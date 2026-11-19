@@ -8,10 +8,10 @@
   "allows_join_mid_match": false,
   "server_code": "const game = {\n  newMatch(ctx) {\n    const board = Array.from({length:8},()=>Array(8).fill(null));\n    for(let r=0;r<3;r++) for(let c=0;c<8;c++) if((r+c)%2===1) board[r][c]={c:1,k:false};\n    for(let r=5;r<8;r++) for(let c=0;c<8;c++) if((r+c)%2===1) board[r][c]={c:0,k:false};\n    const state={board,toMove:0,chain:null,winner:null,draw:false,noCap:0,lastMove:null};\n    return {state, turn:[ctx.players[0].id]};\n  },\n  inB(r,c){return r>=0&&r<8&&c>=0&&c<8;},\n  dirs(p){ if(p.k) return [[-1,-1],[-1,1],[1,-1],[1,1]]; return p.c===0?[[-1,-1],[-1,1]]:[[1,-1],[1,1]]; },\n  jumps(board,r,c){\n    const p=board[r][c]; if(!p) return [];\n    const out=[];\n    const ds=game.dirs(p);\n    for(let i=0;i<ds.length;i++){const dr=ds[i][0],dc=ds[i][1];\n      const mr=r+dr,mc=c+dc,tr=r+2*dr,tc=c+2*dc;\n      if(!game.inB(tr,tc)||!game.inB(mr,mc)) continue;\n      if(board[tr][tc]!==null) continue;\n      const m=board[mr][mc];\n      if(m&&m.c!==p.c) out.push({from:{r:r,c:c},to:{r:tr,c:tc},cap:{r:mr,c:mc}});\n    }\n    return out;\n  },\n  steps(board,r,c){\n    const p=board[r][c]; if(!p) return [];\n    const out=[];\n    const ds=game.dirs(p);\n    for(let i=0;i<ds.length;i++){const tr=r+ds[i][0],tc=c+ds[i][1];\n      if(!game.inB(tr,tc)) continue;\n      if(board[tr][tc]===null) out.push({from:{r:r,c:c},to:{r:tr,c:tc},cap:null});\n    }\n    return out;\n  },\n  legal(state){\n    const b=state.board, pl=state.toMove;\n    if(state.chain){\n      const r=state.chain.r,c=state.chain.c;\n      if(b[r]&&b[r][c]&&b[r][c].c===pl) return game.jumps(b,r,c);\n      return [];\n    }\n    let jumps=[];\n    for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]&&b[r][c].c===pl) jumps.push.apply(jumps,game.jumps(b,r,c));\n    if(jumps.length) return jumps;\n    let steps=[];\n    for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]&&b[r][c].c===pl) steps.push.apply(steps,game.steps(b,r,c));\n    return steps;\n  },\n  count(b){ let a=[0,0]; for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]) a[b[r][c].c]++; return a; },\n  turnId(state,ctx){ return ctx.players[state.toMove].id; },\n  payoutsFor(state,ctx){\n    const humans=ctx.players.filter(function(p){return p.kind==='human';});\n    const pot=ctx.pot;\n    const pay={};\n    if(humans.length===0) return pay;\n    function split(){\n      const each=Math.floor(pot/humans.length);\n      let rem=pot-each*humans.length;\n      for(let i=0;i<humans.length;i++){ pay[humans[i].id]=each; if(rem>0){pay[humans[i].id]++;rem--;} }\n    }\n    if(state.draw){ split(); return pay; }\n    if(state.winner!==null&&state.winner!==undefined){\n      const w=ctx.players[state.winner];\n      const wId=w?w.id:null;\n      let wIsHuman=false;\n      for(let i=0;i<humans.length;i++) if(humans[i].id===wId) wIsHuman=true;\n      if(wIsHuman){ for(let i=0;i<humans.length;i++) pay[humans[i].id]=0; pay[wId]=pot; return pay; }\n      split(); return pay;\n    }\n    split(); return pay;\n  },\n  applyMove(state,playerId,move,ctx){\n    if(state.winner!==null&&state.winner!==undefined||state.draw) throw new InvalidMove('Game is over');\n    const expect=game.turnId(state,ctx);\n    if(playerId!==expect) throw new InvalidMove('Not your turn');\n    if(!move||!move.from||!move.to) throw new InvalidMove('Bad move');\n    const fr=move.from.r,fc=move.from.c,tr=move.to.r,tc=move.to.c;\n    if(!Number.isInteger(fr)||!Number.isInteger(fc)||!Number.isInteger(tr)||!Number.isInteger(tc)) throw new InvalidMove('Bad move');\n    if(!game.inB(fr,fc)||!game.inB(tr,tc)) throw new InvalidMove('Off board');\n    const legal=game.legal(state);\n    let found=null;\n    for(let i=0;i<legal.length;i++){const m=legal[i]; if(m.from.r===fr&&m.from.c===fc&&m.to.r===tr&&m.to.c===tc){found=m;break;}}\n    if(!found) throw new InvalidMove(legal.length&&legal[0].cap?'You must capture':'Illegal move');\n    const b=state.board.map(function(row){return row.map(function(p){return p?{c:p.c,k:p.k}:null;});});\n    const p=b[fr][fc];\n    b[fr][fc]=null;\n    let promoted=false;\n    if(!p.k){ if(p.c===0&&tr===0){p.k=true;promoted=true;} if(p.c===1&&tr===7){p.k=true;promoted=true;} }\n    b[tr][tc]=p;\n    // A man advancing toward promotion is progress, just like a capture.\n    let noCap=(found.cap||!state.board[fr][fc].k)?0:state.noCap+1;\n    let toMove=state.toMove, chain=null;\n    if(found.cap){\n      b[found.cap.r][found.cap.c]=null;\n      if(!promoted){\n        const more=game.jumps(b,tr,tc);\n        if(more.length){ chain={r:tr,c:tc}; toMove=state.toMove; }\n        else toMove=1-state.toMove;\n      } else toMove=1-state.toMove;\n    } else toMove=1-state.toMove;\n    const ns={board:b,toMove:toMove,chain:chain,winner:null,draw:false,noCap:noCap,lastMove:{from:{r:fr,c:fc},to:{r:tr,c:tc}}};\n    const cnt=game.count(b);\n    if(cnt[0]===0){ ns.winner=1; return {state:ns,turn:null,payouts:game.payoutsFor(ns,ctx)}; }\n    if(cnt[1]===0){ ns.winner=0; return {state:ns,turn:null,payouts:game.payoutsFor(ns,ctx)}; }\n    const oppMoves=game.legal({board:b,toMove:toMove,chain:chain});\n    if(oppMoves.length===0){ ns.winner=state.toMove; return {state:ns,turn:null,payouts:game.payoutsFor(ns,ctx)}; }\n    if(noCap>=80){ ns.draw=true; return {state:ns,turn:null,payouts:game.payoutsFor(ns,ctx)}; }\n    const nextId=ctx.players[ns.toMove].id;\n    return {state:ns,turn:[nextId]};\n  },\n  computerMove(state,playerId,ctx){\n    const legal=game.legal(state);\n    if(!legal.length) return {from:{r:0,c:1},to:{r:0,c:1}};\n    let best=legal[0],bestScore=-1e9;\n    for(let i=0;i<legal.length;i++){\n      const m=legal[i];\n      let s=ctx.random()*2;\n      const p=state.board[m.from.r][m.from.c];\n      if(m.cap){\n        const v=state.board[m.cap.r][m.cap.c];\n        s+=10+(v&&v.k?4:0);\n        if(!p.k){ if(p.c===0&&m.to.r===0)s+=5; if(p.c===1&&m.to.r===7)s+=5; }\n        s+=(3-Math.abs(3.5-m.to.c))*0.3;\n      } else {\n        if(!p.k){ if(p.c===0&&m.to.r===0)s+=6; if(p.c===1&&m.to.r===7)s+=6; }\n        s+=(p.k?0:1)+(3-Math.abs(3.5-m.to.c))*0.2+ctx.random();\n      }\n      if(s>bestScore){bestScore=s;best=m;}\n    }\n    return {from:{r:best.from.r,c:best.from.c},to:{r:best.to.r,c:best.to.c}};\n  },\n  randomMove(state,playerId,ctx){\n    const legal=game.legal(state);\n    if(!legal.length) return {from:{r:0,c:1},to:{r:0,c:1}};\n    const i=Math.floor(ctx.random()*legal.length);\n    const m=legal[i];\n    return {from:{r:m.from.r,c:m.from.c},to:{r:m.to.r,c:m.to.c}};\n  },\n  viewFor(state,playerId,ctx){\n    return {board:state.board.map(function(row){return row.map(function(p){return p?{c:p.c,k:p.k}:null;});}),toMove:state.toMove,chain:state.chain?{r:state.chain.r,c:state.chain.c}:null,winner:state.winner,draw:state.draw,noCap:state.noCap,lastMove:state.lastMove?{from:{r:state.lastMove.from.r,c:state.lastMove.from.c},to:{r:state.lastMove.to.r,c:state.lastMove.to.c}}:null,moves:game.legal(state)};\n  }\n};",
   "rules": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-  "ui_instructions": "Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.",
+  "ui_instructions": "Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.",
   "tutorial": {
     "text": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>Checkers (Declarative)</h1><p>Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.</p><p>Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.</p></main>"
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>Checkers (Declarative)</h1><p>Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.</p><p>Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.</p></main>"
   },
   "images": [
     {
@@ -1540,92 +1540,2744 @@
             "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
           }
         ]
+      },
+      {
+        "name": "Continuing match",
+        "description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 1,
+          "seed": 12
+        },
+        "state": {
+          "board": [
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null
+            ],
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null
+            ]
+          ],
+          "toMove": 1,
+          "chain": null,
+          "winner": null,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 5,
+              "c": 6
+            },
+            "to": {
+              "r": 4,
+              "c": 5
+            }
+          }
+        },
+        "view_of_mover": {
+          "board": [
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null
+            ],
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null
+            ]
+          ],
+          "toMove": 1,
+          "chain": null,
+          "winner": null,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 5,
+              "c": 6
+            },
+            "to": {
+              "r": 4,
+              "c": 5
+            }
+          },
+          "moves": [
+            {
+              "from": {
+                "r": 2,
+                "c": 1
+              },
+              "to": {
+                "r": 3,
+                "c": 0
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 1
+              },
+              "to": {
+                "r": 3,
+                "c": 2
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 3
+              },
+              "to": {
+                "r": 3,
+                "c": 2
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 3
+              },
+              "to": {
+                "r": 3,
+                "c": 4
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 5
+              },
+              "to": {
+                "r": 3,
+                "c": 4
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 5
+              },
+              "to": {
+                "r": 3,
+                "c": 6
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 7
+              },
+              "to": {
+                "r": 3,
+                "c": 6
+              },
+              "cap": null
+            }
+          ]
+        },
+        "view_of_other": {
+          "board": [
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null
+            ],
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null
+            ]
+          ],
+          "toMove": 1,
+          "chain": null,
+          "winner": null,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 5,
+              "c": 6
+            },
+            "to": {
+              "r": 4,
+              "c": 5
+            }
+          },
+          "moves": [
+            {
+              "from": {
+                "r": 2,
+                "c": 1
+              },
+              "to": {
+                "r": 3,
+                "c": 0
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 1
+              },
+              "to": {
+                "r": 3,
+                "c": 2
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 3
+              },
+              "to": {
+                "r": 3,
+                "c": 2
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 3
+              },
+              "to": {
+                "r": 3,
+                "c": 4
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 5
+              },
+              "to": {
+                "r": 3,
+                "c": 4
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 5
+              },
+              "to": {
+                "r": 3,
+                "c": 6
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 2,
+                "c": 7
+              },
+              "to": {
+                "r": 3,
+                "c": 6
+              },
+              "cap": null
+            }
+          ]
+        },
+        "player_id": "u2",
+        "other_player_id": null,
+        "move": {
+          "from": {
+            "r": 2,
+            "c": 3
+          },
+          "to": {
+            "r": 3,
+            "c": 2
+          }
+        },
+        "expected_state": {
+          "board": [
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null
+            ],
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null
+            ]
+          ],
+          "toMove": 0,
+          "chain": null,
+          "winner": null,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 2,
+              "c": 3
+            },
+            "to": {
+              "r": 3,
+              "c": 2
+            }
+          }
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "board": [
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null
+            ],
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null
+            ]
+          ],
+          "toMove": 0,
+          "chain": null,
+          "winner": null,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 2,
+              "c": 3
+            },
+            "to": {
+              "r": 3,
+              "c": 2
+            }
+          },
+          "moves": [
+            {
+              "from": {
+                "r": 4,
+                "c": 5
+              },
+              "to": {
+                "r": 3,
+                "c": 4
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 4,
+                "c": 5
+              },
+              "to": {
+                "r": 3,
+                "c": 6
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 5,
+                "c": 0
+              },
+              "to": {
+                "r": 4,
+                "c": 1
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 5,
+                "c": 2
+              },
+              "to": {
+                "r": 4,
+                "c": 1
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 5,
+                "c": 2
+              },
+              "to": {
+                "r": 4,
+                "c": 3
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 5,
+                "c": 4
+              },
+              "to": {
+                "r": 4,
+                "c": 3
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 6,
+                "c": 5
+              },
+              "to": {
+                "r": 5,
+                "c": 6
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 6,
+                "c": 7
+              },
+              "to": {
+                "r": 5,
+                "c": 6
+              },
+              "cap": null
+            }
+          ]
+        },
+        "expected_view_of_other": {
+          "board": [
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null
+            ],
+            [
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              {
+                "c": 1,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null
+            ]
+          ],
+          "toMove": 0,
+          "chain": null,
+          "winner": null,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 2,
+              "c": 3
+            },
+            "to": {
+              "r": 3,
+              "c": 2
+            }
+          },
+          "moves": [
+            {
+              "from": {
+                "r": 4,
+                "c": 5
+              },
+              "to": {
+                "r": 3,
+                "c": 4
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 4,
+                "c": 5
+              },
+              "to": {
+                "r": 3,
+                "c": 6
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 5,
+                "c": 0
+              },
+              "to": {
+                "r": 4,
+                "c": 1
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 5,
+                "c": 2
+              },
+              "to": {
+                "r": 4,
+                "c": 1
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 5,
+                "c": 2
+              },
+              "to": {
+                "r": 4,
+                "c": 3
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 5,
+                "c": 4
+              },
+              "to": {
+                "r": 4,
+                "c": 3
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 6,
+                "c": 5
+              },
+              "to": {
+                "r": 5,
+                "c": 6
+              },
+              "cap": null
+            },
+            {
+              "from": {
+                "r": 6,
+                "c": 7
+              },
+              "to": {
+                "r": 5,
+                "c": 6
+              },
+              "cap": null
+            }
+          ]
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Finishing move",
+        "description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 48,
+          "seed": 59
+        },
+        "state": {
+          "board": [
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          ],
+          "toMove": 0,
+          "chain": null,
+          "winner": null,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 1,
+              "c": 0
+            },
+            "to": {
+              "r": 3,
+              "c": 2
+            }
+          }
+        },
+        "view_of_mover": {
+          "board": [
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          ],
+          "toMove": 0,
+          "chain": null,
+          "winner": null,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 1,
+              "c": 0
+            },
+            "to": {
+              "r": 3,
+              "c": 2
+            }
+          },
+          "moves": [
+            {
+              "from": {
+                "r": 4,
+                "c": 1
+              },
+              "to": {
+                "r": 2,
+                "c": 3
+              },
+              "cap": {
+                "r": 3,
+                "c": 2
+              }
+            }
+          ]
+        },
+        "view_of_other": {
+          "board": [
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              {
+                "c": 1,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          ],
+          "toMove": 0,
+          "chain": null,
+          "winner": null,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 1,
+              "c": 0
+            },
+            "to": {
+              "r": 3,
+              "c": 2
+            }
+          },
+          "moves": [
+            {
+              "from": {
+                "r": 4,
+                "c": 1
+              },
+              "to": {
+                "r": 2,
+                "c": 3
+              },
+              "cap": {
+                "r": 3,
+                "c": 2
+              }
+            }
+          ]
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "from": {
+            "r": 4,
+            "c": 1
+          },
+          "to": {
+            "r": 2,
+            "c": 3
+          }
+        },
+        "expected_state": {
+          "board": [
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          ],
+          "toMove": 1,
+          "chain": null,
+          "winner": 0,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 4,
+              "c": 1
+            },
+            "to": {
+              "r": 2,
+              "c": 3
+            }
+          }
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "board": [
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          ],
+          "toMove": 1,
+          "chain": null,
+          "winner": 0,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 4,
+              "c": 1
+            },
+            "to": {
+              "r": 2,
+              "c": 3
+            }
+          },
+          "moves": []
+        },
+        "expected_view_of_other": {
+          "board": [
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              }
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null,
+              {
+                "c": 0,
+                "k": false
+              },
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          ],
+          "toMove": 1,
+          "chain": null,
+          "winner": 0,
+          "draw": false,
+          "noCap": 0,
+          "lastMove": {
+            "from": {
+              "r": 4,
+              "c": 1
+            },
+            "to": {
+              "r": 2,
+              "c": 3
+            }
+          },
+          "moves": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "u1": 0,
+          "u2": 0
+        }
       }
     ]
   },
   "translations": {
     "es": {
-      "display_name": "Damas (Declarative)",
-      "short_description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_logic_rules": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_ui_rules": "Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.",
+      "display_name": "Damas (Declarativo)",
+      "short_description": "Mueve en diagonal y salta sobre las fichas rivales para capturarlas. Al llegar al otro extremo coronas una dama. Las capturas y las cadenas de saltos son obligatorias.",
+      "game_logic_rules": "Mueve en diagonal y salta sobre las fichas rivales para capturarlas. Al llegar al otro extremo coronas una dama. Las capturas y las cadenas de saltos son obligatorias.",
+      "game_ui_rules": "Selecciona una ficha resaltada y después su destino legal. La vista del servidor muestra damas, capturas obligatorias y saltos continuados.",
       "tutorial_strings": {
-        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed."
+        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Mueve en diagonal y salta sobre las fichas rivales para capturarlas. Al llegar al otro extremo coronas una dama. Las capturas y las cadenas de saltos son obligatorias.",
+        "Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.": "Selecciona una ficha resaltada y después su destino legal. La vista del servidor muestra damas, capturas obligatorias y saltos continuados.",
+        "Checkers (Declarative)": "Damas (Declarativo)"
       },
       "client_strings": {
-        "title": "Damas (Declarative)"
+        "text_0": "Declarativo",
+        "text_1": "Jugador {n}",
+        "text_2": "Tu turno · {name}",
+        "text_3": "Turno de {name}",
+        "text_4": "Fin de la partida",
+        "text_5": "Ganador: {name}",
+        "text_6": "Tu flota",
+        "text_7": "Aguas enemigas",
+        "text_8": "Colocar flota e iniciar batalla",
+        "text_9": "Coloca una flota válida con agua libre entre barcos.",
+        "text_10": "Continúa la captura con la ficha resaltada.",
+        "text_11": "Debes capturar.",
+        "text_12": "Mueve en diagonal; las damas se mueven en ambas direcciones.",
+        "text_13": "reina",
+        "text_14": "torre",
+        "text_15": "alfil",
+        "text_16": "caballo",
+        "text_17": "Promocionar en {square} a {piece}",
+        "text_18": "Eliminar este ejército",
+        "text_19": "Pasar (sin jugada legal)",
+        "text_20": "Rendirse",
+        "text_21": "Mover peón",
+        "text_22": "Colocar muro",
+        "text_23": "Muros restantes · {counts}",
+        "text_24": "Carta superior {card} · palo {suit} · {n} cartas por robar",
+        "text_25": "Jugar {card} como {suit}",
+        "text_26": "Jugar {card}",
+        "text_27": "Robar carta (quedan {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Robar cartas",
+        "text_30": "Pasar",
+        "text_31": "{name} · grupos {ranks}",
+        "text_32": "Recoger baza",
+        "text_33": "Tu personaje: {name}",
+        "text_34": "Tu personaje es privado",
+        "text_35": "Preguntar: {question}",
+        "text_36": "Sí",
+        "text_37": "No",
+        "text_38": "{name}: adivinó {character} · {result}",
+        "text_39": "correcto",
+        "text_40": "incorrecto",
+        "text_41": "¿Lleva gafas?",
+        "text_42": "¿Lleva sombrero?",
+        "text_43": "¿Tiene vello facial?",
+        "text_44": "¿Se le ven las orejas?",
+        "text_45": "¿Tiene pelo rubio?",
+        "text_46": "¿Tiene pelo castaño?",
+        "text_47": "¿Tiene pelo negro?",
+        "text_48": "¿Tiene pelo rojo?",
+        "text_49": "¿Tiene pelo gris?",
+        "text_50": "¿Tiene pelo largo?",
+        "text_51": "¿Tiene pelo corto?",
+        "text_52": "¿Tiene ojos azules?",
+        "text_53": "¿Tiene ojos marrones?",
+        "text_54": "¿Tiene ojos verdes?",
+        "text_55": "Seleccionar pieza en fila {r}, columna {c}",
+        "text_56": "Mover a fila {r}, columna {c}",
+        "server_game_is_over": "Fin de la partida",
+        "server_not_your_turn": "no es tu turno",
+        "server_bad_move": "jugada no válida",
+        "server_off_board": "fuera del tablero",
+        "server_you_must_capture": "debes capturar",
+        "server_illegal_move": "jugada ilegal",
+        "title": "Damas (Declarativo)"
       }
     },
     "fr": {
-      "display_name": "Dames (Declarative)",
-      "short_description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_logic_rules": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_ui_rules": "Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.",
+      "display_name": "Dames (Déclaratif)",
+      "short_description": "Avancez en diagonale et sautez les pions adverses pour les prendre. Atteignez le bord opposé pour obtenir une dame. Les prises et les prises multiples sont obligatoires.",
+      "game_logic_rules": "Avancez en diagonale et sautez les pions adverses pour les prendre. Atteignez le bord opposé pour obtenir une dame. Les prises et les prises multiples sont obligatoires.",
+      "game_ui_rules": "Choisissez un pion surligné puis une destination légale. La vue du serveur montre les dames, les prises obligatoires et les sauts à poursuivre.",
       "tutorial_strings": {
-        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed."
+        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Avancez en diagonale et sautez les pions adverses pour les prendre. Atteignez le bord opposé pour obtenir une dame. Les prises et les prises multiples sont obligatoires.",
+        "Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.": "Choisissez un pion surligné puis une destination légale. La vue du serveur montre les dames, les prises obligatoires et les sauts à poursuivre.",
+        "Checkers (Declarative)": "Dames (Déclaratif)"
       },
       "client_strings": {
-        "title": "Dames (Declarative)"
+        "text_0": "Déclaratif",
+        "text_1": "Joueur {n}",
+        "text_2": "À vous · {name}",
+        "text_3": "À {name} de jouer",
+        "text_4": "Partie terminée",
+        "text_5": "Gagnant : {name}",
+        "text_6": "Votre flotte",
+        "text_7": "Eaux adverses",
+        "text_8": "Placer la flotte et commencer",
+        "text_9": "Place une flotte valide avec de l’eau entre les navires.",
+        "text_10": "Continuez la prise avec le pion surligné.",
+        "text_11": "Une prise est obligatoire.",
+        "text_12": "Déplacez-vous en diagonale ; les dames vont dans les deux sens.",
+        "text_13": "dame",
+        "text_14": "tour",
+        "text_15": "fou",
+        "text_16": "cavalier",
+        "text_17": "Promouvoir en {square} en {piece}",
+        "text_18": "Éliminer cette armée",
+        "text_19": "Passer (aucun coup légal)",
+        "text_20": "Abandonner",
+        "text_21": "Déplacer le pion",
+        "text_22": "Placer un mur",
+        "text_23": "Murs restants · {counts}",
+        "text_24": "Carte du dessus {card} · couleur {suit} · {n} cartes à piocher",
+        "text_25": "Jouer {card} en {suit}",
+        "text_26": "Jouer {card}",
+        "text_27": "Piocher une carte ({n} restantes)",
+        "text_28": "Demander des {rank} à {name}",
+        "text_29": "Piocher des cartes",
+        "text_30": "Passer",
+        "text_31": "{name} · carrés {ranks}",
+        "text_32": "Ramasser le pli",
+        "text_33": "Votre personnage : {name}",
+        "text_34": "Votre personnage est privé",
+        "text_35": "Demander : {question}",
+        "text_36": "Oui",
+        "text_37": "Non",
+        "text_38": "{name} : a proposé {character} · {result}",
+        "text_39": "correct",
+        "text_40": "incorrect",
+        "text_41": "Porte-t-il des lunettes ?",
+        "text_42": "Porte-t-il un chapeau ?",
+        "text_43": "A-t-il des poils au visage ?",
+        "text_44": "Voit-on ses oreilles ?",
+        "text_45": "A-t-il les cheveux blonds ?",
+        "text_46": "A-t-il les cheveux bruns ?",
+        "text_47": "A-t-il les cheveux noirs ?",
+        "text_48": "A-t-il les cheveux roux ?",
+        "text_49": "A-t-il les cheveux gris ?",
+        "text_50": "A-t-il les cheveux longs ?",
+        "text_51": "A-t-il les cheveux courts ?",
+        "text_52": "A-t-il les yeux bleus ?",
+        "text_53": "A-t-il les yeux bruns ?",
+        "text_54": "A-t-il les yeux verts ?",
+        "text_55": "Choisir la pièce en ligne {r}, colonne {c}",
+        "text_56": "Aller en ligne {r}, colonne {c}",
+        "server_game_is_over": "Partie terminée",
+        "server_not_your_turn": "ce n’est pas votre tour",
+        "server_bad_move": "coup invalide",
+        "server_off_board": "hors du plateau",
+        "server_you_must_capture": "vous devez prendre",
+        "server_illegal_move": "coup interdit",
+        "title": "Dames (Déclaratif)"
       }
     },
     "de": {
-      "display_name": "Dame (Declarative)",
-      "short_description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_logic_rules": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_ui_rules": "Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.",
+      "display_name": "Dame (Deklarativ)",
+      "short_description": "Ziehe diagonal, überspringe gegnerische Steine und erreiche den gegenüberliegenden Rand zur Damenumwandlung. Schlagen ist Pflicht; Schlagfolgen müssen beendet werden.",
+      "game_logic_rules": "Ziehe diagonal, überspringe gegnerische Steine und erreiche den gegenüberliegenden Rand zur Damenumwandlung. Schlagen ist Pflicht; Schlagfolgen müssen beendet werden.",
+      "game_ui_rules": "Wähle einen markierten Stein und dann ein gültiges Zielfeld. Die Serveransicht zeigt Damen, Pflichtschläge und fortzusetzende Sprünge.",
       "tutorial_strings": {
-        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed."
+        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Ziehe diagonal, überspringe gegnerische Steine und erreiche den gegenüberliegenden Rand zur Damenumwandlung. Schlagen ist Pflicht; Schlagfolgen müssen beendet werden.",
+        "Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.": "Wähle einen markierten Stein und dann ein gültiges Zielfeld. Die Serveransicht zeigt Damen, Pflichtschläge und fortzusetzende Sprünge.",
+        "Checkers (Declarative)": "Dame (Deklarativ)"
       },
       "client_strings": {
-        "title": "Dame (Declarative)"
+        "text_0": "Deklarativ",
+        "text_1": "Spieler {n}",
+        "text_2": "Dein Zug · {name}",
+        "text_3": "{name} ist am Zug",
+        "text_4": "Spiel beendet",
+        "text_5": "Gewinner: {name}",
+        "text_6": "Deine Flotte",
+        "text_7": "Zielgewässer",
+        "text_8": "Flotte platzieren und starten",
+        "text_9": "Platziert eine gültige Flotte mit Abstand zwischen den Schiffen.",
+        "text_10": "Setze den Schlagzug mit dem markierten Stein fort.",
+        "text_11": "Schlagen ist Pflicht.",
+        "text_12": "Ziehe diagonal; Damen ziehen in beide Richtungen.",
+        "text_13": "Dame",
+        "text_14": "Turm",
+        "text_15": "Läufer",
+        "text_16": "Springer",
+        "text_17": "Auf {square} in {piece} umwandeln",
+        "text_18": "Diese Armee entfernen",
+        "text_19": "Passen (kein gültiger Zug)",
+        "text_20": "Aufgeben",
+        "text_21": "Bauern ziehen",
+        "text_22": "Wand platzieren",
+        "text_23": "Verbleibende Wände · {counts}",
+        "text_24": "Oberste Karte {card} · Farbe {suit} · {n} Karten im Stapel",
+        "text_25": "{card} als {suit} spielen",
+        "text_26": "{card} spielen",
+        "text_27": "Karte ziehen ({n} übrig)",
+        "text_28": "{name} nach {rank} fragen",
+        "text_29": "Karten ziehen",
+        "text_30": "Passen",
+        "text_31": "{name} · Quartette {ranks}",
+        "text_32": "Stich einsammeln",
+        "text_33": "Deine Figur: {name}",
+        "text_34": "Deine Figur ist geheim",
+        "text_35": "Fragen: {question}",
+        "text_36": "Ja",
+        "text_37": "Nein",
+        "text_38": "{name}: hat {character} geraten · {result}",
+        "text_39": "richtig",
+        "text_40": "falsch",
+        "text_41": "Trägt die Person eine Brille?",
+        "text_42": "Trägt die Person einen Hut?",
+        "text_43": "Hat die Person einen Bart?",
+        "text_44": "Sind die Ohren sichtbar?",
+        "text_45": "Hat die Person blonde Haare?",
+        "text_46": "Hat die Person braune Haare?",
+        "text_47": "Hat die Person schwarze Haare?",
+        "text_48": "Hat die Person rote Haare?",
+        "text_49": "Hat die Person graue Haare?",
+        "text_50": "Hat die Person lange Haare?",
+        "text_51": "Hat die Person kurze Haare?",
+        "text_52": "Hat die Person blaue Augen?",
+        "text_53": "Hat die Person braune Augen?",
+        "text_54": "Hat die Person grüne Augen?",
+        "text_55": "Figur in Zeile {r}, Spalte {c} wählen",
+        "text_56": "Nach Zeile {r}, Spalte {c} ziehen",
+        "server_game_is_over": "Spiel beendet",
+        "server_not_your_turn": "du bist nicht dran",
+        "server_bad_move": "ungültiger Zug",
+        "server_off_board": "außerhalb des Bretts",
+        "server_you_must_capture": "du musst schlagen",
+        "server_illegal_move": "ungültiger Zug",
+        "title": "Dame (Deklarativ)"
       }
     },
     "pt": {
-      "display_name": "Damas (Declarative)",
-      "short_description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_logic_rules": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_ui_rules": "Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.",
+      "display_name": "Damas (Declarativo)",
+      "short_description": "Mova na diagonal, salte peças rivais para capturá-las e chegue à borda oposta para virar dama. Capturas e sequências de capturas são obrigatórias.",
+      "game_logic_rules": "Mova na diagonal, salte peças rivais para capturá-las e chegue à borda oposta para virar dama. Capturas e sequências de capturas são obrigatórias.",
+      "game_ui_rules": "Selecione uma peça destacada e depois um destino válido. A visão do servidor mostra damas, capturas obrigatórias e saltos em sequência.",
       "tutorial_strings": {
-        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed."
+        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Mova na diagonal, salte peças rivais para capturá-las e chegue à borda oposta para virar dama. Capturas e sequências de capturas são obrigatórias.",
+        "Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.": "Selecione uma peça destacada e depois um destino válido. A visão do servidor mostra damas, capturas obrigatórias e saltos em sequência.",
+        "Checkers (Declarative)": "Damas (Declarativo)"
       },
       "client_strings": {
-        "title": "Damas (Declarative)"
+        "text_0": "Declarativo",
+        "text_1": "Jogador {n}",
+        "text_2": "Sua vez · {name}",
+        "text_3": "Vez de {name}",
+        "text_4": "Partida encerrada",
+        "text_5": "Vencedor: {name}",
+        "text_6": "Sua frota",
+        "text_7": "Águas inimigas",
+        "text_8": "Posicionar frota e iniciar batalha",
+        "text_9": "Posiciona uma frota válida com água livre entre os navios.",
+        "text_10": "Continue a captura com a peça destacada.",
+        "text_11": "É obrigatório capturar.",
+        "text_12": "Mova na diagonal; damas movem nos dois sentidos.",
+        "text_13": "rainha",
+        "text_14": "torre",
+        "text_15": "bispo",
+        "text_16": "cavalo",
+        "text_17": "Promover em {square} para {piece}",
+        "text_18": "Eliminar este exército",
+        "text_19": "Passar (sem jogada válida)",
+        "text_20": "Desistir",
+        "text_21": "Mover peão",
+        "text_22": "Colocar parede",
+        "text_23": "Paredes restantes · {counts}",
+        "text_24": "Carta do topo {card} · naipe {suit} · {n} cartas para comprar",
+        "text_25": "Jogar {card} como {suit}",
+        "text_26": "Jogar {card}",
+        "text_27": "Comprar carta (restam {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Comprar cartas",
+        "text_30": "Passar",
+        "text_31": "{name} · conjuntos {ranks}",
+        "text_32": "Recolher vaza",
+        "text_33": "Seu personagem: {name}",
+        "text_34": "Seu personagem é privado",
+        "text_35": "Perguntar: {question}",
+        "text_36": "Sim",
+        "text_37": "Não",
+        "text_38": "{name}: adivinhou {character} · {result}",
+        "text_39": "correto",
+        "text_40": "incorreto",
+        "text_41": "Usa óculos?",
+        "text_42": "Usa chapéu?",
+        "text_43": "Tem pelos no rosto?",
+        "text_44": "As orelhas estão visíveis?",
+        "text_45": "Tem cabelo loiro?",
+        "text_46": "Tem cabelo castanho?",
+        "text_47": "Tem cabelo preto?",
+        "text_48": "Tem cabelo ruivo?",
+        "text_49": "Tem cabelo grisalho?",
+        "text_50": "Tem cabelo comprido?",
+        "text_51": "Tem cabelo curto?",
+        "text_52": "Tem olhos azuis?",
+        "text_53": "Tem olhos castanhos?",
+        "text_54": "Tem olhos verdes?",
+        "text_55": "Selecionar peça na linha {r}, coluna {c}",
+        "text_56": "Mover para linha {r}, coluna {c}",
+        "server_game_is_over": "Partida encerrada",
+        "server_not_your_turn": "não é sua vez",
+        "server_bad_move": "jogada inválida",
+        "server_off_board": "fora do tabuleiro",
+        "server_you_must_capture": "você deve capturar",
+        "server_illegal_move": "jogada ilegal",
+        "title": "Damas (Declarativo)"
       }
     },
     "zh": {
-      "display_name": "跳棋 (Declarative)",
-      "short_description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_logic_rules": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_ui_rules": "Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.",
+      "display_name": "跳棋 (声明式)",
+      "short_description": "沿斜线移动，通过跳过对方棋子吃子，到达对面底线可升王。必须吃子，且必须完成连续跳吃。",
+      "game_logic_rules": "沿斜线移动，通过跳过对方棋子吃子，到达对面底线可升王。必须吃子，且必须完成连续跳吃。",
+      "game_ui_rules": "先选择高亮棋子，再选择合法目标格。服务器视图会显示王棋、必须吃子和连续跳吃。",
       "tutorial_strings": {
-        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed."
+        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "沿斜线移动，通过跳过对方棋子吃子，到达对面底线可升王。必须吃子，且必须完成连续跳吃。",
+        "Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.": "先选择高亮棋子，再选择合法目标格。服务器视图会显示王棋、必须吃子和连续跳吃。",
+        "Checkers (Declarative)": "跳棋 (声明式)"
       },
       "client_strings": {
-        "title": "跳棋 (Declarative)"
+        "text_0": "声明式",
+        "text_1": "玩家 {n}",
+        "text_2": "轮到您 · {name}",
+        "text_3": "轮到 {name}",
+        "text_4": "游戏结束",
+        "text_5": "获胜者：{name}",
+        "text_6": "您的舰队",
+        "text_7": "目标海域",
+        "text_8": "部署舰队并开始战斗",
+        "text_9": "部署合法舰队，舰船之间留有空隙。",
+        "text_10": "使用高亮棋子继续连跳。",
+        "text_11": "必须吃子。",
+        "text_12": "沿斜线移动；王棋可以双向移动。",
+        "text_13": "后",
+        "text_14": "车",
+        "text_15": "象",
+        "text_16": "马",
+        "text_17": "在 {square} 升变为{piece}",
+        "text_18": "淘汰此军队",
+        "text_19": "跳过（无合法走法）",
+        "text_20": "认输",
+        "text_21": "移动兵",
+        "text_22": "放置墙",
+        "text_23": "剩余墙数 · {counts}",
+        "text_24": "顶牌 {card} · 花色 {suit} · 余牌 {n} 张",
+        "text_25": "打出 {card}，指定花色 {suit}",
+        "text_26": "打出 {card}",
+        "text_27": "抽一张牌（剩余 {n} 张）",
+        "text_28": "向 {name} 要 {rank}",
+        "text_29": "抽牌",
+        "text_30": "跳过",
+        "text_31": "{name} · 成套牌 {ranks}",
+        "text_32": "收取此墩",
+        "text_33": "您的角色：{name}",
+        "text_34": "您的角色是保密的",
+        "text_35": "提问：{question}",
+        "text_36": "是",
+        "text_37": "否",
+        "text_38": "{name}：猜测 {character} · {result}",
+        "text_39": "正确",
+        "text_40": "错误",
+        "text_41": "戴眼镜吗？",
+        "text_42": "戴帽子吗？",
+        "text_43": "有胡须吗？",
+        "text_44": "耳朵露出来了吗？",
+        "text_45": "是金发吗？",
+        "text_46": "是棕发吗？",
+        "text_47": "是黑发吗？",
+        "text_48": "是红发吗？",
+        "text_49": "是灰发吗？",
+        "text_50": "是长发吗？",
+        "text_51": "是短发吗？",
+        "text_52": "是蓝眼睛吗？",
+        "text_53": "是棕眼睛吗？",
+        "text_54": "是绿眼睛吗？",
+        "text_55": "选择第 {r} 行第 {c} 列的棋子",
+        "text_56": "移至第 {r} 行第 {c} 列",
+        "server_game_is_over": "游戏结束",
+        "server_not_your_turn": "未轮到你",
+        "server_bad_move": "走法无效",
+        "server_off_board": "超出棋盘",
+        "server_you_must_capture": "必须吃子",
+        "server_illegal_move": "非法着法",
+        "title": "跳棋 (声明式)"
       }
     },
     "hi": {
-      "display_name": "चेकर्स (Declarative)",
-      "short_description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_logic_rules": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_ui_rules": "Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.",
+      "display_name": "चेकर्स (घोषणात्मक)",
+      "short_description": "तिरछा चलें, विरोधी गोटियों के ऊपर कूदकर उन्हें मारें और दूसरे छोर पर पहुँचकर राजा बनें। मारना अनिवार्य है और लगातार मार पूरी करनी होगी।",
+      "game_logic_rules": "तिरछा चलें, विरोधी गोटियों के ऊपर कूदकर उन्हें मारें और दूसरे छोर पर पहुँचकर राजा बनें। मारना अनिवार्य है और लगातार मार पूरी करनी होगी।",
+      "game_ui_rules": "पहले चिह्नित गोटी, फिर उसका वैध गंतव्य चुनें। सर्वर दृश्य में राजा, अनिवार्य मार और लगातार कूद दिखाई जाती हैं।",
       "tutorial_strings": {
-        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed."
+        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "तिरछा चलें, विरोधी गोटियों के ऊपर कूदकर उन्हें मारें और दूसरे छोर पर पहुँचकर राजा बनें। मारना अनिवार्य है और लगातार मार पूरी करनी होगी।",
+        "Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.": "पहले चिह्नित गोटी, फिर उसका वैध गंतव्य चुनें। सर्वर दृश्य में राजा, अनिवार्य मार और लगातार कूद दिखाई जाती हैं।",
+        "Checkers (Declarative)": "चेकर्स (घोषणात्मक)"
       },
       "client_strings": {
-        "title": "चेकर्स (Declarative)"
+        "text_0": "घोषणात्मक",
+        "text_1": "खिलाड़ी {n}",
+        "text_2": "आपकी बारी · {name}",
+        "text_3": "{name} की बारी",
+        "text_4": "खेल समाप्त",
+        "text_5": "विजेता: {name}",
+        "text_6": "आपका बेड़ा",
+        "text_7": "लक्ष्य जलक्षेत्र",
+        "text_8": "बेड़ा रखें और युद्ध शुरू करें",
+        "text_9": "जहाज़ों के बीच खाली पानी छोड़कर मान्य बेड़ा रखता है।",
+        "text_10": "चिह्नित गोटी से अगली मार जारी रखें।",
+        "text_11": "मारना अनिवार्य है।",
+        "text_12": "तिरछा चलें; राजा दोनों दिशाओं में चल सकता है।",
+        "text_13": "वज़ीर",
+        "text_14": "हाथी",
+        "text_15": "ऊँट",
+        "text_16": "घोड़ा",
+        "text_17": "{square} पर {piece} में पदोन्नत करें",
+        "text_18": "इस सेना को हटाएँ",
+        "text_19": "पास करें (कोई वैध चाल नहीं)",
+        "text_20": "हार मानें",
+        "text_21": "प्यादा चलें",
+        "text_22": "दीवार रखें",
+        "text_23": "बची दीवारें · {counts}",
+        "text_24": "ऊपर का पत्ता {card} · रंग {suit} · खींचने के लिए {n} पत्ते",
+        "text_25": "{card} को {suit} के रूप में खेलें",
+        "text_26": "{card} खेलें",
+        "text_27": "एक पत्ता खींचें ({n} बचे)",
+        "text_28": "{name} से {rank} माँगें",
+        "text_29": "पत्ते खींचें",
+        "text_30": "पास करें",
+        "text_31": "{name} · पूरे समूह {ranks}",
+        "text_32": "हाथ समेटें",
+        "text_33": "आपका पात्र: {name}",
+        "text_34": "आपका पात्र गोपनीय है",
+        "text_35": "पूछें: {question}",
+        "text_36": "हाँ",
+        "text_37": "नहीं",
+        "text_38": "{name}: {character} का अनुमान · {result}",
+        "text_39": "सही",
+        "text_40": "गलत",
+        "text_41": "क्या चश्मा पहने हैं?",
+        "text_42": "क्या टोपी पहने हैं?",
+        "text_43": "क्या चेहरे पर दाढ़ी या मूँछ है?",
+        "text_44": "क्या कान दिखाई दे रहे हैं?",
+        "text_45": "क्या बाल सुनहरे हैं?",
+        "text_46": "क्या बाल भूरे हैं?",
+        "text_47": "क्या बाल काले हैं?",
+        "text_48": "क्या बाल लाल हैं?",
+        "text_49": "क्या बाल सफ़ेद या स्लेटी हैं?",
+        "text_50": "क्या बाल लंबे हैं?",
+        "text_51": "क्या बाल छोटे हैं?",
+        "text_52": "क्या आँखें नीली हैं?",
+        "text_53": "क्या आँखें भूरी हैं?",
+        "text_54": "क्या आँखें हरी हैं?",
+        "text_55": "पंक्ति {r}, स्तंभ {c} की गोटी चुनें",
+        "text_56": "पंक्ति {r}, स्तंभ {c} पर चलें",
+        "server_game_is_over": "खेल समाप्त",
+        "server_not_your_turn": "आपकी बारी नहीं",
+        "server_bad_move": "अमान्य चाल",
+        "server_off_board": "बोर्ड के बाहर",
+        "server_you_must_capture": "मारना अनिवार्य है",
+        "server_illegal_move": "अवैध चाल",
+        "title": "चेकर्स (घोषणात्मक)"
       }
     },
     "ar": {
-      "display_name": "الداما (Declarative)",
-      "short_description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_logic_rules": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
-      "game_ui_rules": "Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.",
+      "display_name": "الداما (تصريحي)",
+      "short_description": "تحرك قطريًا واقفز فوق قطع الخصم لأسرها، وابلغ الطرف الآخر للترقية إلى ملك. الأسر إجباري ويجب إكمال سلسلة الأسر.",
+      "game_logic_rules": "تحرك قطريًا واقفز فوق قطع الخصم لأسرها، وابلغ الطرف الآخر للترقية إلى ملك. الأسر إجباري ويجب إكمال سلسلة الأسر.",
+      "game_ui_rules": "اختر قطعة مظللة ثم وجهة قانونية. يعرض منظور الخادم الملوك والأسر الإجباري والقفزات المتتابعة.",
       "tutorial_strings": {
-        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed."
+        "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.": "تحرك قطريًا واقفز فوق قطع الخصم لأسرها، وابلغ الطرف الآخر للترقية إلى ملك. الأسر إجباري ويجب إكمال سلسلة الأسر.",
+        "Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.": "اختر قطعة مظللة ثم وجهة قانونية. يعرض منظور الخادم الملوك والأسر الإجباري والقفزات المتتابعة.",
+        "Checkers (Declarative)": "الداما (تصريحي)"
       },
       "client_strings": {
-        "title": "الداما (Declarative)"
+        "text_0": "تصريحي",
+        "text_1": "اللاعب {n}",
+        "text_2": "دورك · {name}",
+        "text_3": "دور {name}",
+        "text_4": "انتهت اللعبة",
+        "text_5": "الفائز: {name}",
+        "text_6": "أسطولك",
+        "text_7": "مياه الهدف",
+        "text_8": "وضع الأسطول وبدء المعركة",
+        "text_9": "يضع أسطولًا صالحًا مع مياه فاصلة بين السفن.",
+        "text_10": "تابع الأسر بالقطعة المظللة.",
+        "text_11": "الأسر إجباري.",
+        "text_12": "تحرك قطريًا؛ تتحرك الملوك في الاتجاهين.",
+        "text_13": "وزير",
+        "text_14": "رخ",
+        "text_15": "فيل",
+        "text_16": "حصان",
+        "text_17": "ترقية في {square} إلى {piece}",
+        "text_18": "إقصاء هذا الجيش",
+        "text_19": "تمرير (لا حركة قانونية)",
+        "text_20": "استسلام",
+        "text_21": "تحريك البيدق",
+        "text_22": "وضع جدار",
+        "text_23": "الجدران المتبقية · {counts}",
+        "text_24": "الورقة العليا {card} · النوع {suit} · {n} أوراق للسحب",
+        "text_25": "العب {card} بنوع {suit}",
+        "text_26": "العب {card}",
+        "text_27": "اسحب ورقة (متبقي {n})",
+        "text_28": "اطلب {rank} من {name}",
+        "text_29": "سحب أوراق",
+        "text_30": "تمرير",
+        "text_31": "{name} · المجموعات {ranks}",
+        "text_32": "جمع اللمة",
+        "text_33": "شخصيتك: {name}",
+        "text_34": "شخصيتك سرية",
+        "text_35": "اسأل: {question}",
+        "text_36": "نعم",
+        "text_37": "لا",
+        "text_38": "{name}: خمن {character} · {result}",
+        "text_39": "صحيح",
+        "text_40": "غير صحيح",
+        "text_41": "هل ترتدي نظارة؟",
+        "text_42": "هل ترتدي قبعة؟",
+        "text_43": "هل لديها شعر في الوجه؟",
+        "text_44": "هل أذناها ظاهرتان؟",
+        "text_45": "هل شعرها أشقر؟",
+        "text_46": "هل شعرها بني؟",
+        "text_47": "هل شعرها أسود؟",
+        "text_48": "هل شعرها أحمر؟",
+        "text_49": "هل شعرها رمادي؟",
+        "text_50": "هل شعرها طويل؟",
+        "text_51": "هل شعرها قصير؟",
+        "text_52": "هل عيناها زرقاوان؟",
+        "text_53": "هل عيناها بنيتان؟",
+        "text_54": "هل عيناها خضراوان؟",
+        "text_55": "اختر قطعة الصف {r} والعمود {c}",
+        "text_56": "تحرك إلى الصف {r} والعمود {c}",
+        "server_game_is_over": "انتهت اللعبة",
+        "server_not_your_turn": "ليس دورك",
+        "server_bad_move": "حركة غير صالحة",
+        "server_off_board": "خارج اللوحة",
+        "server_you_must_capture": "يجب الأسر",
+        "server_illegal_move": "نقلة غير قانونية",
+        "title": "الداما (تصريحي)"
       }
     }
   },
@@ -1683,6 +4335,63 @@
       }
     },
     "strings": {
+      "text_0": "Declarative",
+      "text_1": "Player {n}",
+      "text_2": "Your turn · {name}",
+      "text_3": "{name} to play",
+      "text_4": "Game over",
+      "text_5": "Winner: {name}",
+      "text_6": "Your fleet",
+      "text_7": "Target waters",
+      "text_8": "Place fleet and start battle",
+      "text_9": "Places a valid fleet with clear water between ships.",
+      "text_10": "Continue the capture with the highlighted checker.",
+      "text_11": "A capture is required.",
+      "text_12": "Move diagonally; kings move either direction.",
+      "text_13": "queen",
+      "text_14": "rook",
+      "text_15": "bishop",
+      "text_16": "knight",
+      "text_17": "Promote at {square} to {piece}",
+      "text_18": "Eliminate this army",
+      "text_19": "Pass (no legal move)",
+      "text_20": "Resign",
+      "text_21": "Move pawn",
+      "text_22": "Place wall",
+      "text_23": "Walls remaining · {counts}",
+      "text_24": "Top card {card} · suit {suit} · {n} cards to draw",
+      "text_25": "Play {card} as {suit}",
+      "text_26": "Play {card}",
+      "text_27": "Draw a card ({n} left)",
+      "text_28": "Ask {name} for {rank}",
+      "text_29": "Draw cards",
+      "text_30": "Pass",
+      "text_31": "{name} · books {ranks}",
+      "text_32": "Collect trick",
+      "text_33": "Your character: {name}",
+      "text_34": "Your character is private",
+      "text_35": "Ask: {question}",
+      "text_36": "Yes",
+      "text_37": "No",
+      "text_38": "{name}: guessed {character} · {result}",
+      "text_39": "correct",
+      "text_40": "incorrect",
+      "text_41": "Are they wearing glasses?",
+      "text_42": "Are they wearing a hat?",
+      "text_43": "Do they have facial hair?",
+      "text_44": "Are their ears showing?",
+      "text_45": "Do they have blonde hair?",
+      "text_46": "Do they have brown hair?",
+      "text_47": "Do they have black hair?",
+      "text_48": "Do they have red hair?",
+      "text_49": "Do they have gray hair?",
+      "text_50": "Do they have long hair?",
+      "text_51": "Do they have short hair?",
+      "text_52": "Do they have blue eyes?",
+      "text_53": "Do they have brown eyes?",
+      "text_54": "Do they have green eyes?",
+      "text_55": "Select piece at row {r}, column {c}",
+      "text_56": "Move to row {r}, column {c}",
       "title": "Checkers (Declarative)",
       "server_game_is_over": "Game is over",
       "server_not_your_turn": "Not your turn",
@@ -1691,6 +4400,6 @@
       "server_you_must_capture": "You must capture",
       "server_illegal_move": "Illegal move"
     },
-    "ui_code": "const KIND=\"checkers\";\nconst SOURCE_STRINGS={\"title\":\"Checkers (Declarative)\"};\n// Shared presentation for HTML games converted to the portable declarative UI.\n// Rules and private information remain in each game's existing server module.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active;\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\n    const offers = [];\n    let selectedMode = 'pawn';\n    const playerNames = (m.players || []).map((p, i) => p.name || `Player ${i + 1}`);\n    const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\n    const title = SOURCE_STRINGS.title || KIND;\n    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :\n      Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;\n    scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});\n    if (turnSeat !== null) {\n      scene.labels.push({id: 'status', text: active ? `Your turn · ${playerNames[turnSeat] || `Player ${turnSeat + 1}`}` :\n        (m.status === 'over' ? 'Game over' : `${playerNames[turnSeat] || `Player ${turnSeat + 1}`} to play`),\n        x: 22, y: 52, font_size: 17});\n    }\n    if (m.status === 'over' && Number.isInteger(s.winner)) {\n      scene.labels.push({id: 'winner', text: `Winner: ${playerNames[s.winner] || `Player ${s.winner + 1}`}`,\n        x: 22, y: 78, font_size: 16});\n    }\n    const intent = (move, label, surface, position, presentation) => {\n      if (!active) return null;\n      const id = `intent_${offers.length}`;\n      offers.push(move);\n      if (presentation === 'piece') {\n        scene.pieces.push({id, type: 'card', board: surface, position, text: label,\n          actions: ['tap']});\n      } else if (presentation === 'target') {\n        scene.targets.push({id, board: surface, position, label: label || '•'});\n      } else {\n        scene.controls.push({id, kind: 'button', label});\n      }\n      return id;\n    };\n    const staticPiece = (id, type, board, position, extra = {}) =>\n      scene.pieces.push(Object.assign({id, type, board, position, actions: []}, extra));\n    const label = (id, text, x, y, size = 14) =>\n      scene.labels.push({id, text: String(text), x, y, font_size: size});\n    const cardText = card => String(card || '').replace(/S$/, '♠').replace(/H$/, '♥')\n      .replace(/D$/, '♦').replace(/C$/, '♣');\n    const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});\n    const eventId = message.type === 'ui_event' ? String((message.event || {}).id || '') : '';\n    const intentMatch = /^intent_(\\d+)$/.exec(eventId);\n\n    if (KIND === 'battleship') {\n      const left = {x: 20, y: 120}, right = {x: 435, y: 120};\n      scene.labels.push({id: 'own-title', text: 'Your fleet', x: left.x, y: 84, font_size: 18});\n      scene.labels.push({id: 'target-title', text: 'Target waters', x: right.x, y: 84, font_size: 18});\n      const me = mySeat, opponent = 1 - me;\n      const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];\n      const ownCells = new Set();\n      for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);\n      for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {\n        const pos = {cell: String(r * 10 + c)};\n        const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;\n        const enemyAttack = s.attacks && s.attacks[opponent] ? s.attacks[opponent][r][c] : 0;\n        const ownMark = ownAttack === 2 ? '✹' : ownAttack === 1 ? '·' : ownCells.has(`${c},${r}`) ? '■' : '';\n        const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :\n          ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';\n        staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});\n        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';\n        if (active && s.phase === 'BATTLE' && enemyAttack === 0) {\n          intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');\n        } else {\n          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',\n            'target', pos, {text: targetMark});\n        }\n      }\n      if (active && s.phase === 'SETUP') {\n        const ships = [\n          {name: 'Carrier', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]},\n          {name: 'Battleship', cells: [[0, 2], [1, 2], [2, 2], [3, 2]]},\n          {name: 'Cruiser', cells: [[0, 4], [1, 4], [2, 4]]},\n          {name: 'Submarine', cells: [[0, 6], [1, 6], [2, 6]]},\n          {name: 'Destroyer', cells: [[0, 8], [1, 8]]}\n        ];\n        intent({type: 'place', ships}, 'Place fleet and start battle', null, null, 'control');\n        label('setup-help', 'Places a valid fleet with clear water between ships.', 22, 594, 14);\n      }\n    } else if (KIND === 'checkers') {\n      const board = s.board || [];\n      const moves = legal ? (s.moves || []) : [];\n      const moveTargets = new Set(moves.map(mv => `${mv.to.r},${mv.to.c}`));\n      board.forEach((row, r) => row.forEach((piece, c) => {\n        if (!piece) return;\n        const owner = piece.c === 0 ? 'p0' : 'p1';\n        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',\n          {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});\n      }));\n      moves.forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',\n        {cell: String(move.to.r * 8 + move.to.c)}, 'target'));\n      label('chain', s.chain ? 'Continue the capture with the highlighted checker.' :\n        (moves.some(mv => mv.cap) ? 'A capture is required.' : 'Move diagonally; kings move either direction.'), 22, 670);\n    } else if (KIND === 'chess' || KIND === 'four_player_chess') {\n      const size = KIND === 'chess' ? 8 : 14;\n      const boardId = 'main';\n      const board = KIND === 'chess' ? (s.bd || []) : s.board || {};\n      const symbols = {wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};\n      const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};\n      if (KIND === 'chess') {\n        const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};\n        board.forEach((piece, index) => {\n          if (!piece) return;\n          const r = Math.floor(index / 8), c = index % 8;\n          const name = pieceNames[Math.abs(piece)] || 'P';\n          const code = `${piece > 0 ? 'w' : 'b'}${name}`;\n          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,\n            {cell: String(index)}, {text: symbols[code] || name});\n        });\n      } else {\n        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {\n          if (KIND === 'four_player_chess' && !((r >= 3 && r <= 10) || (c >= 3 && c <= 10))) continue;\n          const pos = KIND === 'chess' ? {cell: String(r * size + c)} : {x: 21 + c * 42, y: 21 + r * 42};\n          const squareType = (r + c) % 2 ? 'square_dark' : 'square_light';\n          if (KIND === 'four_player_chess') staticPiece(`square_${r}_${c}`, squareType, boardId, pos);\n        }\n        for (const [square, piece] of Object.entries(board)) {\n          const [r, c] = square.split(',').map(Number);\n          if (!Number.isInteger(r) || !Number.isInteger(c)) continue;\n          const type = Number(piece.o) || 0;\n          staticPiece(`piece_${r}_${c}`, `seat_${type}`, boardId, {x: 21 + c * 42, y: 21 + r * 42},\n            {text: fourSymbols[piece.t] || piece.t});\n        }\n      }\n      const legalMoves = legal ? (s.legalMoves || []) : [];\n      for (const mv of legalMoves) {\n        const move = KIND === 'chess'\n          ? {fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc, ...(mv.promo ? {promo: mv.promo} : {})}\n          : {kind: 'move', fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc};\n        const position = KIND === 'chess' ? {cell: String(mv.tr * size + mv.tc)} :\n          {x: 21 + mv.tc * 42, y: 21 + mv.tr * 42};\n        if (KIND === 'chess' && mv.promo) {\n          const files = 'abcdefgh';\n          const promotionNames = {Q: 'queen', R: 'rook', B: 'bishop', N: 'knight'};\n          intent(move, `Promote at ${files[mv.tc]}${size - mv.tr} to ${promotionNames[mv.promo] || mv.promo}`,\n            null, null, 'control');\n        } else intent(move, '•', boardId, position, 'target');\n      }\n      if (KIND === 'four_player_chess' && active && !(s.legalMoves || []).length && s.winnerTeam === null) {\n        intent({kind: s.inCheck ? 'elim' : 'pass'}, s.inCheck ? 'Eliminate this army' : 'Pass (no legal move)',\n          null, null, 'control');\n      }\n      if (KIND === 'chess' && s.winner === null && active) {\n        intent({resign: true}, 'Resign', null, null, 'control');\n      }\n    } else if (KIND === 'quoridor') {\n      const cells = [];\n      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n        const x = 44 + c * 54, y = 112 + r * 54;\n        cells.push({r, c, x, y});\n        staticPiece(`square_${r}_${c}`, 'square', 'main', {x, y}, {text: ''});\n      }\n      (s.walls || []).forEach((w, i) => {\n        if (w.o === 'H') scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + w.c * 54, y: 112 + (w.r + 0.5) * 54},\n          {x: 44 + (w.c + 2) * 54, y: 112 + (w.r + 0.5) * 54}], color: '#fbbf24', width: 10});\n        else scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + w.r * 54},\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 2) * 54}], color: '#fbbf24', width: 10});\n      });\n      for (let seat = 0; seat < (s.pawns || []).length; seat++) {\n        const p = s.pawns[seat];\n        staticPiece(`pawn_${seat}`, seat === 0 ? 'p0' : 'p1', 'main',\n          {x: 44 + p.c * 54, y: 112 + p.r * 54}, {text: seat === 0 ? '1' : '2'});\n      }\n      const mode = eventId === 'mode_wall' ? 'wall' : eventId === 'mode_pawn' ? 'pawn' :\n        localState && localState.move_count === m.move_count && localState.mode === 'wall' ? 'wall' : 'pawn';\n      selectedMode = mode;\n      if (active) {\n        scene.controls.push({id: 'mode_pawn', kind: 'button', label: mode === 'pawn' ? '✓ Move pawn' : 'Move pawn'});\n        scene.controls.push({id: 'mode_wall', kind: 'button', label: mode === 'wall' ? '✓ Place wall' : 'Place wall'});\n        if (mode === 'pawn') (s.legalMoves || []).forEach(([r, c]) =>\n          intent({type: 'pawn', r, c}, '•', 'main', {x: 44 + c * 54, y: 112 + r * 54}, 'target'));\n        else (s.legalWalls || []).forEach(w => intent({type: 'wall', r: w.r, c: w.c, o: w.o},\n          w.o === 'H' ? '—' : '│', 'main', w.o === 'H'\n            ? {x: 44 + (w.c + 1) * 54, y: 112 + (w.r + 0.5) * 54}\n            : {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 1) * 54}, 'target'));\n      }\n      label('walls-left', `Walls remaining · ${s.wallsLeft ? s.wallsLeft.join(' / ') : ''}`, 22, 614);\n      if (message.type === 'ui_event' && active && (eventId === 'mode_pawn' || eventId === 'mode_wall')) {\n        selectedMode = eventId === 'mode_wall' ? 'wall' : 'pawn';\n        return {scene, local_state: {mode:selectedMode,move_count:m.move_count,\n          intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};\n      }\n    } else if (KIND === 'crazy_eights') {\n      label('table', `Top card ${cardText(cardFromNumber(s.top))} · suit ${SUITS[s.suit] || ''} · ${s.deckCount || 0} cards to draw`, 22, 94, 16);\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const playable = new Set(s.playable || []);\n      hand.forEach((card, i) => {\n        const r = card % 13 + 1, labelText = cardText(cardFromNumber(card));\n        if (playable.has(card)) {\n          if (r === 8) {\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n            for (let chosenSuit = 0; chosenSuit < 4; chosenSuit++)\n              intent({card, chosenSuit}, `Play ${labelText} as ${SUITS[chosenSuit]}`, null, null, 'control');\n          } else intent({card}, `Play ${labelText}`, 'table', cardPos(i), 'piece');\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n      });\n      if (active) intent('draw', `Draw a card (${s.deckCount || 0} left)`, null, null, 'control');\n    } else if (KIND === 'go_fish') {\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));\n      const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));\n      for (let seat = 0; seat < playerNames.length; seat++) if (active && seat !== mySeat) {\n        for (const rank of rankSet) intent({target: seat, rank}, `Ask ${playerNames[seat]} for ${rank}`, null, null, 'control');\n      }\n      if (active && hand.length === 0) {\n        if (s.deckCount > 0) intent({draw: true}, 'Draw cards', null, null, 'control');\n        else intent({pass: true}, 'Pass', null, null, 'control');\n      }\n      (s.books || []).forEach((books, seat) => label(`books_${seat}`, `${playerNames[seat] || `Player ${seat + 1}`} · books ${(books || []).join(', ') || '—'}`,\n        24, 460 + seat * 25, 14));\n    } else if (KIND === 'hearts' || KIND === 'spades') {\n      const isHearts = KIND === 'hearts';\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const current = isHearts ? s.cur : s.current;\n      const trick = s.trick || [];\n      const legalCards = isHearts ? new Set(s.legal || []) :\n        (s.pendingWin !== null && s.pendingWin !== undefined ? new Set() : new Set(hand));\n      hand.forEach((card, i) => {\n        const moves = legalCards.has(card) ? [{card}] : [];\n        if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)});\n      });\n      trick.forEach((play, i) => staticPiece(`trick_${i}`, 'played', 'table',\n        {x: 300 + (play.player ?? play.seat) * 72, y: 400}, {text: cardText(play.card)}));\n      if (KIND === 'spades' && s.pendingWin !== null && s.pendingWin !== undefined && active)\n        intent({collect: true}, 'Collect trick', null, null, 'control');\n      const scores = isHearts ? s.taken : s.tricksWon;\n      if (Array.isArray(scores)) scores.forEach((score, seat) =>\n        label(`score_${seat}`, `${playerNames[seat] || `Player ${seat + 1}`} · ${score}`, 22 + seat * 170, 92, 14));\n    } else if (KIND === 'guess_who') {\n      const names = CHARACTER_NAMES;\n      const secret = Number.isInteger(s.mySecret) ? `Your character: ${names[s.mySecret]}` : 'Your character is private';\n      label('your-secret', secret, 22, 88, 18);\n      for (let i = 0; i < names.length; i++) {\n        const row = Math.floor(i / 6), col = i % 6;\n        const x = 30 + col * 94, y = 156 + row * 92;\n        staticPiece(`person_${i}`, `person_${i % CHARACTER_COLORS.length}`, 'main',\n          {cell: String(i)}, {text: names[i]});\n        if (active) intent({kind: 'guess', idx: i}, names[i], 'main', {cell: String(i)}, 'target');\n      }\n      const asked = new Set((s.hist || []).filter(item => item.by === mySeat && Number.isInteger(item.q)).map(item => item.q));\n      if (active) QUESTIONS.forEach((question, q) => {\n        if (!asked.has(q)) intent({kind: 'ask', q}, `Ask: ${question}`, null, null, 'control');\n      });\n      (s.hist || []).slice(-8).forEach((item, i) => {\n        const who = playerNames[item.by] || `Player ${item.by + 1}`;\n        const text = Number.isInteger(item.q) ? `${who}: ${QUESTIONS[item.q]} · ${item.ans ? 'Yes' : 'No'}` :\n          `${who}: guessed ${names[item.guess] || '—'} · ${item.correct ? 'correct' : 'incorrect'}`;\n        label(`history_${i}`, text, 22, 520 + i * 18, 13);\n      });\n    }\n\n    const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;\n    if (message.type === 'ui_event' && active && emitted !== undefined) {\n      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))};\n      if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n      return {scene, local_state: nextLocal, make_move: emitted};\n    }\n    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))};\n    if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n    return {scene, local_state: nextLocal};\n  }\n};\n\nconst SUITS = ['♠', '♥', '♦', '♣'];\nconst RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];\nfunction cardFromNumber(value) {\n  const suit = Math.floor(Number(value) / 13), rank = Number(value) % 13 + 1;\n  return `${RANKS[(rank + 12) % 13]}${SUITS[suit] || ''}`;\n}\nconst QUESTIONS = ['Are they wearing glasses?', 'Are they wearing a hat?', 'Do they have facial hair?',\n  'Are their ears showing?', 'Do they have blonde hair?', 'Do they have brown hair?',\n  'Do they have black hair?', 'Do they have red hair?', 'Do they have gray hair?',\n  'Do they have long hair?', 'Do they have short hair?', 'Do they have blue eyes?',\n  'Do they have brown eyes?', 'Do they have green eyes?'];\nconst CHARACTER_NAMES = ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena',\n  'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'];\nconst CHARACTER_COLORS = ['#60a5fa', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#2dd4bf'];\n"
+    "ui_code": "const KIND=\"checkers\";\nconst SOURCE_STRINGS={\"title\":\"Checkers (Declarative)\"};\nconst SOURCE_KEYS={\"Declarative\":\"text_0\",\"Player {n}\":\"text_1\",\"Your turn · {name}\":\"text_2\",\"{name} to play\":\"text_3\",\"Game over\":\"text_4\",\"Winner: {name}\":\"text_5\",\"Your fleet\":\"text_6\",\"Target waters\":\"text_7\",\"Place fleet and start battle\":\"text_8\",\"Places a valid fleet with clear water between ships.\":\"text_9\",\"Continue the capture with the highlighted checker.\":\"text_10\",\"A capture is required.\":\"text_11\",\"Move diagonally; kings move either direction.\":\"text_12\",\"queen\":\"text_13\",\"rook\":\"text_14\",\"bishop\":\"text_15\",\"knight\":\"text_16\",\"Promote at {square} to {piece}\":\"text_17\",\"Eliminate this army\":\"text_18\",\"Pass (no legal move)\":\"text_19\",\"Resign\":\"text_20\",\"Move pawn\":\"text_21\",\"Place wall\":\"text_22\",\"Walls remaining · {counts}\":\"text_23\",\"Top card {card} · suit {suit} · {n} cards to draw\":\"text_24\",\"Play {card} as {suit}\":\"text_25\",\"Play {card}\":\"text_26\",\"Draw a card ({n} left)\":\"text_27\",\"Ask {name} for {rank}\":\"text_28\",\"Draw cards\":\"text_29\",\"Pass\":\"text_30\",\"{name} · books {ranks}\":\"text_31\",\"Collect trick\":\"text_32\",\"Your character: {name}\":\"text_33\",\"Your character is private\":\"text_34\",\"Ask: {question}\":\"text_35\",\"Yes\":\"text_36\",\"No\":\"text_37\",\"{name}: guessed {character} · {result}\":\"text_38\",\"correct\":\"text_39\",\"incorrect\":\"text_40\",\"Are they wearing glasses?\":\"text_41\",\"Are they wearing a hat?\":\"text_42\",\"Do they have facial hair?\":\"text_43\",\"Are their ears showing?\":\"text_44\",\"Do they have blonde hair?\":\"text_45\",\"Do they have brown hair?\":\"text_46\",\"Do they have black hair?\":\"text_47\",\"Do they have red hair?\":\"text_48\",\"Do they have gray hair?\":\"text_49\",\"Do they have long hair?\":\"text_50\",\"Do they have short hair?\":\"text_51\",\"Do they have blue eyes?\":\"text_52\",\"Do they have brown eyes?\":\"text_53\",\"Do they have green eyes?\":\"text_54\",\"Select piece at row {r}, column {c}\":\"text_55\",\"Move to row {r}, column {c}\":\"text_56\"};\n// Shared presentation for HTML games converted to the portable declarative UI.\n// Rules and private information remain in each game's existing server module.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active;\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\n    const offers = [];\n    let selectedMode = 'pawn';\n    let selectedFrom = null;\n    const text = (source, values = {}) => String(m.strings?.[SOURCE_KEYS[source]] ?? source).replace(/\\{(\\w+)\\}/g, (match, key) => values[key] == null ? match : String(values[key]));\n    const playerNames = (m.players || []).map((p, i) => p.name || text('Player {n}', {n:i + 1}));\n    const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\n    const title = m.strings?.title || SOURCE_STRINGS.title || KIND;\n    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :\n      Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;\n    scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});\n    if (turnSeat !== null) {\n      scene.labels.push({id: 'status', text: active ? text('Your turn · {name}', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})}) :\n        (m.status === 'over' ? text('Game over') : text('{name} to play', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})})),\n        x: 22, y: 52, font_size: 17});\n    }\n    if (m.status === 'over' && Number.isInteger(s.winner)) {\n      scene.labels.push({id: 'winner', text: text('Winner: {name}', {name:playerNames[s.winner] || text('Player {n}', {n:s.winner + 1})}),\n        x: 22, y: 78, font_size: 16});\n    }\n    const intent = (move, label, surface, position, presentation, aria_label) => {\n      if (!active) return null;\n      const id = `intent_${offers.length}`;\n      offers.push(move);\n      if (presentation === 'piece' || presentation?.startsWith('person_')) {\n        scene.pieces.push({id, type: presentation === 'piece' ? 'card' : presentation, board: surface, position, text: label,\n          actions: ['tap'], ...(aria_label ? {aria_label} : {})});\n      } else if (presentation === 'target') {\n        const destination = move.to || (Number.isInteger(move.tr) ? {r:move.tr,c:move.tc} : null);\n        scene.targets.push({id, board: surface, position, label: label || '•', ...(destination ? {aria_label:text('Move to row {r}, column {c}', {r:destination.r+1,c:destination.c+1})} : {})});\n      } else {\n        scene.controls.push({id, kind: 'button', label});\n      }\n      return id;\n    };\n    const staticPiece = (id, type, board, position, extra = {}) =>\n      scene.pieces.push(Object.assign({id, type, board, position, actions: []}, extra));\n    const label = (id, text, x, y, size = 14) =>\n      scene.labels.push({id, text: String(text), x, y, font_size: size});\n    const cardText = card => String(card || '').replace(/S$/, '♠').replace(/H$/, '♥')\n      .replace(/D$/, '♦').replace(/C$/, '♣');\n    const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});\n    const eventId = message.type === 'ui_event' && message.event?.type === 'tap' ? String(message.event.id || '') : '';\n    const intentMatch = /^intent_(\\d+)$/.exec(eventId);\n    const selectFrom = (moves, from, position) => {\n      const origins = new Map(moves.map(move => {const cell=from(move);return [`${cell.r}_${cell.c}`,cell];}));\n      const requested = /^select_(\\d+_\\d+)$/.exec(eventId)?.[1];\n      const retained = localState?.move_count === m.move_count && localState?.viewer === mySeat ? localState.selectedFrom : null;\n      selectedFrom = origins.has(requested) ? requested : origins.has(retained) ? retained : null;\n      for (const [key, cell] of origins) scene.targets.push({id:`select_${key}`,board:'main',position:position(cell),label:key===selectedFrom?'◉':'◇',aria_label:text('Select piece at row {r}, column {c}', {r:cell.r+1,c:cell.c+1})});\n      return moves.filter(move => {const cell=from(move);return `${cell.r}_${cell.c}`===selectedFrom;});\n    };\n\n    if (KIND === 'battleship') {\n      const left = {x: 20, y: 120}, right = {x: 435, y: 120};\n      scene.labels.push({id: 'own-title', text: text('Your fleet'), x: left.x, y: 84, font_size: 18});\n      scene.labels.push({id: 'target-title', text: text('Target waters'), x: right.x, y: 84, font_size: 18});\n      const me = mySeat, opponent = 1 - me;\n      const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];\n      const ownCells = new Set();\n      for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);\n      for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {\n        const pos = {cell: String(r * 10 + c)};\n        const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;\n        const enemyAttack = s.attacks && s.attacks[opponent] ? s.attacks[opponent][r][c] : 0;\n        const ownMark = ownAttack === 2 ? '✹' : ownAttack === 1 ? '·' : ownCells.has(`${c},${r}`) ? '■' : '';\n        const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :\n          ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';\n        staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});\n        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';\n        if (active && s.phase === 'BATTLE' && enemyAttack === 0) {\n          intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');\n        } else {\n          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',\n            'target', pos, {text: targetMark});\n        }\n      }\n      if (active && s.phase === 'SETUP') {\n        const ships = [\n          {name: 'Carrier', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]},\n          {name: 'Battleship', cells: [[0, 2], [1, 2], [2, 2], [3, 2]]},\n          {name: 'Cruiser', cells: [[0, 4], [1, 4], [2, 4]]},\n          {name: 'Submarine', cells: [[0, 6], [1, 6], [2, 6]]},\n          {name: 'Destroyer', cells: [[0, 8], [1, 8]]}\n        ];\n        intent({type: 'place', ships}, text('Place fleet and start battle'), null, null, 'control');\n        label('setup-help', text('Places a valid fleet with clear water between ships.'), 22, 594, 14);\n      }\n    } else if (KIND === 'checkers') {\n      const board = s.board || [];\n      const moves = legal ? (s.moves || []) : [];\n      board.forEach((row, r) => row.forEach((piece, c) => {\n        if (!piece) return;\n        const owner = piece.c === 0 ? 'p0' : 'p1';\n        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',\n          {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});\n      }));\n      selectFrom(moves,move=>move.from,cell=>({cell:String(cell.r*8+cell.c)})).forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',\n        {cell: String(move.to.r * 8 + move.to.c)}, 'target'));\n      label('chain', s.chain ? text('Continue the capture with the highlighted checker.') :\n        (moves.some(mv => mv.cap) ? text('A capture is required.') : text('Move diagonally; kings move either direction.')), 22, 670);\n    } else if (KIND === 'chess' || KIND === 'four_player_chess') {\n      const size = KIND === 'chess' ? 8 : 14;\n      const boardId = 'main';\n      const board = KIND === 'chess' ? (s.bd || []) : s.board || {};\n      const symbols = {wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};\n      const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};\n      if (KIND === 'chess') {\n        const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};\n        board.forEach((piece, index) => {\n          if (!piece) return;\n          const r = Math.floor(index / 8), c = index % 8;\n          const name = pieceNames[Math.abs(piece)] || 'P';\n          const code = `${piece > 0 ? 'w' : 'b'}${name}`;\n          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,\n            {cell: String(index)}, {text: symbols[code] || name});\n        });\n      } else {\n        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {\n          if (KIND === 'four_player_chess' && !((r >= 3 && r <= 10) || (c >= 3 && c <= 10))) continue;\n          const pos = KIND === 'chess' ? {cell: String(r * size + c)} : {x: 21 + c * 42, y: 21 + r * 42};\n          const squareType = (r + c) % 2 ? 'square_dark' : 'square_light';\n          if (KIND === 'four_player_chess') staticPiece(`square_${r}_${c}`, squareType, boardId, pos);\n        }\n        for (const [square, piece] of Object.entries(board)) {\n          const [r, c] = square.split(',').map(Number);\n          if (!Number.isInteger(r) || !Number.isInteger(c)) continue;\n          const type = Number(piece.o) || 0;\n          staticPiece(`piece_${r}_${c}`, `seat_${type}`, boardId, {x: 21 + c * 42, y: 21 + r * 42},\n            {text: fourSymbols[piece.t] || piece.t});\n        }\n      }\n      const legalMoves = legal ? (s.legalMoves || []) : [];\n      const selectedMoves = selectFrom(legalMoves,move=>({r:move.fr,c:move.fc}),cell=>KIND==='chess'?{cell:String(cell.r*size+cell.c)}:{x:21+cell.c*42,y:21+cell.r*42});\n      for (const mv of selectedMoves) {\n        const move = KIND === 'chess'\n          ? {fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc, ...(mv.promo ? {promo: mv.promo} : {})}\n          : {kind: 'move', fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc};\n        const position = KIND === 'chess' ? {cell: String(mv.tr * size + mv.tc)} :\n          {x: 21 + mv.tc * 42, y: 21 + mv.tr * 42};\n        if (KIND === 'chess' && mv.promo) {\n          const files = 'abcdefgh';\n          const promotionNames = {Q: text('queen'), R: text('rook'), B: text('bishop'), N: text('knight')};\n          intent(move, text('Promote at {square} to {piece}', {square:files[mv.tc]+(size-mv.tr),piece:promotionNames[mv.promo]||mv.promo}),\n            null, null, 'control');\n        } else intent(move, '•', boardId, position, 'target');\n      }\n      if (KIND === 'four_player_chess' && active && !(s.legalMoves || []).length && s.winnerTeam === null) {\n        intent({kind: s.inCheck ? 'elim' : 'pass'}, s.inCheck ? text('Eliminate this army') : text('Pass (no legal move)'),\n          null, null, 'control');\n      }\n      if (KIND === 'chess' && s.winner === null && active) {\n        intent({resign: true}, text('Resign'), null, null, 'control');\n      }\n    } else if (KIND === 'quoridor') {\n      const cells = [];\n      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n        const x = 44 + c * 54, y = 112 + r * 54;\n        cells.push({r, c, x, y});\n        staticPiece(`square_${r}_${c}`, 'square', 'main', {x, y}, {text: ''});\n      }\n      (s.walls || []).forEach((w, i) => {\n        if (w.o === 'H') scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + w.c * 54, y: 112 + (w.r + 0.5) * 54},\n          {x: 44 + (w.c + 2) * 54, y: 112 + (w.r + 0.5) * 54}], color: '#fbbf24', width: 10});\n        else scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + w.r * 54},\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 2) * 54}], color: '#fbbf24', width: 10});\n      });\n      for (let seat = 0; seat < (s.pawns || []).length; seat++) {\n        const p = s.pawns[seat];\n        staticPiece(`pawn_${seat}`, seat === 0 ? 'p0' : 'p1', 'main',\n          {x: 44 + p.c * 54, y: 112 + p.r * 54}, {text: seat === 0 ? '1' : '2'});\n      }\n      const mode = eventId === 'mode_wall' ? 'wall' : eventId === 'mode_pawn' ? 'pawn' :\n        localState && localState.move_count === m.move_count && localState.mode === 'wall' ? 'wall' : 'pawn';\n      selectedMode = mode;\n      if (active) {\n        scene.controls.push({id: 'mode_pawn', kind: 'button', label: (mode === 'pawn' ? '✓ ' : '') + text('Move pawn')});\n        scene.controls.push({id: 'mode_wall', kind: 'button', label: (mode === 'wall' ? '✓ ' : '') + text('Place wall')});\n        if (mode === 'pawn') (s.legalMoves || []).forEach(([r, c]) =>\n          intent({type: 'pawn', r, c}, '•', 'main', {x: 44 + c * 54, y: 112 + r * 54}, 'target'));\n        else (s.legalWalls || []).forEach(w => intent({type: 'wall', r: w.r, c: w.c, o: w.o},\n          w.o === 'H' ? '—' : '│', 'main', w.o === 'H'\n            ? {x: 44 + (w.c + 1) * 54, y: 112 + (w.r + 0.5) * 54}\n            : {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 1) * 54}, 'target'));\n      }\n      label('walls-left', text('Walls remaining · {counts}', {counts:s.wallsLeft ? s.wallsLeft.join(' / ') : ''}), 22, 614);\n      if (message.type === 'ui_event' && active && (eventId === 'mode_pawn' || eventId === 'mode_wall')) {\n        selectedMode = eventId === 'mode_wall' ? 'wall' : 'pawn';\n        return {scene, local_state: {mode:selectedMode,move_count:m.move_count,\n          intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};\n      }\n    } else if (KIND === 'crazy_eights') {\n      label('table', text('Top card {card} · suit {suit} · {n} cards to draw', {card:cardText(cardFromNumber(s.top)),suit:SUITS[s.suit]||'',n:s.deckCount||0}), 22, 94, 16);\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const playable = new Set(s.playable || []);\n      hand.forEach((card, i) => {\n        const r = card % 13 + 1, labelText = cardText(cardFromNumber(card));\n        if (playable.has(card)) {\n          if (r === 8) {\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n            for (let chosenSuit = 0; chosenSuit < 4; chosenSuit++)\n              intent({card, chosenSuit}, text('Play {card} as {suit}', {card:labelText,suit:SUITS[chosenSuit]}), null, null, 'control');\n          } else intent({card}, text('Play {card}', {card:labelText}), 'table', cardPos(i), 'piece');\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n      });\n      if (active) intent('draw', text('Draw a card ({n} left)', {n:s.deckCount||0}), null, null, 'control');\n    } else if (KIND === 'go_fish') {\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));\n      const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));\n      for (let seat = 0; seat < playerNames.length; seat++) if (active && seat !== mySeat) {\n        for (const rank of rankSet) intent({target: seat, rank}, text('Ask {name} for {rank}', {name:playerNames[seat],rank}), null, null, 'control');\n      }\n      if (active && hand.length === 0) {\n        if (s.deckCount > 0) intent({draw: true}, text('Draw cards'), null, null, 'control');\n        else intent({pass: true}, text('Pass'), null, null, 'control');\n      }\n      (s.books || []).forEach((books, seat) => label(`books_${seat}`, text('{name} · books {ranks}', {name:playerNames[seat]||text('Player {n}', {n:seat+1}),ranks:(books||[]).join(', ')||'—'}),\n        24, 460 + seat * 25, 14));\n    } else if (KIND === 'hearts' || KIND === 'spades') {\n      const isHearts = KIND === 'hearts';\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const current = isHearts ? s.cur : s.current;\n      const trick = s.trick || [];\n      const legalCards = isHearts ? new Set(s.legal || []) :\n        (s.pendingWin !== null && s.pendingWin !== undefined ? new Set() : new Set(hand));\n      hand.forEach((card, i) => {\n        const moves = legalCards.has(card) ? [{card}] : [];\n        if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)});\n      });\n      trick.forEach((play, i) => staticPiece(`trick_${i}`, 'played', 'table',\n        {x: 300 + (play.player ?? play.seat) * 72, y: 400}, {text: cardText(play.card)}));\n      if (KIND === 'spades' && s.pendingWin !== null && s.pendingWin !== undefined && active)\n        intent({collect: true}, text('Collect trick'), null, null, 'control');\n      const scores = isHearts ? s.taken : s.tricksWon;\n      if (Array.isArray(scores)) scores.forEach((score, seat) =>\n        label(`score_${seat}`, `${playerNames[seat] || text('Player {n}', {n:seat + 1})} · ${score}`, 22 + seat * 170, 92, 14));\n    } else if (KIND === 'guess_who') {\n      const names = CHARACTER_NAMES;\n      const secret = Number.isInteger(s.mySecret) ? text('Your character: {name}', {name:names[s.mySecret]}) : text('Your character is private');\n      label('your-secret', secret, 22, 88, 18);\n      for (let i = 0; i < names.length; i++) {\n        const description = names[i]+': '+QUESTIONS.map((question,q)=>text(question)+' '+text(SOURCE_CHARACTER_ANSWERS[i][q]?'Yes':'No')).join('; ');\n        if (active) intent({kind:'guess',idx:i}, names[i], 'main', {cell:String(i)}, `person_${i}`, description);\n        else staticPiece(`person_${i}`, `person_${i}`, 'main', {cell:String(i)}, {text:names[i],aria_label:description});\n      }\n      const asked = new Set((s.hist || []).filter(item => item.by === mySeat && Number.isInteger(item.q)).map(item => item.q));\n      if (active) QUESTIONS.forEach((question, q) => {\n        if (!asked.has(q)) intent({kind: 'ask', q}, text('Ask: {question}', {question:text(question)}), null, null, 'control');\n      });\n      (s.hist || []).slice(-8).forEach((item, i) => {\n        const who = playerNames[item.by] || text('Player {n}', {n:item.by + 1});\n        const historyText = Number.isInteger(item.q) ? `${who}: ${text(QUESTIONS[item.q])} · ${item.ans ? text('Yes') : text('No')}` :\n          text('{name}: guessed {character} · {result}', {name:who,character:names[item.guess]||'—',result:item.correct?text('correct'):text('incorrect')});\n        label(`history_${i}`, historyText, 22, 520 + i * 18, 13);\n      });\n    }\n\n    const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;\n    if (message.type === 'ui_event' && active && emitted !== undefined) {\n      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n      if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n      return {scene, local_state: nextLocal, make_move: emitted};\n    }\n    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n    if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n    return {scene, local_state: nextLocal};\n  }\n};\n\nconst SUITS = ['♠', '♥', '♦', '♣'];\nconst RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];\nfunction cardFromNumber(value) {\n  const suit = Math.floor(Number(value) / 13), rank = Number(value) % 13 + 1;\n  return `${RANKS[(rank + 12) % 13]}${SUITS[suit] || ''}`;\n}\nconst QUESTIONS = ['Are they wearing glasses?', 'Are they wearing a hat?', 'Do they have facial hair?',\n  'Are their ears showing?', 'Do they have blonde hair?', 'Do they have brown hair?',\n  'Do they have black hair?', 'Do they have red hair?', 'Do they have gray hair?',\n  'Do they have long hair?', 'Do they have short hair?', 'Do they have blue eyes?',\n  'Do they have brown eyes?', 'Do they have green eyes?'];\nconst CHARACTER_NAMES = ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena',\n  'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'];\n"
   }
 }

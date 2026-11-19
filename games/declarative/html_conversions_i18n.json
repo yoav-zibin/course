@@ -1,0 +1,1342 @@
+{
+  "strings": {
+    "Declarative": [
+      "Declarativo",
+      "Déclaratif",
+      "Deklarativ",
+      "Declarativo",
+      "声明式",
+      "घोषणात्मक",
+      "تصريحي"
+    ],
+    "Player {n}": [
+      "Jugador {n}",
+      "Joueur {n}",
+      "Spieler {n}",
+      "Jogador {n}",
+      "玩家 {n}",
+      "खिलाड़ी {n}",
+      "اللاعب {n}"
+    ],
+    "Your turn · {name}": [
+      "Tu turno · {name}",
+      "À vous · {name}",
+      "Dein Zug · {name}",
+      "Sua vez · {name}",
+      "轮到您 · {name}",
+      "आपकी बारी · {name}",
+      "دورك · {name}"
+    ],
+    "{name} to play": [
+      "Turno de {name}",
+      "À {name} de jouer",
+      "{name} ist am Zug",
+      "Vez de {name}",
+      "轮到 {name}",
+      "{name} की बारी",
+      "دور {name}"
+    ],
+    "Game over": [
+      "Fin de la partida",
+      "Partie terminée",
+      "Spiel beendet",
+      "Partida encerrada",
+      "游戏结束",
+      "खेल समाप्त",
+      "انتهت اللعبة"
+    ],
+    "Winner: {name}": [
+      "Ganador: {name}",
+      "Gagnant : {name}",
+      "Gewinner: {name}",
+      "Vencedor: {name}",
+      "获胜者：{name}",
+      "विजेता: {name}",
+      "الفائز: {name}"
+    ],
+    "Your fleet": [
+      "Tu flota",
+      "Votre flotte",
+      "Deine Flotte",
+      "Sua frota",
+      "您的舰队",
+      "आपका बेड़ा",
+      "أسطولك"
+    ],
+    "Target waters": [
+      "Aguas enemigas",
+      "Eaux adverses",
+      "Zielgewässer",
+      "Águas inimigas",
+      "目标海域",
+      "लक्ष्य जलक्षेत्र",
+      "مياه الهدف"
+    ],
+    "Place fleet and start battle": [
+      "Colocar flota e iniciar batalla",
+      "Placer la flotte et commencer",
+      "Flotte platzieren und starten",
+      "Posicionar frota e iniciar batalha",
+      "部署舰队并开始战斗",
+      "बेड़ा रखें और युद्ध शुरू करें",
+      "وضع الأسطول وبدء المعركة"
+    ],
+    "Places a valid fleet with clear water between ships.": [
+      "Coloca una flota válida con agua libre entre barcos.",
+      "Place une flotte valide avec de l’eau entre les navires.",
+      "Platziert eine gültige Flotte mit Abstand zwischen den Schiffen.",
+      "Posiciona uma frota válida com água livre entre os navios.",
+      "部署合法舰队，舰船之间留有空隙。",
+      "जहाज़ों के बीच खाली पानी छोड़कर मान्य बेड़ा रखता है।",
+      "يضع أسطولًا صالحًا مع مياه فاصلة بين السفن."
+    ],
+    "Continue the capture with the highlighted checker.": [
+      "Continúa la captura con la ficha resaltada.",
+      "Continuez la prise avec le pion surligné.",
+      "Setze den Schlagzug mit dem markierten Stein fort.",
+      "Continue a captura com a peça destacada.",
+      "使用高亮棋子继续连跳。",
+      "चिह्नित गोटी से अगली मार जारी रखें।",
+      "تابع الأسر بالقطعة المظللة."
+    ],
+    "A capture is required.": [
+      "Debes capturar.",
+      "Une prise est obligatoire.",
+      "Schlagen ist Pflicht.",
+      "É obrigatório capturar.",
+      "必须吃子。",
+      "मारना अनिवार्य है।",
+      "الأسر إجباري."
+    ],
+    "Move diagonally; kings move either direction.": [
+      "Mueve en diagonal; las damas se mueven en ambas direcciones.",
+      "Déplacez-vous en diagonale ; les dames vont dans les deux sens.",
+      "Ziehe diagonal; Damen ziehen in beide Richtungen.",
+      "Mova na diagonal; damas movem nos dois sentidos.",
+      "沿斜线移动；王棋可以双向移动。",
+      "तिरछा चलें; राजा दोनों दिशाओं में चल सकता है।",
+      "تحرك قطريًا؛ تتحرك الملوك في الاتجاهين."
+    ],
+    "queen": [
+      "reina",
+      "dame",
+      "Dame",
+      "rainha",
+      "后",
+      "वज़ीर",
+      "وزير"
+    ],
+    "rook": [
+      "torre",
+      "tour",
+      "Turm",
+      "torre",
+      "车",
+      "हाथी",
+      "رخ"
+    ],
+    "bishop": [
+      "alfil",
+      "fou",
+      "Läufer",
+      "bispo",
+      "象",
+      "ऊँट",
+      "فيل"
+    ],
+    "knight": [
+      "caballo",
+      "cavalier",
+      "Springer",
+      "cavalo",
+      "马",
+      "घोड़ा",
+      "حصان"
+    ],
+    "Promote at {square} to {piece}": [
+      "Promocionar en {square} a {piece}",
+      "Promouvoir en {square} en {piece}",
+      "Auf {square} in {piece} umwandeln",
+      "Promover em {square} para {piece}",
+      "在 {square} 升变为{piece}",
+      "{square} पर {piece} में पदोन्नत करें",
+      "ترقية في {square} إلى {piece}"
+    ],
+    "Eliminate this army": [
+      "Eliminar este ejército",
+      "Éliminer cette armée",
+      "Diese Armee entfernen",
+      "Eliminar este exército",
+      "淘汰此军队",
+      "इस सेना को हटाएँ",
+      "إقصاء هذا الجيش"
+    ],
+    "Pass (no legal move)": [
+      "Pasar (sin jugada legal)",
+      "Passer (aucun coup légal)",
+      "Passen (kein gültiger Zug)",
+      "Passar (sem jogada válida)",
+      "跳过（无合法走法）",
+      "पास करें (कोई वैध चाल नहीं)",
+      "تمرير (لا حركة قانونية)"
+    ],
+    "Resign": [
+      "Rendirse",
+      "Abandonner",
+      "Aufgeben",
+      "Desistir",
+      "认输",
+      "हार मानें",
+      "استسلام"
+    ],
+    "Move pawn": [
+      "Mover peón",
+      "Déplacer le pion",
+      "Bauern ziehen",
+      "Mover peão",
+      "移动兵",
+      "प्यादा चलें",
+      "تحريك البيدق"
+    ],
+    "Place wall": [
+      "Colocar muro",
+      "Placer un mur",
+      "Wand platzieren",
+      "Colocar parede",
+      "放置墙",
+      "दीवार रखें",
+      "وضع جدار"
+    ],
+    "Walls remaining · {counts}": [
+      "Muros restantes · {counts}",
+      "Murs restants · {counts}",
+      "Verbleibende Wände · {counts}",
+      "Paredes restantes · {counts}",
+      "剩余墙数 · {counts}",
+      "बची दीवारें · {counts}",
+      "الجدران المتبقية · {counts}"
+    ],
+    "Top card {card} · suit {suit} · {n} cards to draw": [
+      "Carta superior {card} · palo {suit} · {n} cartas por robar",
+      "Carte du dessus {card} · couleur {suit} · {n} cartes à piocher",
+      "Oberste Karte {card} · Farbe {suit} · {n} Karten im Stapel",
+      "Carta do topo {card} · naipe {suit} · {n} cartas para comprar",
+      "顶牌 {card} · 花色 {suit} · 余牌 {n} 张",
+      "ऊपर का पत्ता {card} · रंग {suit} · खींचने के लिए {n} पत्ते",
+      "الورقة العليا {card} · النوع {suit} · {n} أوراق للسحب"
+    ],
+    "Play {card} as {suit}": [
+      "Jugar {card} como {suit}",
+      "Jouer {card} en {suit}",
+      "{card} als {suit} spielen",
+      "Jogar {card} como {suit}",
+      "打出 {card}，指定花色 {suit}",
+      "{card} को {suit} के रूप में खेलें",
+      "العب {card} بنوع {suit}"
+    ],
+    "Play {card}": [
+      "Jugar {card}",
+      "Jouer {card}",
+      "{card} spielen",
+      "Jogar {card}",
+      "打出 {card}",
+      "{card} खेलें",
+      "العب {card}"
+    ],
+    "Draw a card ({n} left)": [
+      "Robar carta (quedan {n})",
+      "Piocher une carte ({n} restantes)",
+      "Karte ziehen ({n} übrig)",
+      "Comprar carta (restam {n})",
+      "抽一张牌（剩余 {n} 张）",
+      "एक पत्ता खींचें ({n} बचे)",
+      "اسحب ورقة (متبقي {n})"
+    ],
+    "Ask {name} for {rank}": [
+      "Pedir {rank} a {name}",
+      "Demander des {rank} à {name}",
+      "{name} nach {rank} fragen",
+      "Pedir {rank} a {name}",
+      "向 {name} 要 {rank}",
+      "{name} से {rank} माँगें",
+      "اطلب {rank} من {name}"
+    ],
+    "Draw cards": [
+      "Robar cartas",
+      "Piocher des cartes",
+      "Karten ziehen",
+      "Comprar cartas",
+      "抽牌",
+      "पत्ते खींचें",
+      "سحب أوراق"
+    ],
+    "Pass": [
+      "Pasar",
+      "Passer",
+      "Passen",
+      "Passar",
+      "跳过",
+      "पास करें",
+      "تمرير"
+    ],
+    "{name} · books {ranks}": [
+      "{name} · grupos {ranks}",
+      "{name} · carrés {ranks}",
+      "{name} · Quartette {ranks}",
+      "{name} · conjuntos {ranks}",
+      "{name} · 成套牌 {ranks}",
+      "{name} · पूरे समूह {ranks}",
+      "{name} · المجموعات {ranks}"
+    ],
+    "Collect trick": [
+      "Recoger baza",
+      "Ramasser le pli",
+      "Stich einsammeln",
+      "Recolher vaza",
+      "收取此墩",
+      "हाथ समेटें",
+      "جمع اللمة"
+    ],
+    "Your character: {name}": [
+      "Tu personaje: {name}",
+      "Votre personnage : {name}",
+      "Deine Figur: {name}",
+      "Seu personagem: {name}",
+      "您的角色：{name}",
+      "आपका पात्र: {name}",
+      "شخصيتك: {name}"
+    ],
+    "Your character is private": [
+      "Tu personaje es privado",
+      "Votre personnage est privé",
+      "Deine Figur ist geheim",
+      "Seu personagem é privado",
+      "您的角色是保密的",
+      "आपका पात्र गोपनीय है",
+      "شخصيتك سرية"
+    ],
+    "Ask: {question}": [
+      "Preguntar: {question}",
+      "Demander : {question}",
+      "Fragen: {question}",
+      "Perguntar: {question}",
+      "提问：{question}",
+      "पूछें: {question}",
+      "اسأل: {question}"
+    ],
+    "Yes": [
+      "Sí",
+      "Oui",
+      "Ja",
+      "Sim",
+      "是",
+      "हाँ",
+      "نعم"
+    ],
+    "No": [
+      "No",
+      "Non",
+      "Nein",
+      "Não",
+      "否",
+      "नहीं",
+      "لا"
+    ],
+    "{name}: guessed {character} · {result}": [
+      "{name}: adivinó {character} · {result}",
+      "{name} : a proposé {character} · {result}",
+      "{name}: hat {character} geraten · {result}",
+      "{name}: adivinhou {character} · {result}",
+      "{name}：猜测 {character} · {result}",
+      "{name}: {character} का अनुमान · {result}",
+      "{name}: خمن {character} · {result}"
+    ],
+    "correct": [
+      "correcto",
+      "correct",
+      "richtig",
+      "correto",
+      "正确",
+      "सही",
+      "صحيح"
+    ],
+    "incorrect": [
+      "incorrecto",
+      "incorrect",
+      "falsch",
+      "incorreto",
+      "错误",
+      "गलत",
+      "غير صحيح"
+    ],
+    "Are they wearing glasses?": [
+      "¿Lleva gafas?",
+      "Porte-t-il des lunettes ?",
+      "Trägt die Person eine Brille?",
+      "Usa óculos?",
+      "戴眼镜吗？",
+      "क्या चश्मा पहने हैं?",
+      "هل ترتدي نظارة؟"
+    ],
+    "Are they wearing a hat?": [
+      "¿Lleva sombrero?",
+      "Porte-t-il un chapeau ?",
+      "Trägt die Person einen Hut?",
+      "Usa chapéu?",
+      "戴帽子吗？",
+      "क्या टोपी पहने हैं?",
+      "هل ترتدي قبعة؟"
+    ],
+    "Do they have facial hair?": [
+      "¿Tiene vello facial?",
+      "A-t-il des poils au visage ?",
+      "Hat die Person einen Bart?",
+      "Tem pelos no rosto?",
+      "有胡须吗？",
+      "क्या चेहरे पर दाढ़ी या मूँछ है?",
+      "هل لديها شعر في الوجه؟"
+    ],
+    "Are their ears showing?": [
+      "¿Se le ven las orejas?",
+      "Voit-on ses oreilles ?",
+      "Sind die Ohren sichtbar?",
+      "As orelhas estão visíveis?",
+      "耳朵露出来了吗？",
+      "क्या कान दिखाई दे रहे हैं?",
+      "هل أذناها ظاهرتان؟"
+    ],
+    "Do they have blonde hair?": [
+      "¿Tiene pelo rubio?",
+      "A-t-il les cheveux blonds ?",
+      "Hat die Person blonde Haare?",
+      "Tem cabelo loiro?",
+      "是金发吗？",
+      "क्या बाल सुनहरे हैं?",
+      "هل شعرها أشقر؟"
+    ],
+    "Do they have brown hair?": [
+      "¿Tiene pelo castaño?",
+      "A-t-il les cheveux bruns ?",
+      "Hat die Person braune Haare?",
+      "Tem cabelo castanho?",
+      "是棕发吗？",
+      "क्या बाल भूरे हैं?",
+      "هل شعرها بني؟"
+    ],
+    "Do they have black hair?": [
+      "¿Tiene pelo negro?",
+      "A-t-il les cheveux noirs ?",
+      "Hat die Person schwarze Haare?",
+      "Tem cabelo preto?",
+      "是黑发吗？",
+      "क्या बाल काले हैं?",
+      "هل شعرها أسود؟"
+    ],
+    "Do they have red hair?": [
+      "¿Tiene pelo rojo?",
+      "A-t-il les cheveux roux ?",
+      "Hat die Person rote Haare?",
+      "Tem cabelo ruivo?",
+      "是红发吗？",
+      "क्या बाल लाल हैं?",
+      "هل شعرها أحمر؟"
+    ],
+    "Do they have gray hair?": [
+      "¿Tiene pelo gris?",
+      "A-t-il les cheveux gris ?",
+      "Hat die Person graue Haare?",
+      "Tem cabelo grisalho?",
+      "是灰发吗？",
+      "क्या बाल सफ़ेद या स्लेटी हैं?",
+      "هل شعرها رمادي؟"
+    ],
+    "Do they have long hair?": [
+      "¿Tiene pelo largo?",
+      "A-t-il les cheveux longs ?",
+      "Hat die Person lange Haare?",
+      "Tem cabelo comprido?",
+      "是长发吗？",
+      "क्या बाल लंबे हैं?",
+      "هل شعرها طويل؟"
+    ],
+    "Do they have short hair?": [
+      "¿Tiene pelo corto?",
+      "A-t-il les cheveux courts ?",
+      "Hat die Person kurze Haare?",
+      "Tem cabelo curto?",
+      "是短发吗？",
+      "क्या बाल छोटे हैं?",
+      "هل شعرها قصير؟"
+    ],
+    "Do they have blue eyes?": [
+      "¿Tiene ojos azules?",
+      "A-t-il les yeux bleus ?",
+      "Hat die Person blaue Augen?",
+      "Tem olhos azuis?",
+      "是蓝眼睛吗？",
+      "क्या आँखें नीली हैं?",
+      "هل عيناها زرقاوان؟"
+    ],
+    "Do they have brown eyes?": [
+      "¿Tiene ojos marrones?",
+      "A-t-il les yeux bruns ?",
+      "Hat die Person braune Augen?",
+      "Tem olhos castanhos?",
+      "是棕眼睛吗？",
+      "क्या आँखें भूरी हैं?",
+      "هل عيناها بنيتان؟"
+    ],
+    "Do they have green eyes?": [
+      "¿Tiene ojos verdes?",
+      "A-t-il les yeux verts ?",
+      "Hat die Person grüne Augen?",
+      "Tem olhos verdes?",
+      "是绿眼睛吗？",
+      "क्या आँखें हरी हैं?",
+      "هل عيناها خضراوان؟"
+    ],
+    "Select piece at row {r}, column {c}": [
+      "Seleccionar pieza en fila {r}, columna {c}",
+      "Choisir la pièce en ligne {r}, colonne {c}",
+      "Figur in Zeile {r}, Spalte {c} wählen",
+      "Selecionar peça na linha {r}, coluna {c}",
+      "选择第 {r} 行第 {c} 列的棋子",
+      "पंक्ति {r}, स्तंभ {c} की गोटी चुनें",
+      "اختر قطعة الصف {r} والعمود {c}"
+    ],
+    "Move to row {r}, column {c}": [
+      "Mover a fila {r}, columna {c}",
+      "Aller en ligne {r}, colonne {c}",
+      "Nach Zeile {r}, Spalte {c} ziehen",
+      "Mover para linha {r}, coluna {c}",
+      "移至第 {r} 行第 {c} 列",
+      "पंक्ति {r}, स्तंभ {c} पर चलें",
+      "تحرك إلى الصف {r} والعمود {c}"
+    ]
+  },
+  "games": {
+    "battleship": {
+      "rules": [
+        "Coloca cinco barcos y dispara por turnos a aguas ocultas. Un acierto permite otro disparo; hunde la flota rival para ganar.",
+        "Placez cinq navires puis tirez à tour de rôle dans les eaux cachées. Un tir réussi donne un autre tir ; coulez la flotte adverse pour gagner.",
+        "Platziere fünf Schiffe und beschieße abwechselnd verdeckte Gewässer. Ein Treffer erlaubt einen weiteren Schuss. Versenke die gegnerische Flotte, um zu gewinnen.",
+        "Posicione cinco navios e atire por turnos em águas ocultas. Um acerto dá outro tiro; afunde a frota rival para vencer.",
+        "部署五艘舰船，然后轮流向隐藏海域开火。命中可再射击一次；击沉对方舰队即可获胜。",
+        "पाँच जहाज़ रखें, फिर बारी-बारी छिपे जलक्षेत्र पर गोली चलाएँ। निशाना लगने पर एक और अवसर मिलता है; विरोधी बेड़े को डुबोकर जीतें।",
+        "ضع خمس سفن ثم تناوبوا إطلاق النار على المياه المخفية. تمنح الإصابة طلقة أخرى؛ أغرق أسطول الخصم لتفوز."
+      ],
+      "ui": [
+        "Coloca la flota válida ofrecida y toca una casilla enemiga sin probar. Tu flota y los disparos aparecen en tableros separados.",
+        "Placez la flotte valide proposée puis touchez une case adverse non essayée. Votre flotte et les tirs sont affichés sur deux plateaux.",
+        "Platziere die angebotene gültige Flotte und tippe auf ein unbeschossenes Zielfeld. Deine Flotte und Schüsse erscheinen auf getrennten Feldern.",
+        "Posicione a frota válida oferecida e toque numa casa inimiga ainda não tentada. Sua frota e os tiros aparecem em tabuleiros separados.",
+        "部署提供的合法舰队，然后点击尚未射击的目标格。您的舰队和射击记录显示在两个棋盘上。",
+        "प्रस्तावित मान्य बेड़ा रखें, फिर बिना आज़माए लक्ष्य खाने पर टैप करें। आपका बेड़ा और हमले अलग बोर्ड पर दिखते हैं।",
+        "ضع الأسطول الصالح المعروض ثم اضغط خلية هدف لم تجربها. يظهر أسطولك والطلقات على لوحتين منفصلتين."
+      ]
+    },
+    "checkers": {
+      "rules": [
+        "Mueve en diagonal y salta sobre las fichas rivales para capturarlas. Al llegar al otro extremo coronas una dama. Las capturas y las cadenas de saltos son obligatorias.",
+        "Avancez en diagonale et sautez les pions adverses pour les prendre. Atteignez le bord opposé pour obtenir une dame. Les prises et les prises multiples sont obligatoires.",
+        "Ziehe diagonal, überspringe gegnerische Steine und erreiche den gegenüberliegenden Rand zur Damenumwandlung. Schlagen ist Pflicht; Schlagfolgen müssen beendet werden.",
+        "Mova na diagonal, salte peças rivais para capturá-las e chegue à borda oposta para virar dama. Capturas e sequências de capturas são obrigatórias.",
+        "沿斜线移动，通过跳过对方棋子吃子，到达对面底线可升王。必须吃子，且必须完成连续跳吃。",
+        "तिरछा चलें, विरोधी गोटियों के ऊपर कूदकर उन्हें मारें और दूसरे छोर पर पहुँचकर राजा बनें। मारना अनिवार्य है और लगातार मार पूरी करनी होगी।",
+        "تحرك قطريًا واقفز فوق قطع الخصم لأسرها، وابلغ الطرف الآخر للترقية إلى ملك. الأسر إجباري ويجب إكمال سلسلة الأسر."
+      ],
+      "ui": [
+        "Selecciona una ficha resaltada y después su destino legal. La vista del servidor muestra damas, capturas obligatorias y saltos continuados.",
+        "Choisissez un pion surligné puis une destination légale. La vue du serveur montre les dames, les prises obligatoires et les sauts à poursuivre.",
+        "Wähle einen markierten Stein und dann ein gültiges Zielfeld. Die Serveransicht zeigt Damen, Pflichtschläge und fortzusetzende Sprünge.",
+        "Selecione uma peça destacada e depois um destino válido. A visão do servidor mostra damas, capturas obrigatórias e saltos em sequência.",
+        "先选择高亮棋子，再选择合法目标格。服务器视图会显示王棋、必须吃子和连续跳吃。",
+        "पहले चिह्नित गोटी, फिर उसका वैध गंतव्य चुनें। सर्वर दृश्य में राजा, अनिवार्य मार और लगातार कूद दिखाई जाती हैं।",
+        "اختر قطعة مظللة ثم وجهة قانونية. يعرض منظور الخادم الملوك والأسر الإجباري والقفزات المتتابعة."
+      ]
+    },
+    "chess": {
+      "rules": [
+        "Sigue las reglas habituales del ajedrez. El jaque mate gana; ahogado, triple repetición, regla de 50 movimientos y material insuficiente producen tablas.",
+        "Suivez les règles usuelles des échecs. Le mat gagne ; le pat, la triple répétition, la règle des 50 coups et le matériel insuffisant font nulle.",
+        "Es gelten die üblichen Schachregeln. Schachmatt gewinnt; Patt, dreifache Stellungswiederholung, die 50-Züge-Regel und unzureichendes Material führen zum Remis.",
+        "Siga as regras normais do xadrez. Xeque-mate vence; afogamento, repetição tripla, regra de 50 lances e material insuficiente resultam em empate.",
+        "按标准国际象棋规则行棋。将死获胜；逼和、三次重复、50 回合规则和子力不足均为和棋。",
+        "मानक शतरंज नियमों से चलें। शह-मात से जीत होती है; गतिरोध, तीन बार दोहराव, 50 चालों का नियम और अपर्याप्त मोहरों से बराबरी होती है।",
+        "اتبع قواعد الشطرنج المعتادة. يفوز كش مات؛ والتعادل يحدث عند الردب أو التكرار الثلاثي أو قاعدة 50 نقلة أو عدم كفاية القطع."
+      ],
+      "ui": [
+        "Selecciona una pieza resaltada y después su destino legal. Elige una promoción cuando se ofrezca; el servidor valida cada movimiento.",
+        "Choisissez une pièce surlignée puis une destination légale. Choisissez la promotion proposée ; le serveur valide chaque coup.",
+        "Wähle eine markierte Figur und dann ein gültiges Zielfeld. Wähle eine angebotene Umwandlung; der Server prüft jeden Zug.",
+        "Selecione uma peça destacada e depois um destino válido. Escolha a promoção quando oferecida; o servidor valida cada lance.",
+        "先选择高亮棋子，再选择合法目标格。出现升变选项时选择目标棋子；服务器验证每一步。",
+        "पहले चिह्नित मोहरा, फिर उसका वैध गंतव्य चुनें। उपलब्ध होने पर पदोन्नति चुनें; सर्वर हर चाल जाँचता है।",
+        "اختر قطعة مظللة ثم وجهة قانونية. اختر الترقية عند عرضها؛ يتحقق الخادم من كل نقلة."
+      ]
+    },
+    "four_player_chess": {
+      "rules": [
+        "Cuatro jugadores comparten un tablero de ajedrez en cruz. Captura piezas rivales y protege tu rey; el servidor determina los movimientos legales y la victoria por equipos.",
+        "Quatre joueurs partagent un échiquier en croix. Prenez les pièces adverses et protégez votre roi ; le serveur détermine les coups légaux et la victoire par équipe.",
+        "Vier Spieler teilen ein kreuzförmiges Schachbrett. Schlage gegnerische Figuren und schütze deinen König; der Server bestimmt gültige Züge und den Teamsieg.",
+        "Quatro jogadores compartilham um tabuleiro em cruz. Capture peças rivais e proteja seu rei; o servidor determina os lances válidos e a vitória por equipes.",
+        "四名玩家在十字形棋盘上对弈。吃掉对方棋子并保护自己的王；合法走法和团队胜利由服务器判定。",
+        "चार खिलाड़ी साझा क्रॉस-आकार के शतरंज बोर्ड पर खेलते हैं। विरोधी मोहरे मारें और अपने राजा को बचाएँ; वैध चाल और टीम की जीत सर्वर तय करता है।",
+        "يلعب أربعة لاعبين على رقعة شطرنج مشتركة بشكل صليب. أسر قطع الخصم واحمِ ملكك؛ يحدد الخادم النقلات القانونية وفوز الفريق."
+      ],
+      "ui": [
+        "Selecciona una pieza resaltada y después un destino legal en el tablero compartido. Se muestran colores, ejércitos eliminados, jaques y equipo ganador.",
+        "Choisissez une pièce surlignée puis une destination légale sur l’échiquier partagé. Les couleurs, armées éliminées, échecs et équipe gagnante restent visibles.",
+        "Wähle eine markierte Figur und dann ein gültiges Zielfeld auf dem gemeinsamen Brett. Spielerfarben, ausgeschiedene Armeen, Schachgebote und das Siegerteam bleiben sichtbar.",
+        "Selecione uma peça destacada e depois um destino válido no tabuleiro compartilhado. Cores, exércitos eliminados, xeques e equipe vencedora ficam visíveis.",
+        "先选择高亮棋子，再在共享棋盘上选择合法目标格。玩家颜色、淘汰军队、将军状态和获胜团队会显示出来。",
+        "पहले चिह्नित मोहरा, फिर साझा बोर्ड पर उसका वैध गंतव्य चुनें। खिलाड़ियों के रंग, हटाई गई सेनाएँ, शह और विजेता टीम दिखाई देती हैं।",
+        "اختر قطعة مظللة ثم وجهة قانونية على الرقعة المشتركة. تبقى ألوان اللاعبين والجيوش المقصاة وحالات الكش والفريق الفائز ظاهرة."
+      ]
+    },
+    "quoridor": {
+      "rules": [
+        "Lleva tu peón al borde opuesto. En cada turno muévelo una casilla o coloca un muro; los muros pueden frenar al rival, pero nunca bloquear todas las rutas.",
+        "Amenez votre pion au bord opposé. À chaque tour, avancez d’une case ou placez un mur ; un mur peut ralentir l’adversaire mais jamais bloquer tous les chemins.",
+        "Bringe deinen Bauern zum gegenüberliegenden Rand. Ziehe pro Zug ein Feld oder setze eine Wand. Wände dürfen den Gegner bremsen, aber niemals alle Wege versperren.",
+        "Leve seu peão à borda oposta. Em cada turno, mova uma casa ou coloque uma parede; paredes podem atrasar o rival, mas nunca bloquear todas as rotas.",
+        "让兵到达对面边缘。每回合移动一格或放置一堵墙；墙可以阻挡对手，但不能封死所有路径。",
+        "अपने प्यादे को दूसरी ओर पहुँचाएँ। हर बारी एक खाना चलें या दीवार रखें; दीवार विरोधी को धीमा कर सकती है, पर सभी रास्ते बंद नहीं कर सकती।",
+        "أوصل بيدقك إلى الحافة المقابلة. في كل دور تحرك مربعًا أو ضع جدارًا؛ يمكن للجدران إبطاء الخصم لكن لا يجوز إغلاق كل المسارات."
+      ],
+      "ui": [
+        "Elige Mover peón o Colocar muro y toca una casilla o anclaje legal resaltado. El tablero muestra ambos peones y todos los muros.",
+        "Choisissez Déplacer le pion ou Placer un mur, puis touchez une case ou un ancrage légal surligné. Les deux pions et tous les murs sont visibles.",
+        "Wähle Bauern ziehen oder Wand platzieren und tippe auf ein markiertes gültiges Feld oder einen Wandpunkt. Das Brett zeigt beide Bauern und alle Wände.",
+        "Escolha Mover peão ou Colocar parede e toque numa casa ou âncora válida destacada. O tabuleiro mostra os dois peões e todas as paredes.",
+        "选择“移动兵”或“放置墙”，再点击高亮的合法方格或墙锚点。棋盘会显示双方的兵及所有已放置的墙。",
+        "प्यादा चलें या दीवार रखें चुनें, फिर चिह्नित वैध खाने या दीवार के स्थान पर टैप करें। बोर्ड पर दोनों प्यादे और सभी दीवारें दिखती हैं।",
+        "اختر تحريك البيدق أو وضع جدار ثم اضغط مربعًا أو موضع جدار قانونيًا مظللًا. تعرض اللوحة البيدقين وجميع الجدران."
+      ]
+    },
+    "crazy_eights": {
+      "rules": [
+        "Juega una carta del mismo valor o palo que el descarte, o un ocho y elige otro palo. Si no juegas, roba. Gana quien vacíe su mano.",
+        "Jouez une carte de même valeur ou couleur que la défausse, ou un huit pour choisir une couleur. Si vous ne jouez pas, piochez. Videz votre main pour gagner.",
+        "Spiele eine Karte mit passendem Wert oder passender Farbe, oder eine Acht und wähle eine neue Farbe. Ohne ausgespielte Karte ziehst du. Wer alle Karten ablegt, gewinnt.",
+        "Jogue uma carta do mesmo valor ou naipe do descarte, ou um oito e escolha outro naipe. Se não jogar, compre. Esvazie a mão para vencer.",
+        "打出与弃牌点数或花色相同的牌，或打出八并指定新花色。不出牌时抽牌；先出完手牌者获胜。",
+        "ऊपर के पत्ते से समान अंक या रंग का पत्ता खेलें, या आठ खेलकर नया रंग चुनें। पत्ता न खेलने पर खींचें। हाथ खाली करके जीतें।",
+        "العب ورقة تطابق قيمة أو نوع الورقة المكشوفة، أو العب ثمانية واختر نوعًا جديدًا. إذا لم تلعب فاسحب. أفرغ يدك لتفوز."
+      ],
+      "ui": [
+        "Toca una carta jugable o su botón de acción. Los ochos ofrecen cuatro palos; puedes robar si necesitas otra carta.",
+        "Touchez une carte jouable ou son bouton d’action. Les huit proposent quatre couleurs ; la pioche reste disponible si nécessaire.",
+        "Tippe auf eine spielbare Karte oder ihre Aktion. Achten bieten vier Farben an; Ziehen bleibt verfügbar, wenn du eine weitere Karte brauchst.",
+        "Toque numa carta jogável ou em sua ação. Oitos oferecem quatro naipes; comprar continua disponível quando precisar de outra carta.",
+        "点击可出的牌或对应操作按钮。八有四种花色选项；需要其他牌时仍可选择抽牌。",
+        "खेलने योग्य पत्ते या उसके कार्रवाई बटन पर टैप करें। आठ के लिए चार रंग उपलब्ध हैं; दूसरे पत्ते की ज़रूरत पर खींच सकते हैं।",
+        "اضغط ورقة قابلة للعب أو زرها. تعرض الثمانيات أربعة أنواع؛ يظل السحب متاحًا عند الحاجة إلى ورقة أخرى."
+      ]
+    },
+    "go_fish": {
+      "rules": [
+        "Pide a otro jugador un valor que tengas. Cuatro cartas del mismo valor forman un grupo. Si no tiene ninguna, roba; gana quien complete más grupos.",
+        "Demandez à un autre joueur une valeur que vous possédez. Quatre cartes identiques forment un carré. S’il n’en a pas, piochez ; le plus de carrés gagne.",
+        "Frage einen anderen Spieler nach einem Kartenwert, den du selbst besitzt. Vier gleiche Werte bilden ein Quartett. Hat er keine, ziehst du. Die meisten Quartette gewinnen.",
+        "Peça a outro jogador um valor que você tenha. Quatro cartas do mesmo valor formam um conjunto. Se ele não tiver nenhuma, compre; mais conjuntos vencem.",
+        "向其他玩家索要自己持有的点数。集齐同点数四张牌即成套；对方没有时抽牌，成套牌最多者获胜。",
+        "दूसरे खिलाड़ी से वह अंक माँगें जो आपके पास है। एक अंक के चार पत्तों से समूह बनता है। उसके पास न हो तो खींचें; सबसे अधिक समूह वाला जीतता है।",
+        "اطلب من لاعب آخر قيمة تملكها. تشكل أربع أوراق من القيمة نفسها مجموعة. إذا لم يملك أيًا منها فاسحب؛ يفوز صاحب أكثر المجموعات."
+      ],
+      "ui": [
+        "Elige valor y rival en los botones Pedir. Se muestran tu mano y los grupos completados; las otras manos permanecen ocultas.",
+        "Choisissez une valeur et un adversaire avec les boutons Demander. Votre main et les carrés terminés sont visibles, les autres mains restent cachées.",
+        "Wähle Kartenwert und Gegner mit den Fragen-Schaltflächen. Deine Hand und fertige Quartette sind sichtbar, andere Hände bleiben verdeckt.",
+        "Escolha valor e oponente nos botões Pedir. Sua mão e os conjuntos completos aparecem; as outras mãos ficam ocultas.",
+        "通过“要牌”按钮选择点数和对手。显示自己的手牌和已成套的牌，其他人的手牌保持隐藏。",
+        "माँगें बटनों से अंक और विरोधी चुनें। आपका हाथ और पूरे समूह दिखते हैं; दूसरे खिलाड़ियों के हाथ छिपे रहते हैं।",
+        "اختر القيمة والخصم من أزرار الطلب. تظهر يدك والمجموعات المكتملة بينما تبقى الأيدي الأخرى مخفية."
+      ]
+    },
+    "hearts": {
+      "rules": [
+        "Sigue el palo inicial siempre que puedas. Cada corazón vale un punto y la reina de picas trece. Tras trece bazas, gana la puntuación menor.",
+        "Suivez la couleur entamée si possible. Chaque cœur vaut un point et la dame de pique treize. Après treize plis, le plus petit score gagne.",
+        "Bediene nach Möglichkeit die angespielte Farbe. Herzen zählen einen Punkt, die Pikdame dreizehn. Nach dreizehn Stichen gewinnt die niedrigste Punktzahl.",
+        "Siga o naipe inicial quando possível. Cada copa vale um ponto e a dama de espadas treze. Após treze vazas, a menor pontuação vence.",
+        "尽可能跟出首张牌的花色。每张红心计一分，黑桃皇后计十三分。十三墩后分数最低者获胜。",
+        "संभव हो तो पहले पत्ते का रंग चलें। हर हार्ट का एक और स्पेड की रानी के तेरह अंक हैं। तेरह हाथों के बाद सबसे कम अंक वाला जीतता है।",
+        "اتبع نوع الورقة الأولى إن أمكن. كل قلب بنقطة وملكة البستوني بثلاث عشرة. بعد ثلاث عشرة لمة يفوز أقل مجموع."
+      ],
+      "ui": [
+        "Toca una carta legal resaltada en tu mano. Se muestran la baza, las puntuaciones y si ya se han roto corazones.",
+        "Touchez une carte légale surlignée de votre main. Le pli, les scores et l’ouverture des cœurs sont visibles.",
+        "Tippe auf eine markierte gültige Karte deiner Hand. Stich, Punktzahlen und der Freigabestatus der Herzen sind sichtbar.",
+        "Toque numa carta válida destacada em sua mão. A vaza, as pontuações e se copas já foram abertas ficam visíveis.",
+        "点击手牌中高亮的合法牌。画面会显示当前墩、总分以及红心是否已破。",
+        "हाथ में चिह्नित वैध पत्ते पर टैप करें। मौजूदा हाथ, कुल अंक और हार्ट खुल चुके हैं या नहीं, दिखाई देता है।",
+        "اضغط ورقة قانونية مظللة في يدك. تظهر اللمة ومجاميع النقاط وما إذا كانت القلوب قد فُتحت."
+      ]
+    },
+    "spades": {
+      "rules": [
+        "Juega cualquier carta en cada baza. Las picas son triunfo; gana el triunfo más alto o la carta más alta del palo inicial. El ganador recoge las cuatro cartas. Esta edición no exige seguir el palo.",
+        "Jouez n’importe quelle carte à chaque pli. Les piques sont atout ; le plus fort atout ou la plus forte carte de la couleur entamée gagne. Le gagnant ramasse les quatre cartes. Cette édition n’impose pas de suivre la couleur.",
+        "Spiele eine beliebige Karte pro Stich. Pik ist Trumpf; der höchste Trumpf oder die höchste Karte der angespielten Farbe gewinnt. Der Gewinner sammelt die vier Karten ein. In dieser Ausgabe besteht kein Farbzwang.",
+        "Jogue qualquer carta em cada vaza. Espadas são trunfo; vence o maior trunfo ou a maior carta do naipe inicial. O vencedor recolhe as quatro cartas. Esta edição não exige seguir o naipe.",
+        "每墩可以打出任意手牌。黑桃为王牌；最大王牌或首牌花色的最大牌获胜。赢家收取四张牌。此版本不要求跟出首牌花色。",
+        "हर हाथ में कोई भी पत्ता खेलें। स्पेड तुरुप है; सबसे बड़ा तुरुप या शुरुआती रंग का सबसे बड़ा पत्ता जीतता है। विजेता चारों पत्ते समेटता है। इस संस्करण में शुरुआती रंग चलना आवश्यक नहीं है।",
+        "العب أي ورقة في كل لمة. البستوني رابح؛ يفوز أعلى رابح أو أعلى ورقة من النوع الأول. يجمع الفائز الأوراق الأربع. لا تفرض هذه النسخة اتباع النوع."
+      ],
+      "ui": [
+        "Toca cualquier carta de tu mano privada. No es obligatorio seguir el palo; el ganador de la baza recoge las cuatro cartas.",
+        "Touchez n’importe quelle carte de votre main privée. Il n’est pas obligatoire de suivre la couleur ; le gagnant ramasse les quatre cartes.",
+        "Tippe auf eine beliebige Karte deiner verdeckten Hand. Es besteht kein Farbzwang; der Stichgewinner sammelt die vier Karten ein.",
+        "Toque em qualquer carta da sua mão privada. Não é obrigatório seguir o naipe; o vencedor da vaza recolhe as quatro cartas.",
+        "点击自己私有手牌中的任意一张。不要求跟出首牌花色；本墩赢家收取四张牌。",
+        "अपने निजी हाथ का कोई भी पत्ता टैप करें। शुरुआती रंग चलना आवश्यक नहीं है; हाथ का विजेता चारों पत्ते समेटता है।",
+        "اضغط أي ورقة من يدك الخاصة. لا يلزم اتباع النوع؛ يجمع فائز اللمة الأوراق الأربع."
+      ]
+    },
+    "guess_who": {
+      "rules": [
+        "Haz preguntas de sí o no sobre el personaje secreto del rival y después adivina su identidad. Un acierto gana; un error pierde.",
+        "Posez des questions oui/non sur le personnage secret adverse puis devinez son identité. Une bonne réponse gagne ; une mauvaise perd.",
+        "Stelle Ja-Nein-Fragen zur geheimen Figur des Gegners und rate dann ihre Identität. Ein richtiger Tipp gewinnt, ein falscher verliert.",
+        "Faça perguntas de sim ou não sobre o personagem secreto rival e depois adivinhe sua identidade. Um acerto vence; um erro perde.",
+        "对对手的秘密角色提出是非问题，然后猜测身份。猜对获胜，猜错失败。",
+        "विरोधी के गोपनीय पात्र के बारे में हाँ या नहीं वाले प्रश्न पूछें, फिर पहचान का अनुमान लगाएँ। सही अनुमान से जीत और गलत से हार होती है।",
+        "اسأل أسئلة بنعم أو لا عن شخصية الخصم السرية ثم خمن هويتها. التخمين الصحيح يفوز والخاطئ يخسر."
+      ],
+      "ui": [
+        "Elige una pregunta o toca un personaje para adivinar. Tu personaje secreto permanece privado durante la partida; el historial de preguntas es público.",
+        "Choisissez une question ou touchez un personnage pour deviner. Votre personnage reste secret pendant la partie ; l’historique des questions est public.",
+        "Wähle eine Frage oder tippe zum Raten auf eine Figur. Deine Figur bleibt während des Spiels geheim; der Fragenverlauf ist öffentlich.",
+        "Escolha uma pergunta ou toque num personagem para adivinhar. Seu personagem fica privado durante a partida; o histórico de perguntas é público.",
+        "选择问题或点击角色来猜测。游戏期间自己的秘密角色保持私密；提问记录是公开的。",
+        "प्रश्न चुनें या अनुमान के लिए किसी पात्र पर टैप करें। खेल के दौरान आपका पात्र गोपनीय रहता है; प्रश्नों का इतिहास सार्वजनिक है।",
+        "اختر سؤالًا أو اضغط شخصية للتخمين. تبقى شخصيتك سرية أثناء اللعب؛ سجل الأسئلة علني."
+      ]
+    }
+  },
+  "errors": {
+    "unknown player": [
+      "jugador desconocido",
+      "joueur inconnu",
+      "unbekannter Spieler",
+      "jogador desconhecido",
+      "未知玩家",
+      "अज्ञात खिलाड़ी",
+      "لاعب غير معروف"
+    ],
+    "game over": [
+      "partida terminada",
+      "partie terminée",
+      "Spiel beendet",
+      "jogo encerrado",
+      "游戏结束",
+      "खेल समाप्त",
+      "انتهت اللعبة"
+    ],
+    "not your turn": [
+      "no es tu turno",
+      "ce n’est pas votre tour",
+      "du bist nicht dran",
+      "não é sua vez",
+      "未轮到你",
+      "आपकी बारी नहीं",
+      "ليس دورك"
+    ],
+    "Not your turn": [
+      "no es tu turno",
+      "ce n’est pas votre tour",
+      "du bist nicht dran",
+      "não é sua vez",
+      "未轮到你",
+      "आपकी बारी नहीं",
+      "ليس دورك"
+    ],
+    "Illegal move": [
+      "jugada ilegal",
+      "coup interdit",
+      "ungültiger Zug",
+      "jogada ilegal",
+      "非法着法",
+      "अवैध चाल",
+      "نقلة غير قانونية"
+    ],
+    "illegal move": [
+      "jugada ilegal",
+      "coup interdit",
+      "ungültiger Zug",
+      "jogada ilegal",
+      "非法着法",
+      "अवैध चाल",
+      "نقلة غير قانونية"
+    ],
+    "moves available": [
+      "hay jugadas disponibles",
+      "coups disponibles",
+      "Züge verfügbar",
+      "há jogadas disponíveis",
+      "仍有可行着法",
+      "चालें उपलब्ध हैं",
+      "توجد نقلات"
+    ],
+    "unknown move": [
+      "jugada desconocida",
+      "coup inconnu",
+      "unbekannter Zug",
+      "jogada desconhecida",
+      "未知着法",
+      "अज्ञात चाल",
+      "نقلة غير معروفة"
+    ],
+    "Unknown move": [
+      "jugada desconocida",
+      "coup inconnu",
+      "unbekannter Zug",
+      "jogada desconhecida",
+      "未知着法",
+      "अज्ञात चाल",
+      "نقلة غير معروفة"
+    ],
+    "bad move": [
+      "jugada no válida",
+      "coup invalide",
+      "ungültiger Zug",
+      "jogada inválida",
+      "走法无效",
+      "अमान्य चाल",
+      "حركة غير صالحة"
+    ],
+    "place your ships": [
+      "coloca tus barcos",
+      "placez vos navires",
+      "platziere deine Schiffe",
+      "posicione seus navios",
+      "请部署舰船",
+      "अपने जहाज़ रखें",
+      "ضع سفنك"
+    ],
+    "setup done": [
+      "preparación terminada",
+      "préparation terminée",
+      "Aufstellung abgeschlossen",
+      "preparação concluída",
+      "部署已完成",
+      "तैयारी पूरी हुई",
+      "اكتمل الإعداد"
+    ],
+    "not your setup turn": [
+      "no es tu turno de colocar",
+      "ce n’est pas votre tour de placement",
+      "du bist beim Aufstellen nicht am Zug",
+      "não é sua vez de posicionar",
+      "还未轮到您部署",
+      "तैयारी की आपकी बारी नहीं है",
+      "ليس دورك في الإعداد"
+    ],
+    "fire with x,y": [
+      "dispara con x,y",
+      "tirez avec x,y",
+      "schieße mit x,y",
+      "atire com x,y",
+      "请指定射击坐标 x,y",
+      "x,y देकर गोली चलाएँ",
+      "أطلق باستخدام x,y"
+    ],
+    "off board": [
+      "fuera del tablero",
+      "hors du plateau",
+      "außerhalb des Bretts",
+      "fora do tabuleiro",
+      "超出棋盘",
+      "बोर्ड के बाहर",
+      "خارج اللوحة"
+    ],
+    "already shot there": [
+      "ya disparaste ahí",
+      "vous avez déjà tiré ici",
+      "dort wurde bereits geschossen",
+      "você já atirou aí",
+      "此处已射击过",
+      "वहाँ पहले ही गोली चल चुकी है",
+      "أطلقت هنا سابقًا"
+    ],
+    "bad phase": [
+      "fase no válida",
+      "phase invalide",
+      "ungültige Phase",
+      "fase inválida",
+      "阶段无效",
+      "अमान्य चरण",
+      "مرحلة غير صالحة"
+    ],
+    "Battle start! P1 fires. HIT keeps your turn!": [
+      "¡Empieza la batalla! Dispara J1. ¡Un acierto mantiene tu turno!",
+      "La bataille commence ! J1 tire. Un tir réussi conserve le tour !",
+      "Die Schlacht beginnt! S1 schießt. Bei einem Treffer bleibst du am Zug!",
+      "A batalha começou! J1 atira. Um acerto mantém sua vez!",
+      "战斗开始！玩家 1 射击。命中后继续射击！",
+      "युद्ध शुरू! खिलाड़ी 1 गोली चलाए। निशाना लगने पर आपकी बारी बनी रहती है!",
+      "بدأت المعركة! اللاعب 1 يطلق. الإصابة تُبقي دورك!"
+    ],
+    "Game is over": [
+      "Fin de la partida",
+      "Partie terminée",
+      "Spiel beendet",
+      "Partida encerrada",
+      "游戏结束",
+      "खेल समाप्त",
+      "انتهت اللعبة"
+    ],
+    "Bad move": [
+      "jugada no válida",
+      "coup invalide",
+      "ungültiger Zug",
+      "jogada inválida",
+      "走法无效",
+      "अमान्य चाल",
+      "حركة غير صالحة"
+    ],
+    "Off board": [
+      "fuera del tablero",
+      "hors du plateau",
+      "außerhalb des Bretts",
+      "fora do tabuleiro",
+      "超出棋盘",
+      "बोर्ड के बाहर",
+      "خارج اللوحة"
+    ],
+    "You must capture": [
+      "debes capturar",
+      "vous devez prendre",
+      "du musst schlagen",
+      "você deve capturar",
+      "必须吃子",
+      "मारना अनिवार्य है",
+      "يجب الأسر"
+    ],
+    "not your piece": [
+      "no es tu pieza",
+      "ce n’est pas votre pièce",
+      "nicht deine Figur",
+      "não é sua peça",
+      "不是您的棋子",
+      "यह आपका मोहरा नहीं है",
+      "ليست قطعتك"
+    ],
+    "Checkmate": [
+      "Jaque mate",
+      "Échec et mat",
+      "Schachmatt",
+      "Xeque-mate",
+      "将死",
+      "शह-मात",
+      "كش مات"
+    ],
+    "Stalemate": [
+      "Ahogado",
+      "Pat",
+      "Patt",
+      "Afogamento",
+      "逼和",
+      "गतिरोध",
+      "ردب"
+    ],
+    "50-move rule": [
+      "Regla de 50 movimientos",
+      "Règle des 50 coups",
+      "50-Züge-Regel",
+      "Regra de 50 lances",
+      "50 回合规则",
+      "50 चालों का नियम",
+      "قاعدة 50 نقلة"
+    ],
+    "Insufficient material": [
+      "Material insuficiente",
+      "Matériel insuffisant",
+      "Unzureichendes Material",
+      "Material insuficiente",
+      "子力不足",
+      "अपर्याप्त मोहरे",
+      "قطع غير كافية"
+    ],
+    "Move limit": [
+      "Límite de movimientos",
+      "Limite de coups",
+      "Zuglimit",
+      "Limite de lances",
+      "步数上限",
+      "चालों की सीमा",
+      "حد النقلات"
+    ],
+    "Threefold repetition": [
+      "Triple repetición",
+      "Triple répétition",
+      "Dreifache Stellungswiederholung",
+      "Repetição tripla",
+      "三次重复",
+      "तीन बार दोहराव",
+      "تكرار ثلاثي"
+    ],
+    "Resignation — no possible mate": [
+      "Abandono: no es posible dar mate",
+      "Abandon : aucun mat possible",
+      "Aufgabe — kein Matt möglich",
+      "Desistência — mate impossível",
+      "认输——无法将死",
+      "हार मानी — शह-मात संभव नहीं",
+      "استسلام — لا يمكن تحقيق كش مات"
+    ],
+    "Resignation": [
+      "Abandono",
+      "Abandon",
+      "Aufgabe",
+      "Desistência",
+      "认输",
+      "हार मानी",
+      "استسلام"
+    ],
+    "not seated": [
+      "no ocupas un asiento",
+      "vous n’occupez pas de place",
+      "du hast keinen Spielplatz",
+      "você não ocupa um lugar",
+      "您未入座",
+      "आप खेल में बैठे नहीं हैं",
+      "لست جالسًا في اللعبة"
+    ],
+    "bad square": [
+      "casilla no válida",
+      "case invalide",
+      "ungültiges Feld",
+      "casa inválida",
+      "方格无效",
+      "अमान्य खाना",
+      "مربع غير صالح"
+    ],
+    "illegal pawn move": [
+      "movimiento de peón no válido",
+      "déplacement de pion illégal",
+      "ungültiger Bauernzug",
+      "movimento de peão inválido",
+      "兵的走法不合法",
+      "प्यादे की अवैध चाल",
+      "حركة بيدق غير قانونية"
+    ],
+    "bad wall": [
+      "muro no válido",
+      "mur invalide",
+      "ungültige Wand",
+      "parede inválida",
+      "墙无效",
+      "अमान्य दीवार",
+      "جدار غير صالح"
+    ],
+    "no walls left": [
+      "no quedan muros",
+      "il ne reste aucun mur",
+      "keine Wände mehr übrig",
+      "não restam paredes",
+      "没有剩余的墙",
+      "कोई दीवार नहीं बची",
+      "لم تبق جدران"
+    ],
+    "illegal wall": [
+      "muro ilegal",
+      "mur illégal",
+      "unzulässige Wand",
+      "parede ilegal",
+      "墙的位置不合法",
+      "अवैध दीवार",
+      "جدار غير قانوني"
+    ],
+    "Match is over": [
+      "Fin de la partida",
+      "Partie terminée",
+      "Spiel beendet",
+      "Partida encerrada",
+      "游戏结束",
+      "खेल समाप्त",
+      "انتهت اللعبة"
+    ],
+    "Illegal card": [
+      "carta no válida",
+      "carte illégale",
+      "ungültige Karte",
+      "carta inválida",
+      "出牌不合法",
+      "अवैध पत्ता",
+      "ورقة غير قانونية"
+    ],
+    "Choose a suit": [
+      "elige un palo",
+      "choisissez une couleur",
+      "wähle eine Farbe",
+      "escolha um naipe",
+      "请选择花色",
+      "रंग चुनें",
+      "اختر نوعًا"
+    ],
+    "Card not in hand": [
+      "la carta no está en tu mano",
+      "carte absente de votre main",
+      "Karte ist nicht auf deiner Hand",
+      "a carta não está na sua mão",
+      "手牌中没有此牌",
+      "पत्ता आपके हाथ में नहीं है",
+      "الورقة ليست في يدك"
+    ],
+    "empty hand: refill first": [
+      "mano vacía: roba primero",
+      "main vide : piochez d’abord",
+      "leere Hand: zuerst nachziehen",
+      "mão vazia: compre primeiro",
+      "手牌为空：请先补牌",
+      "हाथ खाली है: पहले पत्ते लें",
+      "يد فارغة: اسحب أولًا"
+    ],
+    "you have no cards: pass": [
+      "no tienes cartas: pasa",
+      "vous n’avez pas de cartes : passez",
+      "du hast keine Karten: passe",
+      "você não tem cartas: passe",
+      "您没有手牌：请跳过",
+      "आपके पास पत्ते नहीं हैं: पास करें",
+      "لا أوراق لديك: مرّر"
+    ],
+    "pick a rank and opponent": [
+      "elige un valor y un rival",
+      "choisissez une valeur et un adversaire",
+      "wähle einen Kartenwert und Gegner",
+      "escolha um valor e oponente",
+      "请选择点数和对手",
+      "अंक और विरोधी चुनें",
+      "اختر قيمة وخصمًا"
+    ],
+    "bad opponent": [
+      "rival no válido",
+      "adversaire invalide",
+      "ungültiger Gegner",
+      "oponente inválido",
+      "对手无效",
+      "अमान्य विरोधी",
+      "خصم غير صالح"
+    ],
+    "cannot ask yourself": [
+      "no puedes pedirte cartas a ti mismo",
+      "vous ne pouvez pas vous interroger vous-même",
+      "du kannst dich nicht selbst fragen",
+      "você não pode pedir a si mesmo",
+      "不能向自己要牌",
+      "आप खुद से नहीं माँग सकते",
+      "لا يمكنك سؤال نفسك"
+    ],
+    "bad rank": [
+      "valor no válido",
+      "valeur invalide",
+      "ungültiger Kartenwert",
+      "valor inválido",
+      "点数无效",
+      "अमान्य अंक",
+      "قيمة غير صالحة"
+    ],
+    "you hold no {p1}s": [
+      "no tienes cartas de {p1}",
+      "vous n’avez pas de {p1}",
+      "du hast keine Karten mit Wert {p1}",
+      "você não tem cartas de {p1}",
+      "您没有点数为 {p1} 的牌",
+      "आपके पास {p1} के पत्ते नहीं हैं",
+      "ليس لديك أوراق بقيمة {p1}"
+    ],
+    "{p1} refilled +{p2}": [
+      "{p1} repuso +{p2}",
+      "{p1} a pioché +{p2}",
+      "{p1} hat +{p2} nachgezogen",
+      "{p1} repôs +{p2}",
+      "{p1} 补牌 +{p2}",
+      "{p1} ने +{p2} पत्ते लिए",
+      "{p1} سحب +{p2}"
+    ],
+    "{p1} passes": [
+      "{p1} pasa",
+      "{p1} passe",
+      "{p1} passt",
+      "{p1} passa",
+      "{p1} 跳过",
+      "{p1} पास करता है",
+      "{p1} يمرّر"
+    ],
+    "{p1} got {p2} {p3} from {p4}": [
+      "{p1} recibió {p2} cartas de {p3} de {p4}",
+      "{p1} a reçu {p2} cartes {p3} de {p4}",
+      "{p1} erhielt {p2} Karten mit Wert {p3} von {p4}",
+      "{p1} recebeu {p2} cartas de {p3} de {p4}",
+      "{p1} 从 {p4} 得到 {p2} 张 {p3}",
+      "{p1} को {p4} से {p3} के {p2} पत्ते मिले",
+      "حصل {p1} على {p2} أوراق بقيمة {p3} من {p4}"
+    ],
+    "{p1} asked {p2} for {p3}s — Go Fish!": [
+      "{p1} pidió cartas de {p3} a {p2}: ¡a pescar!",
+      "{p1} a demandé des {p3} à {p2} : va pêcher !",
+      "{p1} fragte {p2} nach {p3} — zieh eine Karte!",
+      "{p1} pediu {p3} a {p2}: vá pescar!",
+      "{p1} 向 {p2} 要 {p3}——去钓鱼！",
+      "{p1} ने {p2} से {p3} माँगे — जाकर पत्ते खींचें!",
+      "طلب {p1} من {p2} أوراق {p3} — اذهب للصيد!"
+    ],
+    "📊 Book(s): {p1}": [
+      "📊 Grupos: {p1}",
+      "📊 Carrés : {p1}",
+      "📊 Quartette: {p1}",
+      "📊 Conjuntos: {p1}",
+      "📊 成套牌：{p1}",
+      "📊 पूरे समूह: {p1}",
+      "📊 المجموعات: {p1}"
+    ],
+    "got {p1} {p2}": [
+      "recibió {p1} cartas de {p2}",
+      "a reçu {p1} cartes {p2}",
+      "erhielt {p1} Karten mit Wert {p2}",
+      "recebeu {p1} cartas de {p2}",
+      "得到 {p1} 张 {p2}",
+      "{p2} के {p1} पत्ते मिले",
+      "حصل على {p1} أوراق بقيمة {p2}"
+    ],
+    "fished the {p1}": [
+      "pescó un {p1}",
+      "a pêché le {p1}",
+      "hat {p1} geangelt",
+      "pescou {p1}",
+      "钓到了 {p1}",
+      "{p1} निकाला",
+      "اصطاد {p1}"
+    ],
+    "go fish": [
+      "a pescar",
+      "va pêcher",
+      "zieh eine Karte",
+      "vá pescar",
+      "去钓鱼",
+      "जाकर पत्ते खींचें",
+      "اذهب للصيد"
+    ],
+    "go fish (empty)": [
+      "a pescar (vacío)",
+      "va pêcher (vide)",
+      "zieh eine Karte (leer)",
+      "vá pescar (vazio)",
+      "去钓鱼（空）",
+      "पत्ते खींचें (खाली)",
+      "اذهب للصيد (فارغ)"
+    ],
+    "pick a card": [
+      "elige una carta",
+      "choisissez une carte",
+      "wähle eine Karte",
+      "escolha uma carta",
+      "请选择一张牌",
+      "एक पत्ता चुनें",
+      "اختر ورقة"
+    ],
+    "card not in hand": [
+      "la carta no está en tu mano",
+      "carte absente de votre main",
+      "Karte ist nicht auf deiner Hand",
+      "a carta não está na sua mão",
+      "手牌中没有此牌",
+      "पत्ता आपके हाथ में नहीं है",
+      "الورقة ليست في يدك"
+    ],
+    "illegal play": [
+      "jugada no válida",
+      "jeu illégal",
+      "ungültiges Ausspiel",
+      "jogada inválida",
+      "出牌不合法",
+      "अवैध खेल",
+      "لعب غير قانوني"
+    ],
+    "bad ai mode": [
+      "modo de IA no válido",
+      "mode IA invalide",
+      "ungültiger KI-Modus",
+      "modo de IA inválido",
+      "电脑模式无效",
+      "अमान्य कंप्यूटर मोड",
+      "وضع ذكاء اصطناعي غير صالح"
+    ],
+    "not your collect": [
+      "no te corresponde recoger",
+      "ce n’est pas à vous de ramasser",
+      "du darfst nicht einsammeln",
+      "não é sua vez de recolher",
+      "未轮到您收取",
+      "समेटने की आपकी बारी नहीं है",
+      "ليس دورك في الجمع"
+    ],
+    "must collect": [
+      "debes recoger",
+      "vous devez ramasser",
+      "du musst einsammeln",
+      "você deve recolher",
+      "必须收取",
+      "समेटना अनिवार्य है",
+      "يجب الجمع"
+    ],
+    "nothing to collect": [
+      "no hay nada que recoger",
+      "rien à ramasser",
+      "nichts zum Einsammeln",
+      "nada para recolher",
+      "没有可收取的牌",
+      "समेटने के लिए कुछ नहीं है",
+      "لا شيء لجمعه"
+    ],
+    "trick full": [
+      "baza completa",
+      "pli complet",
+      "Stich vollständig",
+      "vaza completa",
+      "此墩已满",
+      "हाथ पूरा है",
+      "اللمة مكتملة"
+    ],
+    "not your card": [
+      "no es tu carta",
+      "ce n’est pas votre carte",
+      "nicht deine Karte",
+      "não é sua carta",
+      "不是您的牌",
+      "यह आपका पत्ता नहीं है",
+      "ليست ورقتك"
+    ],
+    "bad question": [
+      "pregunta no válida",
+      "question invalide",
+      "ungültige Frage",
+      "pergunta inválida",
+      "问题无效",
+      "अमान्य प्रश्न",
+      "سؤال غير صالح"
+    ],
+    "already asked": [
+      "ya lo preguntaste",
+      "déjà demandé",
+      "bereits gefragt",
+      "já perguntado",
+      "已经问过",
+      "पहले पूछ चुके हैं",
+      "سُئل سابقًا"
+    ],
+    "bad guess": [
+      "suposición no válida",
+      "hypothèse invalide",
+      "ungültiger Tipp",
+      "palpite inválido",
+      "猜测无效",
+      "अमान्य अनुमान",
+      "تخمين غير صالح"
+    ]
+  }
+}

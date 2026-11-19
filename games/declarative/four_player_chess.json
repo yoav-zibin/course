@@ -8,10 +8,10 @@
   "allows_join_mid_match": false,
   "server_code": "const game = {\n  newMatch(ctx) {\n    const n = ctx.players.length;\n    const elim = [false,false,false,false];\n    for (let i=0;i<4;i++) if(i>=n) elim[i]=true;\n    const state = { board: initialBoard(), eliminated: elim, winnerTeam: null, lastMove: null, ply: 0 };\n    if (!n) return { state, turn: null, payouts: {} };\n    const s = nextAlive(-1, elim, n);\n    if (s==null) return { state, turn: null, payouts: payoutsFor(null, ctx) };\n    return { state, turn: [ctx.players[s].id] };\n  },\n  applyMove(state, playerId, move, ctx) {\n    const n = ctx.players.length;\n    const idx = ctx.players.findIndex(p => p.id === playerId);\n    if (idx<0) throw new InvalidMove('unknown player');\n    if (state.winnerTeam!=null) throw new InvalidMove('game over');\n    if (state.eliminated[idx]) {\n      const nx = nextAlive(idx, state.eliminated, n);\n      if (nx==null) return { state, turn: null, payouts: payoutsFor(null, ctx) };\n      return { state, turn: [ctx.players[nx].id] };\n    }\n    const m = move||{};\n    let ns;\n    if (m.kind==='move') {\n      const legal = legalFor(state.board, idx, state.eliminated);\n      let found=null;\n      for (let i=0;i<legal.length;i++){const x=legal[i];if(x.fr===m.fr&&x.fc===m.fc&&x.tr===m.tr&&x.tc===m.tc){found=x;break;}}\n      if(!found) throw new InvalidMove('illegal move');\n      const nb = shallow(state.board);\n      const fk=found.fr*14+found.fc, tk=found.tr*14+found.tc;\n      const moving = nb[fk];\n      delete nb[fk];\n      let t=moving.t;\n      if(moving.t===80&&(found.promo||isPromo(idx,found.tr,found.tc))) t=81;\n      nb[tk]={t,o:idx};\n      ns={board:nb,eliminated:state.eliminated.slice(),winnerTeam:null,lastMove:{fr:found.fr,fc:found.fc,tr:found.tr,tc:found.tc},ply:(state.ply||0)+1};\n    } else if (m.kind==='pass'||m.kind==='elim') {\n      if(m.kind==='pass'&&hasAnyLegal(state.board,idx,state.eliminated))throw new InvalidMove('moves available');\n      const nb=shallow(state.board);removeArmy(nb,idx);\n      const eliminated=state.eliminated.slice();eliminated[idx]=true;\n      ns={board:nb,eliminated,winnerTeam:null,lastMove:null,ply:(state.ply||0)+1};\n    } else throw new InvalidMove('unknown move');\n    return settleNext(ns,idx,ctx);\n\n  },\n  computerMove(state, playerId, ctx) { return pickMove(state, ctx.players.findIndex(p=>p.id===playerId), ctx, true); },\n  randomMove(state, playerId, ctx) { return pickMove(state, ctx.players.findIndex(p=>p.id===playerId), ctx, false); },\n  viewFor(state, playerId, ctx) {\n    const idx = playerId==null?-1:ctx.players.findIndex(p=>p.id===playerId);\n    let legal=[];\n    let chk=false;\n    if(idx>=0&&!state.eliminated[idx]&&state.winnerTeam==null){\n      legal=legalFor(state.board,idx,state.eliminated);\n      chk=inCheck(state.board,idx);\n    }\n    const cks=[];\n    for(let p=0;p<4;p++){if(!state.eliminated[p]){const kp=kingPos(state.board,p);if(kp&&isAttacked(state.board,kp[0],kp[1],p))cks.push(kp[0]+','+kp[1]);}}\n    const out={};\n    for(const key in state.board){const r=Math.floor(key/14),c=key%14;out[r+','+c]={t:String.fromCharCode(state.board[key].t),o:state.board[key].o};}\n    return {board:out,eliminated:state.eliminated.slice(),winnerTeam:state.winnerTeam,lastMove:state.lastMove?{fr:state.lastMove.fr,fc:state.lastMove.fc,tr:state.lastMove.tr,tc:state.lastMove.tc}:null,legalMoves:legal.map(m=>({fr:m.fr,fc:m.fc,tr:m.tr,tc:m.tc,cap:m.cap?true:false,promo:m.promo?true:false})),inCheck:chk,checkKings:cks,ply:state.ply||0};\n  }\n};\nfunction removeArmy(board,idx){for(const key in board)if(board[key].o===idx)delete board[key];}\nfunction eliminatedWinner(elim){if(elim[0]&&elim[2])return 1;if(elim[1]&&elim[3])return 0;return null;}\nfunction settleNext(state,after,ctx){\n let next=nextAlive(after,state.eliminated,ctx.players.length);\n for(let tries=0;tries<4;tries++){\n  const winner=eliminatedWinner(state.eliminated);\n  if(winner!==null){state.winnerTeam=winner;return {state,turn:null,payouts:payoutsFor(winner,ctx)};}\n  if(state.ply>=24||next===null){const w=materialWinner(state.board);state.winnerTeam=w;return {state,turn:null,payouts:payoutsFor(w,ctx)};}\n  if(hasAnyLegal(state.board,next,state.eliminated))return {state,turn:[ctx.players[next].id]};\n  removeArmy(state.board,next);state.eliminated[next]=true;\n  next=nextAlive(next,state.eliminated,ctx.players.length);\n }\n const w=eliminatedWinner(state.eliminated);state.winnerTeam=w;return {state,turn:null,payouts:payoutsFor(w,ctx)};\n}\nfunction shallow(b){const o={};for(const key in b)o[key]=b[key];return o;}\nfunction teamOf(p){return (p===0||p===2)?0:1;}\nfunction valid(r,c){if(r<0||r>13||c<0||c>13)return false;if(r<3||r>10){if(c<3||c>10)return false;}return true;}\nfunction isPromo(o,r,c){return o===0?r===0:o===2?r===13:o===1?c===13:c===0;}\nfunction initialBoard(){\n  const b={};\n  const S=[82,78,66,81,75,66,78,82], N=[82,78,66,75,81,66,78,82];\n  for(let i=0;i<8;i++){const c=3+i;\n    b[13*14+c]={t:S[i],o:0};b[12*14+c]={t:80,o:0};\n    b[0*14+c]={t:N[i],o:2};b[1*14+c]={t:80,o:2};\n  }\n  for(let i=0;i<8;i++){const r=3+i;\n    b[r*14+0]={t:S[i],o:1};b[r*14+1]={t:80,o:1};\n    b[r*14+13]={t:N[i],o:3};b[r*14+12]={t:80,o:3};\n  }\n  return b;\n}\nfunction kingPos(board,o){\n  for(const key in board){const p=board[key];if(p.o===o&&p.t===75)return[Math.floor(key/14),key%14];}\n  return null;\n}\nfunction isAttacked(b,tr,tc,def){return attackedClean(b,tr,tc,teamOf(def));}\nfunction attackedClean(b,tr,tc,dt){\n  let p;\n  // south o=0 pawns move -r, attack (r-1,c±1): attacker at (tr+1,c±1)\n  if(dt!==teamOf(0)){\n    if((p=b[(tr+1)*14+(tc-1)])&&p.o===0&&p.t===80)return true;\n    if((p=b[(tr+1)*14+(tc+1)])&&p.o===0&&p.t===80)return true;\n  }\n  if(dt!==teamOf(2)){\n    if((p=b[(tr-1)*14+(tc-1)])&&p.o===2&&p.t===80)return true;\n    if((p=b[(tr-1)*14+(tc+1)])&&p.o===2&&p.t===80)return true;\n  }\n  if(dt!==teamOf(1)){\n    if((p=b[(tr-1)*14+(tc-1)])&&p.o===1&&p.t===80)return true;\n    if((p=b[(tr+1)*14+(tc-1)])&&p.o===1&&p.t===80)return true;\n  }\n  if(dt!==teamOf(3)){\n    if((p=b[(tr-1)*14+(tc+1)])&&p.o===3&&p.t===80)return true;\n    if((p=b[(tr+1)*14+(tc+1)])&&p.o===3&&p.t===80)return true;\n  }\n  if((p=b[(tr-2)*14+tc-1])&&p.t===78&&teamOf(p.o)!==dt)return true;\n  if((p=b[(tr-2)*14+tc+1])&&p.t===78&&teamOf(p.o)!==dt)return true;\n  if((p=b[(tr-1)*14+tc-2])&&p.t===78&&teamOf(p.o)!==dt)return true;\n  if((p=b[(tr-1)*14+tc+2])&&p.t===78&&teamOf(p.o)!==dt)return true;\n  if((p=b[(tr+1)*14+tc-2])&&p.t===78&&teamOf(p.o)!==dt)return true;\n  if((p=b[(tr+1)*14+tc+2])&&p.t===78&&teamOf(p.o)!==dt)return true;\n  if((p=b[(tr+2)*14+tc-1])&&p.t===78&&teamOf(p.o)!==dt)return true;\n  if((p=b[(tr+2)*14+tc+2-1])&&p.t===78&&teamOf(p.o)!==dt)return true;\n  for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const q=b[(tr+dr)*14+tc+dc];if(q&&q.t===75&&teamOf(q.o)!==dt)return true;}\n  let r,c,q;\n  r=tr-1;c=tc;while(valid(r,c)){q=b[r*14+c];if(q){if(teamOf(q.o)!==dt&&(q.t===82||q.t===81))return true;break;}r--;}\n  r=tr+1;while(valid(r,tc)){q=b[r*14+tc];if(q){if(teamOf(q.o)!==dt&&(q.t===82||q.t===81))return true;break;}r++;}\n  c=tc-1;while(valid(tr,c)){q=b[tr*14+c];if(q){if(teamOf(q.o)!==dt&&(q.t===82||q.t===81))return true;break;}c--;}\n  c=tc+1;while(valid(tr,c)){q=b[tr*14+c];if(q){if(teamOf(q.o)!==dt&&(q.t===82||q.t===81))return true;break;}c++;}\n  r=tr-1;c=tc-1;while(valid(r,c)){q=b[r*14+c];if(q){if(teamOf(q.o)!==dt&&(q.t===66||q.t===81))return true;break;}r--;c--;}\n  r=tr-1;c=tc+1;while(valid(r,c)){q=b[r*14+c];if(q){if(teamOf(q.o)!==dt&&(q.t===66||q.t===81))return true;break;}r--;c++;}\n  r=tr+1;c=tc-1;while(valid(r,c)){q=b[r*14+c];if(q){if(teamOf(q.o)!==dt&&(q.t===66||q.t===81))return true;break;}r++;c--;}\n  r=tr+1;c=tc+1;while(valid(r,c)){q=b[r*14+c];if(q){if(teamOf(q.o)!==dt&&(q.t===66||q.t===81))return true;break;}r++;c++;}\n  return false;\n}\nfunction inCheck(board,o){const kp=kingPos(board,o);if(!kp)return false;return attackedClean(board,kp[0],kp[1],teamOf(o));}\nfunction pseudoFor(board,o){\n  const moves=[];\n  const mt=teamOf(o);\n  for(const key in board){\n    const p=board[key];if(p.o!==o)continue;\n    const k=+key,r=Math.floor(k/14),c=k%14;\n    if(p.t===78){\n      for(let d=0;d<8;d++){const tr=r+ND[d][0],tc=c+ND[d][1];if(!valid(tr,tc))continue;const q=board[tr*14+tc];if(q&&teamOf(q.o)===mt)continue;if(q&&q.t===75)continue;moves.push({fr:r,fc:c,tr,tc,cap:q?1:0});}\n    } else if(p.t===75){\n      for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const tr=r+dr,tc=c+dc;if(!valid(tr,tc))continue;const q=board[tr*14+tc];if(q&&teamOf(q.o)===mt)continue;if(q&&q.t===75)continue;moves.push({fr:r,fc:c,tr,tc,cap:q?1:0});}\n    } else if(p.t===80){\n      const f=PF[o];const r1=r+f[0],c1=c+f[1];\n      if(valid(r1,c1)&&!board[r1*14+c1]){\n        moves.push({fr:r,fc:c,tr:r1,tc:c1,cap:0,promo:isPromo(o,r1,c1)?1:0});\n        const st=o===0?r===12:o===2?r===1:o===1?c===1:c===12;\n        const r2=r+f[0]*2,c2=c+f[1]*2;\n        if(st&&valid(r2,c2)&&!board[r2*14+c2])moves.push({fr:r,fc:c,tr:r2,tc:c2,cap:0});\n      }\n      const cs=PC[o];\n      for(let i=0;i<2;i++){const tr=r+cs[i][0],tc=c+cs[i][1];if(!valid(tr,tc))continue;const q=board[tr*14+tc];if(q&&teamOf(q.o)!==mt&&q.t!==75)moves.push({fr:r,fc:c,tr,tc,cap:1,promo:isPromo(o,tr,tc)?1:0});}\n    } else {\n      const orth=p.t===82||p.t===81, diag=p.t===66||p.t===81;\n      if(orth){\n        let tr=r-1,tc=c;while(valid(tr,tc)){const q=board[tr*14+tc];if(q){if(teamOf(q.o)!==mt&&q.t!==75)moves.push({fr:r,fc:c,tr,tc,cap:1});break;}moves.push({fr:r,fc:c,tr,tc,cap:0});tr--;}\n        tr=r+1;tc=c;while(valid(tr,tc)){const q=board[tr*14+tc];if(q){if(teamOf(q.o)!==mt&&q.t!==75)moves.push({fr:r,fc:c,tr,tc,cap:1});break;}moves.push({fr:r,fc:c,tr,tc,cap:0});tr++;}\n        tr=r;tc=c-1;while(valid(tr,tc)){const q=board[tr*14+tc];if(q){if(teamOf(q.o)!==mt&&q.t!==75)moves.push({fr:r,fc:c,tr,tc,cap:1});break;}moves.push({fr:r,fc:c,tr,tc,cap:0});tc--;}\n        tr=r;tc=c+1;while(valid(tr,tc)){const q=board[tr*14+tc];if(q){if(teamOf(q.o)!==mt&&q.t!==75)moves.push({fr:r,fc:c,tr,tc,cap:1});break;}moves.push({fr:r,fc:c,tr,tc,cap:0});tc++;}\n      }\n      if(diag){\n        let tr=r-1,tc=c-1;while(valid(tr,tc)){const q=board[tr*14+tc];if(q){if(teamOf(q.o)!==mt&&q.t!==75)moves.push({fr:r,fc:c,tr,tc,cap:1});break;}moves.push({fr:r,fc:c,tr,tc,cap:0});tr--;tc--;}\n        tr=r-1;tc=c+1;while(valid(tr,tc)){const q=board[tr*14+tc];if(q){if(teamOf(q.o)!==mt&&q.t!==75)moves.push({fr:r,fc:c,tr,tc,cap:1});break;}moves.push({fr:r,fc:c,tr,tc,cap:0});tr--;tc++;}\n        tr=r+1;tc=c-1;while(valid(tr,tc)){const q=board[tr*14+tc];if(q){if(teamOf(q.o)!==mt&&q.t!==75)moves.push({fr:r,fc:c,tr,tc,cap:1});break;}moves.push({fr:r,fc:c,tr,tc,cap:0});tr++;tc--;}\n        tr=r+1;tc=c+1;while(valid(tr,tc)){const q=board[tr*14+tc];if(q){if(teamOf(q.o)!==mt&&q.t!==75)moves.push({fr:r,fc:c,tr,tc,cap:1});break;}moves.push({fr:r,fc:c,tr,tc,cap:0});tr++;tc++;}\n      }\n    }\n  }\n  return moves;\n}\nconst ND=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];\nconst PF=[[-1,0],[0,1],[1,0],[0,-1]];\nconst PC=[[[-1,-1],[-1,1]],[[-1,1],[1,1]],[[1,-1],[1,1]],[[-1,-1],[1,-1]]];\nfunction tryMove(board,o,m,mateAlive,mate){\n  const fk=m.fr*14+m.fc, tk=m.tr*14+m.tc;\n  const moving=board[fk];if(!moving)return false;\n  let t=moving.t;if(moving.t===80&&(m.promo||isPromo(o,m.tr,m.tc)))t=81;\n  const cap=board[tk];\n  delete board[fk];board[tk]={t,o};\n  const kp=kingPos(board,o);\n  let ok=false;\n  if(kp&&!attackedClean(board,kp[0],kp[1],teamOf(o))){\n    ok=true;\n    if(mateAlive){const mkp=kingPos(board,mate);if(mkp&&attackedClean(board,mkp[0],mkp[1],teamOf(mate)))ok=false;}\n  }\n  if(cap)board[tk]=cap;else delete board[tk];\n  board[fk]=moving;\n  if(ok){m.cap=cap?1:0;m.promo=(t===81&&moving.t===80)?1:0;}\n  return ok;\n}\nfunction legalFor(board,o,elim){\n  if(elim[o])return[];\n  if(!kingPos(board,o))return[];\n  const mate=o===0?2:o===2?0:o===1?3:1;\n  const mateAlive=!elim[mate]&&!!kingPos(board,mate);\n  const res=[];\n  const ps=pseudoFor(board,o);\n  for(let i=0;i<ps.length;i++) if(tryMove(board,o,ps[i],mateAlive,mate)) res.push(ps[i]);\n  return res;\n}\nfunction hasAnyLegal(board,o,elim){\n  if(elim[o])return false;\n  if(!kingPos(board,o))return false;\n  const mate=o===0?2:o===2?0:o===1?3:1;\n  const mateAlive=!elim[mate]&&!!kingPos(board,mate);\n  const ps=pseudoFor(board,o);\n  for(let i=0;i<ps.length;i++) if(tryMove(board,o,ps[i],mateAlive,mate)) return true;\n  return false;\n}\nfunction nextAlive(after,elim,n){const lim=n==null?4:Math.min(4,n);for(let i=1;i<=4;i++){const s=(after+i+8)%4;if(s<lim&&!elim[s])return s;}return null;}\nfunction matVal(t){return t===80?1:t===78||t===66?3:t===82?5:t===81?9:0;}\nfunction materialWinner(board){\n  let a=0,b=0;\n  for(const key in board){const p=board[key];const v=matVal(p.t);if(teamOf(p.o)===0)a+=v;else b+=v;}\n  if(a===b)return null;\n  return a>b?0:1;\n}\nfunction payoutsFor(w,ctx){\n  const pot=ctx.pot||0;const out={};\n  if(pot<=0)return out;\n  const humans=[];\n  for(let i=0;i<ctx.players.length;i++)if(ctx.players[i].kind==='human')humans.push(ctx.players[i]);\n  if(!humans.length)return out;\n  let win=[];\n  if(w!=null){const idxs=w===0?[0,2]:[1,3];for(let i=0;i<idxs.length;i++){const pl=ctx.players[idxs[i]];if(pl&&pl.kind==='human')win.push(pl.id);}}\n  if(!win.length)for(let i=0;i<humans.length;i++)win.push(humans[i].id);\n  const sh=Math.floor(pot/win.length);\n  let rem=pot-sh*win.length;\n  for(let i=0;i<win.length;i++){out[win[i]]=sh+(rem>0?1:0);if(rem>0)rem--;}\n  return out;\n}\nfunction pickMove(state,idx,ctx,biased){\n  if(idx<0||state.winnerTeam!=null||state.eliminated[idx]) return {kind:'pass'};\n  const ps=pseudoFor(state.board,idx);\n  if(!ps.length){if(inCheck(state.board,idx))return{kind:'elim'};return{kind:'pass'};}\n  const mate=idx===0?2:idx===2?0:idx===1?3:1;\n  const mateAlive=!state.eliminated[mate]&&!!kingPos(state.board,mate);\n  const r0=ctx.random();\n  const start=Math.floor(r0*ps.length);\n  const wantCap=biased&&r0<0.7;\n  let fallback=-1;\n  const tries=ps.length>24?24:ps.length;\n  for(let k=0;k<tries;k++){\n    const m=ps[(start+k)%ps.length];\n    if(wantCap&&!m.cap&&k<tries-1)continue;\n    if(tryMove(state.board,idx,m,mateAlive,mate)){\n      if(!wantCap||m.cap)return{kind:'move',fr:m.fr,fc:m.fc,tr:m.tr,tc:m.tc};\n      if(fallback<0)fallback=(start+k)%ps.length;\n    }\n  }\n  if(fallback>=0){const m=ps[fallback];return{kind:'move',fr:m.fr,fc:m.fc,tr:m.tr,tc:m.tc};}\n  const full=legalFor(state.board,idx,state.eliminated);\n  if(!full.length){if(inCheck(state.board,idx))return{kind:'elim'};return{kind:'pass'};}\n  const m2=full[Math.floor(ctx.random()*full.length)];\n  return{kind:'move',fr:m2.fr,fc:m2.fc,tr:m2.tr,tc:m2.tc};\n}\n",
   "rules": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-  "ui_instructions": "Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.",
+  "ui_instructions": "Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.",
   "tutorial": {
     "text": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>4 player chess (Declarative)</h1><p>Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.</p><p>Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.</p></main>"
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>4 player chess (Declarative)</h1><p>Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.</p><p>Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.</p></main>"
   },
   "images": [
     {
@@ -2231,92 +2231,4290 @@
             "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
           }
         ]
+      },
+      {
+        "name": "Continuing match",
+        "description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u3",
+              "kind": "human",
+              "display_name": "Casey",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u4",
+              "kind": "human",
+              "display_name": "Drew",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 1,
+          "seed": 12
+        },
+        "state": {
+          "board": {
+            "3": {
+              "t": 82,
+              "o": 2
+            },
+            "4": {
+              "t": 78,
+              "o": 2
+            },
+            "5": {
+              "t": 66,
+              "o": 2
+            },
+            "6": {
+              "t": 75,
+              "o": 2
+            },
+            "7": {
+              "t": 81,
+              "o": 2
+            },
+            "8": {
+              "t": 66,
+              "o": 2
+            },
+            "9": {
+              "t": 78,
+              "o": 2
+            },
+            "10": {
+              "t": 82,
+              "o": 2
+            },
+            "17": {
+              "t": 80,
+              "o": 2
+            },
+            "18": {
+              "t": 80,
+              "o": 2
+            },
+            "19": {
+              "t": 80,
+              "o": 2
+            },
+            "20": {
+              "t": 80,
+              "o": 2
+            },
+            "21": {
+              "t": 80,
+              "o": 2
+            },
+            "22": {
+              "t": 80,
+              "o": 2
+            },
+            "23": {
+              "t": 80,
+              "o": 2
+            },
+            "24": {
+              "t": 80,
+              "o": 2
+            },
+            "42": {
+              "t": 82,
+              "o": 1
+            },
+            "43": {
+              "t": 80,
+              "o": 1
+            },
+            "54": {
+              "t": 80,
+              "o": 3
+            },
+            "55": {
+              "t": 82,
+              "o": 3
+            },
+            "56": {
+              "t": 78,
+              "o": 1
+            },
+            "57": {
+              "t": 80,
+              "o": 1
+            },
+            "68": {
+              "t": 80,
+              "o": 3
+            },
+            "69": {
+              "t": 78,
+              "o": 3
+            },
+            "70": {
+              "t": 66,
+              "o": 1
+            },
+            "71": {
+              "t": 80,
+              "o": 1
+            },
+            "82": {
+              "t": 80,
+              "o": 3
+            },
+            "83": {
+              "t": 66,
+              "o": 3
+            },
+            "84": {
+              "t": 81,
+              "o": 1
+            },
+            "85": {
+              "t": 80,
+              "o": 1
+            },
+            "96": {
+              "t": 80,
+              "o": 3
+            },
+            "97": {
+              "t": 75,
+              "o": 3
+            },
+            "98": {
+              "t": 75,
+              "o": 1
+            },
+            "99": {
+              "t": 80,
+              "o": 1
+            },
+            "110": {
+              "t": 80,
+              "o": 3
+            },
+            "111": {
+              "t": 81,
+              "o": 3
+            },
+            "112": {
+              "t": 66,
+              "o": 1
+            },
+            "113": {
+              "t": 80,
+              "o": 1
+            },
+            "124": {
+              "t": 80,
+              "o": 3
+            },
+            "125": {
+              "t": 66,
+              "o": 3
+            },
+            "126": {
+              "t": 78,
+              "o": 1
+            },
+            "127": {
+              "t": 80,
+              "o": 1
+            },
+            "138": {
+              "t": 80,
+              "o": 3
+            },
+            "139": {
+              "t": 78,
+              "o": 3
+            },
+            "140": {
+              "t": 82,
+              "o": 1
+            },
+            "141": {
+              "t": 80,
+              "o": 1
+            },
+            "152": {
+              "t": 80,
+              "o": 3
+            },
+            "153": {
+              "t": 82,
+              "o": 3
+            },
+            "163": {
+              "t": 80,
+              "o": 0
+            },
+            "171": {
+              "t": 80,
+              "o": 0
+            },
+            "172": {
+              "t": 80,
+              "o": 0
+            },
+            "173": {
+              "t": 80,
+              "o": 0
+            },
+            "174": {
+              "t": 80,
+              "o": 0
+            },
+            "175": {
+              "t": 80,
+              "o": 0
+            },
+            "176": {
+              "t": 80,
+              "o": 0
+            },
+            "178": {
+              "t": 80,
+              "o": 0
+            },
+            "185": {
+              "t": 82,
+              "o": 0
+            },
+            "186": {
+              "t": 78,
+              "o": 0
+            },
+            "187": {
+              "t": 66,
+              "o": 0
+            },
+            "188": {
+              "t": 81,
+              "o": 0
+            },
+            "189": {
+              "t": 75,
+              "o": 0
+            },
+            "190": {
+              "t": 66,
+              "o": 0
+            },
+            "191": {
+              "t": 78,
+              "o": 0
+            },
+            "192": {
+              "t": 82,
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": null,
+          "lastMove": {
+            "fr": 12,
+            "fc": 9,
+            "tr": 11,
+            "tc": 9
+          },
+          "ply": 1
+        },
+        "view_of_mover": {
+          "board": {
+            "0,3": {
+              "t": "R",
+              "o": 2
+            },
+            "0,4": {
+              "t": "N",
+              "o": 2
+            },
+            "0,5": {
+              "t": "B",
+              "o": 2
+            },
+            "0,6": {
+              "t": "K",
+              "o": 2
+            },
+            "0,7": {
+              "t": "Q",
+              "o": 2
+            },
+            "0,8": {
+              "t": "B",
+              "o": 2
+            },
+            "0,9": {
+              "t": "N",
+              "o": 2
+            },
+            "0,10": {
+              "t": "R",
+              "o": 2
+            },
+            "1,3": {
+              "t": "P",
+              "o": 2
+            },
+            "1,4": {
+              "t": "P",
+              "o": 2
+            },
+            "1,5": {
+              "t": "P",
+              "o": 2
+            },
+            "1,6": {
+              "t": "P",
+              "o": 2
+            },
+            "1,7": {
+              "t": "P",
+              "o": 2
+            },
+            "1,8": {
+              "t": "P",
+              "o": 2
+            },
+            "1,9": {
+              "t": "P",
+              "o": 2
+            },
+            "1,10": {
+              "t": "P",
+              "o": 2
+            },
+            "3,0": {
+              "t": "R",
+              "o": 1
+            },
+            "3,1": {
+              "t": "P",
+              "o": 1
+            },
+            "3,12": {
+              "t": "P",
+              "o": 3
+            },
+            "3,13": {
+              "t": "R",
+              "o": 3
+            },
+            "4,0": {
+              "t": "N",
+              "o": 1
+            },
+            "4,1": {
+              "t": "P",
+              "o": 1
+            },
+            "4,12": {
+              "t": "P",
+              "o": 3
+            },
+            "4,13": {
+              "t": "N",
+              "o": 3
+            },
+            "5,0": {
+              "t": "B",
+              "o": 1
+            },
+            "5,1": {
+              "t": "P",
+              "o": 1
+            },
+            "5,12": {
+              "t": "P",
+              "o": 3
+            },
+            "5,13": {
+              "t": "B",
+              "o": 3
+            },
+            "6,0": {
+              "t": "Q",
+              "o": 1
+            },
+            "6,1": {
+              "t": "P",
+              "o": 1
+            },
+            "6,12": {
+              "t": "P",
+              "o": 3
+            },
+            "6,13": {
+              "t": "K",
+              "o": 3
+            },
+            "7,0": {
+              "t": "K",
+              "o": 1
+            },
+            "7,1": {
+              "t": "P",
+              "o": 1
+            },
+            "7,12": {
+              "t": "P",
+              "o": 3
+            },
+            "7,13": {
+              "t": "Q",
+              "o": 3
+            },
+            "8,0": {
+              "t": "B",
+              "o": 1
+            },
+            "8,1": {
+              "t": "P",
+              "o": 1
+            },
+            "8,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,13": {
+              "t": "B",
+              "o": 3
+            },
+            "9,0": {
+              "t": "N",
+              "o": 1
+            },
+            "9,1": {
+              "t": "P",
+              "o": 1
+            },
+            "9,12": {
+              "t": "P",
+              "o": 3
+            },
+            "9,13": {
+              "t": "N",
+              "o": 3
+            },
+            "10,0": {
+              "t": "R",
+              "o": 1
+            },
+            "10,1": {
+              "t": "P",
+              "o": 1
+            },
+            "10,12": {
+              "t": "P",
+              "o": 3
+            },
+            "10,13": {
+              "t": "R",
+              "o": 3
+            },
+            "11,9": {
+              "t": "P",
+              "o": 0
+            },
+            "12,3": {
+              "t": "P",
+              "o": 0
+            },
+            "12,4": {
+              "t": "P",
+              "o": 0
+            },
+            "12,5": {
+              "t": "P",
+              "o": 0
+            },
+            "12,6": {
+              "t": "P",
+              "o": 0
+            },
+            "12,7": {
+              "t": "P",
+              "o": 0
+            },
+            "12,8": {
+              "t": "P",
+              "o": 0
+            },
+            "12,10": {
+              "t": "P",
+              "o": 0
+            },
+            "13,3": {
+              "t": "R",
+              "o": 0
+            },
+            "13,4": {
+              "t": "N",
+              "o": 0
+            },
+            "13,5": {
+              "t": "B",
+              "o": 0
+            },
+            "13,6": {
+              "t": "Q",
+              "o": 0
+            },
+            "13,7": {
+              "t": "K",
+              "o": 0
+            },
+            "13,8": {
+              "t": "B",
+              "o": 0
+            },
+            "13,9": {
+              "t": "N",
+              "o": 0
+            },
+            "13,10": {
+              "t": "R",
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": null,
+          "lastMove": {
+            "fr": 12,
+            "fc": 9,
+            "tr": 11,
+            "tc": 9
+          },
+          "legalMoves": [
+            {
+              "fr": 3,
+              "fc": 1,
+              "tr": 3,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 3,
+              "fc": 1,
+              "tr": 3,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 0,
+              "tr": 3,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 0,
+              "tr": 5,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 1,
+              "tr": 4,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 1,
+              "tr": 4,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 5,
+              "fc": 1,
+              "tr": 5,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 5,
+              "fc": 1,
+              "tr": 5,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 1,
+              "tr": 6,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 1,
+              "tr": 6,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 7,
+              "fc": 1,
+              "tr": 7,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 7,
+              "fc": 1,
+              "tr": 7,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 1,
+              "tr": 8,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 1,
+              "tr": 8,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 0,
+              "tr": 8,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 0,
+              "tr": 10,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 1,
+              "tr": 9,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 1,
+              "tr": 9,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 10,
+              "fc": 1,
+              "tr": 10,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 10,
+              "fc": 1,
+              "tr": 10,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            }
+          ],
+          "inCheck": false,
+          "checkKings": [],
+          "ply": 1
+        },
+        "view_of_other": {
+          "board": {
+            "0,3": {
+              "t": "R",
+              "o": 2
+            },
+            "0,4": {
+              "t": "N",
+              "o": 2
+            },
+            "0,5": {
+              "t": "B",
+              "o": 2
+            },
+            "0,6": {
+              "t": "K",
+              "o": 2
+            },
+            "0,7": {
+              "t": "Q",
+              "o": 2
+            },
+            "0,8": {
+              "t": "B",
+              "o": 2
+            },
+            "0,9": {
+              "t": "N",
+              "o": 2
+            },
+            "0,10": {
+              "t": "R",
+              "o": 2
+            },
+            "1,3": {
+              "t": "P",
+              "o": 2
+            },
+            "1,4": {
+              "t": "P",
+              "o": 2
+            },
+            "1,5": {
+              "t": "P",
+              "o": 2
+            },
+            "1,6": {
+              "t": "P",
+              "o": 2
+            },
+            "1,7": {
+              "t": "P",
+              "o": 2
+            },
+            "1,8": {
+              "t": "P",
+              "o": 2
+            },
+            "1,9": {
+              "t": "P",
+              "o": 2
+            },
+            "1,10": {
+              "t": "P",
+              "o": 2
+            },
+            "3,0": {
+              "t": "R",
+              "o": 1
+            },
+            "3,1": {
+              "t": "P",
+              "o": 1
+            },
+            "3,12": {
+              "t": "P",
+              "o": 3
+            },
+            "3,13": {
+              "t": "R",
+              "o": 3
+            },
+            "4,0": {
+              "t": "N",
+              "o": 1
+            },
+            "4,1": {
+              "t": "P",
+              "o": 1
+            },
+            "4,12": {
+              "t": "P",
+              "o": 3
+            },
+            "4,13": {
+              "t": "N",
+              "o": 3
+            },
+            "5,0": {
+              "t": "B",
+              "o": 1
+            },
+            "5,1": {
+              "t": "P",
+              "o": 1
+            },
+            "5,12": {
+              "t": "P",
+              "o": 3
+            },
+            "5,13": {
+              "t": "B",
+              "o": 3
+            },
+            "6,0": {
+              "t": "Q",
+              "o": 1
+            },
+            "6,1": {
+              "t": "P",
+              "o": 1
+            },
+            "6,12": {
+              "t": "P",
+              "o": 3
+            },
+            "6,13": {
+              "t": "K",
+              "o": 3
+            },
+            "7,0": {
+              "t": "K",
+              "o": 1
+            },
+            "7,1": {
+              "t": "P",
+              "o": 1
+            },
+            "7,12": {
+              "t": "P",
+              "o": 3
+            },
+            "7,13": {
+              "t": "Q",
+              "o": 3
+            },
+            "8,0": {
+              "t": "B",
+              "o": 1
+            },
+            "8,1": {
+              "t": "P",
+              "o": 1
+            },
+            "8,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,13": {
+              "t": "B",
+              "o": 3
+            },
+            "9,0": {
+              "t": "N",
+              "o": 1
+            },
+            "9,1": {
+              "t": "P",
+              "o": 1
+            },
+            "9,12": {
+              "t": "P",
+              "o": 3
+            },
+            "9,13": {
+              "t": "N",
+              "o": 3
+            },
+            "10,0": {
+              "t": "R",
+              "o": 1
+            },
+            "10,1": {
+              "t": "P",
+              "o": 1
+            },
+            "10,12": {
+              "t": "P",
+              "o": 3
+            },
+            "10,13": {
+              "t": "R",
+              "o": 3
+            },
+            "11,9": {
+              "t": "P",
+              "o": 0
+            },
+            "12,3": {
+              "t": "P",
+              "o": 0
+            },
+            "12,4": {
+              "t": "P",
+              "o": 0
+            },
+            "12,5": {
+              "t": "P",
+              "o": 0
+            },
+            "12,6": {
+              "t": "P",
+              "o": 0
+            },
+            "12,7": {
+              "t": "P",
+              "o": 0
+            },
+            "12,8": {
+              "t": "P",
+              "o": 0
+            },
+            "12,10": {
+              "t": "P",
+              "o": 0
+            },
+            "13,3": {
+              "t": "R",
+              "o": 0
+            },
+            "13,4": {
+              "t": "N",
+              "o": 0
+            },
+            "13,5": {
+              "t": "B",
+              "o": 0
+            },
+            "13,6": {
+              "t": "Q",
+              "o": 0
+            },
+            "13,7": {
+              "t": "K",
+              "o": 0
+            },
+            "13,8": {
+              "t": "B",
+              "o": 0
+            },
+            "13,9": {
+              "t": "N",
+              "o": 0
+            },
+            "13,10": {
+              "t": "R",
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": null,
+          "lastMove": {
+            "fr": 12,
+            "fc": 9,
+            "tr": 11,
+            "tc": 9
+          },
+          "legalMoves": [],
+          "inCheck": false,
+          "checkKings": [],
+          "ply": 1
+        },
+        "player_id": "u2",
+        "other_player_id": null,
+        "move": {
+          "kind": "move",
+          "fr": 5,
+          "fc": 1,
+          "tr": 5,
+          "tc": 2
+        },
+        "expected_state": {
+          "board": {
+            "3": {
+              "t": 82,
+              "o": 2
+            },
+            "4": {
+              "t": 78,
+              "o": 2
+            },
+            "5": {
+              "t": 66,
+              "o": 2
+            },
+            "6": {
+              "t": 75,
+              "o": 2
+            },
+            "7": {
+              "t": 81,
+              "o": 2
+            },
+            "8": {
+              "t": 66,
+              "o": 2
+            },
+            "9": {
+              "t": 78,
+              "o": 2
+            },
+            "10": {
+              "t": 82,
+              "o": 2
+            },
+            "17": {
+              "t": 80,
+              "o": 2
+            },
+            "18": {
+              "t": 80,
+              "o": 2
+            },
+            "19": {
+              "t": 80,
+              "o": 2
+            },
+            "20": {
+              "t": 80,
+              "o": 2
+            },
+            "21": {
+              "t": 80,
+              "o": 2
+            },
+            "22": {
+              "t": 80,
+              "o": 2
+            },
+            "23": {
+              "t": 80,
+              "o": 2
+            },
+            "24": {
+              "t": 80,
+              "o": 2
+            },
+            "42": {
+              "t": 82,
+              "o": 1
+            },
+            "43": {
+              "t": 80,
+              "o": 1
+            },
+            "54": {
+              "t": 80,
+              "o": 3
+            },
+            "55": {
+              "t": 82,
+              "o": 3
+            },
+            "56": {
+              "t": 78,
+              "o": 1
+            },
+            "57": {
+              "t": 80,
+              "o": 1
+            },
+            "68": {
+              "t": 80,
+              "o": 3
+            },
+            "69": {
+              "t": 78,
+              "o": 3
+            },
+            "70": {
+              "t": 66,
+              "o": 1
+            },
+            "72": {
+              "t": 80,
+              "o": 1
+            },
+            "82": {
+              "t": 80,
+              "o": 3
+            },
+            "83": {
+              "t": 66,
+              "o": 3
+            },
+            "84": {
+              "t": 81,
+              "o": 1
+            },
+            "85": {
+              "t": 80,
+              "o": 1
+            },
+            "96": {
+              "t": 80,
+              "o": 3
+            },
+            "97": {
+              "t": 75,
+              "o": 3
+            },
+            "98": {
+              "t": 75,
+              "o": 1
+            },
+            "99": {
+              "t": 80,
+              "o": 1
+            },
+            "110": {
+              "t": 80,
+              "o": 3
+            },
+            "111": {
+              "t": 81,
+              "o": 3
+            },
+            "112": {
+              "t": 66,
+              "o": 1
+            },
+            "113": {
+              "t": 80,
+              "o": 1
+            },
+            "124": {
+              "t": 80,
+              "o": 3
+            },
+            "125": {
+              "t": 66,
+              "o": 3
+            },
+            "126": {
+              "t": 78,
+              "o": 1
+            },
+            "127": {
+              "t": 80,
+              "o": 1
+            },
+            "138": {
+              "t": 80,
+              "o": 3
+            },
+            "139": {
+              "t": 78,
+              "o": 3
+            },
+            "140": {
+              "t": 82,
+              "o": 1
+            },
+            "141": {
+              "t": 80,
+              "o": 1
+            },
+            "152": {
+              "t": 80,
+              "o": 3
+            },
+            "153": {
+              "t": 82,
+              "o": 3
+            },
+            "163": {
+              "t": 80,
+              "o": 0
+            },
+            "171": {
+              "t": 80,
+              "o": 0
+            },
+            "172": {
+              "t": 80,
+              "o": 0
+            },
+            "173": {
+              "t": 80,
+              "o": 0
+            },
+            "174": {
+              "t": 80,
+              "o": 0
+            },
+            "175": {
+              "t": 80,
+              "o": 0
+            },
+            "176": {
+              "t": 80,
+              "o": 0
+            },
+            "178": {
+              "t": 80,
+              "o": 0
+            },
+            "185": {
+              "t": 82,
+              "o": 0
+            },
+            "186": {
+              "t": 78,
+              "o": 0
+            },
+            "187": {
+              "t": 66,
+              "o": 0
+            },
+            "188": {
+              "t": 81,
+              "o": 0
+            },
+            "189": {
+              "t": 75,
+              "o": 0
+            },
+            "190": {
+              "t": 66,
+              "o": 0
+            },
+            "191": {
+              "t": 78,
+              "o": 0
+            },
+            "192": {
+              "t": 82,
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": null,
+          "lastMove": {
+            "fr": 5,
+            "fc": 1,
+            "tr": 5,
+            "tc": 2
+          },
+          "ply": 2
+        },
+        "expected_turn": [
+          "u3"
+        ],
+        "expected_view_of_mover": {
+          "board": {
+            "0,3": {
+              "t": "R",
+              "o": 2
+            },
+            "0,4": {
+              "t": "N",
+              "o": 2
+            },
+            "0,5": {
+              "t": "B",
+              "o": 2
+            },
+            "0,6": {
+              "t": "K",
+              "o": 2
+            },
+            "0,7": {
+              "t": "Q",
+              "o": 2
+            },
+            "0,8": {
+              "t": "B",
+              "o": 2
+            },
+            "0,9": {
+              "t": "N",
+              "o": 2
+            },
+            "0,10": {
+              "t": "R",
+              "o": 2
+            },
+            "1,3": {
+              "t": "P",
+              "o": 2
+            },
+            "1,4": {
+              "t": "P",
+              "o": 2
+            },
+            "1,5": {
+              "t": "P",
+              "o": 2
+            },
+            "1,6": {
+              "t": "P",
+              "o": 2
+            },
+            "1,7": {
+              "t": "P",
+              "o": 2
+            },
+            "1,8": {
+              "t": "P",
+              "o": 2
+            },
+            "1,9": {
+              "t": "P",
+              "o": 2
+            },
+            "1,10": {
+              "t": "P",
+              "o": 2
+            },
+            "3,0": {
+              "t": "R",
+              "o": 1
+            },
+            "3,1": {
+              "t": "P",
+              "o": 1
+            },
+            "3,12": {
+              "t": "P",
+              "o": 3
+            },
+            "3,13": {
+              "t": "R",
+              "o": 3
+            },
+            "4,0": {
+              "t": "N",
+              "o": 1
+            },
+            "4,1": {
+              "t": "P",
+              "o": 1
+            },
+            "4,12": {
+              "t": "P",
+              "o": 3
+            },
+            "4,13": {
+              "t": "N",
+              "o": 3
+            },
+            "5,0": {
+              "t": "B",
+              "o": 1
+            },
+            "5,2": {
+              "t": "P",
+              "o": 1
+            },
+            "5,12": {
+              "t": "P",
+              "o": 3
+            },
+            "5,13": {
+              "t": "B",
+              "o": 3
+            },
+            "6,0": {
+              "t": "Q",
+              "o": 1
+            },
+            "6,1": {
+              "t": "P",
+              "o": 1
+            },
+            "6,12": {
+              "t": "P",
+              "o": 3
+            },
+            "6,13": {
+              "t": "K",
+              "o": 3
+            },
+            "7,0": {
+              "t": "K",
+              "o": 1
+            },
+            "7,1": {
+              "t": "P",
+              "o": 1
+            },
+            "7,12": {
+              "t": "P",
+              "o": 3
+            },
+            "7,13": {
+              "t": "Q",
+              "o": 3
+            },
+            "8,0": {
+              "t": "B",
+              "o": 1
+            },
+            "8,1": {
+              "t": "P",
+              "o": 1
+            },
+            "8,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,13": {
+              "t": "B",
+              "o": 3
+            },
+            "9,0": {
+              "t": "N",
+              "o": 1
+            },
+            "9,1": {
+              "t": "P",
+              "o": 1
+            },
+            "9,12": {
+              "t": "P",
+              "o": 3
+            },
+            "9,13": {
+              "t": "N",
+              "o": 3
+            },
+            "10,0": {
+              "t": "R",
+              "o": 1
+            },
+            "10,1": {
+              "t": "P",
+              "o": 1
+            },
+            "10,12": {
+              "t": "P",
+              "o": 3
+            },
+            "10,13": {
+              "t": "R",
+              "o": 3
+            },
+            "11,9": {
+              "t": "P",
+              "o": 0
+            },
+            "12,3": {
+              "t": "P",
+              "o": 0
+            },
+            "12,4": {
+              "t": "P",
+              "o": 0
+            },
+            "12,5": {
+              "t": "P",
+              "o": 0
+            },
+            "12,6": {
+              "t": "P",
+              "o": 0
+            },
+            "12,7": {
+              "t": "P",
+              "o": 0
+            },
+            "12,8": {
+              "t": "P",
+              "o": 0
+            },
+            "12,10": {
+              "t": "P",
+              "o": 0
+            },
+            "13,3": {
+              "t": "R",
+              "o": 0
+            },
+            "13,4": {
+              "t": "N",
+              "o": 0
+            },
+            "13,5": {
+              "t": "B",
+              "o": 0
+            },
+            "13,6": {
+              "t": "Q",
+              "o": 0
+            },
+            "13,7": {
+              "t": "K",
+              "o": 0
+            },
+            "13,8": {
+              "t": "B",
+              "o": 0
+            },
+            "13,9": {
+              "t": "N",
+              "o": 0
+            },
+            "13,10": {
+              "t": "R",
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": null,
+          "lastMove": {
+            "fr": 5,
+            "fc": 1,
+            "tr": 5,
+            "tc": 2
+          },
+          "legalMoves": [
+            {
+              "fr": 3,
+              "fc": 1,
+              "tr": 3,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 3,
+              "fc": 1,
+              "tr": 3,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 0,
+              "tr": 3,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 1,
+              "tr": 4,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 1,
+              "tr": 4,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 5,
+              "fc": 2,
+              "tr": 5,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 0,
+              "tr": 5,
+              "tc": 1,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 0,
+              "tr": 4,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 0,
+              "tr": 3,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 0,
+              "tr": 2,
+              "tc": 4,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 0,
+              "tr": 1,
+              "tc": 5,
+              "cap": true,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 1,
+              "tr": 6,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 1,
+              "tr": 6,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 7,
+              "fc": 1,
+              "tr": 7,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 7,
+              "fc": 1,
+              "tr": 7,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 1,
+              "tr": 8,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 1,
+              "tr": 8,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 0,
+              "tr": 8,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 0,
+              "tr": 10,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 1,
+              "tr": 9,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 1,
+              "tr": 9,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 10,
+              "fc": 1,
+              "tr": 10,
+              "tc": 2,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 10,
+              "fc": 1,
+              "tr": 10,
+              "tc": 3,
+              "cap": false,
+              "promo": false
+            }
+          ],
+          "inCheck": false,
+          "checkKings": [],
+          "ply": 2
+        },
+        "expected_view_of_other": {
+          "board": {
+            "0,3": {
+              "t": "R",
+              "o": 2
+            },
+            "0,4": {
+              "t": "N",
+              "o": 2
+            },
+            "0,5": {
+              "t": "B",
+              "o": 2
+            },
+            "0,6": {
+              "t": "K",
+              "o": 2
+            },
+            "0,7": {
+              "t": "Q",
+              "o": 2
+            },
+            "0,8": {
+              "t": "B",
+              "o": 2
+            },
+            "0,9": {
+              "t": "N",
+              "o": 2
+            },
+            "0,10": {
+              "t": "R",
+              "o": 2
+            },
+            "1,3": {
+              "t": "P",
+              "o": 2
+            },
+            "1,4": {
+              "t": "P",
+              "o": 2
+            },
+            "1,5": {
+              "t": "P",
+              "o": 2
+            },
+            "1,6": {
+              "t": "P",
+              "o": 2
+            },
+            "1,7": {
+              "t": "P",
+              "o": 2
+            },
+            "1,8": {
+              "t": "P",
+              "o": 2
+            },
+            "1,9": {
+              "t": "P",
+              "o": 2
+            },
+            "1,10": {
+              "t": "P",
+              "o": 2
+            },
+            "3,0": {
+              "t": "R",
+              "o": 1
+            },
+            "3,1": {
+              "t": "P",
+              "o": 1
+            },
+            "3,12": {
+              "t": "P",
+              "o": 3
+            },
+            "3,13": {
+              "t": "R",
+              "o": 3
+            },
+            "4,0": {
+              "t": "N",
+              "o": 1
+            },
+            "4,1": {
+              "t": "P",
+              "o": 1
+            },
+            "4,12": {
+              "t": "P",
+              "o": 3
+            },
+            "4,13": {
+              "t": "N",
+              "o": 3
+            },
+            "5,0": {
+              "t": "B",
+              "o": 1
+            },
+            "5,2": {
+              "t": "P",
+              "o": 1
+            },
+            "5,12": {
+              "t": "P",
+              "o": 3
+            },
+            "5,13": {
+              "t": "B",
+              "o": 3
+            },
+            "6,0": {
+              "t": "Q",
+              "o": 1
+            },
+            "6,1": {
+              "t": "P",
+              "o": 1
+            },
+            "6,12": {
+              "t": "P",
+              "o": 3
+            },
+            "6,13": {
+              "t": "K",
+              "o": 3
+            },
+            "7,0": {
+              "t": "K",
+              "o": 1
+            },
+            "7,1": {
+              "t": "P",
+              "o": 1
+            },
+            "7,12": {
+              "t": "P",
+              "o": 3
+            },
+            "7,13": {
+              "t": "Q",
+              "o": 3
+            },
+            "8,0": {
+              "t": "B",
+              "o": 1
+            },
+            "8,1": {
+              "t": "P",
+              "o": 1
+            },
+            "8,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,13": {
+              "t": "B",
+              "o": 3
+            },
+            "9,0": {
+              "t": "N",
+              "o": 1
+            },
+            "9,1": {
+              "t": "P",
+              "o": 1
+            },
+            "9,12": {
+              "t": "P",
+              "o": 3
+            },
+            "9,13": {
+              "t": "N",
+              "o": 3
+            },
+            "10,0": {
+              "t": "R",
+              "o": 1
+            },
+            "10,1": {
+              "t": "P",
+              "o": 1
+            },
+            "10,12": {
+              "t": "P",
+              "o": 3
+            },
+            "10,13": {
+              "t": "R",
+              "o": 3
+            },
+            "11,9": {
+              "t": "P",
+              "o": 0
+            },
+            "12,3": {
+              "t": "P",
+              "o": 0
+            },
+            "12,4": {
+              "t": "P",
+              "o": 0
+            },
+            "12,5": {
+              "t": "P",
+              "o": 0
+            },
+            "12,6": {
+              "t": "P",
+              "o": 0
+            },
+            "12,7": {
+              "t": "P",
+              "o": 0
+            },
+            "12,8": {
+              "t": "P",
+              "o": 0
+            },
+            "12,10": {
+              "t": "P",
+              "o": 0
+            },
+            "13,3": {
+              "t": "R",
+              "o": 0
+            },
+            "13,4": {
+              "t": "N",
+              "o": 0
+            },
+            "13,5": {
+              "t": "B",
+              "o": 0
+            },
+            "13,6": {
+              "t": "Q",
+              "o": 0
+            },
+            "13,7": {
+              "t": "K",
+              "o": 0
+            },
+            "13,8": {
+              "t": "B",
+              "o": 0
+            },
+            "13,9": {
+              "t": "N",
+              "o": 0
+            },
+            "13,10": {
+              "t": "R",
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": null,
+          "lastMove": {
+            "fr": 5,
+            "fc": 1,
+            "tr": 5,
+            "tc": 2
+          },
+          "legalMoves": [],
+          "inCheck": false,
+          "checkKings": [],
+          "ply": 2
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Finishing move",
+        "description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u3",
+              "kind": "human",
+              "display_name": "Casey",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u4",
+              "kind": "human",
+              "display_name": "Drew",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 23,
+          "seed": 34
+        },
+        "state": {
+          "board": {
+            "4": {
+              "t": 82,
+              "o": 2
+            },
+            "5": {
+              "t": 66,
+              "o": 2
+            },
+            "6": {
+              "t": 75,
+              "o": 2
+            },
+            "7": {
+              "t": 81,
+              "o": 2
+            },
+            "8": {
+              "t": 66,
+              "o": 2
+            },
+            "9": {
+              "t": 78,
+              "o": 2
+            },
+            "10": {
+              "t": 82,
+              "o": 2
+            },
+            "17": {
+              "t": 80,
+              "o": 2
+            },
+            "18": {
+              "t": 80,
+              "o": 2
+            },
+            "20": {
+              "t": 80,
+              "o": 2
+            },
+            "21": {
+              "t": 80,
+              "o": 2
+            },
+            "22": {
+              "t": 80,
+              "o": 2
+            },
+            "23": {
+              "t": 80,
+              "o": 2
+            },
+            "24": {
+              "t": 80,
+              "o": 2
+            },
+            "42": {
+              "t": 82,
+              "o": 1
+            },
+            "54": {
+              "t": 80,
+              "o": 3
+            },
+            "55": {
+              "t": 82,
+              "o": 3
+            },
+            "56": {
+              "t": 78,
+              "o": 1
+            },
+            "57": {
+              "t": 80,
+              "o": 1
+            },
+            "68": {
+              "t": 80,
+              "o": 3
+            },
+            "69": {
+              "t": 78,
+              "o": 3
+            },
+            "70": {
+              "t": 78,
+              "o": 2
+            },
+            "72": {
+              "t": 80,
+              "o": 1
+            },
+            "82": {
+              "t": 80,
+              "o": 3
+            },
+            "83": {
+              "t": 75,
+              "o": 3
+            },
+            "84": {
+              "t": 75,
+              "o": 1
+            },
+            "85": {
+              "t": 80,
+              "o": 1
+            },
+            "95": {
+              "t": 80,
+              "o": 3
+            },
+            "100": {
+              "t": 80,
+              "o": 1
+            },
+            "110": {
+              "t": 80,
+              "o": 3
+            },
+            "113": {
+              "t": 80,
+              "o": 1
+            },
+            "124": {
+              "t": 80,
+              "o": 3
+            },
+            "125": {
+              "t": 81,
+              "o": 3
+            },
+            "126": {
+              "t": 78,
+              "o": 1
+            },
+            "129": {
+              "t": 80,
+              "o": 1
+            },
+            "136": {
+              "t": 81,
+              "o": 0
+            },
+            "139": {
+              "t": 78,
+              "o": 3
+            },
+            "140": {
+              "t": 82,
+              "o": 1
+            },
+            "141": {
+              "t": 80,
+              "o": 1
+            },
+            "147": {
+              "t": 80,
+              "o": 0
+            },
+            "152": {
+              "t": 80,
+              "o": 3
+            },
+            "153": {
+              "t": 82,
+              "o": 3
+            },
+            "163": {
+              "t": 80,
+              "o": 0
+            },
+            "171": {
+              "t": 80,
+              "o": 0
+            },
+            "172": {
+              "t": 66,
+              "o": 0
+            },
+            "173": {
+              "t": 80,
+              "o": 0
+            },
+            "174": {
+              "t": 78,
+              "o": 0
+            },
+            "176": {
+              "t": 80,
+              "o": 0
+            },
+            "178": {
+              "t": 80,
+              "o": 0
+            },
+            "185": {
+              "t": 82,
+              "o": 0
+            },
+            "189": {
+              "t": 75,
+              "o": 0
+            },
+            "191": {
+              "t": 78,
+              "o": 0
+            },
+            "192": {
+              "t": 82,
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": null,
+          "lastMove": {
+            "fr": 0,
+            "fc": 3,
+            "tr": 0,
+            "tc": 4
+          },
+          "ply": 23
+        },
+        "view_of_mover": {
+          "board": {
+            "0,4": {
+              "t": "R",
+              "o": 2
+            },
+            "0,5": {
+              "t": "B",
+              "o": 2
+            },
+            "0,6": {
+              "t": "K",
+              "o": 2
+            },
+            "0,7": {
+              "t": "Q",
+              "o": 2
+            },
+            "0,8": {
+              "t": "B",
+              "o": 2
+            },
+            "0,9": {
+              "t": "N",
+              "o": 2
+            },
+            "0,10": {
+              "t": "R",
+              "o": 2
+            },
+            "1,3": {
+              "t": "P",
+              "o": 2
+            },
+            "1,4": {
+              "t": "P",
+              "o": 2
+            },
+            "1,6": {
+              "t": "P",
+              "o": 2
+            },
+            "1,7": {
+              "t": "P",
+              "o": 2
+            },
+            "1,8": {
+              "t": "P",
+              "o": 2
+            },
+            "1,9": {
+              "t": "P",
+              "o": 2
+            },
+            "1,10": {
+              "t": "P",
+              "o": 2
+            },
+            "3,0": {
+              "t": "R",
+              "o": 1
+            },
+            "3,12": {
+              "t": "P",
+              "o": 3
+            },
+            "3,13": {
+              "t": "R",
+              "o": 3
+            },
+            "4,0": {
+              "t": "N",
+              "o": 1
+            },
+            "4,1": {
+              "t": "P",
+              "o": 1
+            },
+            "4,12": {
+              "t": "P",
+              "o": 3
+            },
+            "4,13": {
+              "t": "N",
+              "o": 3
+            },
+            "5,0": {
+              "t": "N",
+              "o": 2
+            },
+            "5,2": {
+              "t": "P",
+              "o": 1
+            },
+            "5,12": {
+              "t": "P",
+              "o": 3
+            },
+            "5,13": {
+              "t": "K",
+              "o": 3
+            },
+            "6,0": {
+              "t": "K",
+              "o": 1
+            },
+            "6,1": {
+              "t": "P",
+              "o": 1
+            },
+            "6,11": {
+              "t": "P",
+              "o": 3
+            },
+            "7,2": {
+              "t": "P",
+              "o": 1
+            },
+            "7,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,1": {
+              "t": "P",
+              "o": 1
+            },
+            "8,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,13": {
+              "t": "Q",
+              "o": 3
+            },
+            "9,0": {
+              "t": "N",
+              "o": 1
+            },
+            "9,3": {
+              "t": "P",
+              "o": 1
+            },
+            "9,10": {
+              "t": "Q",
+              "o": 0
+            },
+            "9,13": {
+              "t": "N",
+              "o": 3
+            },
+            "10,0": {
+              "t": "R",
+              "o": 1
+            },
+            "10,1": {
+              "t": "P",
+              "o": 1
+            },
+            "10,7": {
+              "t": "P",
+              "o": 0
+            },
+            "10,12": {
+              "t": "P",
+              "o": 3
+            },
+            "10,13": {
+              "t": "R",
+              "o": 3
+            },
+            "11,9": {
+              "t": "P",
+              "o": 0
+            },
+            "12,3": {
+              "t": "P",
+              "o": 0
+            },
+            "12,4": {
+              "t": "B",
+              "o": 0
+            },
+            "12,5": {
+              "t": "P",
+              "o": 0
+            },
+            "12,6": {
+              "t": "N",
+              "o": 0
+            },
+            "12,8": {
+              "t": "P",
+              "o": 0
+            },
+            "12,10": {
+              "t": "P",
+              "o": 0
+            },
+            "13,3": {
+              "t": "R",
+              "o": 0
+            },
+            "13,7": {
+              "t": "K",
+              "o": 0
+            },
+            "13,9": {
+              "t": "N",
+              "o": 0
+            },
+            "13,10": {
+              "t": "R",
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": null,
+          "lastMove": {
+            "fr": 0,
+            "fc": 3,
+            "tr": 0,
+            "tc": 4
+          },
+          "legalMoves": [
+            {
+              "fr": 3,
+              "fc": 12,
+              "tr": 3,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 3,
+              "fc": 12,
+              "tr": 3,
+              "tc": 10,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 12,
+              "tr": 4,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 12,
+              "tr": 4,
+              "tc": 10,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 13,
+              "tr": 3,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 13,
+              "tr": 5,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 4,
+              "fc": 13,
+              "tr": 6,
+              "tc": 12,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 5,
+              "fc": 12,
+              "tr": 5,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 5,
+              "fc": 12,
+              "tr": 5,
+              "tc": 10,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 5,
+              "fc": 13,
+              "tr": 6,
+              "tc": 12,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 6,
+              "fc": 11,
+              "tr": 6,
+              "tc": 10,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 7,
+              "fc": 12,
+              "tr": 7,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 7,
+              "fc": 12,
+              "tr": 7,
+              "tc": 10,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 12,
+              "tr": 8,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 12,
+              "tr": 8,
+              "tc": 10,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 13,
+              "tr": 7,
+              "tc": 13,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 13,
+              "tr": 6,
+              "tc": 13,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 13,
+              "tr": 9,
+              "tc": 12,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 13,
+              "tr": 10,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 13,
+              "tr": 11,
+              "tc": 10,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 13,
+              "tr": 12,
+              "tc": 9,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 8,
+              "fc": 13,
+              "tr": 13,
+              "tc": 8,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 13,
+              "tr": 8,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 9,
+              "fc": 13,
+              "tr": 10,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 10,
+              "fc": 12,
+              "tr": 10,
+              "tc": 11,
+              "cap": false,
+              "promo": false
+            },
+            {
+              "fr": 10,
+              "fc": 12,
+              "tr": 10,
+              "tc": 10,
+              "cap": false,
+              "promo": false
+            }
+          ],
+          "inCheck": false,
+          "checkKings": [],
+          "ply": 23
+        },
+        "view_of_other": {
+          "board": {
+            "0,4": {
+              "t": "R",
+              "o": 2
+            },
+            "0,5": {
+              "t": "B",
+              "o": 2
+            },
+            "0,6": {
+              "t": "K",
+              "o": 2
+            },
+            "0,7": {
+              "t": "Q",
+              "o": 2
+            },
+            "0,8": {
+              "t": "B",
+              "o": 2
+            },
+            "0,9": {
+              "t": "N",
+              "o": 2
+            },
+            "0,10": {
+              "t": "R",
+              "o": 2
+            },
+            "1,3": {
+              "t": "P",
+              "o": 2
+            },
+            "1,4": {
+              "t": "P",
+              "o": 2
+            },
+            "1,6": {
+              "t": "P",
+              "o": 2
+            },
+            "1,7": {
+              "t": "P",
+              "o": 2
+            },
+            "1,8": {
+              "t": "P",
+              "o": 2
+            },
+            "1,9": {
+              "t": "P",
+              "o": 2
+            },
+            "1,10": {
+              "t": "P",
+              "o": 2
+            },
+            "3,0": {
+              "t": "R",
+              "o": 1
+            },
+            "3,12": {
+              "t": "P",
+              "o": 3
+            },
+            "3,13": {
+              "t": "R",
+              "o": 3
+            },
+            "4,0": {
+              "t": "N",
+              "o": 1
+            },
+            "4,1": {
+              "t": "P",
+              "o": 1
+            },
+            "4,12": {
+              "t": "P",
+              "o": 3
+            },
+            "4,13": {
+              "t": "N",
+              "o": 3
+            },
+            "5,0": {
+              "t": "N",
+              "o": 2
+            },
+            "5,2": {
+              "t": "P",
+              "o": 1
+            },
+            "5,12": {
+              "t": "P",
+              "o": 3
+            },
+            "5,13": {
+              "t": "K",
+              "o": 3
+            },
+            "6,0": {
+              "t": "K",
+              "o": 1
+            },
+            "6,1": {
+              "t": "P",
+              "o": 1
+            },
+            "6,11": {
+              "t": "P",
+              "o": 3
+            },
+            "7,2": {
+              "t": "P",
+              "o": 1
+            },
+            "7,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,1": {
+              "t": "P",
+              "o": 1
+            },
+            "8,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,13": {
+              "t": "Q",
+              "o": 3
+            },
+            "9,0": {
+              "t": "N",
+              "o": 1
+            },
+            "9,3": {
+              "t": "P",
+              "o": 1
+            },
+            "9,10": {
+              "t": "Q",
+              "o": 0
+            },
+            "9,13": {
+              "t": "N",
+              "o": 3
+            },
+            "10,0": {
+              "t": "R",
+              "o": 1
+            },
+            "10,1": {
+              "t": "P",
+              "o": 1
+            },
+            "10,7": {
+              "t": "P",
+              "o": 0
+            },
+            "10,12": {
+              "t": "P",
+              "o": 3
+            },
+            "10,13": {
+              "t": "R",
+              "o": 3
+            },
+            "11,9": {
+              "t": "P",
+              "o": 0
+            },
+            "12,3": {
+              "t": "P",
+              "o": 0
+            },
+            "12,4": {
+              "t": "B",
+              "o": 0
+            },
+            "12,5": {
+              "t": "P",
+              "o": 0
+            },
+            "12,6": {
+              "t": "N",
+              "o": 0
+            },
+            "12,8": {
+              "t": "P",
+              "o": 0
+            },
+            "12,10": {
+              "t": "P",
+              "o": 0
+            },
+            "13,3": {
+              "t": "R",
+              "o": 0
+            },
+            "13,7": {
+              "t": "K",
+              "o": 0
+            },
+            "13,9": {
+              "t": "N",
+              "o": 0
+            },
+            "13,10": {
+              "t": "R",
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": null,
+          "lastMove": {
+            "fr": 0,
+            "fc": 3,
+            "tr": 0,
+            "tc": 4
+          },
+          "legalMoves": [],
+          "inCheck": false,
+          "checkKings": [],
+          "ply": 23
+        },
+        "player_id": "u4",
+        "other_player_id": null,
+        "move": {
+          "kind": "move",
+          "fr": 7,
+          "fc": 12,
+          "tr": 7,
+          "tc": 10
+        },
+        "expected_state": {
+          "board": {
+            "4": {
+              "t": 82,
+              "o": 2
+            },
+            "5": {
+              "t": 66,
+              "o": 2
+            },
+            "6": {
+              "t": 75,
+              "o": 2
+            },
+            "7": {
+              "t": 81,
+              "o": 2
+            },
+            "8": {
+              "t": 66,
+              "o": 2
+            },
+            "9": {
+              "t": 78,
+              "o": 2
+            },
+            "10": {
+              "t": 82,
+              "o": 2
+            },
+            "17": {
+              "t": 80,
+              "o": 2
+            },
+            "18": {
+              "t": 80,
+              "o": 2
+            },
+            "20": {
+              "t": 80,
+              "o": 2
+            },
+            "21": {
+              "t": 80,
+              "o": 2
+            },
+            "22": {
+              "t": 80,
+              "o": 2
+            },
+            "23": {
+              "t": 80,
+              "o": 2
+            },
+            "24": {
+              "t": 80,
+              "o": 2
+            },
+            "42": {
+              "t": 82,
+              "o": 1
+            },
+            "54": {
+              "t": 80,
+              "o": 3
+            },
+            "55": {
+              "t": 82,
+              "o": 3
+            },
+            "56": {
+              "t": 78,
+              "o": 1
+            },
+            "57": {
+              "t": 80,
+              "o": 1
+            },
+            "68": {
+              "t": 80,
+              "o": 3
+            },
+            "69": {
+              "t": 78,
+              "o": 3
+            },
+            "70": {
+              "t": 78,
+              "o": 2
+            },
+            "72": {
+              "t": 80,
+              "o": 1
+            },
+            "82": {
+              "t": 80,
+              "o": 3
+            },
+            "83": {
+              "t": 75,
+              "o": 3
+            },
+            "84": {
+              "t": 75,
+              "o": 1
+            },
+            "85": {
+              "t": 80,
+              "o": 1
+            },
+            "95": {
+              "t": 80,
+              "o": 3
+            },
+            "100": {
+              "t": 80,
+              "o": 1
+            },
+            "108": {
+              "t": 80,
+              "o": 3
+            },
+            "113": {
+              "t": 80,
+              "o": 1
+            },
+            "124": {
+              "t": 80,
+              "o": 3
+            },
+            "125": {
+              "t": 81,
+              "o": 3
+            },
+            "126": {
+              "t": 78,
+              "o": 1
+            },
+            "129": {
+              "t": 80,
+              "o": 1
+            },
+            "136": {
+              "t": 81,
+              "o": 0
+            },
+            "139": {
+              "t": 78,
+              "o": 3
+            },
+            "140": {
+              "t": 82,
+              "o": 1
+            },
+            "141": {
+              "t": 80,
+              "o": 1
+            },
+            "147": {
+              "t": 80,
+              "o": 0
+            },
+            "152": {
+              "t": 80,
+              "o": 3
+            },
+            "153": {
+              "t": 82,
+              "o": 3
+            },
+            "163": {
+              "t": 80,
+              "o": 0
+            },
+            "171": {
+              "t": 80,
+              "o": 0
+            },
+            "172": {
+              "t": 66,
+              "o": 0
+            },
+            "173": {
+              "t": 80,
+              "o": 0
+            },
+            "174": {
+              "t": 78,
+              "o": 0
+            },
+            "176": {
+              "t": 80,
+              "o": 0
+            },
+            "178": {
+              "t": 80,
+              "o": 0
+            },
+            "185": {
+              "t": 82,
+              "o": 0
+            },
+            "189": {
+              "t": 75,
+              "o": 0
+            },
+            "191": {
+              "t": 78,
+              "o": 0
+            },
+            "192": {
+              "t": 82,
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": 0,
+          "lastMove": {
+            "fr": 7,
+            "fc": 12,
+            "tr": 7,
+            "tc": 10
+          },
+          "ply": 24
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "board": {
+            "0,4": {
+              "t": "R",
+              "o": 2
+            },
+            "0,5": {
+              "t": "B",
+              "o": 2
+            },
+            "0,6": {
+              "t": "K",
+              "o": 2
+            },
+            "0,7": {
+              "t": "Q",
+              "o": 2
+            },
+            "0,8": {
+              "t": "B",
+              "o": 2
+            },
+            "0,9": {
+              "t": "N",
+              "o": 2
+            },
+            "0,10": {
+              "t": "R",
+              "o": 2
+            },
+            "1,3": {
+              "t": "P",
+              "o": 2
+            },
+            "1,4": {
+              "t": "P",
+              "o": 2
+            },
+            "1,6": {
+              "t": "P",
+              "o": 2
+            },
+            "1,7": {
+              "t": "P",
+              "o": 2
+            },
+            "1,8": {
+              "t": "P",
+              "o": 2
+            },
+            "1,9": {
+              "t": "P",
+              "o": 2
+            },
+            "1,10": {
+              "t": "P",
+              "o": 2
+            },
+            "3,0": {
+              "t": "R",
+              "o": 1
+            },
+            "3,12": {
+              "t": "P",
+              "o": 3
+            },
+            "3,13": {
+              "t": "R",
+              "o": 3
+            },
+            "4,0": {
+              "t": "N",
+              "o": 1
+            },
+            "4,1": {
+              "t": "P",
+              "o": 1
+            },
+            "4,12": {
+              "t": "P",
+              "o": 3
+            },
+            "4,13": {
+              "t": "N",
+              "o": 3
+            },
+            "5,0": {
+              "t": "N",
+              "o": 2
+            },
+            "5,2": {
+              "t": "P",
+              "o": 1
+            },
+            "5,12": {
+              "t": "P",
+              "o": 3
+            },
+            "5,13": {
+              "t": "K",
+              "o": 3
+            },
+            "6,0": {
+              "t": "K",
+              "o": 1
+            },
+            "6,1": {
+              "t": "P",
+              "o": 1
+            },
+            "6,11": {
+              "t": "P",
+              "o": 3
+            },
+            "7,2": {
+              "t": "P",
+              "o": 1
+            },
+            "7,10": {
+              "t": "P",
+              "o": 3
+            },
+            "8,1": {
+              "t": "P",
+              "o": 1
+            },
+            "8,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,13": {
+              "t": "Q",
+              "o": 3
+            },
+            "9,0": {
+              "t": "N",
+              "o": 1
+            },
+            "9,3": {
+              "t": "P",
+              "o": 1
+            },
+            "9,10": {
+              "t": "Q",
+              "o": 0
+            },
+            "9,13": {
+              "t": "N",
+              "o": 3
+            },
+            "10,0": {
+              "t": "R",
+              "o": 1
+            },
+            "10,1": {
+              "t": "P",
+              "o": 1
+            },
+            "10,7": {
+              "t": "P",
+              "o": 0
+            },
+            "10,12": {
+              "t": "P",
+              "o": 3
+            },
+            "10,13": {
+              "t": "R",
+              "o": 3
+            },
+            "11,9": {
+              "t": "P",
+              "o": 0
+            },
+            "12,3": {
+              "t": "P",
+              "o": 0
+            },
+            "12,4": {
+              "t": "B",
+              "o": 0
+            },
+            "12,5": {
+              "t": "P",
+              "o": 0
+            },
+            "12,6": {
+              "t": "N",
+              "o": 0
+            },
+            "12,8": {
+              "t": "P",
+              "o": 0
+            },
+            "12,10": {
+              "t": "P",
+              "o": 0
+            },
+            "13,3": {
+              "t": "R",
+              "o": 0
+            },
+            "13,7": {
+              "t": "K",
+              "o": 0
+            },
+            "13,9": {
+              "t": "N",
+              "o": 0
+            },
+            "13,10": {
+              "t": "R",
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": 0,
+          "lastMove": {
+            "fr": 7,
+            "fc": 12,
+            "tr": 7,
+            "tc": 10
+          },
+          "legalMoves": [],
+          "inCheck": false,
+          "checkKings": [],
+          "ply": 24
+        },
+        "expected_view_of_other": {
+          "board": {
+            "0,4": {
+              "t": "R",
+              "o": 2
+            },
+            "0,5": {
+              "t": "B",
+              "o": 2
+            },
+            "0,6": {
+              "t": "K",
+              "o": 2
+            },
+            "0,7": {
+              "t": "Q",
+              "o": 2
+            },
+            "0,8": {
+              "t": "B",
+              "o": 2
+            },
+            "0,9": {
+              "t": "N",
+              "o": 2
+            },
+            "0,10": {
+              "t": "R",
+              "o": 2
+            },
+            "1,3": {
+              "t": "P",
+              "o": 2
+            },
+            "1,4": {
+              "t": "P",
+              "o": 2
+            },
+            "1,6": {
+              "t": "P",
+              "o": 2
+            },
+            "1,7": {
+              "t": "P",
+              "o": 2
+            },
+            "1,8": {
+              "t": "P",
+              "o": 2
+            },
+            "1,9": {
+              "t": "P",
+              "o": 2
+            },
+            "1,10": {
+              "t": "P",
+              "o": 2
+            },
+            "3,0": {
+              "t": "R",
+              "o": 1
+            },
+            "3,12": {
+              "t": "P",
+              "o": 3
+            },
+            "3,13": {
+              "t": "R",
+              "o": 3
+            },
+            "4,0": {
+              "t": "N",
+              "o": 1
+            },
+            "4,1": {
+              "t": "P",
+              "o": 1
+            },
+            "4,12": {
+              "t": "P",
+              "o": 3
+            },
+            "4,13": {
+              "t": "N",
+              "o": 3
+            },
+            "5,0": {
+              "t": "N",
+              "o": 2
+            },
+            "5,2": {
+              "t": "P",
+              "o": 1
+            },
+            "5,12": {
+              "t": "P",
+              "o": 3
+            },
+            "5,13": {
+              "t": "K",
+              "o": 3
+            },
+            "6,0": {
+              "t": "K",
+              "o": 1
+            },
+            "6,1": {
+              "t": "P",
+              "o": 1
+            },
+            "6,11": {
+              "t": "P",
+              "o": 3
+            },
+            "7,2": {
+              "t": "P",
+              "o": 1
+            },
+            "7,10": {
+              "t": "P",
+              "o": 3
+            },
+            "8,1": {
+              "t": "P",
+              "o": 1
+            },
+            "8,12": {
+              "t": "P",
+              "o": 3
+            },
+            "8,13": {
+              "t": "Q",
+              "o": 3
+            },
+            "9,0": {
+              "t": "N",
+              "o": 1
+            },
+            "9,3": {
+              "t": "P",
+              "o": 1
+            },
+            "9,10": {
+              "t": "Q",
+              "o": 0
+            },
+            "9,13": {
+              "t": "N",
+              "o": 3
+            },
+            "10,0": {
+              "t": "R",
+              "o": 1
+            },
+            "10,1": {
+              "t": "P",
+              "o": 1
+            },
+            "10,7": {
+              "t": "P",
+              "o": 0
+            },
+            "10,12": {
+              "t": "P",
+              "o": 3
+            },
+            "10,13": {
+              "t": "R",
+              "o": 3
+            },
+            "11,9": {
+              "t": "P",
+              "o": 0
+            },
+            "12,3": {
+              "t": "P",
+              "o": 0
+            },
+            "12,4": {
+              "t": "B",
+              "o": 0
+            },
+            "12,5": {
+              "t": "P",
+              "o": 0
+            },
+            "12,6": {
+              "t": "N",
+              "o": 0
+            },
+            "12,8": {
+              "t": "P",
+              "o": 0
+            },
+            "12,10": {
+              "t": "P",
+              "o": 0
+            },
+            "13,3": {
+              "t": "R",
+              "o": 0
+            },
+            "13,7": {
+              "t": "K",
+              "o": 0
+            },
+            "13,9": {
+              "t": "N",
+              "o": 0
+            },
+            "13,10": {
+              "t": "R",
+              "o": 0
+            }
+          },
+          "eliminated": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "winnerTeam": 0,
+          "lastMove": {
+            "fr": 7,
+            "fc": 12,
+            "tr": 7,
+            "tc": 10
+          },
+          "legalMoves": [],
+          "inCheck": false,
+          "checkKings": [],
+          "ply": 24
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ],
+        "expected_payouts": {}
       }
     ]
   },
   "translations": {
     "es": {
-      "display_name": "Ajedrez para cuatro (Declarative)",
-      "short_description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_logic_rules": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_ui_rules": "Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.",
+      "display_name": "Ajedrez para cuatro (Declarativo)",
+      "short_description": "Cuatro jugadores comparten un tablero de ajedrez en cruz. Captura piezas rivales y protege tu rey; el servidor determina los movimientos legales y la victoria por equipos.",
+      "game_logic_rules": "Cuatro jugadores comparten un tablero de ajedrez en cruz. Captura piezas rivales y protege tu rey; el servidor determina los movimientos legales y la victoria por equipos.",
+      "game_ui_rules": "Selecciona una pieza resaltada y después un destino legal en el tablero compartido. Se muestran colores, ejércitos eliminados, jaques y equipo ganador.",
       "tutorial_strings": {
-        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory."
+        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Cuatro jugadores comparten un tablero de ajedrez en cruz. Captura piezas rivales y protege tu rey; el servidor determina los movimientos legales y la victoria por equipos.",
+        "Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.": "Selecciona una pieza resaltada y después un destino legal en el tablero compartido. Se muestran colores, ejércitos eliminados, jaques y equipo ganador.",
+        "4 player chess (Declarative)": "Ajedrez para cuatro (Declarativo)"
       },
       "client_strings": {
-        "title": "Ajedrez para cuatro (Declarative)"
+        "text_0": "Declarativo",
+        "text_1": "Jugador {n}",
+        "text_2": "Tu turno · {name}",
+        "text_3": "Turno de {name}",
+        "text_4": "Fin de la partida",
+        "text_5": "Ganador: {name}",
+        "text_6": "Tu flota",
+        "text_7": "Aguas enemigas",
+        "text_8": "Colocar flota e iniciar batalla",
+        "text_9": "Coloca una flota válida con agua libre entre barcos.",
+        "text_10": "Continúa la captura con la ficha resaltada.",
+        "text_11": "Debes capturar.",
+        "text_12": "Mueve en diagonal; las damas se mueven en ambas direcciones.",
+        "text_13": "reina",
+        "text_14": "torre",
+        "text_15": "alfil",
+        "text_16": "caballo",
+        "text_17": "Promocionar en {square} a {piece}",
+        "text_18": "Eliminar este ejército",
+        "text_19": "Pasar (sin jugada legal)",
+        "text_20": "Rendirse",
+        "text_21": "Mover peón",
+        "text_22": "Colocar muro",
+        "text_23": "Muros restantes · {counts}",
+        "text_24": "Carta superior {card} · palo {suit} · {n} cartas por robar",
+        "text_25": "Jugar {card} como {suit}",
+        "text_26": "Jugar {card}",
+        "text_27": "Robar carta (quedan {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Robar cartas",
+        "text_30": "Pasar",
+        "text_31": "{name} · grupos {ranks}",
+        "text_32": "Recoger baza",
+        "text_33": "Tu personaje: {name}",
+        "text_34": "Tu personaje es privado",
+        "text_35": "Preguntar: {question}",
+        "text_36": "Sí",
+        "text_37": "No",
+        "text_38": "{name}: adivinó {character} · {result}",
+        "text_39": "correcto",
+        "text_40": "incorrecto",
+        "text_41": "¿Lleva gafas?",
+        "text_42": "¿Lleva sombrero?",
+        "text_43": "¿Tiene vello facial?",
+        "text_44": "¿Se le ven las orejas?",
+        "text_45": "¿Tiene pelo rubio?",
+        "text_46": "¿Tiene pelo castaño?",
+        "text_47": "¿Tiene pelo negro?",
+        "text_48": "¿Tiene pelo rojo?",
+        "text_49": "¿Tiene pelo gris?",
+        "text_50": "¿Tiene pelo largo?",
+        "text_51": "¿Tiene pelo corto?",
+        "text_52": "¿Tiene ojos azules?",
+        "text_53": "¿Tiene ojos marrones?",
+        "text_54": "¿Tiene ojos verdes?",
+        "text_55": "Seleccionar pieza en fila {r}, columna {c}",
+        "text_56": "Mover a fila {r}, columna {c}",
+        "server_unknown_player": "jugador desconocido",
+        "server_game_over": "partida terminada",
+        "server_illegal_move": "jugada ilegal",
+        "server_moves_available": "hay jugadas disponibles",
+        "server_unknown_move": "jugada desconocida",
+        "title": "Ajedrez para cuatro (Declarativo)"
       }
     },
     "fr": {
-      "display_name": "Échecs à quatre (Declarative)",
-      "short_description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_logic_rules": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_ui_rules": "Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.",
+      "display_name": "Échecs à quatre (Déclaratif)",
+      "short_description": "Quatre joueurs partagent un échiquier en croix. Prenez les pièces adverses et protégez votre roi ; le serveur détermine les coups légaux et la victoire par équipe.",
+      "game_logic_rules": "Quatre joueurs partagent un échiquier en croix. Prenez les pièces adverses et protégez votre roi ; le serveur détermine les coups légaux et la victoire par équipe.",
+      "game_ui_rules": "Choisissez une pièce surlignée puis une destination légale sur l’échiquier partagé. Les couleurs, armées éliminées, échecs et équipe gagnante restent visibles.",
       "tutorial_strings": {
-        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory."
+        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Quatre joueurs partagent un échiquier en croix. Prenez les pièces adverses et protégez votre roi ; le serveur détermine les coups légaux et la victoire par équipe.",
+        "Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.": "Choisissez une pièce surlignée puis une destination légale sur l’échiquier partagé. Les couleurs, armées éliminées, échecs et équipe gagnante restent visibles.",
+        "4 player chess (Declarative)": "Échecs à quatre (Déclaratif)"
       },
       "client_strings": {
-        "title": "Échecs à quatre (Declarative)"
+        "text_0": "Déclaratif",
+        "text_1": "Joueur {n}",
+        "text_2": "À vous · {name}",
+        "text_3": "À {name} de jouer",
+        "text_4": "Partie terminée",
+        "text_5": "Gagnant : {name}",
+        "text_6": "Votre flotte",
+        "text_7": "Eaux adverses",
+        "text_8": "Placer la flotte et commencer",
+        "text_9": "Place une flotte valide avec de l’eau entre les navires.",
+        "text_10": "Continuez la prise avec le pion surligné.",
+        "text_11": "Une prise est obligatoire.",
+        "text_12": "Déplacez-vous en diagonale ; les dames vont dans les deux sens.",
+        "text_13": "dame",
+        "text_14": "tour",
+        "text_15": "fou",
+        "text_16": "cavalier",
+        "text_17": "Promouvoir en {square} en {piece}",
+        "text_18": "Éliminer cette armée",
+        "text_19": "Passer (aucun coup légal)",
+        "text_20": "Abandonner",
+        "text_21": "Déplacer le pion",
+        "text_22": "Placer un mur",
+        "text_23": "Murs restants · {counts}",
+        "text_24": "Carte du dessus {card} · couleur {suit} · {n} cartes à piocher",
+        "text_25": "Jouer {card} en {suit}",
+        "text_26": "Jouer {card}",
+        "text_27": "Piocher une carte ({n} restantes)",
+        "text_28": "Demander des {rank} à {name}",
+        "text_29": "Piocher des cartes",
+        "text_30": "Passer",
+        "text_31": "{name} · carrés {ranks}",
+        "text_32": "Ramasser le pli",
+        "text_33": "Votre personnage : {name}",
+        "text_34": "Votre personnage est privé",
+        "text_35": "Demander : {question}",
+        "text_36": "Oui",
+        "text_37": "Non",
+        "text_38": "{name} : a proposé {character} · {result}",
+        "text_39": "correct",
+        "text_40": "incorrect",
+        "text_41": "Porte-t-il des lunettes ?",
+        "text_42": "Porte-t-il un chapeau ?",
+        "text_43": "A-t-il des poils au visage ?",
+        "text_44": "Voit-on ses oreilles ?",
+        "text_45": "A-t-il les cheveux blonds ?",
+        "text_46": "A-t-il les cheveux bruns ?",
+        "text_47": "A-t-il les cheveux noirs ?",
+        "text_48": "A-t-il les cheveux roux ?",
+        "text_49": "A-t-il les cheveux gris ?",
+        "text_50": "A-t-il les cheveux longs ?",
+        "text_51": "A-t-il les cheveux courts ?",
+        "text_52": "A-t-il les yeux bleus ?",
+        "text_53": "A-t-il les yeux bruns ?",
+        "text_54": "A-t-il les yeux verts ?",
+        "text_55": "Choisir la pièce en ligne {r}, colonne {c}",
+        "text_56": "Aller en ligne {r}, colonne {c}",
+        "server_unknown_player": "joueur inconnu",
+        "server_game_over": "partie terminée",
+        "server_illegal_move": "coup interdit",
+        "server_moves_available": "coups disponibles",
+        "server_unknown_move": "coup inconnu",
+        "title": "Échecs à quatre (Déclaratif)"
       }
     },
     "de": {
-      "display_name": "Vierpersonenschach (Declarative)",
-      "short_description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_logic_rules": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_ui_rules": "Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.",
+      "display_name": "Vierpersonenschach (Deklarativ)",
+      "short_description": "Vier Spieler teilen ein kreuzförmiges Schachbrett. Schlage gegnerische Figuren und schütze deinen König; der Server bestimmt gültige Züge und den Teamsieg.",
+      "game_logic_rules": "Vier Spieler teilen ein kreuzförmiges Schachbrett. Schlage gegnerische Figuren und schütze deinen König; der Server bestimmt gültige Züge und den Teamsieg.",
+      "game_ui_rules": "Wähle eine markierte Figur und dann ein gültiges Zielfeld auf dem gemeinsamen Brett. Spielerfarben, ausgeschiedene Armeen, Schachgebote und das Siegerteam bleiben sichtbar.",
       "tutorial_strings": {
-        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory."
+        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Vier Spieler teilen ein kreuzförmiges Schachbrett. Schlage gegnerische Figuren und schütze deinen König; der Server bestimmt gültige Züge und den Teamsieg.",
+        "Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.": "Wähle eine markierte Figur und dann ein gültiges Zielfeld auf dem gemeinsamen Brett. Spielerfarben, ausgeschiedene Armeen, Schachgebote und das Siegerteam bleiben sichtbar.",
+        "4 player chess (Declarative)": "Vierpersonenschach (Deklarativ)"
       },
       "client_strings": {
-        "title": "Vierpersonenschach (Declarative)"
+        "text_0": "Deklarativ",
+        "text_1": "Spieler {n}",
+        "text_2": "Dein Zug · {name}",
+        "text_3": "{name} ist am Zug",
+        "text_4": "Spiel beendet",
+        "text_5": "Gewinner: {name}",
+        "text_6": "Deine Flotte",
+        "text_7": "Zielgewässer",
+        "text_8": "Flotte platzieren und starten",
+        "text_9": "Platziert eine gültige Flotte mit Abstand zwischen den Schiffen.",
+        "text_10": "Setze den Schlagzug mit dem markierten Stein fort.",
+        "text_11": "Schlagen ist Pflicht.",
+        "text_12": "Ziehe diagonal; Damen ziehen in beide Richtungen.",
+        "text_13": "Dame",
+        "text_14": "Turm",
+        "text_15": "Läufer",
+        "text_16": "Springer",
+        "text_17": "Auf {square} in {piece} umwandeln",
+        "text_18": "Diese Armee entfernen",
+        "text_19": "Passen (kein gültiger Zug)",
+        "text_20": "Aufgeben",
+        "text_21": "Bauern ziehen",
+        "text_22": "Wand platzieren",
+        "text_23": "Verbleibende Wände · {counts}",
+        "text_24": "Oberste Karte {card} · Farbe {suit} · {n} Karten im Stapel",
+        "text_25": "{card} als {suit} spielen",
+        "text_26": "{card} spielen",
+        "text_27": "Karte ziehen ({n} übrig)",
+        "text_28": "{name} nach {rank} fragen",
+        "text_29": "Karten ziehen",
+        "text_30": "Passen",
+        "text_31": "{name} · Quartette {ranks}",
+        "text_32": "Stich einsammeln",
+        "text_33": "Deine Figur: {name}",
+        "text_34": "Deine Figur ist geheim",
+        "text_35": "Fragen: {question}",
+        "text_36": "Ja",
+        "text_37": "Nein",
+        "text_38": "{name}: hat {character} geraten · {result}",
+        "text_39": "richtig",
+        "text_40": "falsch",
+        "text_41": "Trägt die Person eine Brille?",
+        "text_42": "Trägt die Person einen Hut?",
+        "text_43": "Hat die Person einen Bart?",
+        "text_44": "Sind die Ohren sichtbar?",
+        "text_45": "Hat die Person blonde Haare?",
+        "text_46": "Hat die Person braune Haare?",
+        "text_47": "Hat die Person schwarze Haare?",
+        "text_48": "Hat die Person rote Haare?",
+        "text_49": "Hat die Person graue Haare?",
+        "text_50": "Hat die Person lange Haare?",
+        "text_51": "Hat die Person kurze Haare?",
+        "text_52": "Hat die Person blaue Augen?",
+        "text_53": "Hat die Person braune Augen?",
+        "text_54": "Hat die Person grüne Augen?",
+        "text_55": "Figur in Zeile {r}, Spalte {c} wählen",
+        "text_56": "Nach Zeile {r}, Spalte {c} ziehen",
+        "server_unknown_player": "unbekannter Spieler",
+        "server_game_over": "Spiel beendet",
+        "server_illegal_move": "ungültiger Zug",
+        "server_moves_available": "Züge verfügbar",
+        "server_unknown_move": "unbekannter Zug",
+        "title": "Vierpersonenschach (Deklarativ)"
       }
     },
     "pt": {
-      "display_name": "Xadrez para quatro (Declarative)",
-      "short_description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_logic_rules": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_ui_rules": "Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.",
+      "display_name": "Xadrez para quatro (Declarativo)",
+      "short_description": "Quatro jogadores compartilham um tabuleiro em cruz. Capture peças rivais e proteja seu rei; o servidor determina os lances válidos e a vitória por equipes.",
+      "game_logic_rules": "Quatro jogadores compartilham um tabuleiro em cruz. Capture peças rivais e proteja seu rei; o servidor determina os lances válidos e a vitória por equipes.",
+      "game_ui_rules": "Selecione uma peça destacada e depois um destino válido no tabuleiro compartilhado. Cores, exércitos eliminados, xeques e equipe vencedora ficam visíveis.",
       "tutorial_strings": {
-        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory."
+        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Quatro jogadores compartilham um tabuleiro em cruz. Capture peças rivais e proteja seu rei; o servidor determina os lances válidos e a vitória por equipes.",
+        "Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.": "Selecione uma peça destacada e depois um destino válido no tabuleiro compartilhado. Cores, exércitos eliminados, xeques e equipe vencedora ficam visíveis.",
+        "4 player chess (Declarative)": "Xadrez para quatro (Declarativo)"
       },
       "client_strings": {
-        "title": "Xadrez para quatro (Declarative)"
+        "text_0": "Declarativo",
+        "text_1": "Jogador {n}",
+        "text_2": "Sua vez · {name}",
+        "text_3": "Vez de {name}",
+        "text_4": "Partida encerrada",
+        "text_5": "Vencedor: {name}",
+        "text_6": "Sua frota",
+        "text_7": "Águas inimigas",
+        "text_8": "Posicionar frota e iniciar batalha",
+        "text_9": "Posiciona uma frota válida com água livre entre os navios.",
+        "text_10": "Continue a captura com a peça destacada.",
+        "text_11": "É obrigatório capturar.",
+        "text_12": "Mova na diagonal; damas movem nos dois sentidos.",
+        "text_13": "rainha",
+        "text_14": "torre",
+        "text_15": "bispo",
+        "text_16": "cavalo",
+        "text_17": "Promover em {square} para {piece}",
+        "text_18": "Eliminar este exército",
+        "text_19": "Passar (sem jogada válida)",
+        "text_20": "Desistir",
+        "text_21": "Mover peão",
+        "text_22": "Colocar parede",
+        "text_23": "Paredes restantes · {counts}",
+        "text_24": "Carta do topo {card} · naipe {suit} · {n} cartas para comprar",
+        "text_25": "Jogar {card} como {suit}",
+        "text_26": "Jogar {card}",
+        "text_27": "Comprar carta (restam {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Comprar cartas",
+        "text_30": "Passar",
+        "text_31": "{name} · conjuntos {ranks}",
+        "text_32": "Recolher vaza",
+        "text_33": "Seu personagem: {name}",
+        "text_34": "Seu personagem é privado",
+        "text_35": "Perguntar: {question}",
+        "text_36": "Sim",
+        "text_37": "Não",
+        "text_38": "{name}: adivinhou {character} · {result}",
+        "text_39": "correto",
+        "text_40": "incorreto",
+        "text_41": "Usa óculos?",
+        "text_42": "Usa chapéu?",
+        "text_43": "Tem pelos no rosto?",
+        "text_44": "As orelhas estão visíveis?",
+        "text_45": "Tem cabelo loiro?",
+        "text_46": "Tem cabelo castanho?",
+        "text_47": "Tem cabelo preto?",
+        "text_48": "Tem cabelo ruivo?",
+        "text_49": "Tem cabelo grisalho?",
+        "text_50": "Tem cabelo comprido?",
+        "text_51": "Tem cabelo curto?",
+        "text_52": "Tem olhos azuis?",
+        "text_53": "Tem olhos castanhos?",
+        "text_54": "Tem olhos verdes?",
+        "text_55": "Selecionar peça na linha {r}, coluna {c}",
+        "text_56": "Mover para linha {r}, coluna {c}",
+        "server_unknown_player": "jogador desconhecido",
+        "server_game_over": "jogo encerrado",
+        "server_illegal_move": "jogada ilegal",
+        "server_moves_available": "há jogadas disponíveis",
+        "server_unknown_move": "jogada desconhecida",
+        "title": "Xadrez para quatro (Declarativo)"
       }
     },
     "zh": {
-      "display_name": "四人国际象棋 (Declarative)",
-      "short_description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_logic_rules": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_ui_rules": "Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.",
+      "display_name": "四人国际象棋 (声明式)",
+      "short_description": "四名玩家在十字形棋盘上对弈。吃掉对方棋子并保护自己的王；合法走法和团队胜利由服务器判定。",
+      "game_logic_rules": "四名玩家在十字形棋盘上对弈。吃掉对方棋子并保护自己的王；合法走法和团队胜利由服务器判定。",
+      "game_ui_rules": "先选择高亮棋子，再在共享棋盘上选择合法目标格。玩家颜色、淘汰军队、将军状态和获胜团队会显示出来。",
       "tutorial_strings": {
-        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory."
+        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "四名玩家在十字形棋盘上对弈。吃掉对方棋子并保护自己的王；合法走法和团队胜利由服务器判定。",
+        "Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.": "先选择高亮棋子，再在共享棋盘上选择合法目标格。玩家颜色、淘汰军队、将军状态和获胜团队会显示出来。",
+        "4 player chess (Declarative)": "四人国际象棋 (声明式)"
       },
       "client_strings": {
-        "title": "四人国际象棋 (Declarative)"
+        "text_0": "声明式",
+        "text_1": "玩家 {n}",
+        "text_2": "轮到您 · {name}",
+        "text_3": "轮到 {name}",
+        "text_4": "游戏结束",
+        "text_5": "获胜者：{name}",
+        "text_6": "您的舰队",
+        "text_7": "目标海域",
+        "text_8": "部署舰队并开始战斗",
+        "text_9": "部署合法舰队，舰船之间留有空隙。",
+        "text_10": "使用高亮棋子继续连跳。",
+        "text_11": "必须吃子。",
+        "text_12": "沿斜线移动；王棋可以双向移动。",
+        "text_13": "后",
+        "text_14": "车",
+        "text_15": "象",
+        "text_16": "马",
+        "text_17": "在 {square} 升变为{piece}",
+        "text_18": "淘汰此军队",
+        "text_19": "跳过（无合法走法）",
+        "text_20": "认输",
+        "text_21": "移动兵",
+        "text_22": "放置墙",
+        "text_23": "剩余墙数 · {counts}",
+        "text_24": "顶牌 {card} · 花色 {suit} · 余牌 {n} 张",
+        "text_25": "打出 {card}，指定花色 {suit}",
+        "text_26": "打出 {card}",
+        "text_27": "抽一张牌（剩余 {n} 张）",
+        "text_28": "向 {name} 要 {rank}",
+        "text_29": "抽牌",
+        "text_30": "跳过",
+        "text_31": "{name} · 成套牌 {ranks}",
+        "text_32": "收取此墩",
+        "text_33": "您的角色：{name}",
+        "text_34": "您的角色是保密的",
+        "text_35": "提问：{question}",
+        "text_36": "是",
+        "text_37": "否",
+        "text_38": "{name}：猜测 {character} · {result}",
+        "text_39": "正确",
+        "text_40": "错误",
+        "text_41": "戴眼镜吗？",
+        "text_42": "戴帽子吗？",
+        "text_43": "有胡须吗？",
+        "text_44": "耳朵露出来了吗？",
+        "text_45": "是金发吗？",
+        "text_46": "是棕发吗？",
+        "text_47": "是黑发吗？",
+        "text_48": "是红发吗？",
+        "text_49": "是灰发吗？",
+        "text_50": "是长发吗？",
+        "text_51": "是短发吗？",
+        "text_52": "是蓝眼睛吗？",
+        "text_53": "是棕眼睛吗？",
+        "text_54": "是绿眼睛吗？",
+        "text_55": "选择第 {r} 行第 {c} 列的棋子",
+        "text_56": "移至第 {r} 行第 {c} 列",
+        "server_unknown_player": "未知玩家",
+        "server_game_over": "游戏结束",
+        "server_illegal_move": "非法着法",
+        "server_moves_available": "仍有可行着法",
+        "server_unknown_move": "未知着法",
+        "title": "四人国际象棋 (声明式)"
       }
     },
     "hi": {
-      "display_name": "चार खिलाड़ी शतरंज (Declarative)",
-      "short_description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_logic_rules": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_ui_rules": "Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.",
+      "display_name": "चार खिलाड़ी शतरंज (घोषणात्मक)",
+      "short_description": "चार खिलाड़ी साझा क्रॉस-आकार के शतरंज बोर्ड पर खेलते हैं। विरोधी मोहरे मारें और अपने राजा को बचाएँ; वैध चाल और टीम की जीत सर्वर तय करता है।",
+      "game_logic_rules": "चार खिलाड़ी साझा क्रॉस-आकार के शतरंज बोर्ड पर खेलते हैं। विरोधी मोहरे मारें और अपने राजा को बचाएँ; वैध चाल और टीम की जीत सर्वर तय करता है।",
+      "game_ui_rules": "पहले चिह्नित मोहरा, फिर साझा बोर्ड पर उसका वैध गंतव्य चुनें। खिलाड़ियों के रंग, हटाई गई सेनाएँ, शह और विजेता टीम दिखाई देती हैं।",
       "tutorial_strings": {
-        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory."
+        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "चार खिलाड़ी साझा क्रॉस-आकार के शतरंज बोर्ड पर खेलते हैं। विरोधी मोहरे मारें और अपने राजा को बचाएँ; वैध चाल और टीम की जीत सर्वर तय करता है।",
+        "Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.": "पहले चिह्नित मोहरा, फिर साझा बोर्ड पर उसका वैध गंतव्य चुनें। खिलाड़ियों के रंग, हटाई गई सेनाएँ, शह और विजेता टीम दिखाई देती हैं।",
+        "4 player chess (Declarative)": "चार खिलाड़ी शतरंज (घोषणात्मक)"
       },
       "client_strings": {
-        "title": "चार खिलाड़ी शतरंज (Declarative)"
+        "text_0": "घोषणात्मक",
+        "text_1": "खिलाड़ी {n}",
+        "text_2": "आपकी बारी · {name}",
+        "text_3": "{name} की बारी",
+        "text_4": "खेल समाप्त",
+        "text_5": "विजेता: {name}",
+        "text_6": "आपका बेड़ा",
+        "text_7": "लक्ष्य जलक्षेत्र",
+        "text_8": "बेड़ा रखें और युद्ध शुरू करें",
+        "text_9": "जहाज़ों के बीच खाली पानी छोड़कर मान्य बेड़ा रखता है।",
+        "text_10": "चिह्नित गोटी से अगली मार जारी रखें।",
+        "text_11": "मारना अनिवार्य है।",
+        "text_12": "तिरछा चलें; राजा दोनों दिशाओं में चल सकता है।",
+        "text_13": "वज़ीर",
+        "text_14": "हाथी",
+        "text_15": "ऊँट",
+        "text_16": "घोड़ा",
+        "text_17": "{square} पर {piece} में पदोन्नत करें",
+        "text_18": "इस सेना को हटाएँ",
+        "text_19": "पास करें (कोई वैध चाल नहीं)",
+        "text_20": "हार मानें",
+        "text_21": "प्यादा चलें",
+        "text_22": "दीवार रखें",
+        "text_23": "बची दीवारें · {counts}",
+        "text_24": "ऊपर का पत्ता {card} · रंग {suit} · खींचने के लिए {n} पत्ते",
+        "text_25": "{card} को {suit} के रूप में खेलें",
+        "text_26": "{card} खेलें",
+        "text_27": "एक पत्ता खींचें ({n} बचे)",
+        "text_28": "{name} से {rank} माँगें",
+        "text_29": "पत्ते खींचें",
+        "text_30": "पास करें",
+        "text_31": "{name} · पूरे समूह {ranks}",
+        "text_32": "हाथ समेटें",
+        "text_33": "आपका पात्र: {name}",
+        "text_34": "आपका पात्र गोपनीय है",
+        "text_35": "पूछें: {question}",
+        "text_36": "हाँ",
+        "text_37": "नहीं",
+        "text_38": "{name}: {character} का अनुमान · {result}",
+        "text_39": "सही",
+        "text_40": "गलत",
+        "text_41": "क्या चश्मा पहने हैं?",
+        "text_42": "क्या टोपी पहने हैं?",
+        "text_43": "क्या चेहरे पर दाढ़ी या मूँछ है?",
+        "text_44": "क्या कान दिखाई दे रहे हैं?",
+        "text_45": "क्या बाल सुनहरे हैं?",
+        "text_46": "क्या बाल भूरे हैं?",
+        "text_47": "क्या बाल काले हैं?",
+        "text_48": "क्या बाल लाल हैं?",
+        "text_49": "क्या बाल सफ़ेद या स्लेटी हैं?",
+        "text_50": "क्या बाल लंबे हैं?",
+        "text_51": "क्या बाल छोटे हैं?",
+        "text_52": "क्या आँखें नीली हैं?",
+        "text_53": "क्या आँखें भूरी हैं?",
+        "text_54": "क्या आँखें हरी हैं?",
+        "text_55": "पंक्ति {r}, स्तंभ {c} की गोटी चुनें",
+        "text_56": "पंक्ति {r}, स्तंभ {c} पर चलें",
+        "server_unknown_player": "अज्ञात खिलाड़ी",
+        "server_game_over": "खेल समाप्त",
+        "server_illegal_move": "अवैध चाल",
+        "server_moves_available": "चालें उपलब्ध हैं",
+        "server_unknown_move": "अज्ञात चाल",
+        "title": "चार खिलाड़ी शतरंज (घोषणात्मक)"
       }
     },
     "ar": {
-      "display_name": "شطرنج لأربعة لاعبين (Declarative)",
-      "short_description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_logic_rules": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
-      "game_ui_rules": "Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.",
+      "display_name": "شطرنج لأربعة لاعبين (تصريحي)",
+      "short_description": "يلعب أربعة لاعبين على رقعة شطرنج مشتركة بشكل صليب. أسر قطع الخصم واحمِ ملكك؛ يحدد الخادم النقلات القانونية وفوز الفريق.",
+      "game_logic_rules": "يلعب أربعة لاعبين على رقعة شطرنج مشتركة بشكل صليب. أسر قطع الخصم واحمِ ملكك؛ يحدد الخادم النقلات القانونية وفوز الفريق.",
+      "game_ui_rules": "اختر قطعة مظللة ثم وجهة قانونية على الرقعة المشتركة. تبقى ألوان اللاعبين والجيوش المقصاة وحالات الكش والفريق الفائز ظاهرة.",
       "tutorial_strings": {
-        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory."
+        "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.": "يلعب أربعة لاعبين على رقعة شطرنج مشتركة بشكل صليب. أسر قطع الخصم واحمِ ملكك؛ يحدد الخادم النقلات القانونية وفوز الفريق.",
+        "Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.": "اختر قطعة مظللة ثم وجهة قانونية على الرقعة المشتركة. تبقى ألوان اللاعبين والجيوش المقصاة وحالات الكش والفريق الفائز ظاهرة.",
+        "4 player chess (Declarative)": "شطرنج لأربعة لاعبين (تصريحي)"
       },
       "client_strings": {
-        "title": "شطرنج لأربعة لاعبين (Declarative)"
+        "text_0": "تصريحي",
+        "text_1": "اللاعب {n}",
+        "text_2": "دورك · {name}",
+        "text_3": "دور {name}",
+        "text_4": "انتهت اللعبة",
+        "text_5": "الفائز: {name}",
+        "text_6": "أسطولك",
+        "text_7": "مياه الهدف",
+        "text_8": "وضع الأسطول وبدء المعركة",
+        "text_9": "يضع أسطولًا صالحًا مع مياه فاصلة بين السفن.",
+        "text_10": "تابع الأسر بالقطعة المظللة.",
+        "text_11": "الأسر إجباري.",
+        "text_12": "تحرك قطريًا؛ تتحرك الملوك في الاتجاهين.",
+        "text_13": "وزير",
+        "text_14": "رخ",
+        "text_15": "فيل",
+        "text_16": "حصان",
+        "text_17": "ترقية في {square} إلى {piece}",
+        "text_18": "إقصاء هذا الجيش",
+        "text_19": "تمرير (لا حركة قانونية)",
+        "text_20": "استسلام",
+        "text_21": "تحريك البيدق",
+        "text_22": "وضع جدار",
+        "text_23": "الجدران المتبقية · {counts}",
+        "text_24": "الورقة العليا {card} · النوع {suit} · {n} أوراق للسحب",
+        "text_25": "العب {card} بنوع {suit}",
+        "text_26": "العب {card}",
+        "text_27": "اسحب ورقة (متبقي {n})",
+        "text_28": "اطلب {rank} من {name}",
+        "text_29": "سحب أوراق",
+        "text_30": "تمرير",
+        "text_31": "{name} · المجموعات {ranks}",
+        "text_32": "جمع اللمة",
+        "text_33": "شخصيتك: {name}",
+        "text_34": "شخصيتك سرية",
+        "text_35": "اسأل: {question}",
+        "text_36": "نعم",
+        "text_37": "لا",
+        "text_38": "{name}: خمن {character} · {result}",
+        "text_39": "صحيح",
+        "text_40": "غير صحيح",
+        "text_41": "هل ترتدي نظارة؟",
+        "text_42": "هل ترتدي قبعة؟",
+        "text_43": "هل لديها شعر في الوجه؟",
+        "text_44": "هل أذناها ظاهرتان؟",
+        "text_45": "هل شعرها أشقر؟",
+        "text_46": "هل شعرها بني؟",
+        "text_47": "هل شعرها أسود؟",
+        "text_48": "هل شعرها أحمر؟",
+        "text_49": "هل شعرها رمادي؟",
+        "text_50": "هل شعرها طويل؟",
+        "text_51": "هل شعرها قصير؟",
+        "text_52": "هل عيناها زرقاوان؟",
+        "text_53": "هل عيناها بنيتان؟",
+        "text_54": "هل عيناها خضراوان؟",
+        "text_55": "اختر قطعة الصف {r} والعمود {c}",
+        "text_56": "تحرك إلى الصف {r} والعمود {c}",
+        "server_unknown_player": "لاعب غير معروف",
+        "server_game_over": "انتهت اللعبة",
+        "server_illegal_move": "نقلة غير قانونية",
+        "server_moves_available": "توجد نقلات",
+        "server_unknown_move": "نقلة غير معروفة",
+        "title": "شطرنج لأربعة لاعبين (تصريحي)"
       }
     }
   },
@@ -2385,6 +6583,63 @@
       }
     },
     "strings": {
+      "text_0": "Declarative",
+      "text_1": "Player {n}",
+      "text_2": "Your turn · {name}",
+      "text_3": "{name} to play",
+      "text_4": "Game over",
+      "text_5": "Winner: {name}",
+      "text_6": "Your fleet",
+      "text_7": "Target waters",
+      "text_8": "Place fleet and start battle",
+      "text_9": "Places a valid fleet with clear water between ships.",
+      "text_10": "Continue the capture with the highlighted checker.",
+      "text_11": "A capture is required.",
+      "text_12": "Move diagonally; kings move either direction.",
+      "text_13": "queen",
+      "text_14": "rook",
+      "text_15": "bishop",
+      "text_16": "knight",
+      "text_17": "Promote at {square} to {piece}",
+      "text_18": "Eliminate this army",
+      "text_19": "Pass (no legal move)",
+      "text_20": "Resign",
+      "text_21": "Move pawn",
+      "text_22": "Place wall",
+      "text_23": "Walls remaining · {counts}",
+      "text_24": "Top card {card} · suit {suit} · {n} cards to draw",
+      "text_25": "Play {card} as {suit}",
+      "text_26": "Play {card}",
+      "text_27": "Draw a card ({n} left)",
+      "text_28": "Ask {name} for {rank}",
+      "text_29": "Draw cards",
+      "text_30": "Pass",
+      "text_31": "{name} · books {ranks}",
+      "text_32": "Collect trick",
+      "text_33": "Your character: {name}",
+      "text_34": "Your character is private",
+      "text_35": "Ask: {question}",
+      "text_36": "Yes",
+      "text_37": "No",
+      "text_38": "{name}: guessed {character} · {result}",
+      "text_39": "correct",
+      "text_40": "incorrect",
+      "text_41": "Are they wearing glasses?",
+      "text_42": "Are they wearing a hat?",
+      "text_43": "Do they have facial hair?",
+      "text_44": "Are their ears showing?",
+      "text_45": "Do they have blonde hair?",
+      "text_46": "Do they have brown hair?",
+      "text_47": "Do they have black hair?",
+      "text_48": "Do they have red hair?",
+      "text_49": "Do they have gray hair?",
+      "text_50": "Do they have long hair?",
+      "text_51": "Do they have short hair?",
+      "text_52": "Do they have blue eyes?",
+      "text_53": "Do they have brown eyes?",
+      "text_54": "Do they have green eyes?",
+      "text_55": "Select piece at row {r}, column {c}",
+      "text_56": "Move to row {r}, column {c}",
       "title": "4 player chess (Declarative)",
       "server_unknown_player": "unknown player",
       "server_game_over": "game over",
@@ -2392,6 +6647,6 @@
       "server_moves_available": "moves available",
       "server_unknown_move": "unknown move"
     },
-    "ui_code": "const KIND=\"four_player_chess\";\nconst SOURCE_STRINGS={\"title\":\"4 player chess (Declarative)\"};\n// Shared presentation for HTML games converted to the portable declarative UI.\n// Rules and private information remain in each game's existing server module.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active;\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\n    const offers = [];\n    let selectedMode = 'pawn';\n    const playerNames = (m.players || []).map((p, i) => p.name || `Player ${i + 1}`);\n    const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\n    const title = SOURCE_STRINGS.title || KIND;\n    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :\n      Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;\n    scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});\n    if (turnSeat !== null) {\n      scene.labels.push({id: 'status', text: active ? `Your turn · ${playerNames[turnSeat] || `Player ${turnSeat + 1}`}` :\n        (m.status === 'over' ? 'Game over' : `${playerNames[turnSeat] || `Player ${turnSeat + 1}`} to play`),\n        x: 22, y: 52, font_size: 17});\n    }\n    if (m.status === 'over' && Number.isInteger(s.winner)) {\n      scene.labels.push({id: 'winner', text: `Winner: ${playerNames[s.winner] || `Player ${s.winner + 1}`}`,\n        x: 22, y: 78, font_size: 16});\n    }\n    const intent = (move, label, surface, position, presentation) => {\n      if (!active) return null;\n      const id = `intent_${offers.length}`;\n      offers.push(move);\n      if (presentation === 'piece') {\n        scene.pieces.push({id, type: 'card', board: surface, position, text: label,\n          actions: ['tap']});\n      } else if (presentation === 'target') {\n        scene.targets.push({id, board: surface, position, label: label || '•'});\n      } else {\n        scene.controls.push({id, kind: 'button', label});\n      }\n      return id;\n    };\n    const staticPiece = (id, type, board, position, extra = {}) =>\n      scene.pieces.push(Object.assign({id, type, board, position, actions: []}, extra));\n    const label = (id, text, x, y, size = 14) =>\n      scene.labels.push({id, text: String(text), x, y, font_size: size});\n    const cardText = card => String(card || '').replace(/S$/, '♠').replace(/H$/, '♥')\n      .replace(/D$/, '♦').replace(/C$/, '♣');\n    const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});\n    const eventId = message.type === 'ui_event' ? String((message.event || {}).id || '') : '';\n    const intentMatch = /^intent_(\\d+)$/.exec(eventId);\n\n    if (KIND === 'battleship') {\n      const left = {x: 20, y: 120}, right = {x: 435, y: 120};\n      scene.labels.push({id: 'own-title', text: 'Your fleet', x: left.x, y: 84, font_size: 18});\n      scene.labels.push({id: 'target-title', text: 'Target waters', x: right.x, y: 84, font_size: 18});\n      const me = mySeat, opponent = 1 - me;\n      const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];\n      const ownCells = new Set();\n      for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);\n      for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {\n        const pos = {cell: String(r * 10 + c)};\n        const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;\n        const enemyAttack = s.attacks && s.attacks[opponent] ? s.attacks[opponent][r][c] : 0;\n        const ownMark = ownAttack === 2 ? '✹' : ownAttack === 1 ? '·' : ownCells.has(`${c},${r}`) ? '■' : '';\n        const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :\n          ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';\n        staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});\n        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';\n        if (active && s.phase === 'BATTLE' && enemyAttack === 0) {\n          intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');\n        } else {\n          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',\n            'target', pos, {text: targetMark});\n        }\n      }\n      if (active && s.phase === 'SETUP') {\n        const ships = [\n          {name: 'Carrier', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]},\n          {name: 'Battleship', cells: [[0, 2], [1, 2], [2, 2], [3, 2]]},\n          {name: 'Cruiser', cells: [[0, 4], [1, 4], [2, 4]]},\n          {name: 'Submarine', cells: [[0, 6], [1, 6], [2, 6]]},\n          {name: 'Destroyer', cells: [[0, 8], [1, 8]]}\n        ];\n        intent({type: 'place', ships}, 'Place fleet and start battle', null, null, 'control');\n        label('setup-help', 'Places a valid fleet with clear water between ships.', 22, 594, 14);\n      }\n    } else if (KIND === 'checkers') {\n      const board = s.board || [];\n      const moves = legal ? (s.moves || []) : [];\n      const moveTargets = new Set(moves.map(mv => `${mv.to.r},${mv.to.c}`));\n      board.forEach((row, r) => row.forEach((piece, c) => {\n        if (!piece) return;\n        const owner = piece.c === 0 ? 'p0' : 'p1';\n        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',\n          {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});\n      }));\n      moves.forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',\n        {cell: String(move.to.r * 8 + move.to.c)}, 'target'));\n      label('chain', s.chain ? 'Continue the capture with the highlighted checker.' :\n        (moves.some(mv => mv.cap) ? 'A capture is required.' : 'Move diagonally; kings move either direction.'), 22, 670);\n    } else if (KIND === 'chess' || KIND === 'four_player_chess') {\n      const size = KIND === 'chess' ? 8 : 14;\n      const boardId = 'main';\n      const board = KIND === 'chess' ? (s.bd || []) : s.board || {};\n      const symbols = {wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};\n      const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};\n      if (KIND === 'chess') {\n        const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};\n        board.forEach((piece, index) => {\n          if (!piece) return;\n          const r = Math.floor(index / 8), c = index % 8;\n          const name = pieceNames[Math.abs(piece)] || 'P';\n          const code = `${piece > 0 ? 'w' : 'b'}${name}`;\n          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,\n            {cell: String(index)}, {text: symbols[code] || name});\n        });\n      } else {\n        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {\n          if (KIND === 'four_player_chess' && !((r >= 3 && r <= 10) || (c >= 3 && c <= 10))) continue;\n          const pos = KIND === 'chess' ? {cell: String(r * size + c)} : {x: 21 + c * 42, y: 21 + r * 42};\n          const squareType = (r + c) % 2 ? 'square_dark' : 'square_light';\n          if (KIND === 'four_player_chess') staticPiece(`square_${r}_${c}`, squareType, boardId, pos);\n        }\n        for (const [square, piece] of Object.entries(board)) {\n          const [r, c] = square.split(',').map(Number);\n          if (!Number.isInteger(r) || !Number.isInteger(c)) continue;\n          const type = Number(piece.o) || 0;\n          staticPiece(`piece_${r}_${c}`, `seat_${type}`, boardId, {x: 21 + c * 42, y: 21 + r * 42},\n            {text: fourSymbols[piece.t] || piece.t});\n        }\n      }\n      const legalMoves = legal ? (s.legalMoves || []) : [];\n      for (const mv of legalMoves) {\n        const move = KIND === 'chess'\n          ? {fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc, ...(mv.promo ? {promo: mv.promo} : {})}\n          : {kind: 'move', fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc};\n        const position = KIND === 'chess' ? {cell: String(mv.tr * size + mv.tc)} :\n          {x: 21 + mv.tc * 42, y: 21 + mv.tr * 42};\n        if (KIND === 'chess' && mv.promo) {\n          const files = 'abcdefgh';\n          const promotionNames = {Q: 'queen', R: 'rook', B: 'bishop', N: 'knight'};\n          intent(move, `Promote at ${files[mv.tc]}${size - mv.tr} to ${promotionNames[mv.promo] || mv.promo}`,\n            null, null, 'control');\n        } else intent(move, '•', boardId, position, 'target');\n      }\n      if (KIND === 'four_player_chess' && active && !(s.legalMoves || []).length && s.winnerTeam === null) {\n        intent({kind: s.inCheck ? 'elim' : 'pass'}, s.inCheck ? 'Eliminate this army' : 'Pass (no legal move)',\n          null, null, 'control');\n      }\n      if (KIND === 'chess' && s.winner === null && active) {\n        intent({resign: true}, 'Resign', null, null, 'control');\n      }\n    } else if (KIND === 'quoridor') {\n      const cells = [];\n      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n        const x = 44 + c * 54, y = 112 + r * 54;\n        cells.push({r, c, x, y});\n        staticPiece(`square_${r}_${c}`, 'square', 'main', {x, y}, {text: ''});\n      }\n      (s.walls || []).forEach((w, i) => {\n        if (w.o === 'H') scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + w.c * 54, y: 112 + (w.r + 0.5) * 54},\n          {x: 44 + (w.c + 2) * 54, y: 112 + (w.r + 0.5) * 54}], color: '#fbbf24', width: 10});\n        else scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + w.r * 54},\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 2) * 54}], color: '#fbbf24', width: 10});\n      });\n      for (let seat = 0; seat < (s.pawns || []).length; seat++) {\n        const p = s.pawns[seat];\n        staticPiece(`pawn_${seat}`, seat === 0 ? 'p0' : 'p1', 'main',\n          {x: 44 + p.c * 54, y: 112 + p.r * 54}, {text: seat === 0 ? '1' : '2'});\n      }\n      const mode = eventId === 'mode_wall' ? 'wall' : eventId === 'mode_pawn' ? 'pawn' :\n        localState && localState.move_count === m.move_count && localState.mode === 'wall' ? 'wall' : 'pawn';\n      selectedMode = mode;\n      if (active) {\n        scene.controls.push({id: 'mode_pawn', kind: 'button', label: mode === 'pawn' ? '✓ Move pawn' : 'Move pawn'});\n        scene.controls.push({id: 'mode_wall', kind: 'button', label: mode === 'wall' ? '✓ Place wall' : 'Place wall'});\n        if (mode === 'pawn') (s.legalMoves || []).forEach(([r, c]) =>\n          intent({type: 'pawn', r, c}, '•', 'main', {x: 44 + c * 54, y: 112 + r * 54}, 'target'));\n        else (s.legalWalls || []).forEach(w => intent({type: 'wall', r: w.r, c: w.c, o: w.o},\n          w.o === 'H' ? '—' : '│', 'main', w.o === 'H'\n            ? {x: 44 + (w.c + 1) * 54, y: 112 + (w.r + 0.5) * 54}\n            : {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 1) * 54}, 'target'));\n      }\n      label('walls-left', `Walls remaining · ${s.wallsLeft ? s.wallsLeft.join(' / ') : ''}`, 22, 614);\n      if (message.type === 'ui_event' && active && (eventId === 'mode_pawn' || eventId === 'mode_wall')) {\n        selectedMode = eventId === 'mode_wall' ? 'wall' : 'pawn';\n        return {scene, local_state: {mode:selectedMode,move_count:m.move_count,\n          intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};\n      }\n    } else if (KIND === 'crazy_eights') {\n      label('table', `Top card ${cardText(cardFromNumber(s.top))} · suit ${SUITS[s.suit] || ''} · ${s.deckCount || 0} cards to draw`, 22, 94, 16);\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const playable = new Set(s.playable || []);\n      hand.forEach((card, i) => {\n        const r = card % 13 + 1, labelText = cardText(cardFromNumber(card));\n        if (playable.has(card)) {\n          if (r === 8) {\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n            for (let chosenSuit = 0; chosenSuit < 4; chosenSuit++)\n              intent({card, chosenSuit}, `Play ${labelText} as ${SUITS[chosenSuit]}`, null, null, 'control');\n          } else intent({card}, `Play ${labelText}`, 'table', cardPos(i), 'piece');\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n      });\n      if (active) intent('draw', `Draw a card (${s.deckCount || 0} left)`, null, null, 'control');\n    } else if (KIND === 'go_fish') {\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));\n      const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));\n      for (let seat = 0; seat < playerNames.length; seat++) if (active && seat !== mySeat) {\n        for (const rank of rankSet) intent({target: seat, rank}, `Ask ${playerNames[seat]} for ${rank}`, null, null, 'control');\n      }\n      if (active && hand.length === 0) {\n        if (s.deckCount > 0) intent({draw: true}, 'Draw cards', null, null, 'control');\n        else intent({pass: true}, 'Pass', null, null, 'control');\n      }\n      (s.books || []).forEach((books, seat) => label(`books_${seat}`, `${playerNames[seat] || `Player ${seat + 1}`} · books ${(books || []).join(', ') || '—'}`,\n        24, 460 + seat * 25, 14));\n    } else if (KIND === 'hearts' || KIND === 'spades') {\n      const isHearts = KIND === 'hearts';\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const current = isHearts ? s.cur : s.current;\n      const trick = s.trick || [];\n      const legalCards = isHearts ? new Set(s.legal || []) :\n        (s.pendingWin !== null && s.pendingWin !== undefined ? new Set() : new Set(hand));\n      hand.forEach((card, i) => {\n        const moves = legalCards.has(card) ? [{card}] : [];\n        if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)});\n      });\n      trick.forEach((play, i) => staticPiece(`trick_${i}`, 'played', 'table',\n        {x: 300 + (play.player ?? play.seat) * 72, y: 400}, {text: cardText(play.card)}));\n      if (KIND === 'spades' && s.pendingWin !== null && s.pendingWin !== undefined && active)\n        intent({collect: true}, 'Collect trick', null, null, 'control');\n      const scores = isHearts ? s.taken : s.tricksWon;\n      if (Array.isArray(scores)) scores.forEach((score, seat) =>\n        label(`score_${seat}`, `${playerNames[seat] || `Player ${seat + 1}`} · ${score}`, 22 + seat * 170, 92, 14));\n    } else if (KIND === 'guess_who') {\n      const names = CHARACTER_NAMES;\n      const secret = Number.isInteger(s.mySecret) ? `Your character: ${names[s.mySecret]}` : 'Your character is private';\n      label('your-secret', secret, 22, 88, 18);\n      for (let i = 0; i < names.length; i++) {\n        const row = Math.floor(i / 6), col = i % 6;\n        const x = 30 + col * 94, y = 156 + row * 92;\n        staticPiece(`person_${i}`, `person_${i % CHARACTER_COLORS.length}`, 'main',\n          {cell: String(i)}, {text: names[i]});\n        if (active) intent({kind: 'guess', idx: i}, names[i], 'main', {cell: String(i)}, 'target');\n      }\n      const asked = new Set((s.hist || []).filter(item => item.by === mySeat && Number.isInteger(item.q)).map(item => item.q));\n      if (active) QUESTIONS.forEach((question, q) => {\n        if (!asked.has(q)) intent({kind: 'ask', q}, `Ask: ${question}`, null, null, 'control');\n      });\n      (s.hist || []).slice(-8).forEach((item, i) => {\n        const who = playerNames[item.by] || `Player ${item.by + 1}`;\n        const text = Number.isInteger(item.q) ? `${who}: ${QUESTIONS[item.q]} · ${item.ans ? 'Yes' : 'No'}` :\n          `${who}: guessed ${names[item.guess] || '—'} · ${item.correct ? 'correct' : 'incorrect'}`;\n        label(`history_${i}`, text, 22, 520 + i * 18, 13);\n      });\n    }\n\n    const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;\n    if (message.type === 'ui_event' && active && emitted !== undefined) {\n      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))};\n      if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n      return {scene, local_state: nextLocal, make_move: emitted};\n    }\n    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))};\n    if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n    return {scene, local_state: nextLocal};\n  }\n};\n\nconst SUITS = ['♠', '♥', '♦', '♣'];\nconst RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];\nfunction cardFromNumber(value) {\n  const suit = Math.floor(Number(value) / 13), rank = Number(value) % 13 + 1;\n  return `${RANKS[(rank + 12) % 13]}${SUITS[suit] || ''}`;\n}\nconst QUESTIONS = ['Are they wearing glasses?', 'Are they wearing a hat?', 'Do they have facial hair?',\n  'Are their ears showing?', 'Do they have blonde hair?', 'Do they have brown hair?',\n  'Do they have black hair?', 'Do they have red hair?', 'Do they have gray hair?',\n  'Do they have long hair?', 'Do they have short hair?', 'Do they have blue eyes?',\n  'Do they have brown eyes?', 'Do they have green eyes?'];\nconst CHARACTER_NAMES = ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena',\n  'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'];\nconst CHARACTER_COLORS = ['#60a5fa', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#2dd4bf'];\n"
+    "ui_code": "const KIND=\"four_player_chess\";\nconst SOURCE_STRINGS={\"title\":\"4 player chess (Declarative)\"};\nconst SOURCE_KEYS={\"Declarative\":\"text_0\",\"Player {n}\":\"text_1\",\"Your turn · {name}\":\"text_2\",\"{name} to play\":\"text_3\",\"Game over\":\"text_4\",\"Winner: {name}\":\"text_5\",\"Your fleet\":\"text_6\",\"Target waters\":\"text_7\",\"Place fleet and start battle\":\"text_8\",\"Places a valid fleet with clear water between ships.\":\"text_9\",\"Continue the capture with the highlighted checker.\":\"text_10\",\"A capture is required.\":\"text_11\",\"Move diagonally; kings move either direction.\":\"text_12\",\"queen\":\"text_13\",\"rook\":\"text_14\",\"bishop\":\"text_15\",\"knight\":\"text_16\",\"Promote at {square} to {piece}\":\"text_17\",\"Eliminate this army\":\"text_18\",\"Pass (no legal move)\":\"text_19\",\"Resign\":\"text_20\",\"Move pawn\":\"text_21\",\"Place wall\":\"text_22\",\"Walls remaining · {counts}\":\"text_23\",\"Top card {card} · suit {suit} · {n} cards to draw\":\"text_24\",\"Play {card} as {suit}\":\"text_25\",\"Play {card}\":\"text_26\",\"Draw a card ({n} left)\":\"text_27\",\"Ask {name} for {rank}\":\"text_28\",\"Draw cards\":\"text_29\",\"Pass\":\"text_30\",\"{name} · books {ranks}\":\"text_31\",\"Collect trick\":\"text_32\",\"Your character: {name}\":\"text_33\",\"Your character is private\":\"text_34\",\"Ask: {question}\":\"text_35\",\"Yes\":\"text_36\",\"No\":\"text_37\",\"{name}: guessed {character} · {result}\":\"text_38\",\"correct\":\"text_39\",\"incorrect\":\"text_40\",\"Are they wearing glasses?\":\"text_41\",\"Are they wearing a hat?\":\"text_42\",\"Do they have facial hair?\":\"text_43\",\"Are their ears showing?\":\"text_44\",\"Do they have blonde hair?\":\"text_45\",\"Do they have brown hair?\":\"text_46\",\"Do they have black hair?\":\"text_47\",\"Do they have red hair?\":\"text_48\",\"Do they have gray hair?\":\"text_49\",\"Do they have long hair?\":\"text_50\",\"Do they have short hair?\":\"text_51\",\"Do they have blue eyes?\":\"text_52\",\"Do they have brown eyes?\":\"text_53\",\"Do they have green eyes?\":\"text_54\",\"Select piece at row {r}, column {c}\":\"text_55\",\"Move to row {r}, column {c}\":\"text_56\"};\n// Shared presentation for HTML games converted to the portable declarative UI.\n// Rules and private information remain in each game's existing server module.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active;\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\n    const offers = [];\n    let selectedMode = 'pawn';\n    let selectedFrom = null;\n    const text = (source, values = {}) => String(m.strings?.[SOURCE_KEYS[source]] ?? source).replace(/\\{(\\w+)\\}/g, (match, key) => values[key] == null ? match : String(values[key]));\n    const playerNames = (m.players || []).map((p, i) => p.name || text('Player {n}', {n:i + 1}));\n    const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\n    const title = m.strings?.title || SOURCE_STRINGS.title || KIND;\n    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :\n      Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;\n    scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});\n    if (turnSeat !== null) {\n      scene.labels.push({id: 'status', text: active ? text('Your turn · {name}', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})}) :\n        (m.status === 'over' ? text('Game over') : text('{name} to play', {name:playerNames[turnSeat] || text('Player {n}', {n:turnSeat + 1})})),\n        x: 22, y: 52, font_size: 17});\n    }\n    if (m.status === 'over' && Number.isInteger(s.winner)) {\n      scene.labels.push({id: 'winner', text: text('Winner: {name}', {name:playerNames[s.winner] || text('Player {n}', {n:s.winner + 1})}),\n        x: 22, y: 78, font_size: 16});\n    }\n    const intent = (move, label, surface, position, presentation, aria_label) => {\n      if (!active) return null;\n      const id = `intent_${offers.length}`;\n      offers.push(move);\n      if (presentation === 'piece' || presentation?.startsWith('person_')) {\n        scene.pieces.push({id, type: presentation === 'piece' ? 'card' : presentation, board: surface, position, text: label,\n          actions: ['tap'], ...(aria_label ? {aria_label} : {})});\n      } else if (presentation === 'target') {\n        const destination = move.to || (Number.isInteger(move.tr) ? {r:move.tr,c:move.tc} : null);\n        scene.targets.push({id, board: surface, position, label: label || '•', ...(destination ? {aria_label:text('Move to row {r}, column {c}', {r:destination.r+1,c:destination.c+1})} : {})});\n      } else {\n        scene.controls.push({id, kind: 'button', label});\n      }\n      return id;\n    };\n    const staticPiece = (id, type, board, position, extra = {}) =>\n      scene.pieces.push(Object.assign({id, type, board, position, actions: []}, extra));\n    const label = (id, text, x, y, size = 14) =>\n      scene.labels.push({id, text: String(text), x, y, font_size: size});\n    const cardText = card => String(card || '').replace(/S$/, '♠').replace(/H$/, '♥')\n      .replace(/D$/, '♦').replace(/C$/, '♣');\n    const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});\n    const eventId = message.type === 'ui_event' && message.event?.type === 'tap' ? String(message.event.id || '') : '';\n    const intentMatch = /^intent_(\\d+)$/.exec(eventId);\n    const selectFrom = (moves, from, position) => {\n      const origins = new Map(moves.map(move => {const cell=from(move);return [`${cell.r}_${cell.c}`,cell];}));\n      const requested = /^select_(\\d+_\\d+)$/.exec(eventId)?.[1];\n      const retained = localState?.move_count === m.move_count && localState?.viewer === mySeat ? localState.selectedFrom : null;\n      selectedFrom = origins.has(requested) ? requested : origins.has(retained) ? retained : null;\n      for (const [key, cell] of origins) scene.targets.push({id:`select_${key}`,board:'main',position:position(cell),label:key===selectedFrom?'◉':'◇',aria_label:text('Select piece at row {r}, column {c}', {r:cell.r+1,c:cell.c+1})});\n      return moves.filter(move => {const cell=from(move);return `${cell.r}_${cell.c}`===selectedFrom;});\n    };\n\n    if (KIND === 'battleship') {\n      const left = {x: 20, y: 120}, right = {x: 435, y: 120};\n      scene.labels.push({id: 'own-title', text: text('Your fleet'), x: left.x, y: 84, font_size: 18});\n      scene.labels.push({id: 'target-title', text: text('Target waters'), x: right.x, y: 84, font_size: 18});\n      const me = mySeat, opponent = 1 - me;\n      const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];\n      const ownCells = new Set();\n      for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);\n      for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {\n        const pos = {cell: String(r * 10 + c)};\n        const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;\n        const enemyAttack = s.attacks && s.attacks[opponent] ? s.attacks[opponent][r][c] : 0;\n        const ownMark = ownAttack === 2 ? '✹' : ownAttack === 1 ? '·' : ownCells.has(`${c},${r}`) ? '■' : '';\n        const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :\n          ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';\n        staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});\n        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';\n        if (active && s.phase === 'BATTLE' && enemyAttack === 0) {\n          intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');\n        } else {\n          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',\n            'target', pos, {text: targetMark});\n        }\n      }\n      if (active && s.phase === 'SETUP') {\n        const ships = [\n          {name: 'Carrier', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]},\n          {name: 'Battleship', cells: [[0, 2], [1, 2], [2, 2], [3, 2]]},\n          {name: 'Cruiser', cells: [[0, 4], [1, 4], [2, 4]]},\n          {name: 'Submarine', cells: [[0, 6], [1, 6], [2, 6]]},\n          {name: 'Destroyer', cells: [[0, 8], [1, 8]]}\n        ];\n        intent({type: 'place', ships}, text('Place fleet and start battle'), null, null, 'control');\n        label('setup-help', text('Places a valid fleet with clear water between ships.'), 22, 594, 14);\n      }\n    } else if (KIND === 'checkers') {\n      const board = s.board || [];\n      const moves = legal ? (s.moves || []) : [];\n      board.forEach((row, r) => row.forEach((piece, c) => {\n        if (!piece) return;\n        const owner = piece.c === 0 ? 'p0' : 'p1';\n        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',\n          {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});\n      }));\n      selectFrom(moves,move=>move.from,cell=>({cell:String(cell.r*8+cell.c)})).forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',\n        {cell: String(move.to.r * 8 + move.to.c)}, 'target'));\n      label('chain', s.chain ? text('Continue the capture with the highlighted checker.') :\n        (moves.some(mv => mv.cap) ? text('A capture is required.') : text('Move diagonally; kings move either direction.')), 22, 670);\n    } else if (KIND === 'chess' || KIND === 'four_player_chess') {\n      const size = KIND === 'chess' ? 8 : 14;\n      const boardId = 'main';\n      const board = KIND === 'chess' ? (s.bd || []) : s.board || {};\n      const symbols = {wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};\n      const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};\n      if (KIND === 'chess') {\n        const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};\n        board.forEach((piece, index) => {\n          if (!piece) return;\n          const r = Math.floor(index / 8), c = index % 8;\n          const name = pieceNames[Math.abs(piece)] || 'P';\n          const code = `${piece > 0 ? 'w' : 'b'}${name}`;\n          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,\n            {cell: String(index)}, {text: symbols[code] || name});\n        });\n      } else {\n        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {\n          if (KIND === 'four_player_chess' && !((r >= 3 && r <= 10) || (c >= 3 && c <= 10))) continue;\n          const pos = KIND === 'chess' ? {cell: String(r * size + c)} : {x: 21 + c * 42, y: 21 + r * 42};\n          const squareType = (r + c) % 2 ? 'square_dark' : 'square_light';\n          if (KIND === 'four_player_chess') staticPiece(`square_${r}_${c}`, squareType, boardId, pos);\n        }\n        for (const [square, piece] of Object.entries(board)) {\n          const [r, c] = square.split(',').map(Number);\n          if (!Number.isInteger(r) || !Number.isInteger(c)) continue;\n          const type = Number(piece.o) || 0;\n          staticPiece(`piece_${r}_${c}`, `seat_${type}`, boardId, {x: 21 + c * 42, y: 21 + r * 42},\n            {text: fourSymbols[piece.t] || piece.t});\n        }\n      }\n      const legalMoves = legal ? (s.legalMoves || []) : [];\n      const selectedMoves = selectFrom(legalMoves,move=>({r:move.fr,c:move.fc}),cell=>KIND==='chess'?{cell:String(cell.r*size+cell.c)}:{x:21+cell.c*42,y:21+cell.r*42});\n      for (const mv of selectedMoves) {\n        const move = KIND === 'chess'\n          ? {fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc, ...(mv.promo ? {promo: mv.promo} : {})}\n          : {kind: 'move', fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc};\n        const position = KIND === 'chess' ? {cell: String(mv.tr * size + mv.tc)} :\n          {x: 21 + mv.tc * 42, y: 21 + mv.tr * 42};\n        if (KIND === 'chess' && mv.promo) {\n          const files = 'abcdefgh';\n          const promotionNames = {Q: text('queen'), R: text('rook'), B: text('bishop'), N: text('knight')};\n          intent(move, text('Promote at {square} to {piece}', {square:files[mv.tc]+(size-mv.tr),piece:promotionNames[mv.promo]||mv.promo}),\n            null, null, 'control');\n        } else intent(move, '•', boardId, position, 'target');\n      }\n      if (KIND === 'four_player_chess' && active && !(s.legalMoves || []).length && s.winnerTeam === null) {\n        intent({kind: s.inCheck ? 'elim' : 'pass'}, s.inCheck ? text('Eliminate this army') : text('Pass (no legal move)'),\n          null, null, 'control');\n      }\n      if (KIND === 'chess' && s.winner === null && active) {\n        intent({resign: true}, text('Resign'), null, null, 'control');\n      }\n    } else if (KIND === 'quoridor') {\n      const cells = [];\n      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n        const x = 44 + c * 54, y = 112 + r * 54;\n        cells.push({r, c, x, y});\n        staticPiece(`square_${r}_${c}`, 'square', 'main', {x, y}, {text: ''});\n      }\n      (s.walls || []).forEach((w, i) => {\n        if (w.o === 'H') scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + w.c * 54, y: 112 + (w.r + 0.5) * 54},\n          {x: 44 + (w.c + 2) * 54, y: 112 + (w.r + 0.5) * 54}], color: '#fbbf24', width: 10});\n        else scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + w.r * 54},\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 2) * 54}], color: '#fbbf24', width: 10});\n      });\n      for (let seat = 0; seat < (s.pawns || []).length; seat++) {\n        const p = s.pawns[seat];\n        staticPiece(`pawn_${seat}`, seat === 0 ? 'p0' : 'p1', 'main',\n          {x: 44 + p.c * 54, y: 112 + p.r * 54}, {text: seat === 0 ? '1' : '2'});\n      }\n      const mode = eventId === 'mode_wall' ? 'wall' : eventId === 'mode_pawn' ? 'pawn' :\n        localState && localState.move_count === m.move_count && localState.mode === 'wall' ? 'wall' : 'pawn';\n      selectedMode = mode;\n      if (active) {\n        scene.controls.push({id: 'mode_pawn', kind: 'button', label: (mode === 'pawn' ? '✓ ' : '') + text('Move pawn')});\n        scene.controls.push({id: 'mode_wall', kind: 'button', label: (mode === 'wall' ? '✓ ' : '') + text('Place wall')});\n        if (mode === 'pawn') (s.legalMoves || []).forEach(([r, c]) =>\n          intent({type: 'pawn', r, c}, '•', 'main', {x: 44 + c * 54, y: 112 + r * 54}, 'target'));\n        else (s.legalWalls || []).forEach(w => intent({type: 'wall', r: w.r, c: w.c, o: w.o},\n          w.o === 'H' ? '—' : '│', 'main', w.o === 'H'\n            ? {x: 44 + (w.c + 1) * 54, y: 112 + (w.r + 0.5) * 54}\n            : {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 1) * 54}, 'target'));\n      }\n      label('walls-left', text('Walls remaining · {counts}', {counts:s.wallsLeft ? s.wallsLeft.join(' / ') : ''}), 22, 614);\n      if (message.type === 'ui_event' && active && (eventId === 'mode_pawn' || eventId === 'mode_wall')) {\n        selectedMode = eventId === 'mode_wall' ? 'wall' : 'pawn';\n        return {scene, local_state: {mode:selectedMode,move_count:m.move_count,\n          intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};\n      }\n    } else if (KIND === 'crazy_eights') {\n      label('table', text('Top card {card} · suit {suit} · {n} cards to draw', {card:cardText(cardFromNumber(s.top)),suit:SUITS[s.suit]||'',n:s.deckCount||0}), 22, 94, 16);\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const playable = new Set(s.playable || []);\n      hand.forEach((card, i) => {\n        const r = card % 13 + 1, labelText = cardText(cardFromNumber(card));\n        if (playable.has(card)) {\n          if (r === 8) {\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n            for (let chosenSuit = 0; chosenSuit < 4; chosenSuit++)\n              intent({card, chosenSuit}, text('Play {card} as {suit}', {card:labelText,suit:SUITS[chosenSuit]}), null, null, 'control');\n          } else intent({card}, text('Play {card}', {card:labelText}), 'table', cardPos(i), 'piece');\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n      });\n      if (active) intent('draw', text('Draw a card ({n} left)', {n:s.deckCount||0}), null, null, 'control');\n    } else if (KIND === 'go_fish') {\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));\n      const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));\n      for (let seat = 0; seat < playerNames.length; seat++) if (active && seat !== mySeat) {\n        for (const rank of rankSet) intent({target: seat, rank}, text('Ask {name} for {rank}', {name:playerNames[seat],rank}), null, null, 'control');\n      }\n      if (active && hand.length === 0) {\n        if (s.deckCount > 0) intent({draw: true}, text('Draw cards'), null, null, 'control');\n        else intent({pass: true}, text('Pass'), null, null, 'control');\n      }\n      (s.books || []).forEach((books, seat) => label(`books_${seat}`, text('{name} · books {ranks}', {name:playerNames[seat]||text('Player {n}', {n:seat+1}),ranks:(books||[]).join(', ')||'—'}),\n        24, 460 + seat * 25, 14));\n    } else if (KIND === 'hearts' || KIND === 'spades') {\n      const isHearts = KIND === 'hearts';\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const current = isHearts ? s.cur : s.current;\n      const trick = s.trick || [];\n      const legalCards = isHearts ? new Set(s.legal || []) :\n        (s.pendingWin !== null && s.pendingWin !== undefined ? new Set() : new Set(hand));\n      hand.forEach((card, i) => {\n        const moves = legalCards.has(card) ? [{card}] : [];\n        if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)});\n      });\n      trick.forEach((play, i) => staticPiece(`trick_${i}`, 'played', 'table',\n        {x: 300 + (play.player ?? play.seat) * 72, y: 400}, {text: cardText(play.card)}));\n      if (KIND === 'spades' && s.pendingWin !== null && s.pendingWin !== undefined && active)\n        intent({collect: true}, text('Collect trick'), null, null, 'control');\n      const scores = isHearts ? s.taken : s.tricksWon;\n      if (Array.isArray(scores)) scores.forEach((score, seat) =>\n        label(`score_${seat}`, `${playerNames[seat] || text('Player {n}', {n:seat + 1})} · ${score}`, 22 + seat * 170, 92, 14));\n    } else if (KIND === 'guess_who') {\n      const names = CHARACTER_NAMES;\n      const secret = Number.isInteger(s.mySecret) ? text('Your character: {name}', {name:names[s.mySecret]}) : text('Your character is private');\n      label('your-secret', secret, 22, 88, 18);\n      for (let i = 0; i < names.length; i++) {\n        const description = names[i]+': '+QUESTIONS.map((question,q)=>text(question)+' '+text(SOURCE_CHARACTER_ANSWERS[i][q]?'Yes':'No')).join('; ');\n        if (active) intent({kind:'guess',idx:i}, names[i], 'main', {cell:String(i)}, `person_${i}`, description);\n        else staticPiece(`person_${i}`, `person_${i}`, 'main', {cell:String(i)}, {text:names[i],aria_label:description});\n      }\n      const asked = new Set((s.hist || []).filter(item => item.by === mySeat && Number.isInteger(item.q)).map(item => item.q));\n      if (active) QUESTIONS.forEach((question, q) => {\n        if (!asked.has(q)) intent({kind: 'ask', q}, text('Ask: {question}', {question:text(question)}), null, null, 'control');\n      });\n      (s.hist || []).slice(-8).forEach((item, i) => {\n        const who = playerNames[item.by] || text('Player {n}', {n:item.by + 1});\n        const historyText = Number.isInteger(item.q) ? `${who}: ${text(QUESTIONS[item.q])} · ${item.ans ? text('Yes') : text('No')}` :\n          text('{name}: guessed {character} · {result}', {name:who,character:names[item.guess]||'—',result:item.correct?text('correct'):text('incorrect')});\n        label(`history_${i}`, historyText, 22, 520 + i * 18, 13);\n      });\n    }\n\n    const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;\n    if (message.type === 'ui_event' && active && emitted !== undefined) {\n      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n      if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n      return {scene, local_state: nextLocal, make_move: emitted};\n    }\n    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};\n    if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n    return {scene, local_state: nextLocal};\n  }\n};\n\nconst SUITS = ['♠', '♥', '♦', '♣'];\nconst RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];\nfunction cardFromNumber(value) {\n  const suit = Math.floor(Number(value) / 13), rank = Number(value) % 13 + 1;\n  return `${RANKS[(rank + 12) % 13]}${SUITS[suit] || ''}`;\n}\nconst QUESTIONS = ['Are they wearing glasses?', 'Are they wearing a hat?', 'Do they have facial hair?',\n  'Are their ears showing?', 'Do they have blonde hair?', 'Do they have brown hair?',\n  'Do they have black hair?', 'Do they have red hair?', 'Do they have gray hair?',\n  'Do they have long hair?', 'Do they have short hair?', 'Do they have blue eyes?',\n  'Do they have brown eyes?', 'Do they have green eyes?'];\nconst CHARACTER_NAMES = ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena',\n  'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'];\n"
   }
 }

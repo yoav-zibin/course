@@ -113,8 +113,9 @@ def test_pending_query_follows_short_and_empty_pages_and_excludes_escalations(mo
     assert all(q["limit"] == [str(review.PAGE_LIMIT)] for q in queries)
 
 
-def test_watcher_page_size_fits_maximum_unicode_report_text_and_resolution():
-    row = {"id": "a" * 32, "text": "🎮" * 10_000, "resolution": "🎮" * 20_000,
+@pytest.mark.parametrize("character", ["🎮", "\x01"])
+def test_watcher_page_size_fits_maximum_unicode_report_text_and_resolution(character):
+    row = {"id": "a" * 32, "text": character * 10_000, "resolution": character * 20_000,
            "user": {"display_name": "🎮" * 200, "email": "a" * 254}}
     response = json.dumps({"items": [row] * review.PAGE_LIMIT, "next_cursor": "a" * 500},
                           ensure_ascii=False).encode()

@@ -317,3 +317,34 @@ test('reduced-motion replay settles immediately and remains read only',async({pa
   await expect(counter).toHaveCount(0);await expect(page.getByTestId('history-ghost')).toHaveCount(0);
   expect(await moves(page)).toEqual([]);
 });
+
+for(const kind of ['checkers','chess','four_player_chess'])test(`${kind} lets physical taps choose either source for a shared legal destination`,async({page,request})=>{
+  const game=JSON.parse(readFileSync(path.resolve(__dirname,`../../../games/declarative/${kind}.json`),'utf8'));
+  const view=game.unit_tests.cases[0].view_of_mover;
+  const legal=kind==='checkers'?view.moves.map((m:any)=>({from:m.from,to:m.to,move:{from:m.from,to:m.to}})):
+    view.legalMoves.map((m:any)=>({from:{r:m.fr,c:m.fc},to:{r:m.tr,c:m.tc},move:{...(kind==='four_player_chess'?{kind:'move'}:{}),fr:m.fr,fc:m.fc,tr:m.tr,tc:m.tc}}));
+  const shared=legal.find((m:any)=>legal.some((other:any)=>JSON.stringify(m.to)===JSON.stringify(other.to)&&JSON.stringify(m.from)!==JSON.stringify(other.from)));
+  const pair=legal.filter((m:any)=>JSON.stringify(m.to)===JSON.stringify(shared.to)).slice(0,2);
+  expect(pair.length).toBe(2);
+  await mount(page,request,game.declarative_ui,state({view,state:view,strings:game.declarative_ui.strings}));
+  for(const [index,choice]of pair.entries()){
+    await send(page,state({view,state:view,strings:game.declarative_ui.strings,move_count:index+2}));
+    await page.getByRole('button',{name:`Select piece at row ${choice.from.r+1}, column ${choice.from.c+1}`,exact:true}).click();
+    await page.getByRole('button',{name:`Move to row ${choice.to.r+1}, column ${choice.to.c+1}`,exact:true}).click();
+    await expect.poll(()=>moves(page)).toHaveLength(index+1);
+    expect((await moves(page)).at(-1)).toEqual(choice.move);
+  }
+});
+
+test('Guess Who portraits expose the public features used by translated questions',async({page,request},info)=>{
+  const game=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/guess_who.json'),'utf8'));
+  const view=game.unit_tests.cases[0].view_of_mover;
+  await mount(page,request,game.declarative_ui,state({view,state:view,strings:game.translations.es.client_strings,locale:'es'}));
+  const cleo=page.getByRole('button',{name:/^Cleo:/});
+  await expect(cleo).toBeVisible();
+  await expect(cleo.locator('svg')).toHaveCount(1);
+  await expect(cleo.locator('path[stroke="#172033"]')).toHaveCount(1);
+  await expect(page.getByRole('button',{name:'Preguntar: ¿Lleva gafas?',exact:true})).toBeVisible();
+  await page.screenshot({path:info.outputPath('guess-who-public-traits.png'),fullPage:true});
+  await cleo.click();await expect.poll(()=>moves(page)).toEqual([{kind:'guess',idx:2}]);
+});

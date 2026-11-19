@@ -21,8 +21,9 @@ DEFAULT_STATE = Path.home() / ".local/share/buildplay-bug-reports"
 RETRY_SECONDS = 6 * 3600
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # Headers contain up to 10k description + 20k review-note characters. With
-# four-byte Unicode, 100 headers exceed the private response cap; 25 fit.
-PAGE_LIMIT = 25
+# JSON escapes control characters to six bytes each; twenty maximal headers
+# still fit, including when the text needs more space than four-byte Unicode.
+PAGE_LIMIT = 20
 STATUSES = ("open", "handling", "escalated", "handled")
 
 

@@ -648,6 +648,16 @@ them into each request together with deterministic test cases, source strings,
 translations and schematic SVG illustrations. Those illustrations are not
 captured gameplay screenshots.
 
+The ten HTML conversions use `html_conversions_ui.js` and
+`html_conversions_i18n.json` for presentation and all seven translations.
+Their checked-in packages retain the authoritative rules and schemas, so
+regeneration needs no private legacy export. The generator records opening,
+intermediate and finishing moves from real matches. Checkers and both chess
+variants select a source piece before a destination, keeping moves to the same
+square individually reachable. Guess Who portraits and accessible descriptions
+show the public character features used by its questions. Spades retains this
+edition's original rule allowing any card, without a follow-suit restriction.
+
 With the checkout importable as `game_platform` and dependencies installed:
 
 ```sh

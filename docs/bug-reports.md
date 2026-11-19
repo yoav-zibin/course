@@ -126,8 +126,9 @@ receipt suppresses duplicate turns for the same reports for six hours; new
 report IDs can trigger a turn sooner. An unfinished `handling` report retries
 after that interval, recovering an interrupted repair. A process lock prevents
 overlapping watcher invocations. Queue delivery never marks a report handled.
-Watcher pages contain at most 25 headers, so complete Unicode descriptions and
-review notes fit within its 4 MiB private-response limit.
+Watcher pages contain at most 20 headers, so complete descriptions and review
+notes fit within its 4 MiB private-response limit, including JSON-escaped control
+characters.
 
 The queued instructions require independent examination of the report and
 screenshots, focused code fixes and checks, integration of current upstream,

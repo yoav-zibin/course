@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Build portable declarative editions of ten existing HTML catalog games.
-// The original server modules stay authoritative; only legal choices are
-// surfaced to the shared portal renderer.
+// The checked-in packages retain their original rules and schemas. Regenerate
+// their presentation without relying on untracked legacy export directories.
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -10,39 +10,41 @@ import {fileURLToPath} from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'games', 'declarative');
 const SOURCE_UI = fs.readFileSync(path.join(ROOT, 'games/declarative/html_conversions_ui.js'), 'utf8');
-const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/leave_contract/catalog.json'), 'utf8'));
+const COPY = JSON.parse(fs.readFileSync(path.join(OUT,'html_conversions_i18n.json'),'utf8'));
+const STRING_KEYS = Object.fromEntries(Object.keys(COPY.strings).map((text,index)=>[text,`text_${index}`]));
+const ENGLISH = Object.fromEntries(Object.entries(STRING_KEYS).map(([text,key])=>[key,text]));
 const languages = ['es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar'];
 const entries = [
-  {kind:'battleship', source:'Battleship', file:'games/audit-batch1/battleship.server.js', players:[2],
+  {kind:'battleship', source:'Battleship', players:[2],
     rules:'Place a fleet of five ships, then take turns firing at hidden waters. A hit earns another shot; sink the opposing fleet to win.',
     ui:'Place the offered valid fleet, then tap an untried target cell. Your fleet and shots remain visible on separate boards.'},
-  {kind:'checkers', source:'Checkers', file:'games/audit-batch4/checkers.server.js', players:[2],
+  {kind:'checkers', source:'Checkers', players:[2],
     rules:'Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.',
-    ui:'Tap one of the highlighted legal destinations. Crowns, required captures, and continuing jumps are shown from the server view.'},
-  {kind:'chess', source:'Chess', file:'games/audit-batch5/chess.server.js', players:[2],
+    ui:'Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.'},
+  {kind:'chess', source:'Chess', players:[2],
     rules:'Move by standard chess rules. Checkmate wins; stalemate, threefold repetition, the 50-move rule, and insufficient material draw.',
-    ui:'Tap a highlighted legal destination. Promotion choices are shown on the destination, and the server validates every move.'},
-  {kind:'four_player_chess', source:'4 player chess', file:'games/audit-batch2/4-player-chess.server.js', players:[4],
+    ui:'Select a highlighted piece, then its legal destination. Choose a promotion when offered; the server validates every move.'},
+  {kind:'four_player_chess', source:'4 player chess', players:[4],
     rules:'Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.',
-    ui:'Tap a highlighted legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.'},
-  {kind:'quoridor', source:'Quoridor', file:'games/audit-batch2/quoridor.server.js', players:[2],
+    ui:'Select a highlighted piece, then its legal destination on the shared board. Player colors, eliminated armies, checks, and the winning team remain visible.'},
+  {kind:'quoridor', source:'Quoridor', players:[2],
     rules:'Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.',
     ui:'Choose Move pawn or Place wall, then tap a highlighted legal square or wall anchor. The board shows both pawns and all placed walls.'},
-  {kind:'crazy_eights', source:'Crazy Eights', file:'games/audit-batch1/crazy-eights.server.js', players:[2,3,4],
+  {kind:'crazy_eights', source:'Crazy Eights', players:[2,3,4],
     rules:'Play a card matching the discard pile by rank or suit, or play an eight and choose a new suit. If no card is played, draw. Empty your hand to win.',
     ui:'Tap a playable card or choose its action button. Eights offer four suit choices; Draw remains available when you need another card.'},
-  {kind:'go_fish', source:'Go Fish', file:'games/audit-batch1/go-fish.server.js', players:[2,3,4,5,6],
+  {kind:'go_fish', source:'Go Fish', players:[2,3,4,5,6],
     rules:'Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.',
     ui:'Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.'},
-  {kind:'hearts', source:'Hearts', file:'games/audit-batch4/hearts.server.js', players:[4],
+  {kind:'hearts', source:'Hearts', players:[4],
     rules:'Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.',
     ui:'Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.'},
-  {kind:'spades', source:'Spades', file:'games/audit-batch5/spades.server.js', players:[4],
+  {kind:'spades', source:'Spades', players:[4],
     rules:'Play one card to each trick. Spades are trump; the highest trump or led-suit card wins. Collect completed tricks to score.',
     ui:'Tap a card from your hand to play it. The trick winner collects the completed trick.'},
-  {kind:'guess_who', source:'Guess Who?', file:'games/audit-batch5/guess-who.server.js', players:[2],
+  {kind:'guess_who', source:'Guess Who?', players:[2],
     rules:'Ask yes-or-no questions about the other player’s secret character, then guess their identity. A correct guess wins; an incorrect guess loses.',
-    ui:'Choose a question or tap a character to make a guess. Your secret character and question history are shown only to you.'}
+    ui:'Choose a question or tap a character to make a guess. Your secret character stays private during play; question history is public.'}
 ];
 
 const TITLE_TRANSLATIONS = {
@@ -84,7 +86,6 @@ function sourceStrings(entry) {
   return strings;
 }
 
-const COLORS = ['#e45757', '#4388d1', '#9b65c9', '#35a979', '#dc8b39', '#21a8a0'];
 const TYPES = {
   p0:{shape:'circle',width:50,height:50,color:'#4aa3ff',text_color:'#10243d'},
   p1:{shape:'circle',width:50,height:50,color:'#fb7185',text_color:'#39101c'},
@@ -107,32 +108,39 @@ const TYPES = {
   mark_ship:{shape:'rect',width:28,height:28,color:'#a9b5c4',text_color:'#1f2937'},
   mark_hit:{shape:'circle',width:28,height:28,color:'#e45757',text_color:'#ffffff'},
   mark_miss:{shape:'circle',width:28,height:28,color:'#e2e8f0',text_color:'#334155'},
-  ...Object.fromEntries(COLORS.map((color, i) => [`person_${i}`, {shape:'card',width:82,height:78,color,text_color:'#ffffff',border_color:'#ffffff'}]))
 };
 
-function playerSource(name) {
-  return catalog.find(entry => entry.name.toLocaleLowerCase() === name.toLocaleLowerCase());
-}
-
-function addServerPresentationData(kind, code, schemas) {
-  if (kind === 'battleship') {
-    return code + `\n;(() => {\n  const original = game.computerMove;\n  game.computerMove = function(state, playerId, ctx) {\n    if (state.phase === 'SETUP') return {type:'place',ships:[\n      {name:'Carrier',cells:[[0,0],[1,0],[2,0],[3,0],[4,0]]},\n      {name:'Battleship',cells:[[0,2],[1,2],[2,2],[3,2]]},\n      {name:'Cruiser',cells:[[0,4],[1,4],[2,4]]},\n      {name:'Submarine',cells:[[0,6],[1,6],[2,6]]},\n      {name:'Destroyer',cells:[[0,8],[1,8]]}]};\n    return original.call(this,state,playerId,ctx);\n  };\n})();`;
-  }
-  if (kind === 'chess') {
-    schemas.view.properties.legalMoves = {type:'array',maxItems:256,items:{
-      type:'object',required:['fr','fc','tr','tc'],additionalProperties:false,
-      properties:{fr:{type:'integer',minimum:0,maximum:7},fc:{type:'integer',minimum:0,maximum:7},
-        tr:{type:'integer',minimum:0,maximum:7},tc:{type:'integer',minimum:0,maximum:7},
-        promo:{enum:['Q','R','B','N']}}}};
-    return code + `\n;(() => {\n  const original = game.viewFor;\n  game.viewFor = function(state, playerId, ctx) {\n    const view = original.call(this,state,playerId,ctx);\n    const seat = playerId == null ? -1 : ctx.players.findIndex(p => p.id === playerId);\n    view.legalMoves = seat >= 0 && state.winner === null ? allLegal(state,state.turn).map(cleanMove) : [];\n    return view;\n  };\n})();`;
-  }
-  if (kind === 'quoridor') {
-    schemas.view.properties.legalWalls = {type:'array',maxItems:128,items:{
-      type:'object',required:['r','c','o'],additionalProperties:false,
-      properties:{r:{type:'integer',minimum:0,maximum:7},c:{type:'integer',minimum:0,maximum:7},o:{enum:['H','V']}}}};
-    return code + `\n;(() => {\n  const original = game.viewFor;\n  game.viewFor = function(state, playerId, ctx) {\n    const view = original.call(this,state,playerId,ctx);\n    const seat = playerId == null ? -1 : this.idxOf(state,playerId,ctx);\n    view.legalWalls = [];\n    if (seat >= 0 && seat === state.turnIdx && state.winner == null && (state.wallsLeft[seat] || 0) > 0) {\n      for (let r=0;r<8;r++) for (let c=0;c<8;c++) for (const o of ['H','V'])\n        if (this.wallFits(state,r,c,o)) view.legalWalls.push({r,c,o});\n    }\n    return view;\n  };\n})();`;
-  }
-  return code;
+function repairLegacySettlement(kind, code) {
+  if (kind !== 'quoridor' || code.includes('// declarative-quoridor-settlement')) return code;
+  return code + `
+// declarative-quoridor-settlement
+;(() => {
+  const legacy = game.playerLeft;
+  game.playerLeft = function(state, playerId, ctx) {
+    let recorded = state._declarative_leave_payouts;
+    if (!recorded && state.winner != null) recorded = this.payoutsFor(state.winner,ctx);
+    if (!recorded) {
+      const result = legacy.call(this,state,playerId,ctx);
+      const humans = ctx.players.filter(p=>p.kind==='human' && p.active!==false);
+      const others = humans.filter(p=>p.id!==playerId);
+      const amount = others.length ? Math.max(0,Math.min(ctx.pot,result.payout||0)) : ctx.pot;
+      recorded = {[playerId]:amount};
+      const share = others.length ? Math.floor((ctx.pot-amount)/others.length) : 0;
+      const extra = ctx.pot-amount-share*others.length;
+      others.forEach((p,i)=>{recorded[p.id]=share+(i<extra?1:0);});
+      state = {...result.state,winner:this.idxOf(state,playerId,ctx)===0?1:0,_declarative_leave_payouts:recorded};
+    }
+    // A later leave preserves the terminal snapshot and never reprices it.
+    const active = ctx.players.filter(p=>p.kind==='human' && p.active!==false);
+    const payouts = Object.fromEntries(active.map(p=>[p.id,recorded[p.id]||0]));
+    const remaining = ctx.pot-Object.values(payouts).reduce((sum,value)=>sum+value,0);
+    if (active.length) {
+      const share = Math.floor(remaining/active.length),extra = remaining-share*active.length;
+      active.forEach((p,i)=>{payouts[p.id]+=share+(i<extra?1:0);});
+    }
+    return {state,turn:null,payouts};
+  };
+})();`;
 }
 
 function boardFor(kind) {
@@ -155,17 +163,15 @@ function makeSpec(entry) {
     entry.kind === 'four_player_chess' ? ['seat_0','seat_1','seat_2','seat_3','square_light','square_dark'] :
     entry.kind === 'quoridor' ? ['square','p0','p1'] :
     entry.kind === 'battleship' ? ['mark_water','mark_ship','mark_hit','mark_miss'] :
-    entry.kind === 'guess_who' ? CHARACTER_TYPES : ['card','played'];
+    entry.kind === 'guess_who' ? [] : ['card','played'];
   const typeValues = {};
   for (const name of typeNames) typeValues[name] = TYPES[name];
   if (entry.kind === 'quoridor') { typeValues.p0 = TYPES.pawn; typeValues.p1 = TYPES.pawn_red; }
-  const strings = sourceStrings(entry);
   return {format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
-    piece_types:typeValues,strings,
-    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title:strings.title})};\n` + SOURCE_UI};
+    piece_types:typeValues,strings:{...ENGLISH,...sourceStrings(entry)},
+    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title:entry.source + ' (Declarative)'})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n` + SOURCE_UI};
 }
 
-const CHARACTER_TYPES = ['person_0','person_1','person_2','person_3','person_4','person_5'];
 
 function safeDeckArt(kind, index) {
   const colors = ['#17324f','#2770a8','#56c9b4','#ffbf66'];
@@ -190,69 +196,117 @@ function randomFor(seed) {
   };
 }
 
-function sampleCase(entry, code, schemas) {
-  const count = Math.min(...entry.players);
-  const players = Array.from({length:count}, (_, i) => ({id:`u${i+1}`,kind:'human',display_name:['Alice','Bob','Casey','Drew','Evan','Fran'][i],
-    picture_url:'',max_loss:0,active:true}));
+function sampleCases(entry, code) {
+  const players = Array.from({length:Math.min(...entry.players)}, (_, i) => ({id:`u${i+1}`,kind:'human',
+    display_name:['Alice','Bob','Casey','Drew','Evan','Fran'][i],picture_url:'',max_loss:0,active:true}));
   const ctx = {players,pot:0,move_count:0};
   const math = Object.create(Math);
   const sandbox = {InvalidMove:class InvalidMove extends Error{},Math:math,
-    Date:class extends Date { static now(){ return 0; } }, console};
+    Date:class extends Date { static now(){ return 0; } }};
   vm.createContext(sandbox);
-  vm.runInContext(code + '\nglobalThis.__convertedGame = game;',sandbox);
-  const game = sandbox.__convertedGame;
-  function call(name, ...args) {
-    const rnd = randomFor(11);
-    ctx.random = rnd; math.random = rnd;
-    return JSON.parse(JSON.stringify(game[name](...args,ctx)));
+  vm.runInContext(code + '\nglobalThis.__convertedGame = game;',sandbox,{timeout:1000});
+  const game = sandbox.__convertedGame, clone = value=>JSON.parse(JSON.stringify(value));
+  function call(name, args, seed) {
+    ctx.random = randomFor(seed); math.random = ctx.random;
+    return clone(game[name](...args,ctx));
   }
-  const first = call('newMatch');
-  const mover = first.turn && first.turn[0];
-  if (!mover) throw new Error(`${entry.kind}: no starting player`);
-  const moveSeed = 17;
-  const rnd = randomFor(moveSeed); ctx.random = rnd; math.random = rnd;
-  const move = game.computerMove ? game.computerMove(first.state,mover,ctx) : game.randomMove(first.state,mover,ctx);
-  const cleanMove = JSON.parse(JSON.stringify(move));
-  if (entry.kind === 'chess' && cleanMove && cleanMove.promo === null) delete cleanMove.promo;
-  const before = call('viewFor',first.state,mover);
-  const other = call('viewFor',first.state,null);
-  ctx.move_count = 0;
-  ctx.random = randomFor(11); math.random = ctx.random;
-  const afterResult = JSON.parse(JSON.stringify(game.applyMove(JSON.parse(JSON.stringify(first.state)),mover,cleanMove,ctx)));
-  ctx.move_count = 1;
-  const afterMover = call('viewFor',afterResult.state,mover);
-  const afterOther = call('viewFor',afterResult.state,null);
-  const svg = safeDeckArt(entry.kind,1);
-  const caseImages = ['Before: player','Before: spectator','After: player','After: spectator'].map(caption=>image(caption,svg));
-  const exampleCtx = {players,pot:0,move_count:0,seed:11};
-  return {name:'Opening move',description:entry.rules,kind:'initial',ctx:exampleCtx,
-    state:first.state,view_of_mover:before,view_of_other:other,player_id:mover,other_player_id:null,move:cleanMove,
-    expected_state:afterResult.state,expected_turn:afterResult.turn,expected_view_of_mover:afterMover,
-    expected_view_of_other:afterOther,images:caseImages,...(afterResult.payouts ? {expected_payouts:afterResult.payouts} : {})};
+  const cases = [];
+  let current = call('newMatch',[],11);
+  for (let step=0;step<1000;step++) {
+    ctx.move_count = step;
+    const seed = 11+step, mover = current.turn?.[0], before = clone(current.state);
+    if (!mover) throw new Error(`${entry.kind}: cannot derive a continuing example`);
+    const move = call(game.computerMove?'computerMove':'randomMove',[clone(before),mover],17+step);
+    if (entry.kind === 'chess' && move?.promo === null) delete move.promo;
+    const viewOfMover = call('viewFor',[clone(before),mover],seed);
+    const viewOfOther = call('viewFor',[clone(before),null],seed);
+    const result = call('applyMove',[clone(before),mover,move],seed);
+    const kind = step===0?'initial':result.turn===null?'terminal':step===1?'intermediate':null;
+    if (kind) {
+      const caseCtx = {players,pot:0,move_count:step,seed};
+      ctx.move_count++;
+      cases.push({name:{initial:'Opening move',intermediate:'Continuing match',terminal:'Finishing move'}[kind],
+        description:entry.rules,kind,ctx:caseCtx,state:before,view_of_mover:viewOfMover,view_of_other:viewOfOther,
+        player_id:mover,other_player_id:null,move,expected_state:result.state,expected_turn:result.turn,
+        expected_view_of_mover:call('viewFor',[clone(result.state),mover],seed),
+        expected_view_of_other:call('viewFor',[clone(result.state),null],seed),
+        images:['Before: player','Before: spectator','After: player','After: spectator'].map(caption=>image(caption,safeDeckArt(entry.kind,1))),
+        ...(result.payouts?{expected_payouts:result.payouts}:{})});
+    }
+    if (result.turn===null) {
+      if (cases.length!==3) throw new Error(`${entry.kind}: expected opening, continuing and terminal cases`);
+      return cases;
+    }
+    current = result;
+  }
+  throw new Error(`${entry.kind}: no terminal example within 1000 moves`);
+}
+
+function addCharacterPortraits(spec, code) {
+  // The character catalogue is public; secret choices never enter these assets.
+  const people = vm.runInNewContext(code + '\n;game.chars;', {}, {timeout:1000});
+  const names = vm.runInNewContext(SOURCE_UI + '\n;CHARACTER_NAMES;', {}, {timeout:1000});
+  if (!Array.isArray(people) || people.length !== 24 || names.length !== people.length) throw new Error('Unknown character catalogue');
+  const answers = vm.runInNewContext(code + '\n;game.chars.map((_,i)=>Array.from({length:14},(_,q)=>game.qAttr(i,q)));', {}, {timeout:1000});
+  spec.ui_code = `const SOURCE_CHARACTER_ANSWERS=${JSON.stringify(answers)};\n` + spec.ui_code;
+  spec.assets = {};
+  spec.piece_types = {};
+  people.forEach((person,index) => {
+    const hair = {black:'#20242c',brown:'#805331',blonde:'#edce70',red:'#c75e35',gray:'#a0a5ad'}[person.hair];
+    const eye = {brown:'#805331',blue:'#3a8dcc',green:'#3e9851'}[person.eye];
+    if (!hair || !eye || !/^[A-Za-z]{1,12}$/.test(names[index])) throw new Error('Unknown public portrait feature');
+    const bottom = person.len === 'long' ? 66 : person.len === 'medium' ? 49 : 27;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 82 78">`+
+      `<rect width="82" height="78" rx="8" fill="#e8edf4"/>`+
+      `<path d="M18 31Q17 9 41 9Q65 9 64 31V${bottom}H18Z" fill="${hair}"/>`+
+      (person.ear ? '<circle cx="21" cy="36" r="5" fill="#efbb95"/><circle cx="61" cy="36" r="5" fill="#efbb95"/>' : '')+
+      '<ellipse cx="41" cy="35" rx="18" ry="23" fill="#efbb95"/>'+
+      `<path d="M23 27Q21 10 41 10Q61 10 59 27Q45 26 39 18Q32 26 23 27Z" fill="${hair}"/>`+
+      `<circle cx="33" cy="34" r="4" fill="${eye}"/><circle cx="49" cy="34" r="4" fill="${eye}"/>`+
+      '<circle cx="33" cy="34" r="1.5" fill="#182232"/><circle cx="49" cy="34" r="1.5" fill="#182232"/>'+
+      '<path d="M36 46Q41 50 46 46" fill="none" stroke="#8c4a39" stroke-width="2"/>'+
+      (person.gl ? '<path d="M24 28h17v12H24ZM43 28h15v12H43ZM41 32h2" fill="none" stroke="#172033" stroke-width="2"/>' : '')+
+      (person.be ? `<path d="M25 42Q41 53 57 42Q54 61 41 63Q28 61 25 42Z" fill="${hair}"/>` : '')+
+      (person.hat ? '<path d="M20 18h42v5H20ZM28 3h26v15H28Z" fill="#5275ad"/>' : '')+
+      `<text x="41" y="75" text-anchor="middle" font-size="11" fill="#172033">${names[index]}</text></svg>`;
+    const key = `person_${index}`;
+    spec.assets[key] = {media_type:'image/svg+xml',alt:names[index],width:82,height:78,uri:'data:image/svg+xml;base64,'+Buffer.from(svg).toString('base64')};
+    spec.piece_types[key] = {shape:'image',asset:key,width:82,height:78,text_color:'#00000000'};
+  });
 }
 
 function packageFor(entry) {
-  const source = playerSource(entry.source);
-  if (!source) throw new Error(`No server schema fixture found for ${entry.source}`);
-  const schemas = structuredClone(source.game_schemas);
-  let code = fs.readFileSync(path.join(ROOT,entry.file),'utf8');
-  code = addServerPresentationData(entry.kind,code,schemas);
+  const source = JSON.parse(fs.readFileSync(path.join(OUT,`${entry.kind}.json`),'utf8'));
+  if (typeof source.server_code !== 'string' || !source.unit_tests) throw new Error(`Missing checked-in rules for ${entry.kind}`);
+  const schemas = Object.fromEntries(['state','move','view'].map(name => [name,structuredClone(source.unit_tests[`${name}_schema`])]));
+  const code = repairLegacySettlement(entry.kind,source.server_code);
   const spec = makeSpec(entry);
-  const example = sampleCase(entry,code,schemas);
+  if (entry.kind === 'guess_who') addCharacterPortraits(spec,code);
+  const examples = sampleCases(entry,code);
   const title = `${entry.source} (Declarative)`;
   const tutorials = `<meta name="viewport" content="width=device-width,initial-scale=1"><main><h1>${title}</h1><p>${entry.rules}</p><p>${entry.ui}</p></main>`;
   const translations = {};
   for (let i=0;i<languages.length;i++) {
-    const locale = languages[i], translatedTitle = `${TITLE_TRANSLATIONS[entry.kind][i]} (Declarative)`;
-    translations[locale] = {display_name:translatedTitle,short_description:entry.rules,
-      game_logic_rules:entry.rules,game_ui_rules:entry.ui,
-      tutorial_strings:{[entry.rules]:entry.rules},client_strings:{title:translatedTitle}};
+    const locale = languages[i], translatedTitle = `${TITLE_TRANSLATIONS[entry.kind][i]} (${COPY.strings.Declarative[i]})`;
+    const metadata = COPY.games[entry.kind];
+    if (!metadata?.rules?.[i] || !metadata?.ui?.[i]) throw new Error(`Missing ${locale} metadata for ${entry.kind}`);
+    const strings = Object.fromEntries(Object.entries(COPY.strings).map(([key,values])=>{
+      if (values.length !== languages.length || !values[i]) throw new Error(`Missing ${locale} text: ${key}`);
+      return [STRING_KEYS[key],values[i]];
+    }));
+    for (const [key,source] of Object.entries(sourceStrings(entry))) if (key !== 'title') {
+      if (!COPY.errors[source]?.[i]) throw new Error(`Missing ${locale} server text: ${source}`);
+      strings[key] = COPY.errors[source][i];
+    }
+    translations[locale] = {display_name:translatedTitle,short_description:metadata.rules[i],
+      game_logic_rules:metadata.rules[i],game_ui_rules:metadata.ui[i],
+      tutorial_strings:{[entry.rules]:metadata.rules[i],[entry.ui]:metadata.ui[i],[title]:translatedTitle},client_strings:{...strings,title:translatedTitle}};
   }
   const payload = {name:title,description:entry.rules,allowed_player_counts:entry.players,
     allows_leave_mid_match:source.allows_leave_mid_match,allows_join_mid_match:source.allows_join_mid_match,
     server_code:code,rules:entry.rules,ui_instructions:entry.ui,
     tutorial:{text:entry.rules,html:tutorials},images:allImages(entry.kind),
-    unit_tests:{state_schema:schemas.state,move_schema:schemas.move,view_schema:schemas.view,cases:[example]},
+    unit_tests:{state_schema:schemas.state,move_schema:schemas.move,view_schema:schemas.view,cases:examples},
     translations,game_addition_request_id_and_secret:`example-only-html-to-declarative-${entry.kind}-replace-before-publishing`,
     declarative_ui:spec};
   const filename = path.join(OUT,`${entry.kind}.json`);
