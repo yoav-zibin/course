@@ -32,6 +32,33 @@ def test_completed_simulator_build_can_be_reused_before_distribution_run_finishe
     audit.validate_provenance(run, artifact, jobs, 52)
 
 
+def test_driver_log_collection_retains_hidden_startup_tail_without_other_files(tmp_path):
+    import os
+    import time
+
+    output = tmp_path / "results"
+    hidden = output / "maestro-debug/.maestro/tests/session"
+    hidden.mkdir(parents=True)
+    started = time.time() - 5
+    (hidden / "xctest_runner_now.log").write_bytes(b"early" + b"last-readiness-failure")
+    (hidden / "maestro.log").write_text("driver bootstrap")
+    (hidden / "credentials.json").write_text("never copy arbitrary files")
+    old = hidden / "xctest_runner_old.log"
+    old.write_text("old unrelated run")
+    os.utime(old, (started - 10, started - 10))
+    outside = tmp_path / "outside.log"
+    outside.write_text("outside permitted tool tree")
+    (hidden / "xctest_runner_link.log").symlink_to(outside)
+    audit.preserve_driver_logs(output, started, home=tmp_path, max_bytes=22)
+    directory = output / "driver-diagnostics"
+    records = json.loads((directory / "log-sources.json").read_text())
+    assert {Path(record["source"]).name for record in records} == {"xctest_runner_now.log", "maestro.log"}
+    startup = next(record for record in records if "xctest_runner" in record["source"])
+    assert startup["tailOnly"] and startup["retainedBytes"] == 22
+    assert (directory / startup["copy"]).read_bytes().endswith(b"last-readiness-failure")
+    assert not list(directory.glob(".*"))
+
+
 @pytest.mark.parametrize("change", ["source", "fork", "workflow", "artifact", "expired", "digest", "build"])
 def test_untrusted_or_unsuccessful_artifact_rejected(change):
     run, artifact, jobs = provenance()

@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 55
     env:
       MAESTRO_CLI_NO_ANALYTICS: '1'
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: '360000'
       SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST: '1'
     steps:
       - uses: actions/checkout@v4

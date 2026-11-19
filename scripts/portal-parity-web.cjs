@@ -11,6 +11,11 @@ const output=path.resolve(process.argv[3]||'/tmp/buildplay-parity-600/web');
 const base=new URL(process.argv[4]||'http://127.0.0.1:8128').origin;
 if(!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Error('Parity audit requires a disposable loopback server');
 const fixture=JSON.parse(fs.readFileSync(fixturePath,'utf8'));
+const requestedViewport=process.env.PORTAL_PARITY_VIEWPORT;
+if(requestedViewport&&!/^\d{3,4}x\d{3,4}$/.test(requestedViewport))throw Error('PORTAL_PARITY_VIEWPORT must be WIDTHxHEIGHT');
+const viewport=requestedViewport?Object.fromEntries(requestedViewport.split('x').map((value,index)=>[index?'height':'width',Number(value)])):fixture.viewport;
+if(viewport.width<300||viewport.width>4096||viewport.height<300||viewport.height>4096)throw Error('Parity viewport is outside the supported audit range');
+const touch=viewport.width<800;
 const key=`buildplay.shared.v1.${encodeURIComponent(base)}.visitor`;
 const canonical=value=>JSON.stringify(value,(_key,child)=>child&&typeof child==='object'&&!Array.isArray(child)?Object.fromEntries(Object.entries(child).sort(([a],[b])=>a.localeCompare(b))):child);
 const digest=value=>crypto.createHash('sha256').update(canonical(value)).digest('hex');
@@ -20,10 +25,10 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function main(){
   fs.mkdirSync(output,{recursive:true});
   const browser=await chromium.launch({headless:true});
-  const summary={sourceSha:fixture.sourceSha,fixtureSha256:crypto.createHash('sha256').update(fs.readFileSync(fixturePath)).digest('hex'),viewport:fixture.viewport,platform:'web',startedAt:new Date().toISOString(),pages:[],games:[],network:[]};
+  const summary={sourceSha:fixture.sourceSha,fixtureSha256:crypto.createHash('sha256').update(fs.readFileSync(fixturePath)).digest('hex'),viewport,input:touch?'touch':'mouse',platform:'web',startedAt:new Date().toISOString(),pages:[],games:[],network:[]};
   let active;
   async function session(){
-    const context=await browser.newContext({viewport:fixture.viewport,deviceScaleFactor:1,isMobile:true,hasTouch:true,serviceWorkers:'block',reducedMotion:'no-preference'});
+    const context=await browser.newContext({viewport,deviceScaleFactor:1,isMobile:touch,hasTouch:touch,serviceWorkers:'block',reducedMotion:'no-preference'});
     const page=await context.newPage();active=page;
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await context.route('**/*',async route=>{
@@ -112,7 +117,7 @@ async function main(){
       const result={slug:game.slug,name:game.name,gameId:game.gameId,gameVersion:game.gameVersion,initial:await settled(page,game,game.initial,game.initialScene,game.slug+'-initial'),steps:[]};
       for(const step of game.steps){
         const sceneStart=await page.evaluate(()=>window.__portalParity.scenes.length),paintStart=await page.evaluate(()=>window.__portalParity.paintSequence);
-        for(const action of step.uiActions)await page.getByRole('button',{name:action.label,exact:true}).tap();
+        for(const action of step.uiActions){const button=page.getByRole('button',{name:action.label,exact:true});if(touch)await button.tap();else await button.click();}
         const record=await settled(page,game,step.expectedMatch,step.scene,game.slug+'-step'+step.number);
         const frames=await page.evaluate(({sceneStart,paintStart})=>({scenes:window.__portalParity.scenes.slice(sceneStart),painted:window.__portalParity.painted.filter(frame=>frame.sequence>paintStart)}),{sceneStart,paintStart});
         save(game.slug+'-step'+step.number+'.playback.json',frames);
@@ -135,7 +140,7 @@ async function main(){
     await expect.poll(async()=>(await fresh())?.move_count,{timeout:30000}).toBe(1);
     const cells=actual.page.getByTestId('game-stage').locator('[role="button"][aria-label^="Cell "][aria-disabled="false"]');
     await expect(cells.first()).toBeVisible({timeout:20000});await capture(actual.page,'created-practice-opening');save('created-practice-opening-match.json',await fresh());
-    await cells.first().tap();await expect.poll(async()=>(await fresh())?.move_count,{timeout:30000}).toBe(3);
+    if(touch)await cells.first().tap();else await cells.first().click();await expect.poll(async()=>(await fresh())?.move_count,{timeout:30000}).toBe(3);
     await delay(2000);await capture(actual.page,'created-practice');
     summary.createdPractice=await actual.page.evaluate(key=>Object.values(JSON.parse(localStorage.getItem(key)).local).find(match=>!match.id.startsWith('local-parity-')),key);
     assert.equal(summary.createdPractice.players.filter(p=>p.kind==='human').length,1);assert.equal(summary.createdPractice.players.filter(p=>p.kind==='computer').length,1);assert.equal(summary.createdPractice.players[1].kind,'human');assert.equal(summary.createdPractice.last_move_player_index,0);assert.deepEqual(summary.createdPractice.turn_of_player_indices,[1]);assert.deepEqual(actual.errors,[]);save('created-practice-match.json',summary.createdPractice);await actual.context.close();

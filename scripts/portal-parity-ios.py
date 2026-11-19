@@ -2,6 +2,7 @@
 """Manual iOS parity audit: reuse a trusted app; navigate and play through XCTest."""
 import argparse
 from collections import Counter
+import datetime
 import hashlib
 import importlib.util
 import json
@@ -198,6 +199,46 @@ def selector(text):
     return {"text": "^" + re.escape(text) + "$"}
 
 
+def preserve_driver_logs(output, started, *, home=None, device=None, max_bytes=512_000):
+    """Keep only fresh tool/crash logs, including otherwise hidden Maestro files."""
+    home = Path.home() if home is None else Path(home)
+    output = Path(output)
+    destination = output / "driver-diagnostics"
+    destination.mkdir(exist_ok=True)
+    roots = [(output / "maestro-debug", "tool"), (output / "maestro-state", "tool"),
+             (home / ".maestro/tests", "tool"), (home / "Library/Logs/DiagnosticReports", "crash")]
+    if device:
+        roots.append((home / "Library/Developer/CoreSimulator/Devices" / device / "data/Library/Logs/CrashReporter", "crash"))
+    records = []
+    for root, kind in roots:
+        if not root.is_dir() or root.is_symlink():
+            continue
+        for path in root.rglob("*"):
+            if len(records) >= 40:
+                break
+            try:
+                if path.is_symlink() or not path.is_file() or path.stat().st_mtime < started:
+                    continue
+                if kind == "tool":
+                    eligible = path.name == "maestro.log" or re.fullmatch(r"xctest_runner_.*\.log", path.name)
+                else:
+                    eligible = path.suffix in (".ips", ".crash") and re.search(r"maestro|xctest|testmanager|BuildPlay", path.name, re.I)
+                if not eligible or not path.resolve().is_relative_to(root.resolve()):
+                    continue
+                size = path.stat().st_size
+                with path.open("rb") as source:
+                    source.seek(max(0, size - max_bytes))
+                    raw = source.read(max_bytes)
+                target = destination / f"{len(records):02d}-{path.name}"
+                target.write_bytes(raw)
+                records.append({"source": str(path), "copy": target.name, "originalBytes": size,
+                                "retainedBytes": len(raw), "tailOnly": size > max_bytes,
+                                "sha256": hashlib.sha256(raw).hexdigest()})
+            except OSError as error:
+                records.append({"source": str(path), "error": type(error).__name__})
+    (destination / "log-sources.json").write_text(json.dumps(records, indent=2) + "\n")
+
+
 class Audit:
     def __init__(self, output, maestro):
         self.output, self.maestro = output.resolve(), str(maestro)
@@ -206,6 +247,7 @@ class Audit:
         self.device = None
         self.container = None
         self.first = True
+        self.started = time.time()
         self.report = {"sourceSha": SOURCE, "fixtureSha256": FIXTURE_SHA256, "platform": "ios",
                        "viewport": self.fixture["viewport"], "stages": [], "actions": [], "passed": False}
 
@@ -226,11 +268,14 @@ class Audit:
         path = self.output / "flows" / (name + ".yaml")
         path.parent.mkdir(exist_ok=True)
         path.write_text(flow_text([{"launchApp": {"stopApp": False}}, *commands]))
-        command = [self.maestro, "--device", self.device, "test", "--no-ansi", "--debug-output", self.output / "maestro-debug", "--format", "JUNIT", "--output", self.output / (name + "-junit.xml")]
-        if not self.first:
-            command.append("--no-reinstall-driver")
+        # Flattening keeps startup logs outside hidden .maestro directories,
+        # which upload-artifact omits. Keep the first installed driver warm for
+        # later hierarchy/touch commands instead of killing it after pages.
+        command = [self.maestro, "--device", self.device, "test", "--no-ansi", "--no-reinstall-driver",
+                   "--debug-output", self.output / "maestro-debug" / name, "--flatten-debug-output",
+                   "--format", "JUNIT", "--output", self.output / (name + "-junit.xml")]
         command.append(path)
-        self.run(name, command, 240 if self.first else 120)
+        self.run(name, command, 600 if self.first else 120)
         self.first = False
 
     def hierarchy(self, name):
@@ -351,11 +396,32 @@ class Audit:
         self.screenshot("extra-practice-seat2")
         self.report["extraPractice"] = {"createdThroughUI": True, "computerMovedFirst": True, "humanSeat": 1}
 
+    def driver_diagnostics(self):
+        # Collect before owned-device shutdown so a second failure identifies
+        # XCTest bootstrap/server readiness rather than losing its evidence.
+        preserve_driver_logs(self.output, self.started, device=self.device)
+        self.run("driver-status", ["curl", "--silent", "--show-error", "--max-time", "10", "--include", "http://127.0.0.1:22087/status"], 15, False)
+        self.run("driver-listener", ["/usr/sbin/lsof", "-nP", "-iTCP:22087", "-sTCP:LISTEN"], 20, False)
+        self.run("driver-host-processes", ["ps", "-axo", "pid,ppid,pcpu,pmem,etime,comm"], 25, False)
+        end = datetime.datetime.now(datetime.timezone.utc)
+        start = end - datetime.timedelta(minutes=3)
+        window = ["--start", start.strftime("%Y-%m-%d %H:%M:%S+0000"), "--end", end.strftime("%Y-%m-%d %H:%M:%S+0000")]
+        predicate = 'process CONTAINS[c] "maestro" OR process CONTAINS[c] "xctest" OR process == "testmanagerd" OR (process == "runningboardd" AND eventMessage CONTAINS[c] "maestro") OR (process == "amfid" AND eventMessage CONTAINS[c] "maestro")'
+        for name, prefix in [("driver-simulator-log", ["xcrun", "simctl", "spawn", self.device, "log"]),
+                             ("driver-host-log", ["/usr/bin/log"])]:
+            self.phase.run_phase(name, 30, self.output / (name + ".log"),
+                                 prefix + ["show", "--style", "compact", *window, "--predicate", predicate], retain_tail=True)
+        preserve_driver_logs(self.output, self.started, device=self.device)
+
     def execute(self, app):
         if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("RUNNER_OS") != "macOS":
             raise ValueError("This driver runs only on the isolated GitHub Mac")
         os.environ["SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST"] = "1"
         os.environ["MAESTRO_CLI_NO_ANALYTICS"] = "1"
+        os.environ["MAESTRO_DRIVER_STARTUP_TIMEOUT"] = "360000"
+        # EnvUtils.xdgStateHome() honors this; hierarchy/bootstrap logs also
+        # remain visible and confined to this fresh workflow's output.
+        os.environ["XDG_STATE_HOME"] = str(self.output / "maestro-state")
         self.output.mkdir(parents=True, exist_ok=True)
         try:
             self.run("prewarm", ["sudo", "xcodebuild", "-runFirstLaunch"], 300)
@@ -387,6 +453,10 @@ class Audit:
         except Exception as error:
             self.report["error"] = str(error)
             if self.device:
+                try:
+                    self.driver_diagnostics()
+                except Exception as diagnostic_error:
+                    self.report["diagnosticError"] = type(diagnostic_error).__name__
                 self.run("failure-screen", ["xcrun", "simctl", "io", self.device, "screenshot", self.output / "failure.png"], 120, False)
                 if self.container:
                     (self.output / "failure-account-data.json").write_text(json.dumps(read_data(self.container), indent=2) + "\n")

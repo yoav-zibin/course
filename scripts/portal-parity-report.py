@@ -30,12 +30,14 @@ def build_report(fixture_path, evidence, output):
     fixture = json.loads(fixture_path.read_text())
     output.mkdir(parents=True, exist_ok=True)
     shutil.copy2(fixture_path,output / "common-fixture.json")
-    rows = [(f"page-{page}", page.replace("local", "On this device").capitalize(), None) for page in PAGES]
+    rows = [(f'board-{game["slug"]}',f'{game["name"]} — board after three human turns',None) for game in fixture["games"]]
+    rows.extend((f"page-{page}", page.replace("local", "On this device").capitalize(), None) for page in PAGES)
     for game in fixture["games"]:
         rows.append((f'{game["slug"]}-initial', f'{game["name"]} — initial', game["initial"]))
         rows.extend((f'{game["slug"]}-step{step["number"]}',
                      f'{game["name"]} — human turn {step["number"]}, {step["expectedMatch"]["move_count"]} accepted moves',
                      step["expectedMatch"]) for step in game["steps"])
+        rows.append((f'{game["slug"]}-restart',f'{game["name"]} — restored after restart',game["steps"][-1]["expectedMatch"]))
     results, rendered, missing = [], [], []
     for stage, title, expected in rows:
         cells, actuals = [], {}
@@ -74,6 +76,27 @@ def build_report(fixture_path, evidence, output):
     findings_path=evidence / "findings.json"
     findings=json.loads(findings_path.read_text()) if findings_path.is_file() else {"findings":[],"visualReviewComplete":False}
     summary["visualReview"]=findings
+    for platform in PLATFORMS:
+        for name in ("summary.json","manifest.json","visual-findings.json","connect4-centers.json","connect4-pixel-alignment.json","board-crops.json"):
+            source=evidence / platform / name
+            if source.is_file():
+                target=output / "proof" / platform / name
+                target.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copy2(source,target)
+    desktop=[]
+    if (evidence / "web-desktop").is_dir():
+        desktop_dir=evidence / "web-desktop"
+        for stage,title in [(f"page-{page}",page.title()) for page in PAGES]+[(f'{game["slug"]}-step3',game["name"]) for game in fixture["games"]]:
+            source=one_file(desktop_dir,stage+".png")
+            target=output / "images" / "web-desktop" / source.name
+            target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
+            desktop.append((title,target.relative_to(output).as_posix()))
+        for name in ("summary.json","responsive-findings.json"):
+            source=desktop_dir / name
+            if source.is_file():
+                target=output / "proof" / "web-desktop" / name
+                target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
+        summary["desktop"]={"viewport":{"width":1440,"height":1000},"screenshots":len(desktop),"proof":"proof/web-desktop/summary.json"}
     (output / "comparison.json").write_text(json.dumps(summary,indent=2)+"\n")
     document = '''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BuildPlay: web, Android and iOS comparison</title><style>
@@ -84,8 +107,12 @@ body{font-family:system-ui,sans-serif;background:#10141f;color:#edf1fa;margin:0;
     document += f'<p><strong>{"All saved-position comparisons passed" if passed else "Comparison has missing evidence or differences"}</strong> · <a href="comparison.json">Detailed state checks</a></p>'
     if findings.get("findings"):
         document+='<h2>Visual findings</h2><ul>'+''.join(f'<li><strong>{html.escape(item["title"])}</strong>: {html.escape(item["description"])}</li>' for item in findings["findings"])+'</ul>'
-    document+='<nav>Jump to: '+ ' · '.join(f'<a href="#{html.escape(stage)}">{html.escape(title)}</a>' for stage,title,_ in rows if stage.startswith('page-') or stage.endswith('step3'))+'</nav>'
-    document += ''.join(rendered)+'</main></html>'
+    document+='<nav>Jump to: '+ ' · '.join(f'<a href="#{html.escape(stage)}">{html.escape(title)}</a>' for stage,title,_ in rows if stage.startswith(('page-','board-')))+'</nav>'
+    document += ''.join(rendered)
+    if desktop:
+        document+='<section><h2>Desktop website: 1440 × 1000</h2><p>Additional wide-layout checks, with the same game positions. Navigation and the catalog adapt to the larger screen.</p>'
+        document+=''.join(f'<details><summary>{html.escape(title)}</summary><a href="{html.escape(file)}"><img loading="lazy" src="{html.escape(file)}" alt="Desktop: {html.escape(title)}"></a></details>' for title,file in desktop)+'</section>'
+    document+='</main></html>'
     (output / "index.html").write_text(document)
     archive = output.parent / "BuildPlay-three-platform-comparison.zip"
     with zipfile.ZipFile(archive,"w",zipfile.ZIP_DEFLATED) as bundle:
