@@ -1,4 +1,4 @@
-"""Exercise the manual workflow with synthetic credentials and a fake Gradle."""
+"""Exercise signed Play builds, versioning and stale-run guards without credentials."""
 import base64
 import json
 import os
@@ -49,6 +49,9 @@ print('Synthetic Gradle finished')
     keytool = bin_dir / "keytool"
     keytool.write_text("#!/bin/sh\nprintf 'SHA256: synthetic-certificate-fingerprint\\n'\n")
     keytool.chmod(0o755)
+    jarsigner = bin_dir / "jarsigner"
+    jarsigner.write_text("#!/bin/sh\n[ -z \"$FAIL_SIGNATURE\" ] || exit 1\nprintf 'jar verified\\n'\n")
+    jarsigner.chmod(0o755)
     inherited = {key: value for key, value in os.environ.items() if not key.startswith("ORG_GRADLE_PROJECT_")}
     env = {**inherited, "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
            "RUNNER_TEMP": str(runner), "GITHUB_WORKSPACE": str(workspace),
@@ -102,3 +105,94 @@ def test_failed_build_still_allows_private_key_cleanup(build):
     assert run("Build signed AAB for Play", FAIL_GRADLE="1").returncode != 0
     assert run("Remove upload keystore").returncode == 0
     assert not key.exists()
+
+
+def test_signature_verification_failure_blocks_publication(build):
+    run, _, _, _ = build
+    assert run("Write upload keystore").returncode == 0
+    assert run("Build signed AAB for Play", FAIL_SIGNATURE="1").returncode != 0
+
+
+def assign_version(tmp_path, run, attempt):
+    env_path, output_path = tmp_path / "env", tmp_path / "output"
+    result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", step("Assign immutable Play version code")],
+                            env={**os.environ, "GITHUB_RUN_NUMBER": str(run), "GITHUB_RUN_ATTEMPT": str(attempt),
+                                 "GITHUB_ENV": str(env_path), "GITHUB_OUTPUT": str(output_path)},
+                            capture_output=True, text=True)
+    return result, env_path, output_path
+
+
+@pytest.mark.parametrize(("run", "attempt", "expected"), [(1, 1, 101), (1, 99, 199), (2, 1, 201), (20999999, 99, 2099999999)])
+def test_play_versions_increase_for_new_runs_and_retries(tmp_path, run, attempt, expected):
+    result, env_path, output_path = assign_version(tmp_path, run, attempt)
+    assert result.returncode == 0, result.stderr
+    assert env_path.read_text() == f"BUILDPLAY_ANDROID_VERSION_CODE={expected}\n"
+    assert output_path.read_text() == f"code={expected}\n"
+
+
+@pytest.mark.parametrize(("run", "attempt"), [(0, 1), (1, 0), (1, 100), (21000000, 1)])
+def test_play_version_range_refuses_collisions_and_overflow(tmp_path, run, attempt):
+    result, env_path, output_path = assign_version(tmp_path, run, attempt)
+    assert result.returncode != 0
+    assert not env_path.exists() and not output_path.exists()
+
+
+@pytest.fixture
+def source_repo(tmp_path):
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    remote = tmp_path / "upstream.git"
+    subprocess.run(["git", "init", "--bare", "--initial-branch=main", str(remote)], check=True, capture_output=True)
+
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=repository, check=True, capture_output=True, text=True).stdout.strip()
+
+    git("init", "--initial-branch=main")
+    git("config", "user.name", "Play workflow tests")
+    git("config", "user.email", "play-workflow@example.invalid")
+    git("remote", "add", "origin", str(remote))
+
+    def commit(filename):
+        path = repository / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(path.read_text() + "\nchange" if path.exists() else "change")
+        git("add", filename)
+        git("commit", "-m", "Synthetic workflow input")
+        git("push", "origin", "HEAD:main")
+        return git("rev-parse", "HEAD")
+
+    source = commit("frontends/portal/app.config.ts")
+
+    def current(candidate=source):
+        output, summary = tmp_path / "current-output", tmp_path / "summary"
+        output.unlink(missing_ok=True)
+        result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", step("Check latest Play build inputs")],
+                                cwd=repository, env={**os.environ, "SOURCE_SHA": candidate,
+                                "GITHUB_OUTPUT": str(output), "GITHUB_STEP_SUMMARY": str(summary)},
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        return output.read_text()
+
+    return commit, current, git
+
+
+def test_unrelated_main_push_does_not_drop_the_only_frontend_build(source_repo):
+    commit, current, _ = source_repo
+    assert current() == "publish=true\n"
+    commit("docs/readme.md")
+    assert current() == "publish=true\n"
+
+
+@pytest.mark.parametrize("filename", ["frontends/portal/app.config.ts", "scripts/publish-play-aab.py", "scripts/play_bundle.py", ".github/workflows/play-aab.yml"])
+def test_newer_play_inputs_skip_an_old_completed_build(source_repo, filename):
+    commit, current, _ = source_repo
+    commit(filename)
+    assert current() == "publish=false\n"
+
+
+def test_source_outside_main_cannot_publish_even_with_identical_build_inputs(source_repo):
+    commit, current, git = source_repo
+    git("checkout", "-b", "unmerged")
+    candidate = commit("docs/unmerged.md")
+    git("push", "--force", "origin", "HEAD~1:main")
+    assert current(candidate) == "publish=false\n"

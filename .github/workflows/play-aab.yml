@@ -2,18 +2,54 @@ name: Play AAB
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'frontends/portal/**'
+      - '.github/workflows/play-aab.yml'
+      - 'scripts/publish-play-aab.py'
+      - 'scripts/play_bundle.py'
+      - 'tests/test_play_aab_workflow.py'
+      - 'tests/test_play_publication.py'
+      - 'tests/test_play_bundle.py'
+
+permissions:
+  contents: read
 
 jobs:
+  shared-client:
+    name: Shared portal checks for Play
+    if: github.ref == 'refs/heads/main' && github.repository == 'yoav-zibin/course'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontends/portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontends/portal/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
   android-play:
     name: BuildPlay Android (Play AAB)
+    needs: shared-client
     if: github.ref == 'refs/heads/main' && github.repository == 'yoav-zibin/course'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
     env:
+      BUILDPLAY_VARIANT: production
       EXPO_PUBLIC_API_URL: https://buildplay.fun
       EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
+    outputs:
+      version-code: ${{ steps.version.outputs.code }}
     defaults:
       run:
         working-directory: frontends/portal
@@ -31,6 +67,24 @@ jobs:
       - uses: android-actions/setup-android@v3
         with: {packages: platform-tools}
       - run: npm ci
+      - name: Assign immutable Play version code
+        id: version
+        run: |
+          python3 - <<'PY'
+          import os
+          run = int(os.environ['GITHUB_RUN_NUMBER'])
+          attempt = int(os.environ['GITHUB_RUN_ATTEMPT'])
+          # Reserve 99 attempts per workflow run so reruns cannot collide with
+          # a newer run or the initial manually built versionCode 2.
+          code = run * 100 + attempt
+          if run < 1 or not 1 <= attempt <= 99 or not 2 < code <= 2100000000:
+              raise SystemExit('Play version code range exhausted; start a new workflow run.')
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write(f'BUILDPLAY_ANDROID_VERSION_CODE={code}\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'code={code}\n')
+          print(f'Play versionCode: {code}')
+          PY
       - name: Prepare optional Android push configuration
         env:
           BUILDPLAY_ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
@@ -44,7 +98,7 @@ jobs:
           umask 077
           test -n "$KEYSTORE_BASE64" || { echo 'Android upload keystore secret is missing.' >&2; exit 1; }
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
-          keytool -list -keystore "$RUNNER_TEMP/upload.keystore" -storepass "$KEYSTORE_PASSWORD" -alias upload
+          keytool -list -keystore "$RUNNER_TEMP/upload.keystore" -storepass:env KEYSTORE_PASSWORD -alias upload
       - run: npx expo prebuild --platform android --no-install --no-clean
       - name: Build signed AAB for Play
         env:
@@ -71,6 +125,8 @@ jobs:
           raise SystemExit(result.returncode)
           PY
           cp android/app/build/outputs/bundle/release/app-release.aab "$GITHUB_WORKSPACE/BuildPlay.aab"
+          jarsigner -verify -strict -keystore "$RUNNER_TEMP/upload.keystore" \
+            -storepass:env KEYSTORE_PASSWORD "$GITHUB_WORKSPACE/BuildPlay.aab" upload
           keytool -printcert -jarfile "$GITHUB_WORKSPACE/BuildPlay.aab" | grep -i "SHA256" | head -2
       - uses: actions/upload-artifact@v4
         if: always()
@@ -79,13 +135,73 @@ jobs:
           path: BuildPlay.aab
           if-no-files-found: warn
           retention-days: 90
+          overwrite: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: BuildPlay-aab-gradle-log
           path: buildplay-aab-build.log
           if-no-files-found: warn
+          overwrite: true
       - name: Remove upload keystore
         if: always()
         run: |
           rm -f -- "$RUNNER_TEMP/upload.keystore"
+
+  play-publish:
+    name: Upload BuildPlay to Play internal testing
+    needs: android-play
+    if: github.ref == 'refs/heads/main' && github.repository == 'yoav-zibin/course'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: buildplay-play-internal
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: BuildPlay-android-aab
+          path: play-publish-input
+      - name: Check latest Play build inputs
+        id: current
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          # Backend/docs-only pushes do not rebuild the app. They may advance
+          # main while the latest frontend build is still safe to upload.
+          if git merge-base --is-ancestor "$SOURCE_SHA" origin/main && \
+             git diff --quiet "$SOURCE_SHA" origin/main -- \
+               frontends/portal .github/workflows/play-aab.yml \
+               scripts/publish-play-aab.py scripts/play_bundle.py; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            echo 'Skipped: newer Play build inputs exist on main.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.current.outputs.publish == 'true'
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        if: steps.current.outputs.publish == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install Google Play upload dependencies
+        if: steps.current.outputs.publish == 'true'
+        run: python3 -m pip install 'google-auth>=2.38,<3' 'requests>=2.32,<3'
+      - name: Publish internal testing release
+        if: steps.current.outputs.publish == 'true'
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          SOURCE_SHA: ${{ github.sha }}
+          PLAY_VERSION_CODE: ${{ needs.android-play.outputs.version-code }}
+        run: |
+          python3 scripts/publish-play-aab.py play-publish-input/BuildPlay.aab \
+            --source "$SOURCE_SHA" --repo "$GITHUB_REPOSITORY" --version-code "$PLAY_VERSION_CODE"
