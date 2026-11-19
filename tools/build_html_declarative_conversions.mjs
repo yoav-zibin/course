@@ -38,8 +38,8 @@ const entries = [
     rules:'Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.',
     ui:'Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.'},
   {kind:'spades', source:'Spades', file:'games/audit-batch5/spades.server.js', players:[4],
-    rules:'Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.',
-    ui:'Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.'},
+    rules:'Play one card to each trick. Spades are trump; the highest trump or led-suit card wins. Collect completed tricks to score.',
+    ui:'Tap a card from your hand to play it. The trick winner collects the completed trick.'},
   {kind:'guess_who', source:'Guess Who?', file:'games/audit-batch5/guess-who.server.js', players:[2],
     rules:'Ask yes-or-no questions about the other player’s secret character, then guess their identity. A correct guess wins; an incorrect guess loses.',
     ui:'Choose a question or tap a character to make a guess. Your secret character and question history are shown only to you.'}
