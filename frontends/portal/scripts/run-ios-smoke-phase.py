@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one simulator phase with streamed, bounded output and a process deadline."""
+"""Run one simulator phase with bounded artifact output and a process deadline."""
 
 import datetime
 import json
@@ -77,10 +77,9 @@ def run_phase(label, timeout_seconds, output_path, command, max_output_bytes=512
     cleanup_attempted = False
     cleanup_restrictions = []
     tail = bytearray()
-    console_bytes = 0
     with output_path.open("wb") as output:
         def record(chunk):
-            nonlocal total, written, console_bytes
+            nonlocal total, written
             total += len(chunk)
             if retain_tail:
                 tail.extend(chunk)
@@ -90,18 +89,11 @@ def run_phase(label, timeout_seconds, output_path, command, max_output_bytes=512
                 output.truncate()
                 output.flush()
                 written = len(tail)
-                # Diagnostic files retain their end; keep CI console traffic
-                # small so a busy log sink cannot stall high-volume capture.
-                visible = chunk[:max(0, 16_384 - console_bytes)]
-                if visible:
-                    print(visible.decode("utf-8", errors="replace"), end="", flush=True)
-                    console_bytes += len(visible)
                 return
             kept = chunk[:max(0, max_output_bytes - written)]
             if kept:
                 output.write(kept)
                 output.flush()
-                print(kept.decode("utf-8", errors="replace"), end="", flush=True)
                 written += len(kept)
 
         def cleanup():
@@ -173,6 +165,14 @@ def run_phase(label, timeout_seconds, output_path, command, max_output_bytes=512
     with (output_path.parent / "phases.jsonl").open("a") as summary:
         summary.write(json.dumps(result) + "\n")
     print(f"{label}: finished after {result['elapsed_seconds']:.1f}s; exit={exit_code}; timed_out={timed_out}", flush=True)
+    # A busy CI console can block writes for longer than the phase deadline.
+    # Keep command capture independent of it, and only echo a small excerpt
+    # after child cleanup, status and timing have been durably recorded.
+    captured = output_path.read_bytes()
+    excerpt = captured[-16_384:] if retain_tail else captured[:16_384]
+    if excerpt:
+        print(f"{label}: output excerpt ({'tail' if retain_tail else 'head'}; full capture: {output_path})", flush=True)
+        print(excerpt.decode("utf-8", errors="replace"), end="" if excerpt.endswith(b"\n") else "\n", flush=True)
     return exit_code
 
 

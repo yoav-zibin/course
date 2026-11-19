@@ -1,7 +1,9 @@
 """Cross-platform regression checks for simulator choice and bounded smoke phases."""
 
-import importlib.util
+import contextlib
 import datetime as dt
+import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -92,6 +94,53 @@ def test_phase_preserves_failure_output_and_exit_code(tmp_path):
     summary = json.loads((tmp_path / "phases.jsonl").read_text())
     assert summary["exit_code"] == 7
     assert summary["timed_out"] is False
+
+
+@pytest.mark.parametrize("retain_tail", [False, True])
+def test_slow_console_cannot_time_out_a_finished_phase(tmp_path, retain_tail):
+    output = tmp_path / "install.log"
+    marker = tmp_path / "command-finished"
+    summaries_before_excerpt = []
+
+    class SlowConsole(io.StringIO):
+        def write(self, value):
+            if "PAYLOAD" in value:
+                # Reproduce a busy CI log sink that blocks longer than the
+                # phase allowance after the actual command has finished.
+                assert marker.exists()
+                summaries_before_excerpt.append((tmp_path / "phases.jsonl").exists())
+                time.sleep(1.1)
+            return super().write(value)
+
+    command = [sys.executable, "-S", "-c",
+               f"from pathlib import Path; Path({str(marker)!r}).write_text('done'); print('PAYLOAD', flush=True)"]
+    started = time.monotonic()
+    with contextlib.redirect_stdout(SlowConsole()):
+        status = run_phase("install", 1, output, command, retain_tail=retain_tail)
+    elapsed_with_console = time.monotonic() - started
+
+    summary = json.loads((tmp_path / "phases.jsonl").read_text())
+    assert status == summary["exit_code"] == 0
+    assert summary["timed_out"] is False
+    assert elapsed_with_console - summary["elapsed_seconds"] >= 1
+    assert summaries_before_excerpt == [True]
+    assert output.read_text() == "PAYLOAD\n"
+
+
+@pytest.mark.parametrize("retain_tail", [False, True])
+def test_console_excerpt_is_small_while_artifact_keeps_captured_output(tmp_path, retain_tail):
+    output = tmp_path / "diagnostic.log"
+    console = io.StringIO()
+    payload = "BEGIN-MARKER" + "x" * 64_000 + "END-MARKER\n"
+    with contextlib.redirect_stdout(console):
+        status = run_phase("diagnostic", 5, output,
+                           [sys.executable, "-S", "-c", "import sys; sys.stdout.write(sys.argv[1])", payload],
+                           retain_tail=retain_tail)
+    assert status == 0
+    assert output.read_text() == payload
+    assert len(console.getvalue().encode()) < 20_000
+    assert ("BEGIN-MARKER" in console.getvalue()) is not retain_tail
+    assert ("END-MARKER" in console.getvalue()) is retain_tail
 
 
 def test_phase_deadline_terminates_descendants_instead_of_leaking_background_work(tmp_path):
