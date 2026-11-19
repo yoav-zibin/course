@@ -1,0 +1,200 @@
+{
+  "upstream_commit": "170a6b0",
+  "scope": "ten handoff games only",
+  "published": false,
+  "preview": "http://127.0.0.1:8173/",
+  "baseline": "/private/tmp/ten-games-polish-baseline/manifest.json",
+  "games": [
+    {
+      "kind": "six-card-golf",
+      "name": "Six-Card Golf",
+      "preview": "http://127.0.0.1:8173/?game=six-card-golf",
+      "package_sha256": "c890324b6c8b7eed04f9d671e342e49490735dfc6a489001d2d877612755259f",
+      "current_catalog_candidates": [],
+      "legacy_candidates": [],
+      "main_rules_preserved": false,
+      "cover_sha256": "01240c91ea6bf61e70ef2e5ac9220548a49a21fe67cc77bdf74816f1517c2b44"
+    },
+    {
+      "kind": "war",
+      "name": "War",
+      "preview": "http://127.0.0.1:8173/?game=war",
+      "package_sha256": "e305ab81e9ea350b9e2e2f804efe1c1483d0ee840064ab1a9bbb0d2f73f6607c",
+      "current_catalog_candidates": [],
+      "legacy_candidates": [
+        {
+          "id": "584a87a2-a569-4e20-a9b7-7603c7e1fd33",
+          "name": "War",
+          "version": 1,
+          "renderer_type": "html"
+        },
+        {
+          "id": "42d06892-449c-44d2-9251-7b9448ce4ddc",
+          "name": "War",
+          "version": 3,
+          "renderer_type": "html"
+        }
+      ],
+      "main_rules_preserved": false,
+      "cover_sha256": "2c5a97968c4451d2a2780bb28d3bf119b63e295ddebc91b8595773dda3e0b0c0"
+    },
+    {
+      "kind": "crazy-eights",
+      "name": "Crazy Eights",
+      "preview": "http://127.0.0.1:8173/?game=crazy-eights",
+      "package_sha256": "948ba965d73e62e2d47e80d14a121195665e7594a689a68d3e0ae52bfc67e174",
+      "current_catalog_candidates": [
+        {
+          "id": "af765df8-d2c2-4074-959d-dbd1a6f0c621",
+          "name": "Crazy Eights (Declarative)",
+          "version": 1,
+          "renderer_type": "declarative"
+        }
+      ],
+      "legacy_candidates": [
+        {
+          "id": "22260b8e-cd94-4664-98e6-de8db8173ef9",
+          "name": "Crazy Eights",
+          "version": 4,
+          "renderer_type": "html"
+        },
+        {
+          "id": "c5e606da-446d-4645-bcea-dccd2d12e9b5",
+          "name": "Crazy Eights",
+          "version": 1,
+          "renderer_type": "html"
+        }
+      ],
+      "main_rules_preserved": true,
+      "cover_sha256": "3b1ef5de8d6c4987bfbb884fb080e27f57edd2a44884d92b9948992ed08b3d98"
+    },
+    {
+      "kind": "hearts",
+      "name": "Hearts",
+      "preview": "http://127.0.0.1:8173/?game=hearts",
+      "package_sha256": "bb7f649895ab7d6721de651ef57721e27036de048ebdc79e11813ff00bfee91c",
+      "current_catalog_candidates": [
+        {
+          "id": "c5ef8730-9876-4874-8a4d-0cf4065d5a9c",
+          "name": "Hearts (Declarative)",
+          "version": 1,
+          "renderer_type": "declarative"
+        }
+      ],
+      "legacy_candidates": [
+        {
+          "id": "d66436fd-b19c-4fcb-8280-9ae7fb75daf6",
+          "name": "Hearts",
+          "version": 3,
+          "renderer_type": "html"
+        }
+      ],
+      "main_rules_preserved": true,
+      "cover_sha256": "707562d82c2d01ae51b1be8ccc3d7a3aff96d5fe39380eb1516366e9710332f3"
+    },
+    {
+      "kind": "michigan",
+      "name": "Michigan",
+      "preview": "http://127.0.0.1:8173/?game=michigan",
+      "package_sha256": "8776392c67f7280c63b62d606cb90b12a0ed5ca93ced346320b6653553c8669d",
+      "current_catalog_candidates": [],
+      "legacy_candidates": [
+        {
+          "id": "a6669442-7d52-40c4-ab67-aa515ccc7ec4",
+          "name": "Michigan",
+          "version": 1,
+          "renderer_type": "html"
+        }
+      ],
+      "main_rules_preserved": false,
+      "cover_sha256": "a5446ace1c4a97ffe8bdeea3866fc2e6b4392e1c7aea457380b8bcc612312b2c"
+    },
+    {
+      "kind": "quoridor",
+      "name": "Quoridor",
+      "preview": "http://127.0.0.1:8173/?game=quoridor",
+      "package_sha256": "dccd55163b91d7c75ae61538cbd16dc06c747a8f61512d914666f2658d119297",
+      "current_catalog_candidates": [
+        {
+          "id": "ef602ade-7aa1-472e-879f-5813291017e3",
+          "name": "Quoridor (Declarative)",
+          "version": 2,
+          "renderer_type": "declarative"
+        }
+      ],
+      "legacy_candidates": [
+        {
+          "id": "b7e3617b-5592-4fa2-ab91-dcb9a42364c1",
+          "name": "Quoridor",
+          "version": 5,
+          "renderer_type": "html"
+        }
+      ],
+      "main_rules_preserved": true,
+      "cover_sha256": "2daede59150b5b8e825ed4310eee0f326e17db873d6eb1f26af6c7f8b98dc2ae"
+    },
+    {
+      "kind": "concentration",
+      "name": "Concentration",
+      "preview": "http://127.0.0.1:8173/?game=concentration",
+      "package_sha256": "22fab164976b606ee762edf49696b7ed664318f26783ef306f2415f0cb30fbd0",
+      "current_catalog_candidates": [],
+      "legacy_candidates": [],
+      "main_rules_preserved": false,
+      "cover_sha256": "6f394877cf44f8cbc15a5bae6a72d4c799d1fbbcb676e522e6115725c3726a6c"
+    },
+    {
+      "kind": "casino-war",
+      "name": "Casino War",
+      "preview": "http://127.0.0.1:8173/?game=casino-war",
+      "package_sha256": "863151bba8d9481ff3257c8569fea6e85ad174d0724a0bd556ec0a2ac9c7b8bc",
+      "current_catalog_candidates": [],
+      "legacy_candidates": [
+        {
+          "id": "07415b38-c214-424a-9a38-a38bf7806c79",
+          "name": "Casino War",
+          "version": 1,
+          "renderer_type": "html"
+        }
+      ],
+      "main_rules_preserved": false,
+      "cover_sha256": "9a2c241dfbf0e1754c08f0f0683a562ca1998bf9dd7fb6453beef3f77b7cacef"
+    },
+    {
+      "kind": "old-maid",
+      "name": "Old Maid",
+      "preview": "http://127.0.0.1:8173/?game=old-maid",
+      "package_sha256": "20d963c83216bb00531a74148168c67792c0f6ef317a48062bdcb748779536e5",
+      "current_catalog_candidates": [],
+      "legacy_candidates": [
+        {
+          "id": "f6fd77da-3b3d-41b7-8bb0-b094f7a5ee73",
+          "name": "Old Maid",
+          "version": 1,
+          "renderer_type": "html"
+        }
+      ],
+      "main_rules_preserved": false,
+      "cover_sha256": "0089b77271ba92b461c236df5b66d8a9e26c2de12cb07b0293641c72995cea16"
+    },
+    {
+      "kind": "blackjack",
+      "name": "Blackjack",
+      "preview": "http://127.0.0.1:8173/?game=blackjack",
+      "package_sha256": "0565cf66e01f47637a50f6cc23331f8137fe6daebd58c2b57264f667feb85c49",
+      "current_catalog_candidates": [],
+      "legacy_candidates": [
+        {
+          "id": "f56aedfa-bc90-4b73-8bbc-e9706a444e71",
+          "name": "Blackjack",
+          "version": 1,
+          "renderer_type": "html"
+        }
+      ],
+      "main_rules_preserved": false,
+      "cover_sha256": "9dd7bd671ec4d07ab4a696c9457203f8d4e0d25349701621e8283941717311b3"
+    }
+  ],
+  "local_catalog": "http://127.0.0.1:8174/portal#games",
+  "cover_theme": "Live BuildPlay catalog flat illustrations, cream pieces, dark outlines, solid backgrounds"
+}

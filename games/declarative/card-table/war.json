@@ -1,0 +1,1472 @@
+{
+  "name": "War",
+  "description": "A 2–4 player card battle. Flip cards; the highest rank takes the pile. Ties trigger a war.",
+  "game_addition_request_id_and_secret": "example-only-war-replace-before-publishing",
+  "allowed_player_counts": [
+    2,
+    3,
+    4
+  ],
+  "server_code": "\"use strict\";\nfunction warRank(card) { return card % 13 + 2; }\nfunction warSuit(card) { return Math.floor(card / 13); }\nfunction warShuffleSeed(ctx) {\n  let h = 2166136261;\n  for (const player of ctx.players || []) {\n    const id = String(player.id || \"\");\n    for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);\n    h = Math.imul(h ^ 255, 16777619);\n  }\n  h ^= (ctx.pot || 0) | 0;\n  return h >>> 0 || 1;\n}\nfunction warRandom(seed) {\n  let x = seed >>> 0;\n  return function() {\n    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;\n    return (x >>> 0) / 4294967296;\n  };\n}\nfunction warEligible(state) {\n  return state.decks.map((deck, seat) => deck.length ? seat : -1).filter(seat => seat >= 0);\n}\nfunction warPayouts(winner, ctx) {\n  const humans = (ctx.players || []).filter(p => p.kind === \"human\" && p.active !== false);\n  if (!humans.length) return {};\n  const pot = ctx.pot || 0;\n  const winnerPlayer = winner === null ? null : ctx.players[winner];\n  const recipients = winnerPlayer && winnerPlayer.kind === \"human\" && winnerPlayer.active !== false ? [winnerPlayer] : humans;\n  const result = {};\n  recipients.forEach((player, i) => { result[player.id] = Math.floor(pot / recipients.length) + (i < pot % recipients.length ? 1 : 0); });\n  return result;\n}\nfunction warEnd(state, winner, ctx) {\n  state.winner = winner;\n  state.turnIdx = 0;\n  state.participants = [];\n  state.acted = [];\n  return {state, turn: null, payouts: warPayouts(winner, ctx)};\n}\nfunction warGivePile(state, seat) {\n  state.decks[seat].push(...state.pile);\n  state.pile = [];\n}\nfunction warStartRound(state, ctx) {\n  const eligible = warEligible(state);\n  if (eligible.length === 1) return warEnd(state, eligible[0], ctx);\n  if (!eligible.length) {\n    const maximum = Math.max(...state.decks.map(d => d.length));\n    const leaders = state.decks.map((d, i) => d.length === maximum ? i : -1).filter(i => i >= 0);\n    return warEnd(state, leaders.length === 1 ? leaders[0] : null, ctx);\n  }\n  state.round++;\n  state.stage = \"battle\";\n  state.participants = eligible;\n  state.acted = [];\n  state.faceUp = state.decks.map(() => null);\n  state.turnIdx = eligible[0];\n  return {state, turn: [ctx.players[state.turnIdx].id]};\n}\nfunction warResolve(state, ctx) {\n  const ranks = state.participants.map(seat => ({seat, rank: warRank(state.faceUp[seat])}));\n  const high = Math.max(...ranks.map(x => x.rank));\n  const leaders = ranks.filter(x => x.rank === high).map(x => x.seat);\n  if (leaders.length === 1) {\n    warGivePile(state, leaders[0]);\n    return warStartRound(state, ctx);\n  }\n  state.warDepth++;\n  state.stage = \"war\";\n  state.participants = leaders;\n  state.acted = [];\n  state.faceUp = state.decks.map(() => null);\n  const able = [];\n  for (const seat of leaders) {\n    if (state.decks[seat].length >= 2) able.push(seat);\n    else state.pile.push(...state.decks[seat].splice(0));\n  }\n  if (able.length === 1) {\n    warGivePile(state, able[0]);\n    return warStartRound(state, ctx);\n  }\n  if (!able.length) return warEnd(state, null, ctx);\n  state.participants = able;\n  state.turnIdx = able[0];\n  return {state, turn: [ctx.players[state.turnIdx].id]};\n}\nfunction warFinishPending(state, ctx) {\n  if (state.acted.length < state.participants.length) {\n    const next = state.participants.find(seat => !state.acted.includes(seat));\n    state.turnIdx = next;\n    return {state, turn: [ctx.players[next].id]};\n  }\n  const human = ctx.players.findIndex(player => player.kind === \"human\" && player.active !== false);\n  if (human < 0) return warResolve(state, ctx);\n  state.showdownStage = state.stage;\n  state.stage = \"showdown\";\n  // In a solo game, give the computer the harmless continue action. The\n  // platform's normal computer-turn delay leaves the revealed cards and\n  // winner visible before the next battle starts. Pass-and-play stays manual.\n  const computer = ctx.players.findIndex(player => player.kind === \"computer\" && player.active !== false);\n  const next = computer >= 0 ? computer : human;\n  state.turnIdx = next;\n  return {state, turn: [ctx.players[next].id]};\n}\nconst game = {\n  newMatch(ctx) {\n    const deck = Array.from({length: 52}, (_, card) => card);\n    const random = warRandom(warShuffleSeed(ctx));\n    for (let i = deck.length - 1; i > 0; i--) {\n      const j = Math.floor(random() * (i + 1));\n      [deck[i], deck[j]] = [deck[j], deck[i]];\n    }\n    const decks = (ctx.players || []).map(() => []);\n    deck.forEach((card, i) => decks[i % decks.length].push(card));\n    const state = {decks, pile: [], faceUp: decks.map(() => null), participants: decks.map((_, i) => i), acted: [], stage: \"battle\", round: 1, warDepth: 0, turnIdx: 0, winner: null, showdownStage: null};\n    return {state, turn: [ctx.players[0].id]};\n  },\n  applyMove(state, playerId, move, ctx) {\n    if (state.winner !== null) throw new InvalidMove(\"game over\");\n    const seat = ctx.players.findIndex(p => p.id === playerId);\n    if (seat < 0) throw new InvalidMove(\"not seated\");\n    if (seat !== state.turnIdx) throw new InvalidMove(\"not your turn\");\n    if (state.stage === \"showdown\") {\n      if (!move || typeof move !== \"object\" || move.continue !== true || Object.keys(move).length !== 1) throw new InvalidMove(\"bad move\");\n      const resolved = {decks: state.decks.map(d => d.slice()), pile: state.pile.slice(), faceUp: state.faceUp.slice(), participants: state.participants.slice(), acted: state.acted.slice(), stage: state.showdownStage, round: state.round, warDepth: state.warDepth, turnIdx: state.turnIdx, winner: state.winner, showdownStage: null};\n      return warResolve(resolved, ctx);\n    }\n    if (!move || typeof move !== \"object\" || move.flip !== true || Object.keys(move).length !== 1) throw new InvalidMove(\"bad move\");\n    if (!state.participants.includes(seat) || state.acted.includes(seat)) throw new InvalidMove(\"not your turn\");\n    const next = {decks: state.decks.map(d => d.slice()), pile: state.pile.slice(), faceUp: state.faceUp.slice(), participants: state.participants.slice(), acted: state.acted.slice(), stage: state.stage, round: state.round, warDepth: state.warDepth, turnIdx: state.turnIdx, winner: state.winner, showdownStage: state.showdownStage || null};\n    const deck = next.decks[seat];\n    if (next.stage === \"battle\") {\n      if (!deck.length) throw new InvalidMove(\"no cards to flip\");\n      const card = deck.shift(); next.pile.push(card); next.faceUp[seat] = card;\n    } else {\n      if (deck.length < 2) throw new InvalidMove(\"not enough cards for war\");\n      next.pile.push(deck.shift());\n      const card = deck.shift(); next.pile.push(card); next.faceUp[seat] = card;\n    }\n    next.acted.push(seat);\n    if ((ctx.move_count || 0) >= 1000) {\n      const maximum = Math.max(...next.decks.map(d => d.length));\n      const leaders = next.decks.map((d, i) => d.length === maximum ? i : -1).filter(i => i >= 0);\n      return warEnd(next, leaders.length === 1 ? leaders[0] : null, ctx);\n    }\n    return warFinishPending(next, ctx);\n  },\n  computerMove(state) { return state.stage === \"showdown\" ? {continue: true} : {flip: true}; },\n  randomMove(state) { return state.stage === \"showdown\" ? {continue: true} : {flip: true}; },\n  viewFor(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(p => p.id === playerId);\n    const legalMoves = state.winner !== null || seat !== state.turnIdx ? [] :\n      state.stage === \"showdown\" ? [{continue: true}] :\n      state.participants.includes(seat) && !state.acted.includes(seat) ? [{flip: true}] : [];\n    return {counts: state.decks.map(d => d.length), faceUp: state.faceUp.map(card => card === null ? null : {rank: warRank(card), suit: warSuit(card)}), pileCount: state.pile.length, participants: state.participants.slice(), acted: state.acted.slice(), stage: state.stage, showdownStage: state.showdownStage || null, round: state.round, warDepth: state.warDepth, turnIdx: state.turnIdx, winner: state.winner, legalMoves};\n  }\n};",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 600,
+      "height": 700,
+      "camera_enabled": false
+    },
+    "motion": {
+      "move_ms": 360,
+      "turn_pause_ms": 650,
+      "animate_own": true
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 700,
+        "color": "#163e32",
+        "line_color": "#c8ab75"
+      }
+    ],
+    "piece_types": {
+      "back": {
+        "shape": "image",
+        "width": 82,
+        "height": 112,
+        "back_asset": "card_back"
+      },
+      "red": {
+        "shape": "card",
+        "width": 82,
+        "height": 112,
+        "color": "#fff6df",
+        "text_color": "#b72f4c",
+        "border_color": "#d3ad62"
+      },
+      "black": {
+        "shape": "card",
+        "width": 82,
+        "height": 112,
+        "color": "#fff6df",
+        "text_color": "#1c2d49",
+        "border_color": "#d3ad62"
+      }
+    },
+    "assets": {
+      "card_back": {
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCAxMTAiPjxyZWN0IHdpZHRoPSI4MCIgaGVpZ2h0PSIxMTAiIHJ4PSI5IiBmaWxsPSIjMjg0ODcyIi8+PHJlY3QgeD0iNiIgeT0iNiIgd2lkdGg9IjY4IiBoZWlnaHQ9Ijk4IiByeD0iNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZTNiNjRjIiBzdHJva2Utd2lkdGg9IjMiLz48cGF0aCBkPSJNMTIgNTVMNDAgMTRMNjggNTVMNDAgOTZaIiBmaWxsPSIjYzQzZTU1IiBzdHJva2U9IiNmZmY2ZGYiIHN0cm9rZS13aWR0aD0iMyIvPjwvc3ZnPg==",
+        "media_type": "image/svg+xml"
+      }
+    },
+    "strings": {
+      "title": "War",
+      "player": "Player {n}",
+      "cards_left": "{count} cards",
+      "round": "Round {n}",
+      "pile": "Battle pile: {count}",
+      "flip": "Flip top card",
+      "flip_hint": "Tap your highlighted deck to flip the top card.",
+      "waiting": "Waiting for {name} to flip…",
+      "war": "WAR! Each tied player places one card down and one face up.",
+      "battle": "High card wins the pile.",
+      "face_down": "Face down",
+      "revealed": "{rank} of {suit}",
+      "wins_round": "{name} wins the pile!",
+      "wins_game": "{name} wins the game!",
+      "draw": "The game is a draw.",
+      "suit_clubs": "Clubs",
+      "suit_diamonds": "Diamonds",
+      "suit_hearts": "Hearts",
+      "suit_spades": "Spades",
+      "server_game_over": "game over",
+      "server_not_seated": "not seated",
+      "server_not_your_turn": "not your turn",
+      "server_bad_move": "bad move",
+      "server_no_cards_to_flip": "no cards to flip",
+      "server_not_enough_cards_for_war": "not enough cards for war"
+    },
+    "ui_code": "const SOURCE_STRINGS = {\n  title: \"War\", player: \"Player {n}\", cards_left: \"{count} cards\", round: \"Round {n}\",\n  pile: \"Battle pile: {count}\", flip: \"Flip top card\", flip_hint: \"Tap your highlighted deck to flip the top card.\", waiting: \"Waiting for {name} to flip…\", next_battle: \"Next battle\", showdown: \"Cards are revealed.\", tie_reveal: \"Tie. WAR begins next.\",\n  war: \"WAR! Each tied player places one card down and one face up.\",\n  battle: \"High card wins the pile.\", face_down: \"Face down\", revealed: \"{rank} of {suit}\",\n  wins_round: \"{name} wins the pile!\", wins_game: \"{name} wins the game!\", draw: \"The game is a draw.\",\n  suit_clubs: \"Clubs\", suit_diamonds: \"Diamonds\", suit_hearts: \"Hearts\", suit_spades: \"Spades\",\n  server_game_over: \"game over\", server_not_seated: \"not seated\", server_not_your_turn: \"not your turn\",\n  server_bad_move: \"bad move\", server_no_cards_to_flip: \"no cards to flip\", server_not_enough_cards_for_war: \"not enough cards for war\"\n};\nfunction warText(message,key,args){const text=(message.strings||{})[key]||SOURCE_STRINGS[key]||key;return text.replace(/\\{(\\w+)\\}/g,(_,k)=>args&&args[k]!==undefined?String(args[k]):\"\");}\nfunction warCenteredX(text,size,center=450){return Math.max(12,center-String(text).length*size*.28);}\nvar gameUI = {\n  reduce(message, localState) {\n    const m=message.type==='ui_event'?(message.state_changed||{}):message;\n    const s=m.view||m.state||{};\n    const t=(key,args={})=>warText(m,key,args);\n    const active=m.status==='ongoing'&&!m.replay&&Number.isInteger(m.acting_for_player_index);\n    const seats=m.players||[], count=(s.counts||[]).length;\n    const positions=count===2?[[315,270],[585,270]]:[[220,160],[680,160],[220,470],[680,470]];\n    const cardText=card=>!card?'':`${card.rank===1||card.rank===14?'A':card.rank===11?'J':card.rank===12?'Q':card.rank===13?'K':card.rank}${['♣','♦','♥','♠'][card.suit]}`;\n    const pieces=[],controls=[],labels=[];\n    labels.push({id:'title',text:t('title'),x:warCenteredX(t('title'),26),y:30,font_size:26,color:'#fff5dc'});\n    labels.push({id:'round',text:t('round',{n:s.round||1}),x:warCenteredX(t('round',{n:s.round||1}),18),y:66,font_size:18,color:'#dbe8db'});\n    labels.push({id:'pile',text:t('pile',{count:s.pileCount||0}),x:warCenteredX(t('pile',{count:s.pileCount||0}),16),y:96,font_size:16,color:'#ffe28a'});\n    const centerY=count===2?370:235;\n    const phaseText=(m.status==='over'||m.turn_of_player_indices===null)?(s.winner===null?t('draw'):t('wins_game',{name:(seats[s.winner]||{}).name||t('player',{n:s.winner+1})})):s.stage==='showdown'?t('showdown'):(s.stage==='war'?t('war'):t('battle'));\n    labels.push({id:'phase',text:phaseText,x:warCenteredX(phaseText,s.stage==='showdown'?14:16),y:centerY,font_size:s.stage==='showdown'?14:16,color:'#fff5dc'});\n    if(active&&s.stage!=='showdown')labels.push({id:'flip-hint',text:t('flip_hint'),x:warCenteredX(t('flip_hint'),14),y:centerY+34,font_size:14,color:'#dbe8db'});\n    if(s.stage==='showdown'){\n      const ranks=(s.participants||[]).map(i=>({i,rank:(s.faceUp||[])[i]?.rank||0}));\n      const high=Math.max(0,...ranks.map(item=>item.rank)),leaders=ranks.filter(item=>item.rank===high).map(item=>item.i);\n      const result=leaders.length===1?t('wins_round',{name:(seats[leaders[0]]||{}).name||t('player',{n:leaders[0]+1})}):t('tie_reveal');\n      labels.push({id:'showdown-result',text:result,x:warCenteredX(result,15),y:centerY+36,font_size:15,color:'#ffe28a'});\n    }\n    const lastWinner=localState&&localState.lastWinner;\n    for(let i=0;i<count;i++){\n      const [x,y]=positions[i%positions.length],name=(seats[i]||{}).name||t('player',{n:i+1}),card=(s.faceUp||[])[i];\n      labels.push({id:`player-${i}`,text:name,x:warCenteredX(name,18,x),y:y-143,font_size:18,color:i===s.turnIdx&&m.status==='ongoing'?'#a7f070':'#ffffff'});\n      const countText=t('cards_left',{count:(s.counts||[])[i]||0});\n      labels.push({id:`count-${i}`,text:countText,x:warCenteredX(countText,14,x),y:y-116,font_size:14,color:'#d9e7df'});\n      if((s.counts||[])[i]>0)pieces.push({id:`deck-${i}`,type:'back',board:'table',position:{x:x-46,y},asset:'card_back',text:'',actions:active&&s.stage!=='showdown'&&i===m.acting_for_player_index?['tap']:[],aria_label:active&&i===m.acting_for_player_index?t('flip_hint'):t('face_down')});\n      if(card)pieces.push({id:`top-card-${i}`,type:card.suit===1||card.suit===2?'red':'black',board:'table',position:{x,y},text:cardText(card),face:'front',actions:[],aria_label:t('revealed',{rank:card.rank,suit:t('suit_'+['clubs','diamonds','hearts','spades'][card.suit])}),animation:{kind:'move',key:`war-${s.round}-${s.warDepth}-${i}-${card.rank}-${card.suit}`,duration_ms:360}});\n      else if((s.counts||[])[i]>0)pieces.push({id:`top-card-${i}`,type:'back',board:'table',position:{x,y},face:'back',asset:'card_back',text:'',actions:[],aria_label:t('face_down')});\n\n    }\n    if(active&&s.stage==='showdown'&&Array.isArray(s.legalMoves)&&s.legalMoves.some(mv=>mv.continue===true)&&!(seats||[]).some(player=>player.kind==='computer'))controls.push({id:'continue-battle',kind:'button',label:t('next_battle')});\n    else if(active&&Array.isArray(s.legalMoves)&&s.legalMoves.some(mv=>mv.flip===true))controls.push({id:'flip-card',kind:'button',label:t('flip')});\n    else if(m.status==='ongoing'&&Array.isArray(m.turn_of_player_indices)&&m.turn_of_player_indices.length){const i=m.turn_of_player_indices[0],waitingText=s.stage==='showdown'?'Next battle starts shortly.':t('waiting',{name:(seats[i]||{}).name||t('player',{n:i+1})});labels.push({id:'waiting',text:waitingText,x:warCenteredX(waitingText,15),y:centerY+70,font_size:15,color:'#dbe8db'});}\n    for(const piece of pieces){piece.position.x*=2/3;piece.position.y=count===2?piece.position.y+20:piece.position.y;}\n    for(const label of labels){label.x*=2/3;if(count===2&&/^(player|count)-/.test(label.id))label.y+=20;}\n    const scene={pieces,targets:[],controls,labels};\n    const result={scene,local_state:{lastWinner:s.winner}};\n    if(message.type==='ui_event'&&active&&message.event.type==='tap'&&message.event.id==='continue-battle'&&s.stage==='showdown')result.make_move={continue:true};\n    if(message.type==='ui_event'&&active&&message.event.type==='tap'&&(message.event.id==='flip-card'||message.event.id===`deck-${m.acting_for_player_index}`)&&s.stage!=='showdown')result.make_move={flip:true};\n    return result;\n  }\n};\n"
+  },
+  "rules": "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.",
+  "ui_instructions": "On your turn, tap your highlighted deck or choose Flip top card. The top card flips automatically; you do not choose a card. The game reveals each card and announces who takes the pile. During a war, each tied player flips a face-down card and then a face-up card. Counts show how many cards remain in each deck. Only your own turn has an enabled action.",
+  "tutorial": {
+    "text": "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.",
+    "html": "<!doctype html><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>War</h1><p>Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.</p></main>"
+  },
+  "images": [
+    {
+      "caption": "War cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#10213a\"/><g transform=\"translate(250 218) rotate(-10) scale(1)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#17324f\" stroke=\"#20312b\" stroke-width=\"5\"/><rect x=\"-43\" y=\"-65\" width=\"86\" height=\"130\" rx=\"6\" fill=\"none\" stroke=\"#94a3b8\" stroke-width=\"3\"/><path d=\"M0 -35 24 0 0 35 -24 0Z\" fill=\"#56c9b4\"/></g><g transform=\"translate(292 215) rotate(-5) scale(1)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 -54) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 -27) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 0) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 27) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 54) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 -54) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 -27) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 0) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 27) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 54) scale(0.48333333333333334)\"/></g><g transform=\"translate(550 218) rotate(10) scale(1)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#17324f\" stroke=\"#20312b\" stroke-width=\"5\"/><rect x=\"-43\" y=\"-65\" width=\"86\" height=\"130\" rx=\"6\" fill=\"none\" stroke=\"#94a3b8\" stroke-width=\"3\"/><path d=\"M0 -35 24 0 0 35 -24 0Z\" fill=\"#56c9b4\"/></g><g transform=\"translate(508 215) rotate(5) scale(1)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 0) scale(0.9)\"/></g></svg>"
+    },
+    {
+      "caption": "A card is revealed",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#c43e55\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#c43e55\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#c43e55\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">A card is revealed</text></svg>"
+    },
+    {
+      "caption": "A tied battle",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#e3b64c\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#e3b64c\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#e3b64c\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">A tied battle</text></svg>"
+    },
+    {
+      "caption": "Take the pile",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#c43e55\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#c43e55\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#c43e55\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">Take the pile</text></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "required": [
+        "decks",
+        "pile",
+        "faceUp",
+        "participants",
+        "acted",
+        "stage",
+        "round",
+        "warDepth",
+        "turnIdx",
+        "winner"
+      ],
+      "properties": {
+        "decks": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "type": "array",
+            "maxItems": 52,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 51
+            }
+          }
+        },
+        "pile": {
+          "type": "array",
+          "maxItems": 52,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 51
+          }
+        },
+        "faceUp": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 51
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "participants": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          }
+        },
+        "acted": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          }
+        },
+        "stage": {
+          "enum": [
+            "battle",
+            "war",
+            "showdown"
+          ]
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "warDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 52
+        },
+        "turnIdx": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "winner": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "enum": [
+            0,
+            1,
+            2,
+            3,
+            null
+          ]
+        },
+        "showdownStage": {
+          "enum": [
+            "battle",
+            "war",
+            null
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "view_schema": {
+      "type": "object",
+      "required": [
+        "counts",
+        "faceUp",
+        "pileCount",
+        "participants",
+        "acted",
+        "stage",
+        "round",
+        "warDepth",
+        "turnIdx",
+        "winner",
+        "legalMoves"
+      ],
+      "properties": {
+        "counts": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 52
+          }
+        },
+        "faceUp": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "rank",
+                  "suit"
+                ],
+                "properties": {
+                  "rank": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 14
+                  },
+                  "suit": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "pileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 52
+        },
+        "participants": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          }
+        },
+        "acted": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          }
+        },
+        "stage": {
+          "enum": [
+            "battle",
+            "war",
+            "showdown"
+          ]
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "warDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 52
+        },
+        "turnIdx": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "winner": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "enum": [
+            0,
+            1,
+            2,
+            3,
+            null
+          ]
+        },
+        "showdownStage": {
+          "enum": [
+            "battle",
+            "war",
+            null
+          ]
+        },
+        "legalMoves": {
+          "type": "array",
+          "maxItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "flip"
+                ],
+                "properties": {
+                  "flip": {
+                    "const": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "continue"
+                ],
+                "properties": {
+                  "continue": {
+                    "const": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "move_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "flip"
+          ],
+          "properties": {
+            "flip": {
+              "const": true
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "continue"
+          ],
+          "properties": {
+            "continue": {
+              "const": true
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "cases": [
+      {
+        "name": "Initial flip",
+        "description": "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 10,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 10,
+              "active": true
+            }
+          ],
+          "pot": 20,
+          "move_count": 0,
+          "seed": 21
+        },
+        "state": {
+          "decks": [
+            [
+              47,
+              16,
+              48,
+              20,
+              14,
+              31,
+              23,
+              6,
+              44,
+              27,
+              30,
+              26,
+              13,
+              3,
+              41,
+              4,
+              22,
+              5,
+              15,
+              46,
+              38,
+              51,
+              8,
+              35,
+              18,
+              9
+            ],
+            [
+              19,
+              21,
+              7,
+              2,
+              28,
+              43,
+              29,
+              42,
+              11,
+              37,
+              36,
+              40,
+              39,
+              0,
+              10,
+              34,
+              1,
+              33,
+              49,
+              24,
+              17,
+              12,
+              45,
+              50,
+              32,
+              25
+            ]
+          ],
+          "pile": [],
+          "faceUp": [
+            null,
+            null
+          ],
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [],
+          "stage": "battle",
+          "round": 1,
+          "warDepth": 0,
+          "turnIdx": 0,
+          "winner": null,
+          "showdownStage": null
+        },
+        "view_of_mover": {
+          "counts": [
+            26,
+            26
+          ],
+          "faceUp": [
+            null,
+            null
+          ],
+          "pileCount": 0,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [],
+          "stage": "battle",
+          "showdownStage": null,
+          "round": 1,
+          "warDepth": 0,
+          "turnIdx": 0,
+          "winner": null,
+          "legalMoves": [
+            {
+              "flip": true
+            }
+          ]
+        },
+        "view_of_other": {
+          "counts": [
+            26,
+            26
+          ],
+          "faceUp": [
+            null,
+            null
+          ],
+          "pileCount": 0,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [],
+          "stage": "battle",
+          "showdownStage": null,
+          "round": 1,
+          "warDepth": 0,
+          "turnIdx": 0,
+          "winner": null,
+          "legalMoves": []
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "flip": true
+        },
+        "expected_state": {
+          "decks": [
+            [
+              16,
+              48,
+              20,
+              14,
+              31,
+              23,
+              6,
+              44,
+              27,
+              30,
+              26,
+              13,
+              3,
+              41,
+              4,
+              22,
+              5,
+              15,
+              46,
+              38,
+              51,
+              8,
+              35,
+              18,
+              9
+            ],
+            [
+              19,
+              21,
+              7,
+              2,
+              28,
+              43,
+              29,
+              42,
+              11,
+              37,
+              36,
+              40,
+              39,
+              0,
+              10,
+              34,
+              1,
+              33,
+              49,
+              24,
+              17,
+              12,
+              45,
+              50,
+              32,
+              25
+            ]
+          ],
+          "pile": [
+            47
+          ],
+          "faceUp": [
+            47,
+            null
+          ],
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0
+          ],
+          "stage": "battle",
+          "round": 1,
+          "warDepth": 0,
+          "turnIdx": 1,
+          "winner": null,
+          "showdownStage": null
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "counts": [
+            25,
+            26
+          ],
+          "faceUp": [
+            {
+              "rank": 10,
+              "suit": 3
+            },
+            null
+          ],
+          "pileCount": 1,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0
+          ],
+          "stage": "battle",
+          "showdownStage": null,
+          "round": 1,
+          "warDepth": 0,
+          "turnIdx": 1,
+          "winner": null,
+          "legalMoves": []
+        },
+        "expected_view_of_other": {
+          "counts": [
+            25,
+            26
+          ],
+          "faceUp": [
+            {
+              "rank": 10,
+              "suit": 3
+            },
+            null
+          ],
+          "pileCount": 1,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0
+          ],
+          "stage": "battle",
+          "showdownStage": null,
+          "round": 1,
+          "warDepth": 0,
+          "turnIdx": 1,
+          "winner": null,
+          "legalMoves": []
+        },
+        "images": [
+          {
+            "caption": "initial · before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#c43e55\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#c43e55\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#c43e55\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">initial · before</text></svg>"
+          },
+          {
+            "caption": "initial · table",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#e3b64c\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#e3b64c\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#e3b64c\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">initial · table</text></svg>"
+          },
+          {
+            "caption": "initial · battle",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#c43e55\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#c43e55\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#c43e55\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">initial · battle</text></svg>"
+          },
+          {
+            "caption": "initial · after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#e3b64c\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#e3b64c\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#e3b64c\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">initial · after</text></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Round winner takes the pile",
+        "description": "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 10,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 10,
+              "active": true
+            }
+          ],
+          "pot": 20,
+          "move_count": 4,
+          "seed": 22
+        },
+        "state": {
+          "decks": [
+            [
+              2
+            ],
+            [
+              11
+            ]
+          ],
+          "pile": [
+            4
+          ],
+          "faceUp": [
+            4,
+            null
+          ],
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0
+          ],
+          "stage": "battle",
+          "round": 3,
+          "warDepth": 0,
+          "turnIdx": 1,
+          "winner": null,
+          "showdownStage": null
+        },
+        "view_of_mover": {
+          "counts": [
+            1,
+            1
+          ],
+          "faceUp": [
+            {
+              "rank": 6,
+              "suit": 0
+            },
+            null
+          ],
+          "pileCount": 1,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0
+          ],
+          "stage": "battle",
+          "showdownStage": null,
+          "round": 3,
+          "warDepth": 0,
+          "turnIdx": 1,
+          "winner": null,
+          "legalMoves": [
+            {
+              "flip": true
+            }
+          ]
+        },
+        "view_of_other": {
+          "counts": [
+            1,
+            1
+          ],
+          "faceUp": [
+            {
+              "rank": 6,
+              "suit": 0
+            },
+            null
+          ],
+          "pileCount": 1,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0
+          ],
+          "stage": "battle",
+          "showdownStage": null,
+          "round": 3,
+          "warDepth": 0,
+          "turnIdx": 1,
+          "winner": null,
+          "legalMoves": []
+        },
+        "player_id": "u2",
+        "other_player_id": null,
+        "move": {
+          "flip": true
+        },
+        "expected_state": {
+          "decks": [
+            [
+              2
+            ],
+            []
+          ],
+          "pile": [
+            4,
+            11
+          ],
+          "faceUp": [
+            4,
+            11
+          ],
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0,
+            1
+          ],
+          "stage": "showdown",
+          "round": 3,
+          "warDepth": 0,
+          "turnIdx": 0,
+          "winner": null,
+          "showdownStage": "battle"
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "counts": [
+            1,
+            0
+          ],
+          "faceUp": [
+            {
+              "rank": 6,
+              "suit": 0
+            },
+            {
+              "rank": 13,
+              "suit": 0
+            }
+          ],
+          "pileCount": 2,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0,
+            1
+          ],
+          "stage": "showdown",
+          "showdownStage": "battle",
+          "round": 3,
+          "warDepth": 0,
+          "turnIdx": 0,
+          "winner": null,
+          "legalMoves": []
+        },
+        "expected_view_of_other": {
+          "counts": [
+            1,
+            0
+          ],
+          "faceUp": [
+            {
+              "rank": 6,
+              "suit": 0
+            },
+            {
+              "rank": 13,
+              "suit": 0
+            }
+          ],
+          "pileCount": 2,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0,
+            1
+          ],
+          "stage": "showdown",
+          "showdownStage": "battle",
+          "round": 3,
+          "warDepth": 0,
+          "turnIdx": 0,
+          "winner": null,
+          "legalMoves": []
+        },
+        "images": [
+          {
+            "caption": "intermediate · before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#c43e55\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#c43e55\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#c43e55\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">intermediate · before</text></svg>"
+          },
+          {
+            "caption": "intermediate · table",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#e3b64c\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#e3b64c\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#e3b64c\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">intermediate · table</text></svg>"
+          },
+          {
+            "caption": "intermediate · battle",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#c43e55\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#c43e55\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#c43e55\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">intermediate · battle</text></svg>"
+          },
+          {
+            "caption": "intermediate · after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#e3b64c\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#e3b64c\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#e3b64c\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">intermediate · after</text></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Visible last battle resolves",
+        "description": "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 10,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 10,
+              "active": true
+            }
+          ],
+          "pot": 20,
+          "move_count": 30,
+          "seed": 23
+        },
+        "state": {
+          "decks": [
+            [
+              2
+            ],
+            []
+          ],
+          "pile": [
+            10
+          ],
+          "faceUp": [
+            10,
+            0
+          ],
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0,
+            1
+          ],
+          "stage": "showdown",
+          "round": 8,
+          "warDepth": 0,
+          "turnIdx": 1,
+          "winner": null,
+          "showdownStage": "battle"
+        },
+        "view_of_mover": {
+          "counts": [
+            1,
+            0
+          ],
+          "faceUp": [
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 2,
+              "suit": 0
+            }
+          ],
+          "pileCount": 1,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0,
+            1
+          ],
+          "stage": "showdown",
+          "showdownStage": "battle",
+          "round": 8,
+          "warDepth": 0,
+          "turnIdx": 1,
+          "winner": null,
+          "legalMoves": [
+            {
+              "continue": true
+            }
+          ]
+        },
+        "view_of_other": {
+          "counts": [
+            1,
+            0
+          ],
+          "faceUp": [
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 2,
+              "suit": 0
+            }
+          ],
+          "pileCount": 1,
+          "participants": [
+            0,
+            1
+          ],
+          "acted": [
+            0,
+            1
+          ],
+          "stage": "showdown",
+          "showdownStage": "battle",
+          "round": 8,
+          "warDepth": 0,
+          "turnIdx": 1,
+          "winner": null,
+          "legalMoves": []
+        },
+        "player_id": "u2",
+        "other_player_id": null,
+        "move": {
+          "continue": true
+        },
+        "expected_state": {
+          "decks": [
+            [
+              2,
+              10
+            ],
+            []
+          ],
+          "pile": [],
+          "faceUp": [
+            10,
+            0
+          ],
+          "participants": [],
+          "acted": [],
+          "stage": "battle",
+          "round": 8,
+          "warDepth": 0,
+          "turnIdx": 0,
+          "winner": 0,
+          "showdownStage": null
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "counts": [
+            2,
+            0
+          ],
+          "faceUp": [
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 2,
+              "suit": 0
+            }
+          ],
+          "pileCount": 0,
+          "participants": [],
+          "acted": [],
+          "stage": "battle",
+          "showdownStage": null,
+          "round": 8,
+          "warDepth": 0,
+          "turnIdx": 0,
+          "winner": 0,
+          "legalMoves": []
+        },
+        "expected_view_of_other": {
+          "counts": [
+            2,
+            0
+          ],
+          "faceUp": [
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 2,
+              "suit": 0
+            }
+          ],
+          "pileCount": 0,
+          "participants": [],
+          "acted": [],
+          "stage": "battle",
+          "showdownStage": null,
+          "round": 8,
+          "warDepth": 0,
+          "turnIdx": 0,
+          "winner": 0,
+          "legalMoves": []
+        },
+        "images": [
+          {
+            "caption": "terminal · before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#c43e55\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#c43e55\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#c43e55\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">terminal · before</text></svg>"
+          },
+          {
+            "caption": "terminal · table",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#e3b64c\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#e3b64c\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#e3b64c\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">terminal · table</text></svg>"
+          },
+          {
+            "caption": "terminal · battle",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#c43e55\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#c43e55\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#c43e55\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">terminal · battle</text></svg>"
+          },
+          {
+            "caption": "terminal · after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#15523d\"/><rect x=\"100\" y=\"75\" width=\"200\" height=\"250\" rx=\"20\" fill=\"#fff6df\" stroke=\"#e3b64c\" stroke-width=\"8\"/><circle cx=\"155\" cy=\"140\" r=\"22\" fill=\"#e3b64c\"/><circle cx=\"245\" cy=\"260\" r=\"22\" fill=\"#e3b64c\"/><text x=\"150\" y=\"225\" font-size=\"54\" fill=\"#18263f\">A</text><text x=\"50\" y=\"370\" font-size=\"18\" fill=\"#fff\">terminal · after</text></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "u1": 20
+        }
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "War",
+      "short_description": "Reparte una baraja estándar de 52 cartas entre 2–4 jugadores. En cada ronda, todos voltean una carta; el rango más alto gana todas las cartas del montón. Un empate inicia una guerra: cada jugador empatado pone una carta boca abajo y otra boca arriba. El rango visible más alto gana el montón. Quien no pueda completar la guerra queda fuera de esa disputa. Gana quien reúna todas las cartas. Si nadie puede continuar una guerra empatada, la partida termina en empate.",
+      "game_logic_rules": "Reparte una baraja estándar de 52 cartas entre 2–4 jugadores. En cada ronda, todos voltean una carta; el rango más alto gana todas las cartas del montón. Un empate inicia una guerra: cada jugador empatado pone una carta boca abajo y otra boca arriba. El rango visible más alto gana el montón. Quien no pueda completar la guerra queda fuera de esa disputa. Gana quien reúna todas las cartas. Si nadie puede continuar una guerra empatada, la partida termina en empate.",
+      "game_ui_rules": "En tu turno, toca el mazo resaltado o elige Voltear la carta superior. La carta superior se voltea automáticamente; no eliges la carta. El juego revela cada carta El juego revela cada carta y anuncia quién gana el montón. Durante una guerra, cada jugador empatado voltea una carta boca abajo y luego una boca arriba. Los conteos muestran las cartas restantes. Solo está habilitada tu acción durante tu turno.",
+      "tutorial_strings": {
+        "War": "Guerra",
+        "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.": "Reparte una baraja estándar de 52 cartas entre 2–4 jugadores. En cada ronda, todos voltean una carta; el rango más alto gana todas las cartas del montón. Un empate inicia una guerra: cada jugador empatado pone una carta boca abajo y otra boca arriba. El rango visible más alto gana el montón. Quien no pueda completar la guerra queda fuera de esa disputa. Gana quien reúna todas las cartas. Si nadie puede continuar una guerra empatada, la partida termina en empate."
+      },
+      "client_strings": {
+        "title": "War",
+        "player": "Jugador {n}",
+        "cards_left": "{count} cartas",
+        "round": "Ronda {n}",
+        "pile": "Montón: {count}",
+        "flip": "Voltear la carta superior",
+        "flip_hint": "Toca tu mazo resaltado para voltear la carta superior.",
+        "waiting": "Esperando a que {name} voltee…",
+        "war": "¡GUERRA! Cada jugador empatado pone una carta abajo y otra arriba.",
+        "battle": "La carta más alta gana el montón.",
+        "face_down": "Boca abajo",
+        "revealed": "{rank} de {suit}",
+        "wins_round": "¡{name} gana el montón!",
+        "wins_game": "¡{name} gana la partida!",
+        "draw": "La partida termina en empate.",
+        "suit_clubs": "Tréboles",
+        "suit_diamonds": "Diamantes",
+        "suit_hearts": "Corazones",
+        "suit_spades": "Picas",
+        "server_game_over": "partida terminada",
+        "server_not_seated": "no estás en la partida",
+        "server_not_your_turn": "no es tu turno",
+        "server_bad_move": "jugada incorrecta",
+        "server_no_cards_to_flip": "no quedan cartas",
+        "server_not_enough_cards_for_war": "no hay cartas suficientes para la guerra"
+      }
+    },
+    "fr": {
+      "display_name": "War",
+      "short_description": "Distribuez un jeu standard de 52 cartes entre 2 à 4 joueurs. À chaque manche, chacun retourne une carte ; la valeur la plus élevée remporte toutes les cartes du pli. Une égalité déclenche une bataille : chaque joueur à égalité pose une carte face cachée puis une face visible. La valeur visible la plus élevée remporte le pli. Un joueur qui ne peut pas terminer la bataille est éliminé de cette bataille. Celui qui possède toutes les cartes gagne. Si personne ne peut poursuivre une bataille à égalité, la partie est nulle.",
+      "game_logic_rules": "Distribuez un jeu standard de 52 cartes entre 2 à 4 joueurs. À chaque manche, chacun retourne une carte ; la valeur la plus élevée remporte toutes les cartes du pli. Une égalité déclenche une bataille : chaque joueur à égalité pose une carte face cachée puis une face visible. La valeur visible la plus élevée remporte le pli. Un joueur qui ne peut pas terminer la bataille est éliminé de cette bataille. Celui qui possède toutes les cartes gagne. Si personne ne peut poursuivre une bataille à égalité, la partie est nulle.",
+      "game_ui_rules": "À votre tour, touchez Retourner ma carte. Le jeu révèle chaque carte et annonce qui remporte le pli. Pendant une bataille, chaque joueur à égalité retourne une carte face cachée puis une carte visible. Les compteurs indiquent les cartes restantes. L’action n’est activée que pendant votre tour.",
+      "tutorial_strings": {
+        "War": "Guerre",
+        "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.": "Distribuez un jeu standard de 52 cartes entre 2 à 4 joueurs. À chaque manche, chacun retourne une carte ; la valeur la plus élevée remporte toutes les cartes du pli. Une égalité déclenche une bataille : chaque joueur à égalité pose une carte face cachée puis une face visible. La valeur visible la plus élevée remporte le pli. Un joueur qui ne peut pas terminer la bataille est éliminé de cette bataille. Celui qui possède toutes les cartes gagne. Si personne ne peut poursuivre une bataille à égalité, la partie est nulle."
+      },
+      "client_strings": {
+        "title": "War",
+        "player": "Joueur {n}",
+        "cards_left": "{count} cartes",
+        "round": "Manche {n}",
+        "pile": "Pli : {count}",
+        "flip": "Retourner la carte du dessus",
+        "flip_hint": "Touchez votre paquet en surbrillance pour retourner la carte du dessus.",
+        "waiting": "En attente de {name}…",
+        "war": "BATAILLE ! Chaque joueur à égalité pose une carte cachée puis une visible.",
+        "battle": "La carte la plus forte remporte le pli.",
+        "face_down": "Face cachée",
+        "revealed": "{rank} de {suit}",
+        "wins_round": "{name} remporte le pli !",
+        "wins_game": "{name} gagne la partie !",
+        "draw": "La partie est nulle.",
+        "suit_clubs": "Trèfles",
+        "suit_diamonds": "Carreaux",
+        "suit_hearts": "Cœurs",
+        "suit_spades": "Piques",
+        "server_game_over": "partie terminée",
+        "server_not_seated": "vous ne jouez pas",
+        "server_not_your_turn": "ce n’est pas votre tour",
+        "server_bad_move": "coup invalide",
+        "server_no_cards_to_flip": "aucune carte à retourner",
+        "server_not_enough_cards_for_war": "pas assez de cartes pour la bataille"
+      }
+    },
+    "de": {
+      "display_name": "War",
+      "short_description": "Verteile ein Standarddeck mit 52 Karten an 2–4 Spieler. In jeder Runde deckt jeder eine Karte auf; der höchste Rang gewinnt alle Karten des Stapels. Bei Gleichstand beginnt ein Krieg: Jeder beteiligte Spieler legt eine Karte verdeckt und eine offen ab. Der höchste offene Rang gewinnt den Stapel. Wer den Krieg nicht beenden kann, scheidet aus diesem Stich aus. Wer alle Karten besitzt, gewinnt. Kann bei einem Gleichstand niemand weiterspielen, endet die Partie unentschieden.",
+      "game_logic_rules": "Verteile ein Standarddeck mit 52 Karten an 2–4 Spieler. In jeder Runde deckt jeder eine Karte auf; der höchste Rang gewinnt alle Karten des Stapels. Bei Gleichstand beginnt ein Krieg: Jeder beteiligte Spieler legt eine Karte verdeckt und eine offen ab. Der höchste offene Rang gewinnt den Stapel. Wer den Krieg nicht beenden kann, scheidet aus diesem Stich aus. Wer alle Karten besitzt, gewinnt. Kann bei einem Gleichstand niemand weiterspielen, endet die Partie unentschieden.",
+      "game_ui_rules": "Tippe in deinem Zug auf Karte aufdecken. Das Spiel zeigt jede Karte und meldet, wer den Stapel gewinnt. Im Krieg deckt jeder beteiligte Spieler erst eine Karte verdeckt und dann eine offen auf. Die Zähler zeigen die verbleibenden Karten. Nur während deines Zuges ist die Aktion aktiv.",
+      "tutorial_strings": {
+        "War": "Krieg",
+        "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.": "Verteile ein Standarddeck mit 52 Karten an 2–4 Spieler. In jeder Runde deckt jeder eine Karte auf; der höchste Rang gewinnt alle Karten des Stapels. Bei Gleichstand beginnt ein Krieg: Jeder beteiligte Spieler legt eine Karte verdeckt und eine offen ab. Der höchste offene Rang gewinnt den Stapel. Wer den Krieg nicht beenden kann, scheidet aus diesem Stich aus. Wer alle Karten besitzt, gewinnt. Kann bei einem Gleichstand niemand weiterspielen, endet die Partie unentschieden."
+      },
+      "client_strings": {
+        "title": "War",
+        "player": "Spieler {n}",
+        "cards_left": "{count} Karten",
+        "round": "Runde {n}",
+        "pile": "Stapel: {count}",
+        "flip": "Oberste Karte aufdecken",
+        "flip_hint": "Tippe auf deinen markierten Stapel, um die oberste Karte aufzudecken.",
+        "waiting": "Warte auf {name}…",
+        "war": "KRIEG! Jeder beteiligte Spieler legt eine Karte verdeckt und eine offen.",
+        "battle": "Die höchste Karte gewinnt den Stapel.",
+        "face_down": "Verdeckt",
+        "revealed": "{rank} {suit}",
+        "wins_round": "{name} gewinnt den Stapel!",
+        "wins_game": "{name} gewinnt das Spiel!",
+        "draw": "Das Spiel endet unentschieden.",
+        "suit_clubs": "Kreuz",
+        "suit_diamonds": "Karo",
+        "suit_hearts": "Herz",
+        "suit_spades": "Pik",
+        "server_game_over": "Spiel beendet",
+        "server_not_seated": "nicht am Tisch",
+        "server_not_your_turn": "du bist nicht dran",
+        "server_bad_move": "ungültiger Zug",
+        "server_no_cards_to_flip": "keine Karte zum Aufdecken",
+        "server_not_enough_cards_for_war": "nicht genug Karten für den Krieg"
+      }
+    },
+    "pt": {
+      "display_name": "War",
+      "short_description": "Distribua um baralho padrão de 52 cartas entre 2–4 jogadores. Em cada rodada, todos viram uma carta; o maior valor leva todas as cartas da pilha. Um empate inicia uma guerra: cada jogador empatado coloca uma carta virada para baixo e outra para cima. O maior valor visível leva a pilha. Quem não puder completar a guerra sai daquela disputa. Vence quem ficar com todas as cartas. Se ninguém puder continuar uma guerra empatada, a partida termina empatada.",
+      "game_logic_rules": "Distribua um baralho padrão de 52 cartas entre 2–4 jogadores. Em cada rodada, todos viram uma carta; o maior valor leva todas as cartas da pilha. Um empate inicia uma guerra: cada jogador empatado coloca uma carta virada para baixo e outra para cima. O maior valor visível leva a pilha. Quem não puder completar a guerra sai daquela disputa. Vence quem ficar com todas as cartas. Se ninguém puder continuar uma guerra empatada, a partida termina empatada.",
+      "game_ui_rules": "Na sua vez, toque no seu monte ou em Virar a carta do topo. O jogo revela cada carta e anuncia quem leva a pilha. Durante a guerra, cada jogador empatado vira uma carta para baixo e depois uma para cima. Os contadores mostram quantas cartas restam. A ação só fica ativa na sua vez.",
+      "tutorial_strings": {
+        "War": "Guerra",
+        "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.": "Distribua um baralho padrão de 52 cartas entre 2–4 jogadores. Em cada rodada, todos viram uma carta; o maior valor leva todas as cartas da pilha. Um empate inicia uma guerra: cada jogador empatado coloca uma carta virada para baixo e outra para cima. O maior valor visível leva a pilha. Quem não puder completar a guerra sai daquela disputa. Vence quem ficar com todas as cartas. Se ninguém puder continuar uma guerra empatada, a partida termina empatada."
+      },
+      "client_strings": {
+        "title": "War",
+        "player": "Jogador {n}",
+        "cards_left": "{count} cartas",
+        "round": "Rodada {n}",
+        "pile": "Pilha: {count}",
+        "flip": "Virar a carta do topo",
+        "flip_hint": "Toque no seu monte destacado para virar a carta do topo.",
+        "waiting": "Aguardando {name}…",
+        "war": "GUERRA! Cada jogador empatado coloca uma carta para baixo e outra para cima.",
+        "battle": "A carta mais alta leva a pilha.",
+        "face_down": "Virada para baixo",
+        "revealed": "{rank} de {suit}",
+        "wins_round": "{name} leva a pilha!",
+        "wins_game": "{name} venceu a partida!",
+        "draw": "A partida terminou empatada.",
+        "suit_clubs": "Paus",
+        "suit_diamonds": "Ouros",
+        "suit_hearts": "Copas",
+        "suit_spades": "Espadas",
+        "server_game_over": "partida encerrada",
+        "server_not_seated": "não está na partida",
+        "server_not_your_turn": "não é sua vez",
+        "server_bad_move": "jogada inválida",
+        "server_no_cards_to_flip": "não há cartas para virar",
+        "server_not_enough_cards_for_war": "cartas insuficientes para a guerra"
+      }
+    },
+    "zh": {
+      "display_name": "War",
+      "short_description": "将一副52张标准扑克牌平均分给2至4名玩家。每轮每人翻开一张牌，点数最高者收走战斗牌堆。平局时进入战争：每位平局玩家先扣下一张，再翻开一张；翻开的牌点数最高者收走牌堆。无法完成战争的玩家退出本次争夺。集齐所有牌者获胜；若平局时无人能继续战争，则本局平局结束。",
+      "game_logic_rules": "将一副52张标准扑克牌平均分给2至4名玩家。每轮每人翻开一张牌，点数最高者收走战斗牌堆。平局时进入战争：每位平局玩家先扣下一张，再翻开一张；翻开的牌点数最高者收走牌堆。无法完成战争的玩家退出本次争夺。集齐所有牌者获胜；若平局时无人能继续战争，则本局平局结束。",
+      "game_ui_rules": "轮到你时，点击“翻开你的牌”。游戏会依次展示牌面并宣布谁赢得牌堆。战争中，每位平局玩家先扣一张，再翻开一张。计数显示各牌堆剩余牌数。只有轮到你时操作按钮才会启用。",
+      "tutorial_strings": {
+        "War": "战争",
+        "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.": "将一副52张标准扑克牌平均分给2至4名玩家。每轮每人翻开一张牌，点数最高者收走战斗牌堆。平局时进入战争：每位平局玩家先扣下一张，再翻开一张；翻开的牌点数最高者收走牌堆。无法完成战争的玩家退出本次争夺。集齐所有牌者获胜；若平局时无人能继续战争，则本局平局结束。"
+      },
+      "client_strings": {
+        "title": "War",
+        "player": "玩家{n}",
+        "cards_left": "{count}张牌",
+        "round": "第{n}轮",
+        "pile": "战斗堆：{count}",
+        "flip": "翻开最上面的牌",
+        "flip_hint": "点击高亮的牌堆翻开最上面的牌。",
+        "waiting": "等待{name}翻牌…",
+        "war": "战争！每位平局玩家先扣一张，再翻开一张。",
+        "battle": "最高牌赢得牌堆。",
+        "face_down": "扣下",
+        "revealed": "{suit}{rank}",
+        "wins_round": "{name}赢得牌堆！",
+        "wins_game": "{name}赢得比赛！",
+        "draw": "本局平局。",
+        "suit_clubs": "梅花",
+        "suit_diamonds": "方块",
+        "suit_hearts": "红桃",
+        "suit_spades": "黑桃",
+        "server_game_over": "游戏结束",
+        "server_not_seated": "未入座",
+        "server_not_your_turn": "还没轮到你",
+        "server_bad_move": "操作无效",
+        "server_no_cards_to_flip": "没有牌可翻",
+        "server_not_enough_cards_for_war": "战争牌数不足"
+      }
+    },
+    "hi": {
+      "display_name": "War",
+      "short_description": "52 पत्तों की मानक गड्डी 2–4 खिलाड़ियों में बाँटें। हर दौर में सभी एक पत्ता खोलते हैं; सबसे ऊँचा रैंक पूरा ढेर लेता है। बराबरी पर युद्ध होता है: बराबरी वाले हर खिलाड़ी एक पत्ता नीचे और एक ऊपर रखता है। सबसे ऊँचा खुला रैंक ढेर लेता है। जो युद्ध पूरा न कर सके, वह उस मुकाबले से बाहर होता है। सभी पत्ते पाने वाला जीतता है। बराबरी के युद्ध में कोई आगे न खेल सके तो खेल बराबरी पर समाप्त होता है।",
+      "game_logic_rules": "52 पत्तों की मानक गड्डी 2–4 खिलाड़ियों में बाँटें। हर दौर में सभी एक पत्ता खोलते हैं; सबसे ऊँचा रैंक पूरा ढेर लेता है। बराबरी पर युद्ध होता है: बराबरी वाले हर खिलाड़ी एक पत्ता नीचे और एक ऊपर रखता है। सबसे ऊँचा खुला रैंक ढेर लेता है। जो युद्ध पूरा न कर सके, वह उस मुकाबले से बाहर होता है। सभी पत्ते पाने वाला जीतता है। बराबरी के युद्ध में कोई आगे न खेल सके तो खेल बराबरी पर समाप्त होता है।",
+      "game_ui_rules": "आपकी बारी पर अपने पत्तों के ढेर या ऊपर का पत्ता खोलें बटन को दबाएँ। खेल हर पत्ता दिखाता है और बताता है कि ढेर किसे मिला। युद्ध में बराबरी वाले खिलाड़ी पहले एक पत्ता नीचे और फिर एक ऊपर करते हैं। गिनती शेष पत्ते दिखाती है। बटन केवल आपकी बारी में सक्रिय है।",
+      "tutorial_strings": {
+        "War": "युद्ध",
+        "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.": "52 पत्तों की मानक गड्डी 2–4 खिलाड़ियों में बाँटें। हर दौर में सभी एक पत्ता खोलते हैं; सबसे ऊँचा रैंक पूरा ढेर लेता है। बराबरी पर युद्ध होता है: बराबरी वाले हर खिलाड़ी एक पत्ता नीचे और एक ऊपर रखता है। सबसे ऊँचा खुला रैंक ढेर लेता है। जो युद्ध पूरा न कर सके, वह उस मुकाबले से बाहर होता है। सभी पत्ते पाने वाला जीतता है। बराबरी के युद्ध में कोई आगे न खेल सके तो खेल बराबरी पर समाप्त होता है।"
+      },
+      "client_strings": {
+        "title": "War",
+        "player": "खिलाड़ी {n}",
+        "cards_left": "{count} पत्ते",
+        "round": "दौर {n}",
+        "pile": "ढेर: {count}",
+        "flip": "ऊपर का पत्ता खोलें",
+        "flip_hint": "ऊपर का पत्ता पलटने के लिए हाइलाइट किए गए ढेर पर टैप करें।",
+        "waiting": "{name} के पलटने की प्रतीक्षा…",
+        "war": "युद्ध! बराबरी वाले हर खिलाड़ी एक पत्ता नीचे और एक ऊपर रखता है।",
+        "battle": "सबसे ऊँचा पत्ता ढेर लेता है।",
+        "face_down": "उल्टा",
+        "revealed": "{suit} का {rank}",
+        "wins_round": "{name} ढेर जीतते हैं!",
+        "wins_game": "{name} खेल जीत गए!",
+        "draw": "खेल बराबरी पर है।",
+        "suit_clubs": "चिड़ी",
+        "suit_diamonds": "ईंट",
+        "suit_hearts": "पान",
+        "suit_spades": "हुकुम",
+        "server_game_over": "खेल समाप्त",
+        "server_not_seated": "खेल में शामिल नहीं",
+        "server_not_your_turn": "आपकी बारी नहीं",
+        "server_bad_move": "गलत चाल",
+        "server_no_cards_to_flip": "खोलने के लिए पत्ते नहीं",
+        "server_not_enough_cards_for_war": "युद्ध के लिए पर्याप्त पत्ते नहीं"
+      }
+    },
+    "ar": {
+      "display_name": "War",
+      "short_description": "وزّع مجموعة قياسية من 52 بطاقة على 2–4 لاعبين. في كل جولة يكشف الجميع بطاقة؛ أعلى رتبة تأخذ كومة المعركة كلها. عند التعادل تبدأ حرب: يضع كل لاعب متعادل بطاقة مقلوبة ثم بطاقة مكشوفة. أعلى رتبة مكشوفة تأخذ الكومة. من لا يستطيع إكمال الحرب يخرج من تلك المواجهة. يفوز من يجمع كل البطاقات. إذا لم يستطع أحد مواصلة حرب متعادلة، تنتهي المباراة بالتعادل.",
+      "game_logic_rules": "وزّع مجموعة قياسية من 52 بطاقة على 2–4 لاعبين. في كل جولة يكشف الجميع بطاقة؛ أعلى رتبة تأخذ كومة المعركة كلها. عند التعادل تبدأ حرب: يضع كل لاعب متعادل بطاقة مقلوبة ثم بطاقة مكشوفة. أعلى رتبة مكشوفة تأخذ الكومة. من لا يستطيع إكمال الحرب يخرج من تلك المواجهة. يفوز من يجمع كل البطاقات. إذا لم يستطع أحد مواصلة حرب متعادلة، تنتهي المباراة بالتعادل.",
+      "game_ui_rules": "عندما يأتي دورك، اضغط على مجموعتك أو زر اكشف البطاقة العليا. تكشف اللعبة كل بطاقة وتعلن من يأخذ الكومة. أثناء الحرب، يكشف كل لاعب متعادل بطاقة مقلوبة ثم بطاقة مكشوفة. تُظهر العدادات عدد البطاقات المتبقية. لا يتفعّل الإجراء إلا في دورك.",
+      "tutorial_strings": {
+        "War": "حرب",
+        "Deal a standard 52-card deck evenly to 2–4 players. Each round, players flip one card; the highest rank takes every card in the battle pile. A tie starts a war: each tied player puts one card face down and one face up. The highest face-up rank takes the pile. Players who cannot complete a war are out of that contest. The player with all the cards wins. If nobody can continue a tied war, the match is a draw.": "وزّع مجموعة قياسية من 52 بطاقة على 2–4 لاعبين. في كل جولة يكشف الجميع بطاقة؛ أعلى رتبة تأخذ كومة المعركة كلها. عند التعادل تبدأ حرب: يضع كل لاعب متعادل بطاقة مقلوبة ثم بطاقة مكشوفة. أعلى رتبة مكشوفة تأخذ الكومة. من لا يستطيع إكمال الحرب يخرج من تلك المواجهة. يفوز من يجمع كل البطاقات. إذا لم يستطع أحد مواصلة حرب متعادلة، تنتهي المباراة بالتعادل."
+      },
+      "client_strings": {
+        "title": "War",
+        "player": "اللاعب {n}",
+        "cards_left": "{count} بطاقة",
+        "round": "الجولة {n}",
+        "pile": "كومة المعركة: {count}",
+        "flip": "اكشف البطاقة العليا",
+        "flip_hint": "اضغط على مجموعتك المميزة لكشف البطاقة العليا.",
+        "waiting": "بانتظار {name} ليكشف…",
+        "war": "حرب! يضع كل لاعب متعادل بطاقة مقلوبة وأخرى مكشوفة.",
+        "battle": "أعلى بطاقة تأخذ الكومة.",
+        "face_down": "مقلوبة",
+        "revealed": "{rank} من {suit}",
+        "wins_round": "فاز {name} بالكومة!",
+        "wins_game": "فاز {name} بالمباراة!",
+        "draw": "انتهت المباراة بالتعادل.",
+        "suit_clubs": "النوادي",
+        "suit_diamonds": "الماس",
+        "suit_hearts": "القلوب",
+        "suit_spades": "البستوني",
+        "server_game_over": "انتهت اللعبة",
+        "server_not_seated": "لست جالسًا",
+        "server_not_your_turn": "ليس دورك",
+        "server_bad_move": "حركة غير صالحة",
+        "server_no_cards_to_flip": "لا توجد بطاقات لكشفها",
+        "server_not_enough_cards_for_war": "لا توجد بطاقات كافية للحرب"
+      }
+    }
+  }
+}

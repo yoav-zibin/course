@@ -1,0 +1,1894 @@
+{
+  "all_state_public": false,
+  "name": "Hearts (Declarative)",
+  "description": "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.",
+  "allowed_player_counts": [
+    4
+  ],
+  "allows_leave_mid_match": false,
+  "allows_join_mid_match": false,
+  "server_code": "const game = {\n newMatch: function(ctx) {\n  const R=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];\n  const S=['C','D','S','H'];\n  let deck=[]; for (const s of S) for (const r of R) deck.push(r+s);\n  for (let i=deck.length-1;i>0;i--){ const j=Math.floor(ctx.random()*(i+1)); const t=deck[i]; deck[i]=deck[j]; deck[j]=t; }\n  const hands=[[],[],[],[]];\n  for (let i=0;i<52;i++) hands[i%4].push(deck[i]);\n  const ord={C:0,D:1,S:2,H:3};\n  function rv(c){ const r=c.slice(0,-1); if(r==='J')return 11; if(r==='Q')return 12; if(r==='K')return 13; if(r==='A')return 14; return parseInt(r,10); }\n  for (let i=0;i<4;i++) hands[i].sort((a,b)=> ord[a.slice(-1)]-ord[b.slice(-1)] || rv(a)-rv(b));\n  let leader=0; for (let i=0;i<4;i++) if (hands[i].indexOf('2C')>=0) leader=i;\n  const ids=ctx.players.map(p=>p.id);\n  const state={hands:hands,trick:[],trickNum:0,leader:leader,heartsBroken:false,taken:[0,0,0,0],phase:'play',winner:null,shooter:-1};\n  return {state:state, turn:[ids[leader]]};\n },\n applyMove: function(state, playerId, move, ctx) {\n  if (state.phase==='over') throw new InvalidMove('game over');\n  const n=4;\n  const idx=ctx.players.findIndex(p=>p.id===playerId);\n  if (idx<0) throw new InvalidMove('unknown player');\n  const cur=(state.leader+state.trick.length)%n;\n  if (idx!==cur) throw new InvalidMove('not your turn');\n  const card=move&&move.card;\n  if (typeof card!=='string') throw new InvalidMove('pick a card');\n  const hi=state.hands[idx].indexOf(card);\n  if (hi<0) throw new InvalidMove('card not in hand');\n  const legal=legalFor(state.hands[idx], state);\n  if (legal.indexOf(card)<0) throw new InvalidMove('illegal play');\n  state.hands[idx].splice(hi,1);\n  state.trick.push({player:idx,card:card});\n  if (card.slice(-1)==='H') state.heartsBroken=true;\n  const ids=ctx.players.map(p=>p.id);\n  if (state.trick.length<4) return {state:state, turn:[ids[(cur+1)%n]]};\n  const led=state.trick[0].card.slice(-1);\n  let best=state.trick[0], br=-1;\n  for (const t of state.trick){ if (t.card.slice(-1)===led){ const v=rv(t.card); if(v>br){br=v;best=t;} } }\n  const w=best.player;\n  let pts=0;\n  for (const t of state.trick){ if (t.card.slice(-1)==='H') pts+=1; if (t.card==='QS') pts+=13; }\n  state.taken[w]+=pts;\n  if (state.trickNum>=12){\n   let shooter=-1;\n   for (let i=0;i<4;i++) if (state.taken[i]===26) shooter=i;\n   let fin=state.taken.slice();\n   if (shooter>=0){ fin=[26,26,26,26]; fin[shooter]=0; }\n   let win=0; for (let i=1;i<4;i++) if (fin[i]<fin[win]) win=i;\n   state.taken=fin; state.trick=[]; state.phase='over'; state.winner=win; state.shooter=shooter;\n   return {state:state, turn:null, payouts:payOut(ctx, fin)};\n  }\n  state.trick=[]; state.trickNum+=1; state.leader=w;\n  return {state:state, turn:[ids[w]]};\n },\n computerMove: function(state, playerId, ctx) {\n  const idx=ctx.players.findIndex(p=>p.id===playerId);\n  const hand=state.hands[idx];\n  const legal=legalFor(hand, state);\n  return {card: aiPick(legal, state)};\n },\n randomMove: function(state, playerId, ctx) {\n  const idx=ctx.players.findIndex(p=>p.id===playerId);\n  const legal=legalFor(state.hands[idx], state);\n  return {card: legal[Math.floor(ctx.random()*legal.length)]};\n },\n viewFor: function(state, playerId, ctx) {\n  const idx=playerId===null?-1:ctx.players.findIndex(p=>p.id===playerId);\n  const counts=state.hands.map(h=>h.length);\n  const cur=state.phase==='over'?-1:(state.leader+state.trick.length)%4;\n  const base={phase:state.phase,trick:state.trick.map(t=>({player:t.player,card:t.card})),trickNum:state.trickNum,leader:state.leader,heartsBroken:state.heartsBroken,taken:state.taken.slice(),counts:counts,cur:cur,winner:state.winner,shooter:state.shooter};\n  if (idx<0){ base.hand=[]; base.legal=[]; return base; }\n  base.hand=state.hands[idx].slice();\n  base.legal=legalFor(state.hands[idx], state);\n  return base;\n }\n};\nfunction rv(c){ const r=c.slice(0,-1); if(r==='J')return 11; if(r==='Q')return 12; if(r==='K')return 13; if(r==='A')return 14; return parseInt(r,10); }\nfunction legalFor(hand, st){\n if (st.trick.length===0){\n  if (st.trickNum===0) return hand.filter(c=>c==='2C');\n  const nonH=hand.filter(c=>c.slice(-1)!=='H');\n  if (!st.heartsBroken && nonH.length>0) return nonH;\n  return hand.slice();\n }\n const led=st.trick[0].card.slice(-1);\n const fol=hand.filter(c=>c.slice(-1)===led);\n if (fol.length>0) return fol;\n if (st.trickNum===0){ const safe=hand.filter(c=>!(c.slice(-1)==='H'||c==='QS')); if (safe.length>0) return safe; }\n return hand.slice();\n}\nfunction aiPick(legal, st){\n const asc=legal.slice().sort((a,b)=>rv(a)-rv(b));\n const desc=asc.slice().reverse();\n if (st.trick.length===0) return asc[0];\n const led=st.trick[0].card.slice(-1);\n const isFol=legal.every(c=>c.slice(-1)===led);\n if (isFol){\n  let win=0; for (const t of st.trick) if (t.card.slice(-1)===led) win=Math.max(win, rv(t.card));\n  const lose=asc.filter(c=>rv(c)<win);\n  if (lose.length>0) return lose[lose.length-1];\n  return desc[0];\n }\n if (legal.indexOf('QS')>=0) return 'QS';\n const hs=legal.filter(c=>c.slice(-1)==='H').sort((a,b)=>rv(b)-rv(a));\n if (hs.length>0) return hs[0];\n if (legal.indexOf('AS')>=0) return 'AS';\n if (legal.indexOf('KS')>=0) return 'KS';\n return desc[0];\n}\nfunction payOut(ctx, fin){\n const pot=ctx.pot||0;\n const humans=ctx.players.filter(p=>p.kind!=='computer');\n const out={};\n if (humans.length===0) return out;\n if (pot<=0){ for (const h of humans) out[h.id]=0; return out; }\n let best=Infinity; for (const h of humans){ const i=ctx.players.findIndex(p=>p.id===h.id); if (fin[i]<best) best=fin[i]; }\n let gBest=Infinity; for (let i=0;i<4;i++) if (fin[i]<gBest) gBest=fin[i];\n let winners=humans.filter(h=>fin[ctx.players.findIndex(p=>p.id===h.id)]===best && best===gBest);\n if (winners.length===0) winners=humans.slice();\n const share=Math.floor(pot/winners.length);\n let rem=pot;\n for (const h of humans) out[h.id]=0;\n for (let k=0;k<winners.length;k++){ const amt=(k===winners.length-1)?rem:share; out[winners[k].id]=amt; rem-=amt; }\n return out;\n}\n",
+  "rules": "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.",
+  "ui_instructions": "Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.",
+  "tutorial": {
+    "text": "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>Hearts (Declarative)</h1><p>Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.</p><p>Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.</p></main>"
+  },
+  "images": [
+    {
+      "caption": "Hearts (Declarative) cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#0b5136\"/><g transform=\"translate(260 230) rotate(-16) scale(1)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(0 0) scale(0.9)\"/></g><g transform=\"translate(400 219) rotate(0) scale(1)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 0) scale(0.9)\"/></g><g transform=\"translate(540 230) rotate(16) scale(1)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 -42) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 0) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 42) scale(0.48333333333333334)\"/></g></svg>"
+    },
+    {
+      "caption": "Initial board",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+    },
+    {
+      "caption": "Playable choices",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#56c9b4\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#ffbf66\" stroke-width=\"26\"/></svg>"
+    },
+    {
+      "caption": "Game in progress",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#ffbf66\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#17324f\" stroke-width=\"26\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "hands": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "heartsBroken": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "leader": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "phase": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "shooter": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "taken": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "trick": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "trickNum": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "winner": {
+          "type": [
+            "null",
+            "number"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "move_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "card": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "view_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "counts": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "cur": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "hand": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "heartsBroken": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "leader": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "legal": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "phase": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "shooter": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "taken": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "trick": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "trickNum": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "winner": {
+          "type": [
+            "null",
+            "number"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "cases": [
+      {
+        "name": "Opening move",
+        "description": "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u3",
+              "kind": "human",
+              "display_name": "Casey",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u4",
+              "kind": "human",
+              "display_name": "Drew",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "hands": [
+            [
+              "3C",
+              "4C",
+              "6C",
+              "7C",
+              "AC",
+              "QD",
+              "4S",
+              "8S",
+              "9S",
+              "10S",
+              "2H",
+              "5H",
+              "JH"
+            ],
+            [
+              "5C",
+              "10C",
+              "2D",
+              "6D",
+              "9D",
+              "10D",
+              "KD",
+              "6S",
+              "JS",
+              "QS",
+              "4H",
+              "7H",
+              "9H"
+            ],
+            [
+              "2C",
+              "JC",
+              "3D",
+              "8D",
+              "JD",
+              "AD",
+              "3S",
+              "5S",
+              "7S",
+              "KS",
+              "6H",
+              "8H",
+              "10H"
+            ],
+            [
+              "8C",
+              "9C",
+              "QC",
+              "KC",
+              "4D",
+              "5D",
+              "7D",
+              "2S",
+              "AS",
+              "3H",
+              "QH",
+              "KH",
+              "AH"
+            ]
+          ],
+          "trick": [],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "phase": "play",
+          "winner": null,
+          "shooter": -1
+        },
+        "view_of_mover": {
+          "phase": "play",
+          "trick": [],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "counts": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "cur": 2,
+          "winner": null,
+          "shooter": -1,
+          "hand": [
+            "2C",
+            "JC",
+            "3D",
+            "8D",
+            "JD",
+            "AD",
+            "3S",
+            "5S",
+            "7S",
+            "KS",
+            "6H",
+            "8H",
+            "10H"
+          ],
+          "legal": [
+            "2C"
+          ]
+        },
+        "view_of_other": {
+          "phase": "play",
+          "trick": [],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "counts": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "cur": 2,
+          "winner": null,
+          "shooter": -1,
+          "hand": [],
+          "legal": []
+        },
+        "player_id": "u3",
+        "other_player_id": null,
+        "move": {
+          "card": "2C"
+        },
+        "expected_state": {
+          "hands": [
+            [
+              "3C",
+              "4C",
+              "6C",
+              "7C",
+              "AC",
+              "QD",
+              "4S",
+              "8S",
+              "9S",
+              "10S",
+              "2H",
+              "5H",
+              "JH"
+            ],
+            [
+              "5C",
+              "10C",
+              "2D",
+              "6D",
+              "9D",
+              "10D",
+              "KD",
+              "6S",
+              "JS",
+              "QS",
+              "4H",
+              "7H",
+              "9H"
+            ],
+            [
+              "JC",
+              "3D",
+              "8D",
+              "JD",
+              "AD",
+              "3S",
+              "5S",
+              "7S",
+              "KS",
+              "6H",
+              "8H",
+              "10H"
+            ],
+            [
+              "8C",
+              "9C",
+              "QC",
+              "KC",
+              "4D",
+              "5D",
+              "7D",
+              "2S",
+              "AS",
+              "3H",
+              "QH",
+              "KH",
+              "AH"
+            ]
+          ],
+          "trick": [
+            {
+              "player": 2,
+              "card": "2C"
+            }
+          ],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "phase": "play",
+          "winner": null,
+          "shooter": -1
+        },
+        "expected_turn": [
+          "u4"
+        ],
+        "expected_view_of_mover": {
+          "phase": "play",
+          "trick": [
+            {
+              "player": 2,
+              "card": "2C"
+            }
+          ],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "counts": [
+            13,
+            13,
+            12,
+            13
+          ],
+          "cur": 3,
+          "winner": null,
+          "shooter": -1,
+          "hand": [
+            "JC",
+            "3D",
+            "8D",
+            "JD",
+            "AD",
+            "3S",
+            "5S",
+            "7S",
+            "KS",
+            "6H",
+            "8H",
+            "10H"
+          ],
+          "legal": [
+            "JC"
+          ]
+        },
+        "expected_view_of_other": {
+          "phase": "play",
+          "trick": [
+            {
+              "player": 2,
+              "card": "2C"
+            }
+          ],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "counts": [
+            13,
+            13,
+            12,
+            13
+          ],
+          "cur": 3,
+          "winner": null,
+          "shooter": -1,
+          "hand": [],
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Continuing match",
+        "description": "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u3",
+              "kind": "human",
+              "display_name": "Casey",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u4",
+              "kind": "human",
+              "display_name": "Drew",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 1,
+          "seed": 12
+        },
+        "state": {
+          "hands": [
+            [
+              "3C",
+              "4C",
+              "6C",
+              "7C",
+              "AC",
+              "QD",
+              "4S",
+              "8S",
+              "9S",
+              "10S",
+              "2H",
+              "5H",
+              "JH"
+            ],
+            [
+              "5C",
+              "10C",
+              "2D",
+              "6D",
+              "9D",
+              "10D",
+              "KD",
+              "6S",
+              "JS",
+              "QS",
+              "4H",
+              "7H",
+              "9H"
+            ],
+            [
+              "JC",
+              "3D",
+              "8D",
+              "JD",
+              "AD",
+              "3S",
+              "5S",
+              "7S",
+              "KS",
+              "6H",
+              "8H",
+              "10H"
+            ],
+            [
+              "8C",
+              "9C",
+              "QC",
+              "KC",
+              "4D",
+              "5D",
+              "7D",
+              "2S",
+              "AS",
+              "3H",
+              "QH",
+              "KH",
+              "AH"
+            ]
+          ],
+          "trick": [
+            {
+              "player": 2,
+              "card": "2C"
+            }
+          ],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "phase": "play",
+          "winner": null,
+          "shooter": -1
+        },
+        "view_of_mover": {
+          "phase": "play",
+          "trick": [
+            {
+              "player": 2,
+              "card": "2C"
+            }
+          ],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "counts": [
+            13,
+            13,
+            12,
+            13
+          ],
+          "cur": 3,
+          "winner": null,
+          "shooter": -1,
+          "hand": [
+            "8C",
+            "9C",
+            "QC",
+            "KC",
+            "4D",
+            "5D",
+            "7D",
+            "2S",
+            "AS",
+            "3H",
+            "QH",
+            "KH",
+            "AH"
+          ],
+          "legal": [
+            "8C",
+            "9C",
+            "QC",
+            "KC"
+          ]
+        },
+        "view_of_other": {
+          "phase": "play",
+          "trick": [
+            {
+              "player": 2,
+              "card": "2C"
+            }
+          ],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "counts": [
+            13,
+            13,
+            12,
+            13
+          ],
+          "cur": 3,
+          "winner": null,
+          "shooter": -1,
+          "hand": [],
+          "legal": []
+        },
+        "player_id": "u4",
+        "other_player_id": null,
+        "move": {
+          "card": "KC"
+        },
+        "expected_state": {
+          "hands": [
+            [
+              "3C",
+              "4C",
+              "6C",
+              "7C",
+              "AC",
+              "QD",
+              "4S",
+              "8S",
+              "9S",
+              "10S",
+              "2H",
+              "5H",
+              "JH"
+            ],
+            [
+              "5C",
+              "10C",
+              "2D",
+              "6D",
+              "9D",
+              "10D",
+              "KD",
+              "6S",
+              "JS",
+              "QS",
+              "4H",
+              "7H",
+              "9H"
+            ],
+            [
+              "JC",
+              "3D",
+              "8D",
+              "JD",
+              "AD",
+              "3S",
+              "5S",
+              "7S",
+              "KS",
+              "6H",
+              "8H",
+              "10H"
+            ],
+            [
+              "8C",
+              "9C",
+              "QC",
+              "4D",
+              "5D",
+              "7D",
+              "2S",
+              "AS",
+              "3H",
+              "QH",
+              "KH",
+              "AH"
+            ]
+          ],
+          "trick": [
+            {
+              "player": 2,
+              "card": "2C"
+            },
+            {
+              "player": 3,
+              "card": "KC"
+            }
+          ],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "phase": "play",
+          "winner": null,
+          "shooter": -1
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "phase": "play",
+          "trick": [
+            {
+              "player": 2,
+              "card": "2C"
+            },
+            {
+              "player": 3,
+              "card": "KC"
+            }
+          ],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "counts": [
+            13,
+            13,
+            12,
+            12
+          ],
+          "cur": 0,
+          "winner": null,
+          "shooter": -1,
+          "hand": [
+            "8C",
+            "9C",
+            "QC",
+            "4D",
+            "5D",
+            "7D",
+            "2S",
+            "AS",
+            "3H",
+            "QH",
+            "KH",
+            "AH"
+          ],
+          "legal": [
+            "8C",
+            "9C",
+            "QC"
+          ]
+        },
+        "expected_view_of_other": {
+          "phase": "play",
+          "trick": [
+            {
+              "player": 2,
+              "card": "2C"
+            },
+            {
+              "player": 3,
+              "card": "KC"
+            }
+          ],
+          "trickNum": 0,
+          "leader": 2,
+          "heartsBroken": false,
+          "taken": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "counts": [
+            13,
+            13,
+            12,
+            12
+          ],
+          "cur": 0,
+          "winner": null,
+          "shooter": -1,
+          "hand": [],
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Finishing move",
+        "description": "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u3",
+              "kind": "human",
+              "display_name": "Casey",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u4",
+              "kind": "human",
+              "display_name": "Drew",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 51,
+          "seed": 62
+        },
+        "state": {
+          "hands": [
+            [],
+            [],
+            [
+              "5S"
+            ],
+            []
+          ],
+          "trick": [
+            {
+              "player": 3,
+              "card": "KH"
+            },
+            {
+              "player": 0,
+              "card": "4S"
+            },
+            {
+              "player": 1,
+              "card": "6D"
+            }
+          ],
+          "trickNum": 12,
+          "leader": 3,
+          "heartsBroken": true,
+          "taken": [
+            0,
+            5,
+            1,
+            19
+          ],
+          "phase": "play",
+          "winner": null,
+          "shooter": -1
+        },
+        "view_of_mover": {
+          "phase": "play",
+          "trick": [
+            {
+              "player": 3,
+              "card": "KH"
+            },
+            {
+              "player": 0,
+              "card": "4S"
+            },
+            {
+              "player": 1,
+              "card": "6D"
+            }
+          ],
+          "trickNum": 12,
+          "leader": 3,
+          "heartsBroken": true,
+          "taken": [
+            0,
+            5,
+            1,
+            19
+          ],
+          "counts": [
+            0,
+            0,
+            1,
+            0
+          ],
+          "cur": 2,
+          "winner": null,
+          "shooter": -1,
+          "hand": [
+            "5S"
+          ],
+          "legal": [
+            "5S"
+          ]
+        },
+        "view_of_other": {
+          "phase": "play",
+          "trick": [
+            {
+              "player": 3,
+              "card": "KH"
+            },
+            {
+              "player": 0,
+              "card": "4S"
+            },
+            {
+              "player": 1,
+              "card": "6D"
+            }
+          ],
+          "trickNum": 12,
+          "leader": 3,
+          "heartsBroken": true,
+          "taken": [
+            0,
+            5,
+            1,
+            19
+          ],
+          "counts": [
+            0,
+            0,
+            1,
+            0
+          ],
+          "cur": 2,
+          "winner": null,
+          "shooter": -1,
+          "hand": [],
+          "legal": []
+        },
+        "player_id": "u3",
+        "other_player_id": null,
+        "move": {
+          "card": "5S"
+        },
+        "expected_state": {
+          "hands": [
+            [],
+            [],
+            [],
+            []
+          ],
+          "trick": [],
+          "trickNum": 12,
+          "leader": 3,
+          "heartsBroken": true,
+          "taken": [
+            0,
+            5,
+            1,
+            20
+          ],
+          "phase": "over",
+          "winner": 0,
+          "shooter": -1
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "phase": "over",
+          "trick": [],
+          "trickNum": 12,
+          "leader": 3,
+          "heartsBroken": true,
+          "taken": [
+            0,
+            5,
+            1,
+            20
+          ],
+          "counts": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cur": -1,
+          "winner": 0,
+          "shooter": -1,
+          "hand": [],
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "phase": "over",
+          "trick": [],
+          "trickNum": 12,
+          "leader": 3,
+          "heartsBroken": true,
+          "taken": [
+            0,
+            5,
+            1,
+            20
+          ],
+          "counts": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cur": -1,
+          "winner": 0,
+          "shooter": -1,
+          "hand": [],
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "u1": 0,
+          "u2": 0,
+          "u3": 0,
+          "u4": 0
+        }
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Corazones (Declarativo)",
+      "short_description": "Sigue el palo inicial siempre que puedas. Cada corazón vale un punto y la reina de picas trece. Tras trece bazas, gana la puntuación menor.",
+      "game_logic_rules": "Sigue el palo inicial siempre que puedas. Cada corazón vale un punto y la reina de picas trece. Tras trece bazas, gana la puntuación menor.",
+      "game_ui_rules": "Toca una carta legal resaltada en tu mano. Se muestran la baza, las puntuaciones y si ya se han roto corazones.",
+      "tutorial_strings": {
+        "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.": "Sigue el palo inicial siempre que puedas. Cada corazón vale un punto y la reina de picas trece. Tras trece bazas, gana la puntuación menor.",
+        "Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.": "Toca una carta legal resaltada en tu mano. Se muestran la baza, las puntuaciones y si ya se han roto corazones.",
+        "Hearts (Declarative)": "Corazones (Declarativo)"
+      },
+      "client_strings": {
+        "text_0": "Declarativo",
+        "text_1": "Jugador {n}",
+        "text_2": "Tu turno · {name}",
+        "text_3": "Turno de {name}",
+        "text_4": "Fin de la partida",
+        "text_5": "Ganador: {name}",
+        "text_6": "Tu flota",
+        "text_7": "Aguas enemigas",
+        "text_8": "Colocar flota e iniciar batalla",
+        "text_9": "Coloca una flota válida con agua libre entre barcos.",
+        "text_10": "Continúa la captura con la ficha resaltada.",
+        "text_11": "Debes capturar.",
+        "text_12": "Mueve en diagonal; las damas se mueven en ambas direcciones.",
+        "text_13": "reina",
+        "text_14": "torre",
+        "text_15": "alfil",
+        "text_16": "caballo",
+        "text_17": "Promocionar en {square} a {piece}",
+        "text_18": "Eliminar este ejército",
+        "text_19": "Pasar (sin jugada legal)",
+        "text_20": "Rendirse",
+        "text_21": "Mover peón",
+        "text_22": "Colocar muro",
+        "text_23": "Muros restantes · {counts}",
+        "text_24": "Carta superior {card} · palo {suit} · {n} cartas por robar",
+        "text_25": "Jugar {card} como {suit}",
+        "text_26": "Jugar {card}",
+        "text_27": "Robar carta (quedan {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Robar cartas",
+        "text_30": "Pasar",
+        "text_31": "{name} · grupos {ranks}",
+        "text_32": "Recoger baza",
+        "text_33": "Tu personaje: {name}",
+        "text_34": "Tu personaje es privado",
+        "text_35": "Preguntar: {question}",
+        "text_36": "Sí",
+        "text_37": "No",
+        "text_38": "{name}: adivinó {character} · {result}",
+        "text_39": "correcto",
+        "text_40": "incorrecto",
+        "text_41": "¿Lleva gafas?",
+        "text_42": "¿Lleva sombrero?",
+        "text_43": "¿Tiene vello facial?",
+        "text_44": "¿Se le ven las orejas?",
+        "text_45": "¿Tiene pelo rubio?",
+        "text_46": "¿Tiene pelo castaño?",
+        "text_47": "¿Tiene pelo negro?",
+        "text_48": "¿Tiene pelo rojo?",
+        "text_49": "¿Tiene pelo gris?",
+        "text_50": "¿Tiene pelo largo?",
+        "text_51": "¿Tiene pelo corto?",
+        "text_52": "¿Tiene ojos azules?",
+        "text_53": "¿Tiene ojos marrones?",
+        "text_54": "¿Tiene ojos verdes?",
+        "text_55": "Seleccionar pieza en fila {r}, columna {c}",
+        "text_56": "Mover a fila {r}, columna {c}",
+        "server_game_over": "partida terminada",
+        "server_unknown_player": "jugador desconocido",
+        "server_not_your_turn": "no es tu turno",
+        "server_pick_a_card": "elige una carta",
+        "server_card_not_in_hand": "la carta no está en tu mano",
+        "server_illegal_play": "jugada no válida",
+        "title": "Corazones (Declarativo)"
+      }
+    },
+    "fr": {
+      "display_name": "Cœurs (Déclaratif)",
+      "short_description": "Suivez la couleur entamée si possible. Chaque cœur vaut un point et la dame de pique treize. Après treize plis, le plus petit score gagne.",
+      "game_logic_rules": "Suivez la couleur entamée si possible. Chaque cœur vaut un point et la dame de pique treize. Après treize plis, le plus petit score gagne.",
+      "game_ui_rules": "Touchez une carte légale surlignée de votre main. Le pli, les scores et l’ouverture des cœurs sont visibles.",
+      "tutorial_strings": {
+        "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.": "Suivez la couleur entamée si possible. Chaque cœur vaut un point et la dame de pique treize. Après treize plis, le plus petit score gagne.",
+        "Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.": "Touchez une carte légale surlignée de votre main. Le pli, les scores et l’ouverture des cœurs sont visibles.",
+        "Hearts (Declarative)": "Cœurs (Déclaratif)"
+      },
+      "client_strings": {
+        "text_0": "Déclaratif",
+        "text_1": "Joueur {n}",
+        "text_2": "À vous · {name}",
+        "text_3": "À {name} de jouer",
+        "text_4": "Partie terminée",
+        "text_5": "Gagnant : {name}",
+        "text_6": "Votre flotte",
+        "text_7": "Eaux adverses",
+        "text_8": "Placer la flotte et commencer",
+        "text_9": "Place une flotte valide avec de l’eau entre les navires.",
+        "text_10": "Continuez la prise avec le pion surligné.",
+        "text_11": "Une prise est obligatoire.",
+        "text_12": "Déplacez-vous en diagonale ; les dames vont dans les deux sens.",
+        "text_13": "dame",
+        "text_14": "tour",
+        "text_15": "fou",
+        "text_16": "cavalier",
+        "text_17": "Promouvoir en {square} en {piece}",
+        "text_18": "Éliminer cette armée",
+        "text_19": "Passer (aucun coup légal)",
+        "text_20": "Abandonner",
+        "text_21": "Déplacer le pion",
+        "text_22": "Placer un mur",
+        "text_23": "Murs restants · {counts}",
+        "text_24": "Carte du dessus {card} · couleur {suit} · {n} cartes à piocher",
+        "text_25": "Jouer {card} en {suit}",
+        "text_26": "Jouer {card}",
+        "text_27": "Piocher une carte ({n} restantes)",
+        "text_28": "Demander des {rank} à {name}",
+        "text_29": "Piocher des cartes",
+        "text_30": "Passer",
+        "text_31": "{name} · carrés {ranks}",
+        "text_32": "Ramasser le pli",
+        "text_33": "Votre personnage : {name}",
+        "text_34": "Votre personnage est privé",
+        "text_35": "Demander : {question}",
+        "text_36": "Oui",
+        "text_37": "Non",
+        "text_38": "{name} : a proposé {character} · {result}",
+        "text_39": "correct",
+        "text_40": "incorrect",
+        "text_41": "Porte-t-il des lunettes ?",
+        "text_42": "Porte-t-il un chapeau ?",
+        "text_43": "A-t-il des poils au visage ?",
+        "text_44": "Voit-on ses oreilles ?",
+        "text_45": "A-t-il les cheveux blonds ?",
+        "text_46": "A-t-il les cheveux bruns ?",
+        "text_47": "A-t-il les cheveux noirs ?",
+        "text_48": "A-t-il les cheveux roux ?",
+        "text_49": "A-t-il les cheveux gris ?",
+        "text_50": "A-t-il les cheveux longs ?",
+        "text_51": "A-t-il les cheveux courts ?",
+        "text_52": "A-t-il les yeux bleus ?",
+        "text_53": "A-t-il les yeux bruns ?",
+        "text_54": "A-t-il les yeux verts ?",
+        "text_55": "Choisir la pièce en ligne {r}, colonne {c}",
+        "text_56": "Aller en ligne {r}, colonne {c}",
+        "server_game_over": "partie terminée",
+        "server_unknown_player": "joueur inconnu",
+        "server_not_your_turn": "ce n’est pas votre tour",
+        "server_pick_a_card": "choisissez une carte",
+        "server_card_not_in_hand": "carte absente de votre main",
+        "server_illegal_play": "jeu illégal",
+        "title": "Cœurs (Déclaratif)"
+      }
+    },
+    "de": {
+      "display_name": "Herz (Deklarativ)",
+      "short_description": "Bediene nach Möglichkeit die angespielte Farbe. Herzen zählen einen Punkt, die Pikdame dreizehn. Nach dreizehn Stichen gewinnt die niedrigste Punktzahl.",
+      "game_logic_rules": "Bediene nach Möglichkeit die angespielte Farbe. Herzen zählen einen Punkt, die Pikdame dreizehn. Nach dreizehn Stichen gewinnt die niedrigste Punktzahl.",
+      "game_ui_rules": "Tippe auf eine markierte gültige Karte deiner Hand. Stich, Punktzahlen und der Freigabestatus der Herzen sind sichtbar.",
+      "tutorial_strings": {
+        "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.": "Bediene nach Möglichkeit die angespielte Farbe. Herzen zählen einen Punkt, die Pikdame dreizehn. Nach dreizehn Stichen gewinnt die niedrigste Punktzahl.",
+        "Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.": "Tippe auf eine markierte gültige Karte deiner Hand. Stich, Punktzahlen und der Freigabestatus der Herzen sind sichtbar.",
+        "Hearts (Declarative)": "Herz (Deklarativ)"
+      },
+      "client_strings": {
+        "text_0": "Deklarativ",
+        "text_1": "Spieler {n}",
+        "text_2": "Dein Zug · {name}",
+        "text_3": "{name} ist am Zug",
+        "text_4": "Spiel beendet",
+        "text_5": "Gewinner: {name}",
+        "text_6": "Deine Flotte",
+        "text_7": "Zielgewässer",
+        "text_8": "Flotte platzieren und starten",
+        "text_9": "Platziert eine gültige Flotte mit Abstand zwischen den Schiffen.",
+        "text_10": "Setze den Schlagzug mit dem markierten Stein fort.",
+        "text_11": "Schlagen ist Pflicht.",
+        "text_12": "Ziehe diagonal; Damen ziehen in beide Richtungen.",
+        "text_13": "Dame",
+        "text_14": "Turm",
+        "text_15": "Läufer",
+        "text_16": "Springer",
+        "text_17": "Auf {square} in {piece} umwandeln",
+        "text_18": "Diese Armee entfernen",
+        "text_19": "Passen (kein gültiger Zug)",
+        "text_20": "Aufgeben",
+        "text_21": "Bauern ziehen",
+        "text_22": "Wand platzieren",
+        "text_23": "Verbleibende Wände · {counts}",
+        "text_24": "Oberste Karte {card} · Farbe {suit} · {n} Karten im Stapel",
+        "text_25": "{card} als {suit} spielen",
+        "text_26": "{card} spielen",
+        "text_27": "Karte ziehen ({n} übrig)",
+        "text_28": "{name} nach {rank} fragen",
+        "text_29": "Karten ziehen",
+        "text_30": "Passen",
+        "text_31": "{name} · Quartette {ranks}",
+        "text_32": "Stich einsammeln",
+        "text_33": "Deine Figur: {name}",
+        "text_34": "Deine Figur ist geheim",
+        "text_35": "Fragen: {question}",
+        "text_36": "Ja",
+        "text_37": "Nein",
+        "text_38": "{name}: hat {character} geraten · {result}",
+        "text_39": "richtig",
+        "text_40": "falsch",
+        "text_41": "Trägt die Person eine Brille?",
+        "text_42": "Trägt die Person einen Hut?",
+        "text_43": "Hat die Person einen Bart?",
+        "text_44": "Sind die Ohren sichtbar?",
+        "text_45": "Hat die Person blonde Haare?",
+        "text_46": "Hat die Person braune Haare?",
+        "text_47": "Hat die Person schwarze Haare?",
+        "text_48": "Hat die Person rote Haare?",
+        "text_49": "Hat die Person graue Haare?",
+        "text_50": "Hat die Person lange Haare?",
+        "text_51": "Hat die Person kurze Haare?",
+        "text_52": "Hat die Person blaue Augen?",
+        "text_53": "Hat die Person braune Augen?",
+        "text_54": "Hat die Person grüne Augen?",
+        "text_55": "Figur in Zeile {r}, Spalte {c} wählen",
+        "text_56": "Nach Zeile {r}, Spalte {c} ziehen",
+        "server_game_over": "Spiel beendet",
+        "server_unknown_player": "unbekannter Spieler",
+        "server_not_your_turn": "du bist nicht dran",
+        "server_pick_a_card": "wähle eine Karte",
+        "server_card_not_in_hand": "Karte ist nicht auf deiner Hand",
+        "server_illegal_play": "ungültiges Ausspiel",
+        "title": "Herz (Deklarativ)"
+      }
+    },
+    "pt": {
+      "display_name": "Copas (Declarativo)",
+      "short_description": "Siga o naipe inicial quando possível. Cada copa vale um ponto e a dama de espadas treze. Após treze vazas, a menor pontuação vence.",
+      "game_logic_rules": "Siga o naipe inicial quando possível. Cada copa vale um ponto e a dama de espadas treze. Após treze vazas, a menor pontuação vence.",
+      "game_ui_rules": "Toque numa carta válida destacada em sua mão. A vaza, as pontuações e se copas já foram abertas ficam visíveis.",
+      "tutorial_strings": {
+        "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.": "Siga o naipe inicial quando possível. Cada copa vale um ponto e a dama de espadas treze. Após treze vazas, a menor pontuação vence.",
+        "Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.": "Toque numa carta válida destacada em sua mão. A vaza, as pontuações e se copas já foram abertas ficam visíveis.",
+        "Hearts (Declarative)": "Copas (Declarativo)"
+      },
+      "client_strings": {
+        "text_0": "Declarativo",
+        "text_1": "Jogador {n}",
+        "text_2": "Sua vez · {name}",
+        "text_3": "Vez de {name}",
+        "text_4": "Partida encerrada",
+        "text_5": "Vencedor: {name}",
+        "text_6": "Sua frota",
+        "text_7": "Águas inimigas",
+        "text_8": "Posicionar frota e iniciar batalha",
+        "text_9": "Posiciona uma frota válida com água livre entre os navios.",
+        "text_10": "Continue a captura com a peça destacada.",
+        "text_11": "É obrigatório capturar.",
+        "text_12": "Mova na diagonal; damas movem nos dois sentidos.",
+        "text_13": "rainha",
+        "text_14": "torre",
+        "text_15": "bispo",
+        "text_16": "cavalo",
+        "text_17": "Promover em {square} para {piece}",
+        "text_18": "Eliminar este exército",
+        "text_19": "Passar (sem jogada válida)",
+        "text_20": "Desistir",
+        "text_21": "Mover peão",
+        "text_22": "Colocar parede",
+        "text_23": "Paredes restantes · {counts}",
+        "text_24": "Carta do topo {card} · naipe {suit} · {n} cartas para comprar",
+        "text_25": "Jogar {card} como {suit}",
+        "text_26": "Jogar {card}",
+        "text_27": "Comprar carta (restam {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Comprar cartas",
+        "text_30": "Passar",
+        "text_31": "{name} · conjuntos {ranks}",
+        "text_32": "Recolher vaza",
+        "text_33": "Seu personagem: {name}",
+        "text_34": "Seu personagem é privado",
+        "text_35": "Perguntar: {question}",
+        "text_36": "Sim",
+        "text_37": "Não",
+        "text_38": "{name}: adivinhou {character} · {result}",
+        "text_39": "correto",
+        "text_40": "incorreto",
+        "text_41": "Usa óculos?",
+        "text_42": "Usa chapéu?",
+        "text_43": "Tem pelos no rosto?",
+        "text_44": "As orelhas estão visíveis?",
+        "text_45": "Tem cabelo loiro?",
+        "text_46": "Tem cabelo castanho?",
+        "text_47": "Tem cabelo preto?",
+        "text_48": "Tem cabelo ruivo?",
+        "text_49": "Tem cabelo grisalho?",
+        "text_50": "Tem cabelo comprido?",
+        "text_51": "Tem cabelo curto?",
+        "text_52": "Tem olhos azuis?",
+        "text_53": "Tem olhos castanhos?",
+        "text_54": "Tem olhos verdes?",
+        "text_55": "Selecionar peça na linha {r}, coluna {c}",
+        "text_56": "Mover para linha {r}, coluna {c}",
+        "server_game_over": "jogo encerrado",
+        "server_unknown_player": "jogador desconhecido",
+        "server_not_your_turn": "não é sua vez",
+        "server_pick_a_card": "escolha uma carta",
+        "server_card_not_in_hand": "a carta não está na sua mão",
+        "server_illegal_play": "jogada inválida",
+        "title": "Copas (Declarativo)"
+      }
+    },
+    "zh": {
+      "display_name": "红心大战 (声明式)",
+      "short_description": "尽可能跟出首张牌的花色。每张红心计一分，黑桃皇后计十三分。十三墩后分数最低者获胜。",
+      "game_logic_rules": "尽可能跟出首张牌的花色。每张红心计一分，黑桃皇后计十三分。十三墩后分数最低者获胜。",
+      "game_ui_rules": "点击手牌中高亮的合法牌。画面会显示当前墩、总分以及红心是否已破。",
+      "tutorial_strings": {
+        "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.": "尽可能跟出首张牌的花色。每张红心计一分，黑桃皇后计十三分。十三墩后分数最低者获胜。",
+        "Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.": "点击手牌中高亮的合法牌。画面会显示当前墩、总分以及红心是否已破。",
+        "Hearts (Declarative)": "红心大战 (声明式)"
+      },
+      "client_strings": {
+        "text_0": "声明式",
+        "text_1": "玩家 {n}",
+        "text_2": "轮到您 · {name}",
+        "text_3": "轮到 {name}",
+        "text_4": "游戏结束",
+        "text_5": "获胜者：{name}",
+        "text_6": "您的舰队",
+        "text_7": "目标海域",
+        "text_8": "部署舰队并开始战斗",
+        "text_9": "部署合法舰队，舰船之间留有空隙。",
+        "text_10": "使用高亮棋子继续连跳。",
+        "text_11": "必须吃子。",
+        "text_12": "沿斜线移动；王棋可以双向移动。",
+        "text_13": "后",
+        "text_14": "车",
+        "text_15": "象",
+        "text_16": "马",
+        "text_17": "在 {square} 升变为{piece}",
+        "text_18": "淘汰此军队",
+        "text_19": "跳过（无合法走法）",
+        "text_20": "认输",
+        "text_21": "移动兵",
+        "text_22": "放置墙",
+        "text_23": "剩余墙数 · {counts}",
+        "text_24": "顶牌 {card} · 花色 {suit} · 余牌 {n} 张",
+        "text_25": "打出 {card}，指定花色 {suit}",
+        "text_26": "打出 {card}",
+        "text_27": "抽一张牌（剩余 {n} 张）",
+        "text_28": "向 {name} 要 {rank}",
+        "text_29": "抽牌",
+        "text_30": "跳过",
+        "text_31": "{name} · 成套牌 {ranks}",
+        "text_32": "收取此墩",
+        "text_33": "您的角色：{name}",
+        "text_34": "您的角色是保密的",
+        "text_35": "提问：{question}",
+        "text_36": "是",
+        "text_37": "否",
+        "text_38": "{name}：猜测 {character} · {result}",
+        "text_39": "正确",
+        "text_40": "错误",
+        "text_41": "戴眼镜吗？",
+        "text_42": "戴帽子吗？",
+        "text_43": "有胡须吗？",
+        "text_44": "耳朵露出来了吗？",
+        "text_45": "是金发吗？",
+        "text_46": "是棕发吗？",
+        "text_47": "是黑发吗？",
+        "text_48": "是红发吗？",
+        "text_49": "是灰发吗？",
+        "text_50": "是长发吗？",
+        "text_51": "是短发吗？",
+        "text_52": "是蓝眼睛吗？",
+        "text_53": "是棕眼睛吗？",
+        "text_54": "是绿眼睛吗？",
+        "text_55": "选择第 {r} 行第 {c} 列的棋子",
+        "text_56": "移至第 {r} 行第 {c} 列",
+        "server_game_over": "游戏结束",
+        "server_unknown_player": "未知玩家",
+        "server_not_your_turn": "未轮到你",
+        "server_pick_a_card": "请选择一张牌",
+        "server_card_not_in_hand": "手牌中没有此牌",
+        "server_illegal_play": "出牌不合法",
+        "title": "红心大战 (声明式)"
+      }
+    },
+    "hi": {
+      "display_name": "हार्ट्स (घोषणात्मक)",
+      "short_description": "संभव हो तो पहले पत्ते का रंग चलें। हर हार्ट का एक और स्पेड की रानी के तेरह अंक हैं। तेरह हाथों के बाद सबसे कम अंक वाला जीतता है।",
+      "game_logic_rules": "संभव हो तो पहले पत्ते का रंग चलें। हर हार्ट का एक और स्पेड की रानी के तेरह अंक हैं। तेरह हाथों के बाद सबसे कम अंक वाला जीतता है।",
+      "game_ui_rules": "हाथ में चिह्नित वैध पत्ते पर टैप करें। मौजूदा हाथ, कुल अंक और हार्ट खुल चुके हैं या नहीं, दिखाई देता है।",
+      "tutorial_strings": {
+        "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.": "संभव हो तो पहले पत्ते का रंग चलें। हर हार्ट का एक और स्पेड की रानी के तेरह अंक हैं। तेरह हाथों के बाद सबसे कम अंक वाला जीतता है।",
+        "Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.": "हाथ में चिह्नित वैध पत्ते पर टैप करें। मौजूदा हाथ, कुल अंक और हार्ट खुल चुके हैं या नहीं, दिखाई देता है।",
+        "Hearts (Declarative)": "हार्ट्स (घोषणात्मक)"
+      },
+      "client_strings": {
+        "text_0": "घोषणात्मक",
+        "text_1": "खिलाड़ी {n}",
+        "text_2": "आपकी बारी · {name}",
+        "text_3": "{name} की बारी",
+        "text_4": "खेल समाप्त",
+        "text_5": "विजेता: {name}",
+        "text_6": "आपका बेड़ा",
+        "text_7": "लक्ष्य जलक्षेत्र",
+        "text_8": "बेड़ा रखें और युद्ध शुरू करें",
+        "text_9": "जहाज़ों के बीच खाली पानी छोड़कर मान्य बेड़ा रखता है।",
+        "text_10": "चिह्नित गोटी से अगली मार जारी रखें।",
+        "text_11": "मारना अनिवार्य है।",
+        "text_12": "तिरछा चलें; राजा दोनों दिशाओं में चल सकता है।",
+        "text_13": "वज़ीर",
+        "text_14": "हाथी",
+        "text_15": "ऊँट",
+        "text_16": "घोड़ा",
+        "text_17": "{square} पर {piece} में पदोन्नत करें",
+        "text_18": "इस सेना को हटाएँ",
+        "text_19": "पास करें (कोई वैध चाल नहीं)",
+        "text_20": "हार मानें",
+        "text_21": "प्यादा चलें",
+        "text_22": "दीवार रखें",
+        "text_23": "बची दीवारें · {counts}",
+        "text_24": "ऊपर का पत्ता {card} · रंग {suit} · खींचने के लिए {n} पत्ते",
+        "text_25": "{card} को {suit} के रूप में खेलें",
+        "text_26": "{card} खेलें",
+        "text_27": "एक पत्ता खींचें ({n} बचे)",
+        "text_28": "{name} से {rank} माँगें",
+        "text_29": "पत्ते खींचें",
+        "text_30": "पास करें",
+        "text_31": "{name} · पूरे समूह {ranks}",
+        "text_32": "हाथ समेटें",
+        "text_33": "आपका पात्र: {name}",
+        "text_34": "आपका पात्र गोपनीय है",
+        "text_35": "पूछें: {question}",
+        "text_36": "हाँ",
+        "text_37": "नहीं",
+        "text_38": "{name}: {character} का अनुमान · {result}",
+        "text_39": "सही",
+        "text_40": "गलत",
+        "text_41": "क्या चश्मा पहने हैं?",
+        "text_42": "क्या टोपी पहने हैं?",
+        "text_43": "क्या चेहरे पर दाढ़ी या मूँछ है?",
+        "text_44": "क्या कान दिखाई दे रहे हैं?",
+        "text_45": "क्या बाल सुनहरे हैं?",
+        "text_46": "क्या बाल भूरे हैं?",
+        "text_47": "क्या बाल काले हैं?",
+        "text_48": "क्या बाल लाल हैं?",
+        "text_49": "क्या बाल सफ़ेद या स्लेटी हैं?",
+        "text_50": "क्या बाल लंबे हैं?",
+        "text_51": "क्या बाल छोटे हैं?",
+        "text_52": "क्या आँखें नीली हैं?",
+        "text_53": "क्या आँखें भूरी हैं?",
+        "text_54": "क्या आँखें हरी हैं?",
+        "text_55": "पंक्ति {r}, स्तंभ {c} की गोटी चुनें",
+        "text_56": "पंक्ति {r}, स्तंभ {c} पर चलें",
+        "server_game_over": "खेल समाप्त",
+        "server_unknown_player": "अज्ञात खिलाड़ी",
+        "server_not_your_turn": "आपकी बारी नहीं",
+        "server_pick_a_card": "एक पत्ता चुनें",
+        "server_card_not_in_hand": "पत्ता आपके हाथ में नहीं है",
+        "server_illegal_play": "अवैध खेल",
+        "title": "हार्ट्स (घोषणात्मक)"
+      }
+    },
+    "ar": {
+      "display_name": "قلوب (تصريحي)",
+      "short_description": "اتبع نوع الورقة الأولى إن أمكن. كل قلب بنقطة وملكة البستوني بثلاث عشرة. بعد ثلاث عشرة لمة يفوز أقل مجموع.",
+      "game_logic_rules": "اتبع نوع الورقة الأولى إن أمكن. كل قلب بنقطة وملكة البستوني بثلاث عشرة. بعد ثلاث عشرة لمة يفوز أقل مجموع.",
+      "game_ui_rules": "اضغط ورقة قانونية مظللة في يدك. تظهر اللمة ومجاميع النقاط وما إذا كانت القلوب قد فُتحت.",
+      "tutorial_strings": {
+        "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.": "اتبع نوع الورقة الأولى إن أمكن. كل قلب بنقطة وملكة البستوني بثلاث عشرة. بعد ثلاث عشرة لمة يفوز أقل مجموع.",
+        "Tap one of the legal cards highlighted in your hand. The trick, score totals, and whether hearts have been broken are visible.": "اضغط ورقة قانونية مظللة في يدك. تظهر اللمة ومجاميع النقاط وما إذا كانت القلوب قد فُتحت.",
+        "Hearts (Declarative)": "قلوب (تصريحي)"
+      },
+      "client_strings": {
+        "text_0": "تصريحي",
+        "text_1": "اللاعب {n}",
+        "text_2": "دورك · {name}",
+        "text_3": "دور {name}",
+        "text_4": "انتهت اللعبة",
+        "text_5": "الفائز: {name}",
+        "text_6": "أسطولك",
+        "text_7": "مياه الهدف",
+        "text_8": "وضع الأسطول وبدء المعركة",
+        "text_9": "يضع أسطولًا صالحًا مع مياه فاصلة بين السفن.",
+        "text_10": "تابع الأسر بالقطعة المظللة.",
+        "text_11": "الأسر إجباري.",
+        "text_12": "تحرك قطريًا؛ تتحرك الملوك في الاتجاهين.",
+        "text_13": "وزير",
+        "text_14": "رخ",
+        "text_15": "فيل",
+        "text_16": "حصان",
+        "text_17": "ترقية في {square} إلى {piece}",
+        "text_18": "إقصاء هذا الجيش",
+        "text_19": "تمرير (لا حركة قانونية)",
+        "text_20": "استسلام",
+        "text_21": "تحريك البيدق",
+        "text_22": "وضع جدار",
+        "text_23": "الجدران المتبقية · {counts}",
+        "text_24": "الورقة العليا {card} · النوع {suit} · {n} أوراق للسحب",
+        "text_25": "العب {card} بنوع {suit}",
+        "text_26": "العب {card}",
+        "text_27": "اسحب ورقة (متبقي {n})",
+        "text_28": "اطلب {rank} من {name}",
+        "text_29": "سحب أوراق",
+        "text_30": "تمرير",
+        "text_31": "{name} · المجموعات {ranks}",
+        "text_32": "جمع اللمة",
+        "text_33": "شخصيتك: {name}",
+        "text_34": "شخصيتك سرية",
+        "text_35": "اسأل: {question}",
+        "text_36": "نعم",
+        "text_37": "لا",
+        "text_38": "{name}: خمن {character} · {result}",
+        "text_39": "صحيح",
+        "text_40": "غير صحيح",
+        "text_41": "هل ترتدي نظارة؟",
+        "text_42": "هل ترتدي قبعة؟",
+        "text_43": "هل لديها شعر في الوجه؟",
+        "text_44": "هل أذناها ظاهرتان؟",
+        "text_45": "هل شعرها أشقر؟",
+        "text_46": "هل شعرها بني؟",
+        "text_47": "هل شعرها أسود؟",
+        "text_48": "هل شعرها أحمر؟",
+        "text_49": "هل شعرها رمادي؟",
+        "text_50": "هل شعرها طويل؟",
+        "text_51": "هل شعرها قصير؟",
+        "text_52": "هل عيناها زرقاوان؟",
+        "text_53": "هل عيناها بنيتان؟",
+        "text_54": "هل عيناها خضراوان؟",
+        "text_55": "اختر قطعة الصف {r} والعمود {c}",
+        "text_56": "تحرك إلى الصف {r} والعمود {c}",
+        "server_game_over": "انتهت اللعبة",
+        "server_unknown_player": "لاعب غير معروف",
+        "server_not_your_turn": "ليس دورك",
+        "server_pick_a_card": "اختر ورقة",
+        "server_card_not_in_hand": "الورقة ليست في يدك",
+        "server_illegal_play": "لعب غير قانوني",
+        "title": "قلوب (تصريحي)"
+      }
+    }
+  },
+  "game_addition_request_id_and_secret": "example-only-html-to-declarative-hearts-replace-before-publishing",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 600,
+      "height": 910,
+      "camera_enabled": true
+    },
+    "motion": {
+      "move_ms": 440,
+      "turn_pause_ms": 650,
+      "animate_own": true
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 910,
+        "color": "#164b3d",
+        "line_color": "#a58a55"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 78,
+        "height": 104,
+        "color": "#fff6df",
+        "text_color": "#202c42",
+        "border_color": "#d3ad62"
+      },
+      "red-card": {
+        "shape": "card",
+        "width": 78,
+        "height": 104,
+        "color": "#fff6df",
+        "text_color": "#b72f4c",
+        "border_color": "#d3ad62"
+      },
+      "black-card": {
+        "shape": "card",
+        "width": 78,
+        "height": 104,
+        "color": "#fff6df",
+        "text_color": "#202c42",
+        "border_color": "#d3ad62"
+      },
+      "back": {
+        "shape": "image",
+        "width": 78,
+        "height": 104,
+        "back_asset": "back"
+      }
+    },
+    "assets": {
+      "back": {
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCAxMTAiPjxyZWN0IHg9IjEiIHk9IjEiIHdpZHRoPSI3OCIgaGVpZ2h0PSIxMDgiIHJ4PSI5IiBmaWxsPSIjMjQzZDY4IiBzdHJva2U9IiNlNGM0NzciIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjYiIHk9IjYiIHdpZHRoPSI2OCIgaGVpZ2h0PSI5OCIgcng9IjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZjFkNiIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTEyIDU1IDQwIDE0IDY4IDU1IDQwIDk2WiIgZmlsbD0iI2I5NDY1YSIgc3Ryb2tlPSIjZmZmMWQ2IiBzdHJva2Utd2lkdGg9IjMiLz48Y2lyY2xlIGN4PSI0MCIgY3k9IjU1IiByPSI2IiBmaWxsPSIjZjJjZjdiIi8+PC9zdmc+",
+        "media_type": "image/svg+xml",
+        "width": 80,
+        "height": 110,
+        "alt": "Decorative card back"
+      }
+    },
+    "strings": {
+      "text_0": "Declarative",
+      "text_1": "Player {n}",
+      "text_2": "Your turn · {name}",
+      "text_3": "{name} to play",
+      "text_4": "Game over",
+      "text_5": "Winner: {name}",
+      "text_6": "Your fleet",
+      "text_7": "Target waters",
+      "text_8": "Place fleet and start battle",
+      "text_9": "Places a valid fleet with clear water between ships.",
+      "text_10": "Continue the capture with the highlighted checker.",
+      "text_11": "A capture is required.",
+      "text_12": "Move diagonally; kings move either direction.",
+      "text_13": "queen",
+      "text_14": "rook",
+      "text_15": "bishop",
+      "text_16": "knight",
+      "text_17": "Promote at {square} to {piece}",
+      "text_18": "Eliminate this army",
+      "text_19": "Pass (no legal move)",
+      "text_20": "Resign",
+      "text_21": "Move pawn",
+      "text_22": "Place wall",
+      "text_23": "Walls remaining · {counts}",
+      "text_24": "Top card {card} · suit {suit} · {n} cards to draw",
+      "text_25": "Play {card} as {suit}",
+      "text_26": "Play {card}",
+      "text_27": "Draw a card ({n} left)",
+      "text_28": "Ask {name} for {rank}",
+      "text_29": "Draw cards",
+      "text_30": "Pass",
+      "text_31": "{name} · books {ranks}",
+      "text_32": "Collect trick",
+      "text_33": "Your character: {name}",
+      "text_34": "Your character is private",
+      "text_35": "Ask: {question}",
+      "text_36": "Yes",
+      "text_37": "No",
+      "text_38": "{name}: guessed {character} · {result}",
+      "text_39": "correct",
+      "text_40": "incorrect",
+      "text_41": "Are they wearing glasses?",
+      "text_42": "Are they wearing a hat?",
+      "text_43": "Do they have facial hair?",
+      "text_44": "Are their ears showing?",
+      "text_45": "Do they have blonde hair?",
+      "text_46": "Do they have brown hair?",
+      "text_47": "Do they have black hair?",
+      "text_48": "Do they have red hair?",
+      "text_49": "Do they have gray hair?",
+      "text_50": "Do they have long hair?",
+      "text_51": "Do they have short hair?",
+      "text_52": "Do they have blue eyes?",
+      "text_53": "Do they have brown eyes?",
+      "text_54": "Do they have green eyes?",
+      "text_55": "Select piece at row {r}, column {c}",
+      "text_56": "Move to row {r}, column {c}",
+      "title": "Hearts (Declarative)",
+      "server_game_over": "game over",
+      "server_unknown_player": "unknown player",
+      "server_not_your_turn": "not your turn",
+      "server_pick_a_card": "pick a card",
+      "server_card_not_in_hand": "card not in hand",
+      "server_illegal_play": "illegal play"
+    },
+    "ui_code": "const GAME=\"hearts\";\nconst TITLE=\"Hearts\";\nfunction cardName(c){if(typeof c==='string'){const m=/^(10|[2-9]|A|J|Q|K)([CDSH])$/i.exec(c);if(!m)return c;return m[1].toUpperCase()+({C:'♣',D:'♦',S:'♠',H:'♥'}[m[2].toUpperCase()]||'');}if(c&&typeof c==='object'){const suit={C:'♣',D:'♦',S:'♠',H:'♥'}[c.s]||'♣';return ['?','A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.r]+suit;}const r=c%13+1;return ['A','2','3','4','5','6','7','8','9','10','J','Q','K'][r-1]+['♣','♦','♠','♥'][Math.floor(c/13)];}\nfunction cardType(c){let suit;if(typeof c==='string'){const m=/([CDSH])$/i.exec(c);suit=m?m[1].toUpperCase():'C';}else if(c&&typeof c==='object')suit=String(c.s||'C').toUpperCase();else suit=['C','D','S','H'][Math.floor(Number(c)/13)]||'C';return suit==='D'||suit==='H'?'red-card':'black-card';}\nfunction centeredX(text,font,center=300){return Math.max(16,center-String(text).length*font*.27);}\nfunction shortName(name){return String(name||'Player').length>16?String(name).slice(0,15)+'…':String(name||'Player');}\nvar gameUI={reduce(message,localState){\nconst m=message.type==='ui_event'?(message.state_changed||{}):message,v=m.view||m.state||{},e=message.type==='ui_event'?(message.event||{}):{};\nconst active=m.status==='ongoing'&&!m.replay&&Number.isInteger(m.acting_for_player_index),seat=Number.isInteger(m.acting_for_player_index)?m.acting_for_player_index:(m.my_player_index||0);\nconst pieces=[],labels=[],controls=[],suits=['♣','♦','♠','♥'],names=(m.players||[]).map(p=>shortName(p.name||p.display_name));\nlet make_move, next={};\nconst label=(id,text,y,size=20,x=300,color='#dfede5')=>labels.push({id,text:String(text),x:centeredX(text,size,x),y,font_size:size,color});\nconst button=(id,text)=>controls.push({id,kind:'button',label:text});\nconst card=(id,c,x,y,ok=false,extra={})=>pieces.push({id,type:cardType(c),board:'table',position:{x,y},text:cardName(c),face:'front',actions:ok?['tap']:[],aria_label:(ok?'Play ':'')+cardName(c),animation:{kind:'move',key:id+'-'+String(c&&typeof c==='object'?JSON.stringify(c):c).replace(/[^A-Za-z0-9_.:-]/g,'_'),duration_ms:380},...extra});\nconst hand=(cards,legal,y=490)=>{const cols=Math.min(6,cards.length),rows=Math.ceil(cards.length/6);cards.forEach((c,i)=>{const row=Math.floor(i/6),count=Math.min(6,cards.length-row*6);card('hand-'+c,c,300+(i%6-(count-1)/2)*88,y+row*112,active&&legal.includes(c));});return rows;};\nlabel('title',TITLE,24,30,300,'#fff1d6');\nlabel('turn',m.status==='over'?(GAME==='old-maid'?(names[v.loser]==='You'?'You hold the Old Maid':`${names[v.loser]||'Player'} holds the Old Maid`):Number.isInteger(v.winner)?(names[v.winner]==='You'?'You win':`${names[v.winner]||'Player'} wins`):'Round complete'):active?'Your turn':`Waiting for ${names[v.turnIdx??v.turn??v.cur??(m.turn_of_player_indices||[])[0]]||'player'}`,70);\nif(GAME==='crazy-eights'){\n const cards=v.hand||[],legal=v.playable||[];let pending=localState&&localState.moveCount===m.move_count?localState.pendingEight:null;\n if(!legal.includes(pending))pending=null;\n if(active&&e.type==='tap'){\n  if(e.id&&e.id.startsWith('hand-')){const c=Number(e.id.slice(5));if(legal.includes(c)){if(c%13+1===8)pending=c;else{make_move={card:c};pending=null;}}}\n  if(e.id==='cancel-suit')pending=null;\n  if(/^suit-[0-3]$/.test(e.id||'')&&pending!=null){make_move={card:pending,chosenSuit:Number(e.id.slice(5))};pending=null;}\n  if((e.id==='draw'||e.id==='stock')&&!legal.length)make_move='draw';\n }\n names.forEach((name,i)=>label('score-'+i,`${name} · ${(v.counts||[])[i]||0}`,110+Math.floor(i/3)*26,17,300+(i%3-(Math.min(3,names.length-Math.floor(i/3)*3)-1)/2)*190));\n pieces.push({id:'stock',type:'back',board:'table',position:{x:205,y:270},face:'back',actions:active&&!legal.length&&v.deckCount>0?['tap']:[],aria_label:'Draw a card'});\n card('hand-'+v.top,v.top,395,270,false,{animation:{kind:'move',key:'discard-'+v.top,duration_ms:440}});\n label('stock-label',`Draw · ${v.deckCount||0}`,343,18,205);label('discard-label','Discard',343,18,395);\n label('suit',`Match ${suits[v.suit??v.currentSuit??Math.floor(v.top/13)]||''} or rank · 8 is wild`,385,19,300,'#ffe28a');\n label('hand-label',`Your hand · ${cards.length} cards`,415,20);\n hand(cards,legal,505);label('hint',m.status==='over'?'Round complete · the winning hand is empty.':pending!=null?'Choose a suit below to play your 8.':'Tap a highlighted card to play.',690,19,300,'#ffe28a');\n if(active&&!legal.length)button('draw','Draw a card');\n if(pending!=null){for(let s=0;s<4;s++)button('suit-'+s,suits[s]+' '+['Clubs','Diamonds','Spades','Hearts'][s]);button('cancel-suit','Cancel suit choice');}\n next={moveCount:m.move_count,pendingEight:pending};\n}else if(GAME==='hearts'){\n const cards=v.hand||[],legal=v.legal||[],trick=(v.trick||[]).length?v.trick:(v.lastTrick||[]),low=Math.min(...(v.taken||[0])),leaders=(v.taken||[]).map((score,i)=>score===low?i:-1).filter(i=>i>=0);\n if(m.status==='over'&&leaders.length>1){const turn=labels.find(l=>l.id==='turn');turn.text=`Tie · ${low} points`;turn.x=centeredX(turn.text,turn.font_size);}\n names.forEach((name,i)=>label('score-'+i,`${name} · ${(v.taken||[])[i]||0} pts`,112+Math.floor(i/2)*28,18,155+(i%2)*290,m.status==='over'&&leaders.includes(i)?'#ffe28a':'#dfede5'));\n label('trick-label',`Trick ${Math.min(13,(v.trickNum||0)+1)} of 13`,185,20,300,'#ffe28a');\n const places=[[190,265],[410,265],[190,380],[410,380]];\n trick.forEach(t=>{const [x,y]=places[t.player%4];card('hand-'+t.card,t.card,x,y,false,{scale:.8});label('played-'+t.player,names[t.player]||'Player',y+48,16,x);});\n label('hand-label','Your hand · follow the suit led',460,20);hand(cards,legal,560);\n if(active&&e.type==='tap'&&legal.includes(e.id?.slice(5))&&e.id.startsWith('hand-'))make_move={card:e.id.slice(5)};\n label('hint',m.status==='over'?(leaders.length>1?`Shared lowest score · ${low} points`:`Winner · ${names[v.winner]||'—'}`):'One round · ♥ = 1 · Q♠ = 13 · lowest score wins',860,18,300,'#ffe28a');\n}else if(GAME==='michigan'){\n const cards=v.hand||[],legal=v.legal||[],rows=v.rows||[],symbols=['♣','♦','♥','♠'];\n label('objective','Build each suit outward from 7',110,20,300,'#ffe28a');for(let r=1;r<=13;r++)label('rank-'+r,['A','2','3','4','5','6','7','8','9','10','J','Q','K'][r-1],137,14,82+(r-1)*38,'#9abcae');\n rows.forEach((row,s)=>{label('suit-'+s,symbols[s],163+s*72,24,35);for(let r=1;r<=13;r++){const x=82+(r-1)*38,y=180+s*72;if(row.low!==null&&r>=row.low&&r<=row.high)card('hand-'+(s*13+r-1),s*13+r-1,x,y,false,{scale:.43,text:['A','2','3','4','5','6','7','8','9','10','J','Q','K'][r-1]+symbols[s],type:s===1||s===2?'red-card':'black-card'});}});\n label('hand-label',`Your hand · ${cards.length} cards`,430,20);hand(cards,legal,520);for(const piece of pieces.filter(p=>p.id.startsWith('hand-'))){const c=Number(piece.id.slice(5)),s=Math.floor(c/13);piece.text=['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c%13]+symbols[s];piece.type=s===1||s===2?'red-card':'black-card';piece.aria_label=(piece.actions.length?'Play ':'')+piece.text;}\n label('hint',m.status==='over'?'Round complete · the sequences remain on the table.':'Tap a highlighted card to extend a sequence.',1065,18,300,'#ffe28a');\n if(active&&!legal.length)button('pass','Pass · no playable cards');\n if(active&&e.type==='tap'){const c=Number((e.id||'').slice(5));if(e.id?.startsWith('hand-')&&legal.includes(c))make_move={card:c};if(e.id==='pass'&&!legal.length)make_move={pass:true};}\n}else if(GAME==='casino-war'){\n label('round',`Hand ${v.round||1} of 10`,110,21);label('score',`You ${v.playerWins||0} · Dealer ${v.dealerWins||0} · Ties ${v.ties||0}`,150,20,300,'#ffe28a');\n label('you','You',220,22,170);label('dealer','Dealer',220,22,430);\n for(const [who,c,x] of [['player',v.playerCard,170],['dealer',v.dealerCard,430]]){\n if(c)card(who+'-card',c,x,330,false,{type:c.suit===1||c.suit===3?'red-card':'black-card',text:['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.rank-1]+suits[c.suit],aria_label:who+' '+['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.rank-1]+suits[c.suit],animation:{kind:'move',key:`${v.round}-${c.rank}-${c.suit}`,duration_ms:560}});\n else pieces.push({id:who+'-card',type:'back',board:'table',position:{x,y:330},face:'back',actions:[]});\n }\n const high=c=>c.rank===1?14:c.rank;\n const result=v.phase==='result'?(high(v.playerCard)>high(v.dealerCard)?'You win the hand':high(v.playerCard)<high(v.dealerCard)?'Dealer wins the hand':'Tie · no winner this hand'):v.phase==='over'?(v.winner==null?'Match tied':v.winner===0?'You win!':'Dealer wins!'):v.phase==='dealer'?'Your card is revealed. Flip the dealer.':'Higher card wins the hand.';\n label('result',result,455,23,300,'#ffe28a');\n if(active){if(v.phase==='deal')button('deal','Deal your card');if(v.phase==='dealer')button('dealer-flip','Reveal dealer');if(v.phase==='result')button('next','Next hand');\n if(e.type==='tap'){if(e.id==='deal'&&v.phase==='deal')make_move={kind:'deal'};if(e.id==='dealer-flip'&&v.phase==='dealer')make_move={kind:'flip'};if(e.id==='next'&&v.phase==='result')make_move={kind:'next'};}}\n}else if(GAME==='old-maid'){\n const cards=v.hand||[],opponents=v.opponents||[],cols=opponents.length===1?1:2,rows=Math.ceil(opponents.length/cols);\n opponents.forEach((opp,k)=>{const ok=active&&(v.legalTargets||[]).includes(opp.seat),cx=300,cy=310,gap=Math.min(50,460/Math.max(1,opp.count-1));\n label('opp-name-'+opp.seat,`${names[opp.seat]||'Player'} · ${opp.count}`,110+Math.floor(k/2)*28,18,cols===1?300:155+(k%2)*290,ok?'#ffe28a':'#dfede5');\n if(ok||(!active&&k===0))for(let j=0;j<opp.count;j++)pieces.push({id:`opp-${opp.seat}-${j}`,type:'back',board:'table',position:{x:cx+(j-(opp.count-1)/2)*gap,y:cy},scale:.8,face:'back',actions:ok?['tap']:[],aria_label:`Draw card ${j+1} from ${names[opp.seat]||'opponent'}`});\n if(ok&&e.type==='tap'&&e.id?.startsWith(`opp-${opp.seat}-`)){const i=Number(e.id.split('-')[2]);if(Number.isInteger(i)&&i>=0&&i<opp.count)make_move={target:opp.seat,cardIndex:i};}\n });\n const y=450;label('hand-label',`Your hand · ${cards.length} cards`,y-30,20);hand(cards,[],y+50);\n label('hint',m.status==='over'?'Round complete · pairs have been cleared.':'Draw one hidden card · matching pairs clear automatically.',y+Math.max(1,Math.ceil(cards.length/6))*112+38,18,300,'#ffe28a');\n}else if(GAME==='blackjack'){\n const hs=(v.hands||[])[seat]||[],hi=v.curP===seat&&Number.isInteger(v.curH)?Math.max(0,Math.min(v.curH,hs.length-1)):0,h=hs[hi]||hs[0]||{},cards=h.cards||[],dealer=v.dealer||[];\n const value=cs=>{let t=0,a=0;cs.forEach(c=>{t+=c.r===1?11:Math.min(c.r,10);if(c.r===1)a++;});while(t>21&&a-->0)t-=10;return t;};\n const leaders=(v.chips||[]).map((chips,i)=>chips===Math.max(...(v.chips||[0]))?i:-1).filter(i=>i>=0);\n const phase={setup:'Ready to play',betting:'Place your bet',play:active?'Hit or stand':'Waiting for the other hand',roundOver:'Round complete',gameOver:leaders.length>1?'Game over · tied chip totals':v.winners===seat?'Game over · You win':`Game over · ${names[v.winners]||'Winner'} wins`}[v.phase]||'';\n labels.splice(1,1);label('phase',phase,70,22);label('bank',`Round ${v.round||1} · Chips ${(v.chips||[])[seat]||0} · Bet ${h.bet||(v.pendingBets||{})[seat]||0}`,115,19,300,'#ffe28a');\n label('dealer-label',v.holeHidden?'Dealer · one card hidden':`Dealer · ${dealer.length?value(dealer):'—'}`,170,21);\n const dc=dealer.length+(v.holeHidden?1:0),step=Math.min(90,480/Math.max(1,dc-1));\n dealer.forEach((c,i)=>card('dealer-'+i,c,300+(i-(dc-1)/2)*step,265,false,{animation:{kind:'move',key:`${v.round}-${i}-${c.r}-${c.s}`,duration_ms:560}}));\n if(v.holeHidden)pieces.push({id:'dealer-1',type:'back',board:'table',position:{x:300+(dc-1)/2*step,y:265},face:'back',actions:[]});\n label('hand-label',`${names[seat]||'You'} · Hand ${hi+1} of ${Math.max(1,hs.length)}`,370,21);label('hand-value',cards.length?`Value ${value(cards)}${value(cards)>21?' · Bust':''}`:'Get as close to 21 as you can.',406,20,300,'#ffe28a');\n const ps=Math.min(90,480/Math.max(1,cards.length-1));cards.forEach((c,i)=>card(`player-${seat}-${hi}-${i}`,c,300+(i-(cards.length-1)/2)*ps,510));\n ((v.results||[])[seat]||'Dealer draws to 17').split(' | ').forEach((text,i)=>label('result-'+i,hs.length>1?`Hand ${i+1} · ${value((hs[i]||{}).cards||[])} · ${text}`:text,610+i*26,18,300,'#ffe28a'));\n if(v.phase==='play'&&hs.length>1)hs.forEach((other,i)=>label('split-hand-'+i,`Hand ${i+1} · ${value(other.cards||[])} · Bet ${other.bet} · ${i===hi?'Playing':other.done?'Done':'Waiting'}`,640+i*24,16));\n const available=[];if(active){if(v.phase==='setup')available.push(['start','Start game']);if(v.phase==='betting'){const chips=(v.chips||[])[seat]||0;if(chips>0)available.push(['bet',`Bet ${Math.min(10,chips)}`]);for(const amount of [25,50,100])if(chips>=amount)available.push(['bet-'+amount,`Bet ${amount}`]);}if(v.phase==='roundOver')available.push(['next','Next round']);if(v.phase==='play'){\n available.push(['hit','Hit'],['stand','Stand']);const afford=(v.chips||[])[seat]>=h.bet;\n if(cards.length===2&&afford)available.push(['double','Double']);if(cards.length===2&&afford&&cards[0].r===cards[1].r&&hs.length<4)available.push(['split','Split']);\n }}available.forEach(([id,text])=>button(id,text));if(e.type==='tap'&&available.some(([id])=>id===e.id))make_move=e.id==='bet'?{kind:'bet',amount:Math.min(10,(v.chips||[])[seat]||10)}:e.id.startsWith('bet-')?{kind:'bet',amount:Number(e.id.slice(4))}:{kind:e.id};\n}\nconst out={scene:{pieces,labels,controls,targets:[]},local_state:next};if(make_move!==undefined)out.make_move=make_move;return out;\n}};\n"
+  }
+}

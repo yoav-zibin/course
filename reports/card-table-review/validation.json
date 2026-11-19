@@ -1,0 +1,107 @@
+{
+  "upstream_commit": "170a6b0",
+  "publication_performed": false,
+  "preview_running": "http://127.0.0.1:8173/",
+  "focused_python": {
+    "passed": 25,
+    "failed": 0
+  },
+  "earlier_python_ui_action_boundary": {
+    "passed": 134,
+    "failed": 0
+  },
+  "shared_client": {
+    "passed": 178,
+    "failed": 0
+  },
+  "desktop_phone_browser": {
+    "passed": 50,
+    "failed": 0,
+    "viewports": [
+      "1280x900",
+      "390x844"
+    ],
+    "console_errors": 0,
+    "final_scenarios_played": 20,
+    "checks": [
+      "single physical tap without duplicate submission",
+      "intermediate/final scene rendering",
+      "completed match results",
+      "independent dealer flip",
+      "reduced motion",
+      "removed pair fades without input target",
+      "no outer horizontal overflow",
+      "arrow badges removed with legal highlights preserved",
+      "Quoridor framing unchanged after wall placement",
+      "War timing and computer cadence halved",
+      "all ten real Portal cover images loaded"
+    ]
+  },
+  "typescript": "passed",
+  "web_build": "passed",
+  "diff_whitespace": "passed",
+  "screenshots": "/private/tmp/card-table-user-revision",
+  "renderer_sha256": "a037d43ad6d7678dd7c1d3a3b39f22afd41d8cdb49cccb32e1bbb09ce7b5a75c",
+  "limits": [
+    "No native-device execution",
+    "Not exhaustive over locales, rosters or deals",
+    "Production target resolution and recorded release flow remain pending authorization"
+  ],
+  "scoring_covers_fixtures": {
+    "passed": 38,
+    "failed": 0
+  },
+  "focused_python_combined": {
+    "passed": 61,
+    "failed": 0
+  },
+  "final_affected_python_recheck": {
+    "passed": 54,
+    "deselected": 8,
+    "failed": 0
+  },
+  "desktop_phone_targeted_recheck": {
+    "passed": 8,
+    "failed": 0
+  },
+  "final_portal_thumbnail_recheck": {
+    "passed": 2,
+    "failed": 0
+  },
+  "local_catalog": "http://127.0.0.1:8174/portal#games",
+  "final_cover_screenshots": "/private/tmp/card-table-final-thumbnail-proof",
+  "builder_idempotence": "passed",
+  "cover_theme_followup": {
+    "scoring_cover_checks_passed": 38,
+    "live_reference": "https://buildplay.fun/portal#games",
+    "reviewed_reference_games": [
+      "Boggle",
+      "Mu Torere",
+      "Zamma",
+      "Spades (local practice)"
+    ],
+    "local_catalog_revision": 3,
+    "desktop_phone_images_loaded": 10,
+    "screenshot": "/Users/juancastillo/.codex/visualizations/2026/11/19/01a1f543-4482-70d0-8982-88f5378c6e17/catalog-theme.jpg"
+  },
+  "authorized_release_preparation": {
+    "current_main": "3d31ce1",
+    "renderer_commit": "6558bff",
+    "typecheck": "passed",
+    "build": "passed",
+    "client_tests_passed": 182,
+    "package_scoring_tests_passed": 63,
+    "complete_local_traces": 100,
+    "local_trace_moves": 9258,
+    "game_publication": "pending"
+  },
+  "release_repairs": {
+    "focused_tests_passed": 45,
+    "scoped_index_tests_passed": 3,
+    "shared_client_tests_passed": 182,
+    "typecheck": "passed",
+    "web_build": "passed",
+    "direct_svg_semantic_click": "passed",
+    "initial_ci_ui_result": "151 passed; 12 pointer-target timeouts; repaired before next push"
+  }
+}

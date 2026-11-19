@@ -106,7 +106,7 @@ jobs:
         run: |
           set -o pipefail
           python3 - <<'PY' 2>&1 | tee "$GITHUB_WORKSPACE/buildplay-aab-build.log"
-          import os, subprocess
+          import os, re, subprocess, time
           password = os.environ.get('KEYSTORE_PASSWORD')
           if not password:
               raise SystemExit('Android upload keystore password is missing.')
@@ -119,9 +119,18 @@ jobs:
           # Gradle's CI project-property environment keeps passwords out of argv.
           # Keep Bash explicit: POSIX sh can drop environment names containing dots.
           environment = {**os.environ, **{'ORG_GRADLE_PROJECT_' + key: value for key, value in properties.items()}}
-          result = subprocess.run(['bash', 'android/gradlew', '--project-dir', 'android',
-                                   '--no-daemon', '--max-workers=2', '-Pandroid.enableMinifyInReleaseBuilds=false',
-                                   ':app:bundleRelease'], env=environment)
+          command = ['bash', 'android/gradlew', '--project-dir', 'android',
+                     '--no-daemon', '--max-workers=2', '-Pandroid.enableMinifyInReleaseBuilds=false',
+                     ':app:bundleRelease']
+          for attempt in range(3):
+              result = subprocess.run(command + (['--refresh-dependencies'] if attempt else []),
+                                      env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+              print(result.stdout, end='', flush=True)
+              dependency_failure = re.search(r'Could not (?:find|resolve|GET|HEAD)|Read timed out|Connection reset', result.stdout)
+              if result.returncode == 0 or not dependency_failure or attempt == 2:
+                  break
+              print('Dependency download failed; refreshing and retrying the Android build.', flush=True)
+              time.sleep(5 * (attempt + 1))
           raise SystemExit(result.returncode)
           PY
           cp android/app/build/outputs/bundle/release/app-release.aab "$GITHUB_WORKSPACE/BuildPlay.aab"

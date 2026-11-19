@@ -1,0 +1,1293 @@
+{
+  "name": "Michigan",
+  "description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+  "game_addition_request_id_and_secret": "example-only-michigan-replace-before-publishing",
+  "allowed_player_counts": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "server_code": "\"use strict\";\nfunction mShuffle(deck,ctx){for(let i=deck.length-1;i>0;i--){const j=Math.floor(ctx.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}return deck;}\nfunction mLegal(s,seat){return s.hands[seat].filter(c=>{const r=c%13+1, suit=Math.floor(c/13),row=s.rows[suit];return row.low===null?r===7:r===row.low-1||r===row.high+1;});}\nfunction mWinner(s,ctx,seat){s.done=true;s.winner=seat;s.turn=0;const humans=ctx.players.filter(p=>p.kind==='human'&&p.active!==false),pot=ctx.pot||0,out={};const p=ctx.players[seat];const recipients=p&&p.kind==='human'&&p.active!==false?[p]:humans;if(recipients.length)recipients.forEach((x,i)=>out[x.id]=Math.floor(pot/recipients.length)+(i<pot%recipients.length?1:0));return {state:s,turn:null,payouts:out};}\nconst game={\n newMatch(ctx){const deck=mShuffle(Array.from({length:52},(_,i)=>i),ctx),n=ctx.players.length,hands=Array.from({length:n},()=>[]);deck.forEach((c,i)=>hands[i%n].push(c));let start=0;for(let p=0;p<n;p++)if(hands[p].includes(6)){start=p;break;}return {state:{hands,rows:Array.from({length:4},()=>({low:null,high:null})),turn:start,passes:0,done:false,winner:null},turn:[ctx.players[start].id]};},\n applyMove(s,pid,move,ctx){if(s.done)throw new InvalidMove('game over');const seat=ctx.players.findIndex(p=>p.id===pid);if(seat!==s.turn)throw new InvalidMove('not your turn');s={hands:s.hands.map(h=>h.slice()),rows:s.rows.map(r=>({...r})),turn:s.turn,passes:s.passes,done:s.done,winner:s.winner};const legal=mLegal(s,seat),n=ctx.players.length;if(move&&Number.isInteger(move.card)){const c=move.card,i=s.hands[seat].indexOf(c);if(i<0||!legal.includes(c))throw new InvalidMove('illegal card');s.hands[seat].splice(i,1);const r=c%13+1,row=s.rows[Math.floor(c/13)];if(row.low===null)row.low=row.high=7;else if(r<row.low)row.low=r;else row.high=r;s.passes=0;if(s.hands[seat].length===0)return mWinner(s,ctx,seat);}else if(move&&move.pass===true&&Object.keys(move).length===1){if(legal.length)throw new InvalidMove('you have a playable card');s.passes++;if(s.passes>=n){let winner=0;for(let i=1;i<n;i++)if(s.hands[i].length<s.hands[winner].length)winner=i;return mWinner(s,ctx,winner);}}else throw new InvalidMove('bad move');s.turn=(seat+1)%n;return {state:s,turn:[ctx.players[s.turn].id]};},\n computerMove(s,pid,ctx){const seat=ctx.players.findIndex(p=>p.id===pid),legal=mLegal(s,seat);return legal.length?{card:legal[0]}:{pass:true};},randomMove(s,pid,ctx){const seat=ctx.players.findIndex(p=>p.id===pid),legal=mLegal(s,seat);return legal.length?{card:legal[Math.floor(ctx.random()*legal.length)]}:{pass:true};},\n viewFor(s,pid,ctx){const seat=ctx.players.findIndex(p=>p.id===pid);return {hand:seat>=0?s.hands[seat].slice():[],counts:s.hands.map(h=>h.length),rows:s.rows.map(r=>({...r})),turn:s.turn,passes:s.passes,done:s.done,winner:s.winner,legal:seat===s.turn&&!s.done?mLegal(s,seat):[]};}\n};\n",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 600,
+      "height": 1120,
+      "camera_enabled": true
+    },
+    "motion": {
+      "move_ms": 440,
+      "turn_pause_ms": 650,
+      "animate_own": true
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 1120,
+        "color": "#164b3d",
+        "line_color": "#a58a55"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 78,
+        "height": 104,
+        "color": "#fff6df",
+        "text_color": "#202c42",
+        "border_color": "#d3ad62"
+      },
+      "red-card": {
+        "shape": "card",
+        "width": 78,
+        "height": 104,
+        "color": "#fff6df",
+        "text_color": "#b72f4c",
+        "border_color": "#d3ad62"
+      },
+      "black-card": {
+        "shape": "card",
+        "width": 78,
+        "height": 104,
+        "color": "#fff6df",
+        "text_color": "#202c42",
+        "border_color": "#d3ad62"
+      },
+      "back": {
+        "shape": "image",
+        "width": 78,
+        "height": 104,
+        "back_asset": "back"
+      }
+    },
+    "assets": {
+      "back": {
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCAxMTAiPjxyZWN0IHg9IjEiIHk9IjEiIHdpZHRoPSI3OCIgaGVpZ2h0PSIxMDgiIHJ4PSI5IiBmaWxsPSIjMjQzZDY4IiBzdHJva2U9IiNlNGM0NzciIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjYiIHk9IjYiIHdpZHRoPSI2OCIgaGVpZ2h0PSI5OCIgcng9IjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZjFkNiIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTEyIDU1IDQwIDE0IDY4IDU1IDQwIDk2WiIgZmlsbD0iI2I5NDY1YSIgc3Ryb2tlPSIjZmZmMWQ2IiBzdHJva2Utd2lkdGg9IjMiLz48Y2lyY2xlIGN4PSI0MCIgY3k9IjU1IiByPSI2IiBmaWxsPSIjZjJjZjdiIi8+PC9zdmc+",
+        "media_type": "image/svg+xml",
+        "width": 80,
+        "height": 110,
+        "alt": "Decorative card back"
+      }
+    },
+    "strings": {
+      "title": "Michigan",
+      "server_message_1": "game over",
+      "server_message_2": "not your turn",
+      "server_message_3": "illegal card",
+      "server_message_4": "you have a playable card",
+      "server_message_5": "bad move"
+    },
+    "ui_code": "const GAME=\"michigan\";\nconst TITLE=\"Michigan\";\nfunction cardName(c){if(typeof c==='string'){const m=/^(10|[2-9]|A|J|Q|K)([CDSH])$/i.exec(c);if(!m)return c;return m[1].toUpperCase()+({C:'♣',D:'♦',S:'♠',H:'♥'}[m[2].toUpperCase()]||'');}if(c&&typeof c==='object'){const suit={C:'♣',D:'♦',S:'♠',H:'♥'}[c.s]||'♣';return ['?','A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.r]+suit;}const r=c%13+1;return ['A','2','3','4','5','6','7','8','9','10','J','Q','K'][r-1]+['♣','♦','♠','♥'][Math.floor(c/13)];}\nfunction cardType(c){let suit;if(typeof c==='string'){const m=/([CDSH])$/i.exec(c);suit=m?m[1].toUpperCase():'C';}else if(c&&typeof c==='object')suit=String(c.s||'C').toUpperCase();else suit=['C','D','S','H'][Math.floor(Number(c)/13)]||'C';return suit==='D'||suit==='H'?'red-card':'black-card';}\nfunction centeredX(text,font,center=300){return Math.max(16,center-String(text).length*font*.27);}\nfunction shortName(name){return String(name||'Player').length>16?String(name).slice(0,15)+'…':String(name||'Player');}\nvar gameUI={reduce(message,localState){\nconst m=message.type==='ui_event'?(message.state_changed||{}):message,v=m.view||m.state||{},e=message.type==='ui_event'?(message.event||{}):{};\nconst active=m.status==='ongoing'&&!m.replay&&Number.isInteger(m.acting_for_player_index),seat=Number.isInteger(m.acting_for_player_index)?m.acting_for_player_index:(m.my_player_index||0);\nconst pieces=[],labels=[],controls=[],suits=['♣','♦','♠','♥'],names=(m.players||[]).map(p=>shortName(p.name||p.display_name));\nlet make_move, next={};\nconst label=(id,text,y,size=20,x=300,color='#dfede5')=>labels.push({id,text:String(text),x:centeredX(text,size,x),y,font_size:size,color});\nconst button=(id,text)=>controls.push({id,kind:'button',label:text});\nconst card=(id,c,x,y,ok=false,extra={})=>pieces.push({id,type:cardType(c),board:'table',position:{x,y},text:cardName(c),face:'front',actions:ok?['tap']:[],aria_label:(ok?'Play ':'')+cardName(c),animation:{kind:'move',key:id+'-'+String(c&&typeof c==='object'?JSON.stringify(c):c).replace(/[^A-Za-z0-9_.:-]/g,'_'),duration_ms:380},...extra});\nconst hand=(cards,legal,y=490)=>{const cols=Math.min(6,cards.length),rows=Math.ceil(cards.length/6);cards.forEach((c,i)=>{const row=Math.floor(i/6),count=Math.min(6,cards.length-row*6);card('hand-'+c,c,300+(i%6-(count-1)/2)*88,y+row*112,active&&legal.includes(c));});return rows;};\nlabel('title',TITLE,24,30,300,'#fff1d6');\nlabel('turn',m.status==='over'?(GAME==='old-maid'?(names[v.loser]==='You'?'You hold the Old Maid':`${names[v.loser]||'Player'} holds the Old Maid`):Number.isInteger(v.winner)?(names[v.winner]==='You'?'You win':`${names[v.winner]||'Player'} wins`):'Round complete'):active?'Your turn':`Waiting for ${names[v.turnIdx??v.turn??v.cur??(m.turn_of_player_indices||[])[0]]||'player'}`,70);\nif(GAME==='crazy-eights'){\n const cards=v.hand||[],legal=v.playable||[];let pending=localState&&localState.moveCount===m.move_count?localState.pendingEight:null;\n if(!legal.includes(pending))pending=null;\n if(active&&e.type==='tap'){\n  if(e.id&&e.id.startsWith('hand-')){const c=Number(e.id.slice(5));if(legal.includes(c)){if(c%13+1===8)pending=c;else{make_move={card:c};pending=null;}}}\n  if(e.id==='cancel-suit')pending=null;\n  if(/^suit-[0-3]$/.test(e.id||'')&&pending!=null){make_move={card:pending,chosenSuit:Number(e.id.slice(5))};pending=null;}\n  if((e.id==='draw'||e.id==='stock')&&!legal.length)make_move='draw';\n }\n names.forEach((name,i)=>label('score-'+i,`${name} · ${(v.counts||[])[i]||0}`,110+Math.floor(i/3)*26,17,300+(i%3-(Math.min(3,names.length-Math.floor(i/3)*3)-1)/2)*190));\n pieces.push({id:'stock',type:'back',board:'table',position:{x:205,y:270},face:'back',actions:active&&!legal.length&&v.deckCount>0?['tap']:[],aria_label:'Draw a card'});\n card('hand-'+v.top,v.top,395,270,false,{animation:{kind:'move',key:'discard-'+v.top,duration_ms:440}});\n label('stock-label',`Draw · ${v.deckCount||0}`,343,18,205);label('discard-label','Discard',343,18,395);\n label('suit',`Match ${suits[v.suit??v.currentSuit??Math.floor(v.top/13)]||''} or rank · 8 is wild`,385,19,300,'#ffe28a');\n label('hand-label',`Your hand · ${cards.length} cards`,415,20);\n hand(cards,legal,505);label('hint',m.status==='over'?'Round complete · the winning hand is empty.':pending!=null?'Choose a suit below to play your 8.':'Tap a highlighted card to play.',690,19,300,'#ffe28a');\n if(active&&!legal.length)button('draw','Draw a card');\n if(pending!=null){for(let s=0;s<4;s++)button('suit-'+s,suits[s]+' '+['Clubs','Diamonds','Spades','Hearts'][s]);button('cancel-suit','Cancel suit choice');}\n next={moveCount:m.move_count,pendingEight:pending};\n}else if(GAME==='hearts'){\n const cards=v.hand||[],legal=v.legal||[],trick=(v.trick||[]).length?v.trick:(v.lastTrick||[]),low=Math.min(...(v.taken||[0])),leaders=(v.taken||[]).map((score,i)=>score===low?i:-1).filter(i=>i>=0);\n if(m.status==='over'&&leaders.length>1){const turn=labels.find(l=>l.id==='turn');turn.text=`Tie · ${low} points`;turn.x=centeredX(turn.text,turn.font_size);}\n names.forEach((name,i)=>label('score-'+i,`${name} · ${(v.taken||[])[i]||0} pts`,112+Math.floor(i/2)*28,18,155+(i%2)*290,m.status==='over'&&leaders.includes(i)?'#ffe28a':'#dfede5'));\n label('trick-label',`Trick ${Math.min(13,(v.trickNum||0)+1)} of 13`,185,20,300,'#ffe28a');\n const places=[[190,265],[410,265],[190,380],[410,380]];\n trick.forEach(t=>{const [x,y]=places[t.player%4];card('hand-'+t.card,t.card,x,y,false,{scale:.8});label('played-'+t.player,names[t.player]||'Player',y+48,16,x);});\n label('hand-label','Your hand · follow the suit led',460,20);hand(cards,legal,560);\n if(active&&e.type==='tap'&&legal.includes(e.id?.slice(5))&&e.id.startsWith('hand-'))make_move={card:e.id.slice(5)};\n label('hint',m.status==='over'?(leaders.length>1?`Shared lowest score · ${low} points`:`Winner · ${names[v.winner]||'—'}`):'One round · ♥ = 1 · Q♠ = 13 · lowest score wins',860,18,300,'#ffe28a');\n}else if(GAME==='michigan'){\n const cards=v.hand||[],legal=v.legal||[],rows=v.rows||[],symbols=['♣','♦','♥','♠'];\n label('objective','Build each suit outward from 7',110,20,300,'#ffe28a');for(let r=1;r<=13;r++)label('rank-'+r,['A','2','3','4','5','6','7','8','9','10','J','Q','K'][r-1],137,14,82+(r-1)*38,'#9abcae');\n rows.forEach((row,s)=>{label('suit-'+s,symbols[s],163+s*72,24,35);for(let r=1;r<=13;r++){const x=82+(r-1)*38,y=180+s*72;if(row.low!==null&&r>=row.low&&r<=row.high)card('hand-'+(s*13+r-1),s*13+r-1,x,y,false,{scale:.43,text:['A','2','3','4','5','6','7','8','9','10','J','Q','K'][r-1]+symbols[s],type:s===1||s===2?'red-card':'black-card'});}});\n label('hand-label',`Your hand · ${cards.length} cards`,430,20);hand(cards,legal,520);for(const piece of pieces.filter(p=>p.id.startsWith('hand-'))){const c=Number(piece.id.slice(5)),s=Math.floor(c/13);piece.text=['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c%13]+symbols[s];piece.type=s===1||s===2?'red-card':'black-card';piece.aria_label=(piece.actions.length?'Play ':'')+piece.text;}\n label('hint',m.status==='over'?'Round complete · the sequences remain on the table.':'Tap a highlighted card to extend a sequence.',1065,18,300,'#ffe28a');\n if(active&&!legal.length)button('pass','Pass · no playable cards');\n if(active&&e.type==='tap'){const c=Number((e.id||'').slice(5));if(e.id?.startsWith('hand-')&&legal.includes(c))make_move={card:c};if(e.id==='pass'&&!legal.length)make_move={pass:true};}\n}else if(GAME==='casino-war'){\n label('round',`Hand ${v.round||1} of 10`,110,21);label('score',`You ${v.playerWins||0} · Dealer ${v.dealerWins||0} · Ties ${v.ties||0}`,150,20,300,'#ffe28a');\n label('you','You',220,22,170);label('dealer','Dealer',220,22,430);\n for(const [who,c,x] of [['player',v.playerCard,170],['dealer',v.dealerCard,430]]){\n if(c)card(who+'-card',c,x,330,false,{type:c.suit===1||c.suit===3?'red-card':'black-card',text:['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.rank-1]+suits[c.suit],aria_label:who+' '+['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.rank-1]+suits[c.suit],animation:{kind:'move',key:`${v.round}-${c.rank}-${c.suit}`,duration_ms:560}});\n else pieces.push({id:who+'-card',type:'back',board:'table',position:{x,y:330},face:'back',actions:[]});\n }\n const high=c=>c.rank===1?14:c.rank;\n const result=v.phase==='result'?(high(v.playerCard)>high(v.dealerCard)?'You win the hand':high(v.playerCard)<high(v.dealerCard)?'Dealer wins the hand':'Tie · no winner this hand'):v.phase==='over'?(v.winner==null?'Match tied':v.winner===0?'You win!':'Dealer wins!'):v.phase==='dealer'?'Your card is revealed. Flip the dealer.':'Higher card wins the hand.';\n label('result',result,455,23,300,'#ffe28a');\n if(active){if(v.phase==='deal')button('deal','Deal your card');if(v.phase==='dealer')button('dealer-flip','Reveal dealer');if(v.phase==='result')button('next','Next hand');\n if(e.type==='tap'){if(e.id==='deal'&&v.phase==='deal')make_move={kind:'deal'};if(e.id==='dealer-flip'&&v.phase==='dealer')make_move={kind:'flip'};if(e.id==='next'&&v.phase==='result')make_move={kind:'next'};}}\n}else if(GAME==='old-maid'){\n const cards=v.hand||[],opponents=v.opponents||[],cols=opponents.length===1?1:2,rows=Math.ceil(opponents.length/cols);\n opponents.forEach((opp,k)=>{const ok=active&&(v.legalTargets||[]).includes(opp.seat),cx=300,cy=310,gap=Math.min(50,460/Math.max(1,opp.count-1));\n label('opp-name-'+opp.seat,`${names[opp.seat]||'Player'} · ${opp.count}`,110+Math.floor(k/2)*28,18,cols===1?300:155+(k%2)*290,ok?'#ffe28a':'#dfede5');\n if(ok||(!active&&k===0))for(let j=0;j<opp.count;j++)pieces.push({id:`opp-${opp.seat}-${j}`,type:'back',board:'table',position:{x:cx+(j-(opp.count-1)/2)*gap,y:cy},scale:.8,face:'back',actions:ok?['tap']:[],aria_label:`Draw card ${j+1} from ${names[opp.seat]||'opponent'}`});\n if(ok&&e.type==='tap'&&e.id?.startsWith(`opp-${opp.seat}-`)){const i=Number(e.id.split('-')[2]);if(Number.isInteger(i)&&i>=0&&i<opp.count)make_move={target:opp.seat,cardIndex:i};}\n });\n const y=450;label('hand-label',`Your hand · ${cards.length} cards`,y-30,20);hand(cards,[],y+50);\n label('hint',m.status==='over'?'Round complete · pairs have been cleared.':'Draw one hidden card · matching pairs clear automatically.',y+Math.max(1,Math.ceil(cards.length/6))*112+38,18,300,'#ffe28a');\n}else if(GAME==='blackjack'){\n const hs=(v.hands||[])[seat]||[],hi=v.curP===seat&&Number.isInteger(v.curH)?Math.max(0,Math.min(v.curH,hs.length-1)):0,h=hs[hi]||hs[0]||{},cards=h.cards||[],dealer=v.dealer||[];\n const value=cs=>{let t=0,a=0;cs.forEach(c=>{t+=c.r===1?11:Math.min(c.r,10);if(c.r===1)a++;});while(t>21&&a-->0)t-=10;return t;};\n const leaders=(v.chips||[]).map((chips,i)=>chips===Math.max(...(v.chips||[0]))?i:-1).filter(i=>i>=0);\n const phase={setup:'Ready to play',betting:'Place your bet',play:active?'Hit or stand':'Waiting for the other hand',roundOver:'Round complete',gameOver:leaders.length>1?'Game over · tied chip totals':v.winners===seat?'Game over · You win':`Game over · ${names[v.winners]||'Winner'} wins`}[v.phase]||'';\n labels.splice(1,1);label('phase',phase,70,22);label('bank',`Round ${v.round||1} · Chips ${(v.chips||[])[seat]||0} · Bet ${h.bet||(v.pendingBets||{})[seat]||0}`,115,19,300,'#ffe28a');\n label('dealer-label',v.holeHidden?'Dealer · one card hidden':`Dealer · ${dealer.length?value(dealer):'—'}`,170,21);\n const dc=dealer.length+(v.holeHidden?1:0),step=Math.min(90,480/Math.max(1,dc-1));\n dealer.forEach((c,i)=>card('dealer-'+i,c,300+(i-(dc-1)/2)*step,265,false,{animation:{kind:'move',key:`${v.round}-${i}-${c.r}-${c.s}`,duration_ms:560}}));\n if(v.holeHidden)pieces.push({id:'dealer-1',type:'back',board:'table',position:{x:300+(dc-1)/2*step,y:265},face:'back',actions:[]});\n label('hand-label',`${names[seat]||'You'} · Hand ${hi+1} of ${Math.max(1,hs.length)}`,370,21);label('hand-value',cards.length?`Value ${value(cards)}${value(cards)>21?' · Bust':''}`:'Get as close to 21 as you can.',406,20,300,'#ffe28a');\n const ps=Math.min(90,480/Math.max(1,cards.length-1));cards.forEach((c,i)=>card(`player-${seat}-${hi}-${i}`,c,300+(i-(cards.length-1)/2)*ps,510));\n ((v.results||[])[seat]||'Dealer draws to 17').split(' | ').forEach((text,i)=>label('result-'+i,hs.length>1?`Hand ${i+1} · ${value((hs[i]||{}).cards||[])} · ${text}`:text,610+i*26,18,300,'#ffe28a'));\n if(v.phase==='play'&&hs.length>1)hs.forEach((other,i)=>label('split-hand-'+i,`Hand ${i+1} · ${value(other.cards||[])} · Bet ${other.bet} · ${i===hi?'Playing':other.done?'Done':'Waiting'}`,640+i*24,16));\n const available=[];if(active){if(v.phase==='setup')available.push(['start','Start game']);if(v.phase==='betting'){const chips=(v.chips||[])[seat]||0;if(chips>0)available.push(['bet',`Bet ${Math.min(10,chips)}`]);for(const amount of [25,50,100])if(chips>=amount)available.push(['bet-'+amount,`Bet ${amount}`]);}if(v.phase==='roundOver')available.push(['next','Next round']);if(v.phase==='play'){\n available.push(['hit','Hit'],['stand','Stand']);const afford=(v.chips||[])[seat]>=h.bet;\n if(cards.length===2&&afford)available.push(['double','Double']);if(cards.length===2&&afford&&cards[0].r===cards[1].r&&hs.length<4)available.push(['split','Split']);\n }}available.forEach(([id,text])=>button(id,text));if(e.type==='tap'&&available.some(([id])=>id===e.id))make_move=e.id==='bet'?{kind:'bet',amount:Math.min(10,(v.chips||[])[seat]||10)}:e.id.startsWith('bet-')?{kind:'bet',amount:Number(e.id.slice(4))}:{kind:e.id};\n}\nconst out={scene:{pieces,labels,controls,targets:[]},local_state:next};if(make_move!==undefined)out.make_move=make_move;return out;\n}};\n"
+  },
+  "rules": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+  "ui_instructions": "Play a highlighted legal card from your hand. The center rows show the ranks already built for each suit; pass only when no card is playable.",
+  "tutorial": {
+    "text": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+    "html": "<!doctype html><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>Michigan</h1><p>Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.</p></main>"
+  },
+  "images": [
+    {
+      "caption": "Michigan cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#0b5136\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#fffdf3\" transform=\"translate(143 87) scale(0.7166666666666667)\"/><g transform=\"translate(247 87) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(0 0) scale(0.9)\"/></g><g transform=\"translate(333 87) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(0 -35) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(0 35) scale(0.48333333333333334)\"/></g><g transform=\"translate(419 87) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(0 -42) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(0 0) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(0 42) scale(0.48333333333333334)\"/></g><g transform=\"translate(505 87) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(-24 -38) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(24 -38) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(-24 38) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(24 38) scale(0.48333333333333334)\"/></g><g transform=\"translate(591 87) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(-24 -51) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(-24 -17) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(-24 17) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(-24 51) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(24 -51) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(24 -17) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(24 17) scale(0.48333333333333334)\"/><path d=\"M0 -23 A13 13 0 1 0 -7 -1 A13 13 0 1 0 -2 17 L-8 29 H8 L2 17 A13 13 0 1 0 7 -1 A13 13 0 1 0 0 -23Z\" fill=\"#20312b\" transform=\"translate(24 51) scale(0.48333333333333334)\"/></g><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(143 181) scale(0.7166666666666667)\"/><g transform=\"translate(247 181) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(0 0) scale(0.9)\"/></g><g transform=\"translate(333 181) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(0 -35) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(0 35) scale(0.48333333333333334)\"/></g><g transform=\"translate(419 181) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(0 -42) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(0 0) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(0 42) scale(0.48333333333333334)\"/></g><g transform=\"translate(505 181) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 -38) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 -38) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 38) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 38) scale(0.48333333333333334)\"/></g><g transform=\"translate(591 181) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 -51) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 -17) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 17) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(-24 51) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 -51) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 -17) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 17) scale(0.48333333333333334)\"/><path d=\"M0 -31 L23 0 L0 31 L-23 0Z\" fill=\"#ef4444\" transform=\"translate(24 51) scale(0.48333333333333334)\"/></g><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(143 275) scale(0.7166666666666667)\"/><g transform=\"translate(247 275) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 0) scale(0.9)\"/></g><g transform=\"translate(333 275) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 -35) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 35) scale(0.48333333333333334)\"/></g><g transform=\"translate(419 275) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 -42) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 0) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(0 42) scale(0.48333333333333334)\"/></g><g transform=\"translate(505 275) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(-24 -38) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(24 -38) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(-24 38) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(24 38) scale(0.48333333333333334)\"/></g><g transform=\"translate(591 275) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(-24 -51) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(-24 -17) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(-24 17) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(-24 51) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(24 -51) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(24 -17) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(24 17) scale(0.48333333333333334)\"/><path d=\"M0 9 C-28 -7 -28 -29 -13 -29 C-5 -29 0 -22 0 -18 C0 -22 5 -29 13 -29 C28 -29 28 -7 0 9Z\" fill=\"#ef4444\" transform=\"translate(24 51) scale(0.48333333333333334)\"/></g><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#fffdf3\" transform=\"translate(143 369) scale(0.7166666666666667)\"/><g transform=\"translate(247 369) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(0 0) scale(0.9)\"/></g><g transform=\"translate(333 369) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(0 -35) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(0 35) scale(0.48333333333333334)\"/></g><g transform=\"translate(419 369) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(0 -42) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(0 0) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(0 42) scale(0.48333333333333334)\"/></g><g transform=\"translate(505 369) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 -38) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 -38) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 38) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 38) scale(0.48333333333333334)\"/></g><g transform=\"translate(591 369) rotate(0) scale(0.52)\"><rect x=\"-55\" y=\"-77\" width=\"110\" height=\"154\" rx=\"12\" fill=\"#fffdf3\" stroke=\"#20312b\" stroke-width=\"5\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 -51) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 -17) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 17) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(-24 51) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 -51) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 -17) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 17) scale(0.48333333333333334)\"/><path d=\"M0 -30 C-8 -18 -29 -6 -24 7 C-20 19 -5 16 -2 8 L-8 25 H8 L2 8 C5 16 20 19 24 7 C29 -6 8 -18 0 -30Z\" fill=\"#20312b\" transform=\"translate(24 51) scale(0.48333333333333334)\"/></g></svg>"
+    },
+    {
+      "caption": "Your hand",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+    },
+    {
+      "caption": "A card in play",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+    },
+    {
+      "caption": "Round result",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "move_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": true
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "view_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "cases": [
+      {
+        "name": "Michigan initial",
+        "description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 20
+        },
+        "state": {
+          "hands": [
+            [
+              26,
+              40,
+              11,
+              38,
+              29,
+              32,
+              12,
+              25,
+              31,
+              5,
+              9,
+              33,
+              49,
+              7,
+              41,
+              6,
+              27,
+              17,
+              51,
+              46,
+              19,
+              35,
+              23,
+              15,
+              37,
+              16
+            ],
+            [
+              48,
+              10,
+              8,
+              39,
+              1,
+              18,
+              13,
+              0,
+              50,
+              42,
+              20,
+              45,
+              28,
+              34,
+              2,
+              14,
+              24,
+              36,
+              21,
+              43,
+              4,
+              44,
+              30,
+              47,
+              22,
+              3
+            ]
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            }
+          ],
+          "turn": 0,
+          "passes": 0,
+          "done": false,
+          "winner": null
+        },
+        "view_of_mover": {
+          "hand": [
+            26,
+            40,
+            11,
+            38,
+            29,
+            32,
+            12,
+            25,
+            31,
+            5,
+            9,
+            33,
+            49,
+            7,
+            41,
+            6,
+            27,
+            17,
+            51,
+            46,
+            19,
+            35,
+            23,
+            15,
+            37,
+            16
+          ],
+          "counts": [
+            26,
+            26
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            }
+          ],
+          "turn": 0,
+          "passes": 0,
+          "done": false,
+          "winner": null,
+          "legal": [
+            32,
+            6,
+            19
+          ]
+        },
+        "view_of_other": {
+          "hand": [],
+          "counts": [
+            26,
+            26
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            }
+          ],
+          "turn": 0,
+          "passes": 0,
+          "done": false,
+          "winner": null,
+          "legal": []
+        },
+        "player_id": "p0",
+        "other_player_id": null,
+        "move": {
+          "card": 32
+        },
+        "expected_state": {
+          "hands": [
+            [
+              26,
+              40,
+              11,
+              38,
+              29,
+              12,
+              25,
+              31,
+              5,
+              9,
+              33,
+              49,
+              7,
+              41,
+              6,
+              27,
+              17,
+              51,
+              46,
+              19,
+              35,
+              23,
+              15,
+              37,
+              16
+            ],
+            [
+              48,
+              10,
+              8,
+              39,
+              1,
+              18,
+              13,
+              0,
+              50,
+              42,
+              20,
+              45,
+              28,
+              34,
+              2,
+              14,
+              24,
+              36,
+              21,
+              43,
+              4,
+              44,
+              30,
+              47,
+              22,
+              3
+            ]
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": 7,
+              "high": 7
+            },
+            {
+              "low": null,
+              "high": null
+            }
+          ],
+          "turn": 1,
+          "passes": 0,
+          "done": false,
+          "winner": null
+        },
+        "expected_turn": [
+          "p1"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            26,
+            40,
+            11,
+            38,
+            29,
+            12,
+            25,
+            31,
+            5,
+            9,
+            33,
+            49,
+            7,
+            41,
+            6,
+            27,
+            17,
+            51,
+            46,
+            19,
+            35,
+            23,
+            15,
+            37,
+            16
+          ],
+          "counts": [
+            25,
+            26
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": 7,
+              "high": 7
+            },
+            {
+              "low": null,
+              "high": null
+            }
+          ],
+          "turn": 1,
+          "passes": 0,
+          "done": false,
+          "winner": null,
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "counts": [
+            25,
+            26
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": 7,
+              "high": 7
+            },
+            {
+              "low": null,
+              "high": null
+            }
+          ],
+          "turn": 1,
+          "passes": 0,
+          "done": false,
+          "winner": null,
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Michigan intermediate",
+        "description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 1,
+          "seed": 21
+        },
+        "state": {
+          "hands": [
+            [
+              26,
+              40,
+              11,
+              38,
+              29,
+              12,
+              25,
+              31,
+              5,
+              9,
+              33,
+              49,
+              7,
+              41,
+              6,
+              27,
+              17,
+              51,
+              46,
+              19,
+              35,
+              23,
+              15,
+              37,
+              16
+            ],
+            [
+              48,
+              10,
+              8,
+              39,
+              1,
+              18,
+              13,
+              0,
+              50,
+              42,
+              20,
+              45,
+              28,
+              34,
+              2,
+              14,
+              24,
+              36,
+              21,
+              43,
+              4,
+              44,
+              30,
+              47,
+              22,
+              3
+            ]
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": 7,
+              "high": 7
+            },
+            {
+              "low": null,
+              "high": null
+            }
+          ],
+          "turn": 1,
+          "passes": 0,
+          "done": false,
+          "winner": null
+        },
+        "view_of_mover": {
+          "hand": [
+            48,
+            10,
+            8,
+            39,
+            1,
+            18,
+            13,
+            0,
+            50,
+            42,
+            20,
+            45,
+            28,
+            34,
+            2,
+            14,
+            24,
+            36,
+            21,
+            43,
+            4,
+            44,
+            30,
+            47,
+            22,
+            3
+          ],
+          "counts": [
+            25,
+            26
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": 7,
+              "high": 7
+            },
+            {
+              "low": null,
+              "high": null
+            }
+          ],
+          "turn": 1,
+          "passes": 0,
+          "done": false,
+          "winner": null,
+          "legal": [
+            45
+          ]
+        },
+        "view_of_other": {
+          "hand": [],
+          "counts": [
+            25,
+            26
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": 7,
+              "high": 7
+            },
+            {
+              "low": null,
+              "high": null
+            }
+          ],
+          "turn": 1,
+          "passes": 0,
+          "done": false,
+          "winner": null,
+          "legal": []
+        },
+        "player_id": "p1",
+        "other_player_id": null,
+        "move": {
+          "card": 45
+        },
+        "expected_state": {
+          "hands": [
+            [
+              26,
+              40,
+              11,
+              38,
+              29,
+              12,
+              25,
+              31,
+              5,
+              9,
+              33,
+              49,
+              7,
+              41,
+              6,
+              27,
+              17,
+              51,
+              46,
+              19,
+              35,
+              23,
+              15,
+              37,
+              16
+            ],
+            [
+              48,
+              10,
+              8,
+              39,
+              1,
+              18,
+              13,
+              0,
+              50,
+              42,
+              20,
+              28,
+              34,
+              2,
+              14,
+              24,
+              36,
+              21,
+              43,
+              4,
+              44,
+              30,
+              47,
+              22,
+              3
+            ]
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": 7,
+              "high": 7
+            },
+            {
+              "low": 7,
+              "high": 7
+            }
+          ],
+          "turn": 0,
+          "passes": 0,
+          "done": false,
+          "winner": null
+        },
+        "expected_turn": [
+          "p0"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            48,
+            10,
+            8,
+            39,
+            1,
+            18,
+            13,
+            0,
+            50,
+            42,
+            20,
+            28,
+            34,
+            2,
+            14,
+            24,
+            36,
+            21,
+            43,
+            4,
+            44,
+            30,
+            47,
+            22,
+            3
+          ],
+          "counts": [
+            25,
+            25
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": 7,
+              "high": 7
+            },
+            {
+              "low": 7,
+              "high": 7
+            }
+          ],
+          "turn": 0,
+          "passes": 0,
+          "done": false,
+          "winner": null,
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "counts": [
+            25,
+            25
+          ],
+          "rows": [
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": null,
+              "high": null
+            },
+            {
+              "low": 7,
+              "high": 7
+            },
+            {
+              "low": 7,
+              "high": 7
+            }
+          ],
+          "turn": 0,
+          "passes": 0,
+          "done": false,
+          "winner": null,
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Michigan terminal",
+        "description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 50,
+          "seed": 70
+        },
+        "state": {
+          "hands": [
+            [
+              15
+            ],
+            [
+              13,
+              14
+            ]
+          ],
+          "rows": [
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 4,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            }
+          ],
+          "turn": 0,
+          "passes": 1,
+          "done": false,
+          "winner": null
+        },
+        "view_of_mover": {
+          "hand": [
+            15
+          ],
+          "counts": [
+            1,
+            2
+          ],
+          "rows": [
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 4,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            }
+          ],
+          "turn": 0,
+          "passes": 1,
+          "done": false,
+          "winner": null,
+          "legal": [
+            15
+          ]
+        },
+        "view_of_other": {
+          "hand": [],
+          "counts": [
+            1,
+            2
+          ],
+          "rows": [
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 4,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            }
+          ],
+          "turn": 0,
+          "passes": 1,
+          "done": false,
+          "winner": null,
+          "legal": []
+        },
+        "player_id": "p0",
+        "other_player_id": null,
+        "move": {
+          "card": 15
+        },
+        "expected_state": {
+          "hands": [
+            [],
+            [
+              13,
+              14
+            ]
+          ],
+          "rows": [
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 3,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            }
+          ],
+          "turn": 0,
+          "passes": 0,
+          "done": true,
+          "winner": 0
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "hand": [],
+          "counts": [
+            0,
+            2
+          ],
+          "rows": [
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 3,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            }
+          ],
+          "turn": 0,
+          "passes": 0,
+          "done": true,
+          "winner": 0,
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "counts": [
+            0,
+            2
+          ],
+          "rows": [
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 3,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            },
+            {
+              "low": 1,
+              "high": 13
+            }
+          ],
+          "turn": 0,
+          "passes": 0,
+          "done": true,
+          "winner": 0,
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          },
+          {
+            "caption": "after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 225\"><rect width=\"400\" height=\"220\" rx=\"20\" fill=\"#15523d\"/><rect x=\"155\" y=\"38\" width=\"90\" height=\"135\" rx=\"12\" fill=\"#fff6df\" stroke=\"#d3ad62\" stroke-width=\"5\"/><text x=\"180\" y=\"112\" font-size=\"40\" fill=\"#b72f4c\">A</text></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "p0": 0
+        }
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Michigan",
+      "short_description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_logic_rules": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_ui_rules": "Play a highlighted legal card from your hand. The center rows show the ranks already built for each suit; pass only when no card is playable.",
+      "tutorial_strings": {
+        "Michigan": "Michigan",
+        "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins."
+      },
+      "client_strings": {
+        "title": "Michigan",
+        "server_message_1": "game over",
+        "server_message_2": "not your turn",
+        "server_message_3": "illegal card",
+        "server_message_4": "you have a playable card",
+        "server_message_5": "bad move"
+      }
+    },
+    "fr": {
+      "display_name": "Michigan",
+      "short_description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_logic_rules": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_ui_rules": "Play a highlighted legal card from your hand. The center rows show the ranks already built for each suit; pass only when no card is playable.",
+      "tutorial_strings": {
+        "Michigan": "Michigan",
+        "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins."
+      },
+      "client_strings": {
+        "title": "Michigan",
+        "server_message_1": "game over",
+        "server_message_2": "not your turn",
+        "server_message_3": "illegal card",
+        "server_message_4": "you have a playable card",
+        "server_message_5": "bad move"
+      }
+    },
+    "de": {
+      "display_name": "Michigan",
+      "short_description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_logic_rules": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_ui_rules": "Play a highlighted legal card from your hand. The center rows show the ranks already built for each suit; pass only when no card is playable.",
+      "tutorial_strings": {
+        "Michigan": "Michigan",
+        "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins."
+      },
+      "client_strings": {
+        "title": "Michigan",
+        "server_message_1": "game over",
+        "server_message_2": "not your turn",
+        "server_message_3": "illegal card",
+        "server_message_4": "you have a playable card",
+        "server_message_5": "bad move"
+      }
+    },
+    "pt": {
+      "display_name": "Michigan",
+      "short_description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_logic_rules": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_ui_rules": "Play a highlighted legal card from your hand. The center rows show the ranks already built for each suit; pass only when no card is playable.",
+      "tutorial_strings": {
+        "Michigan": "Michigan",
+        "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins."
+      },
+      "client_strings": {
+        "title": "Michigan",
+        "server_message_1": "game over",
+        "server_message_2": "not your turn",
+        "server_message_3": "illegal card",
+        "server_message_4": "you have a playable card",
+        "server_message_5": "bad move"
+      }
+    },
+    "zh": {
+      "display_name": "密歇根牌",
+      "short_description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_logic_rules": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_ui_rules": "Play a highlighted legal card from your hand. The center rows show the ranks already built for each suit; pass only when no card is playable.",
+      "tutorial_strings": {
+        "Michigan": "密歇根牌",
+        "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins."
+      },
+      "client_strings": {
+        "title": "密歇根牌",
+        "server_message_1": "game over",
+        "server_message_2": "not your turn",
+        "server_message_3": "illegal card",
+        "server_message_4": "you have a playable card",
+        "server_message_5": "bad move"
+      }
+    },
+    "hi": {
+      "display_name": "मिशिगन",
+      "short_description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_logic_rules": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_ui_rules": "Play a highlighted legal card from your hand. The center rows show the ranks already built for each suit; pass only when no card is playable.",
+      "tutorial_strings": {
+        "Michigan": "मिशिगन",
+        "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins."
+      },
+      "client_strings": {
+        "title": "मिशिगन",
+        "server_message_1": "game over",
+        "server_message_2": "not your turn",
+        "server_message_3": "illegal card",
+        "server_message_4": "you have a playable card",
+        "server_message_5": "bad move"
+      }
+    },
+    "ar": {
+      "display_name": "ميشيغان",
+      "short_description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_logic_rules": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
+      "game_ui_rules": "Play a highlighted legal card from your hand. The center rows show the ranks already built for each suit; pass only when no card is playable.",
+      "tutorial_strings": {
+        "Michigan": "ميشيغان",
+        "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins."
+      },
+      "client_strings": {
+        "title": "ميشيغان",
+        "server_message_1": "game over",
+        "server_message_2": "not your turn",
+        "server_message_3": "illegal card",
+        "server_message_4": "you have a playable card",
+        "server_message_5": "bad move"
+      }
+    }
+  }
+}
