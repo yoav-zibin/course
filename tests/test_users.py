@@ -18,6 +18,8 @@ def test_create_and_get_a_guest_user(api: Api) -> None:
         "display_name": "alice",
         "picture_url": user["picture_url"],
         "locale": "",
+        "notifications_enabled": True,
+        "notification_prompt_seen": False,
         "replaced_by_user_id": None,
         "replaced_user_ids": [],
         "password": user["password"],
@@ -40,6 +42,7 @@ def test_create_and_get_a_guest_user(api: Api) -> None:
     assert api.ok("GET", f"/users/{user['id']}") == {
         **user_without_password, "referral_code": None,
         "token_balance": None, "last_token_grant_day": None,
+        "notifications_enabled": None, "notification_prompt_seen": None,
     }
 
 
@@ -116,7 +119,7 @@ def test_users_can_change_their_own_display_name(api: Api) -> None:
     assert rename("nobody", as_user=alice) == (404, "user not found")
     assert validation_errors(
         api.request("PATCH", f"/users/{alice}", as_user=alice, json={})
-    ) == ["Value error, give display_name, locale or both"]
+    ) == ["Value error, give at least one profile field"]
 
 
 def test_passwords_are_saved_and_only_shown_by_the_debug_tools(

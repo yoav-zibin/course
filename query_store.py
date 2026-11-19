@@ -77,6 +77,7 @@ INTERNAL_COLLECTIONS = frozenset(
         "jobs",
         "failed_jobs",
         "outbox",
+        "push_receipts",
         "cleanup",
         "matchmaking",
         "migration",
@@ -1299,7 +1300,8 @@ class QueryStore:
             invite.token,
             invite,
             participants=sorted(
-                {invite.created_by_user_id, *(a.user_id for a in invite.acceptances)}
+                {invite.created_by_user_id, *(a.user_id for a in invite.acceptances),
+                 *([invite.recipient_user_id] if invite.recipient_user_id else [])}
             ),
         )
 

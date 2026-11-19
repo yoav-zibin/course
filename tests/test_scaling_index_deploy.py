@@ -4,8 +4,20 @@ from unittest.mock import Mock, patch
 import pytest
 
 from game_platform.scaling_index_deploy import deploy
+from game_platform.scaling_indexes import index_config
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore_admin_v1 as admin
+
+
+def test_native_receipt_worker_due_time_remains_indexed_when_defaults_are_disabled():
+    overrides = index_config("test_notifications")["fieldOverrides"]
+    fields = {item["fieldPath"]: item for item in overrides
+              if item["collectionGroup"] == "test_notifications_push_receipts"}
+    assert fields["*"]["indexes"] == []
+    assert fields["due_at"]["indexes"] == [
+        {"queryScope": "COLLECTION", "order": "ASCENDING"},
+    ]
+    assert set(fields) == {"*", "due_at"}  # Receipt endpoints remain unindexed.
 
 
 def test_default_database_indexes_require_deliberate_opt_in():

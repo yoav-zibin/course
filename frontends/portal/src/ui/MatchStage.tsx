@@ -14,7 +14,7 @@ export function MatchStage() {
   const {p,run,navigate,notify,openMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
   const match=p.selectedMatch!, game=p.game;
   const [share,setShare]=useState(false),[invite,setInvite]=useState<any>(null),[confirm,setConfirm]=useState(''),[clock,setClock]=useState(''),[rendererError,setRendererError]=useState('');
-  const [help,setHelp]=useState(false);
+  const [help,setHelp]=useState(false),[recipient,setRecipient]=useState('');
   const owner=match.owner_user_id===p.account?.id,local=Boolean(match.localMode),seat=match.players.find(player=>player.active!==false&&(match.localMode==='computer'?player.kind==='human':player.user_id===p.account?.id)),participant=local||Boolean(seat),waiting=match.status==='waiting_for_players',over=match.status==='over';
   const turns=match.turn_of_player_indices||[],yourTurn=participant&&Boolean(seat&&turns.includes(seat.player_index));
   const conflict=p.conflicts[match.id],pending=match.pending||0;
@@ -40,7 +40,7 @@ export function MatchStage() {
       }
     }finally{if(active())setPlaying(false);}
   }
-  useEffect(()=>{setInvite(null);setShare(false);setHelp(false);setRendererError('');},[match.id]);
+  useEffect(()=>{setInvite(null);setShare(false);setRecipient('');setHelp(false);setRendererError('');},[match.id]);
   useEffect(()=>{if(!match.turn_deadline){setClock('');return;}const offset=match.server_time?Date.parse(match.server_time)-Date.now():0;
     const update=()=>{const seconds=Math.max(0,Math.ceil((Date.parse(match.turn_deadline)-Date.now()-offset)/1000));setClock(`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`);};update();const timer=setInterval(update,1000);return()=>clearInterval(timer);
   },[match.turn_deadline,match.server_time]);
@@ -78,6 +78,7 @@ export function MatchStage() {
     {local&&over&&<Row><Button onPress={()=>run(async()=>{const next=await p.actions.startPractice(match.game_id,{humans:match.players.filter(player=>player.kind==='human').length,computers:match.players.filter(player=>player.kind==='computer').length,humanSeat:match.players.find(player=>player.kind==='human')?.player_index,names:match.players.map(player=>player.name||'Player')});await openMatch(next.id);})}>{copyText("Play again")}</Button><Button secondary onPress={()=>run(async()=>{await p.actions.deleteLocal(match.id);navigate('local');})}>{copyText("Hide finished game")}</Button></Row>}
     {game&&<Dialog visible={help} title={t('ui.game.rules','How to play')} onClose={()=>setHelp(false)}><GameInstructions game={game}/></Dialog>}
     <Dialog visible={share} title={copyText("Share match")} onClose={()=>setShare(false)}>
+      <Field label={copyText('Player code or ID')} value={recipient} onChangeText={setRecipient} autoCapitalize="none" autoCorrect={false}/><Button disabled={!recipient.trim()} onPress={()=>run(async()=>{await p.actions.createInvite({recipient_user_id:recipient.trim()});setRecipient('');notify(copyText('Invitation sent.'));})}>{copyText('Send invitation')}</Button>
       {invite&&<><Field label={copyText("Invite link")} value={invite.url} editable={false}/><Row><Button onPress={()=>run(async()=>{await Clipboard.setStringAsync(invite.url);notify(copyText("Invite link copied."));})}>{copyText("Copy link")}</Button><Button secondary onPress={()=>run(()=>Share.share({message:invite.url,url:invite.url}))}>{copyText("Share…")}</Button></Row><View style={{alignItems:'center',padding:20,backgroundColor:'white',borderRadius:8}}><SvgUri uri={new URL(invite.qr_code_url,p.baseUrl).href} width={200} height={200} accessibilityLabel={copyText("Match invite QR code")}/></View><Copy small muted>{match.private?copyText("Anyone with this invite can join this private match."):copyText("Send the link or scan the QR code to join.")}</Copy></>}
     </Dialog>
     <Dialog visible={Boolean(confirm)} title={confirm==='resolve'?copyText("Use server version?"):confirm==='delete'?copyText("Delete this match?"):copyText("Leave this match?")} onClose={()=>setConfirm('')}>

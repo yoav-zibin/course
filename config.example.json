@@ -79,6 +79,8 @@
   },
   "push": {
     "provider": "log",
+    "native_enabled": true,
+    "expo_access_token": "",
     "vapid_private_key": "",
     "vapid_subject": "",
     "ttl_seconds": 86400,

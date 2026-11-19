@@ -65,7 +65,7 @@ def _messages_to(notifier: FakeNotifier, user_id: str) -> list[PushMessage]:
 
 
 def test_push_config_is_public_and_disabled_by_default(api: Api) -> None:
-    assert api.ok("GET", "/push/config") == {"enabled": False, "vapid_public_key": ""}
+    assert api.ok("GET", "/push/config") == {"enabled": False, "native_enabled": True, "vapid_public_key": ""}
 
 
 def test_push_config_reports_the_public_key_of_the_configured_pair() -> None:
@@ -79,6 +79,7 @@ def test_push_config_reports_the_public_key_of_the_configured_pair() -> None:
     )
     assert api.ok("GET", "/push/config") == {
         "enabled": True,
+        "native_enabled": True,
         "vapid_public_key": public_key,
     }
 
@@ -178,6 +179,23 @@ def test_subscriptions_per_user_are_capped() -> None:
         "https://push.example.com/s/3",
     ]
     assert first["id"] not in [s["id"] for s in remaining]
+
+
+def test_account_reassignment_cannot_bypass_subscription_cap() -> None:
+    api = Api(max_push_subscriptions_per_user=2)
+    alice, bob, cy = (api.new_user(name) for name in ("alice", "bob", "cy"))
+    # Create the endpoints before Bob's existing devices: reassignment must
+    # retain the device being enabled even when its creation date is older.
+    old = _subscribe_ok(api, alice, "https://push.example.com/s/old")
+    another = _subscribe_ok(api, cy, "https://push.example.com/s/another")
+    _subscribe_ok(api, bob, "https://push.example.com/s/bob1")
+    _subscribe_ok(api, bob, "https://push.example.com/s/bob2")
+    for subscription in (old, another):
+        response = _subscribe(api, bob, subscription["endpoint"])
+        assert response.status_code == 200
+        remaining = api.ok("GET", "/push/subscriptions", as_user=bob)
+        assert len(remaining) == 2
+        assert subscription["id"] in {item["id"] for item in remaining}
 
 
 # Unsubscribing

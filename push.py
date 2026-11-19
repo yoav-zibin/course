@@ -1,10 +1,12 @@
-"""Delivers web push notifications.
+"""Delivers browser and native push notifications.
 
 The service decides *who* is told *what* ([GamePlatform] composes localized messages);
 this module decides *how*. [PushNotifier] is the interface the service depends on.
 [LogPushNotifier] writes notifications to the server log (development only).
 [WebPushNotifier] encrypts and posts them to the browsers' push services (RFC 8030,
 payload encryption RFC 8291, VAPID signatures RFC 8292).
+[ExpoPushDelivery] routes native messages through Expo to FCM/APNs and checks
+delivery receipts; [RoutedPushNotifier] enforces the current account preference.
 
 Delivery never happens on the request path: [enqueue] only queues, and a worker
 thread does the network I/O, so a slow push service can't stall the platform, which
@@ -13,6 +15,7 @@ annoying, not corrupting, so failures are logged, not raised.
 """
 
 import base64
+import datetime as dt
 import json
 import logging
 import queue
@@ -21,6 +24,7 @@ from urllib.parse import urlsplit
 
 import requests
 from collections.abc import Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -46,6 +50,7 @@ class PushMessage:
     url: str
     # Browsers replace a showing notification that has the same tag.
     tag: str
+    notification_id: str = ""
 
 
 class PushNotifier(Protocol):
@@ -202,6 +207,8 @@ class WebPushNotifier:
                     "body": message.body,
                     "url": message.url,
                     "tag": message.tag,
+                    "user_id": subscription.user_id,
+                    "notification_id": message.notification_id,
                 }
             ),
             vapid_private_key=self._private_key,
@@ -215,9 +222,181 @@ class WebPushNotifier:
 
 def make_push_notifier(config: PushConfig, store: Store) -> PushNotifier:
     """The [config.provider]'s notifier. Raises ValueError on incomplete VAPID setup."""
-    if config.provider == "webpush":
-        return WebPushNotifier(config=config, store=store)
-    return LogPushNotifier()
+    browser = (WebPushNotifier(config=config, store=store)
+               if config.provider == "webpush" else LogPushNotifier())
+    return RoutedPushNotifier(config=config, store=store, browser=browser)
+
+
+class ExpoPushDelivery:
+    """Native push through Expo, with delayed delivery-receipt processing.
+
+    Query mode persists receipts so restarts do not lose invalid-token cleanup.
+    Local file mode retains pending receipts in memory, like its delivery queue.
+    """
+
+    def __init__(self, *, config: PushConfig, store: Store) -> None:
+        self.config, self.store = config, store
+        self._pending: dict[str, dict] = {}
+        self._lock = threading.Lock()
+
+    def _post(self, action: str, payload: dict) -> dict:
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        if self.config.expo_access_token:
+            headers["Authorization"] = f"Bearer {self.config.expo_access_token}"
+        response = requests.post(
+            f"https://exp.host/--/api/v2/push/{action}", json=payload,
+            headers=headers, timeout=30, allow_redirects=False,
+        )
+        # Keep tokens and server response bodies out of error logs.
+        if response.status_code != 200:
+            raise RuntimeError(f"Expo push {action} returned HTTP {response.status_code}")
+        result = response.json()
+        if not isinstance(result, dict) or "data" not in result:
+            raise RuntimeError(f"Expo push {action} returned an invalid response")
+        return result["data"]
+
+    def deliver(self, message: PushMessage) -> None:
+        token = message.subscription.endpoint.removeprefix("expo:")
+        ticket = self._post("send", {
+            "to": token, "title": message.title, "body": message.body,
+            "sound": "default", "priority": "high", "channelId": "matches",
+            "ttl": self.config.ttl_seconds,
+            "data": {"url": message.url, "user_id": message.subscription.user_id,
+                     "notification_id": message.notification_id},
+        })
+        if not isinstance(ticket, dict):
+            raise RuntimeError("Expo push returned an invalid ticket")
+        if ticket.get("status") != "ok":
+            self._handle_error(ticket, message.subscription.endpoint)
+            return
+        receipt_id = ticket.get("id")
+        if not isinstance(receipt_id, str) or not receipt_id or "/" in receipt_id or len(receipt_id) > 128:
+            raise RuntimeError("Expo push returned an invalid receipt ID")
+        now = dt.datetime.now(dt.timezone.utc)
+        record = {"receipt_id": receipt_id, "endpoint": message.subscription.endpoint,
+                  "user_id": message.subscription.user_id,
+                  "created_at": now, "due_at": now + dt.timedelta(minutes=15)}
+        if getattr(self.store, "scalable", False):
+            with self.store.atomic():
+                self.store.raw_put(self.store.ref("push_receipts", receipt_id), record)
+        else:
+            with self._lock:
+                self._pending[receipt_id] = record
+
+    def _handle_error(self, result: dict, endpoint: str) -> None:
+        error = (result.get("details") or {}).get("error", "UnknownError")
+        if error == "DeviceNotRegistered":
+            self.store.delete_push_subscription_by_endpoint(endpoint)
+        elif error in {"MessageRateExceeded", "ExpoServerError", "InternalServerError", "UnknownError"}:
+            raise RuntimeError("Expo push delivery temporarily failed")
+        else:
+            logger.warning("Expo push rejected a notification (%s)", error)
+
+    def run_receipts(self, limit: int = 10) -> None:
+        now = dt.datetime.now(dt.timezone.utc)
+        scalable = getattr(self.store, "scalable", False)
+        if scalable:
+            from google.cloud.firestore_v1.base_query import FieldFilter
+            records = {}
+            for doc in (self.store.collection("push_receipts")
+                        .where(filter=FieldFilter("due_at", "<=", now))
+                        .order_by("due_at").limit(limit).stream()):
+                with self.store.atomic():
+                    row = self.store.raw_get(doc.reference)
+                    if not row or row["due_at"] > now:
+                        continue
+                    # Claim before network I/O; a failed/crashed check retries.
+                    self.store.raw_put(doc.reference, {**row, "due_at": now + dt.timedelta(minutes=1)})
+                    records[row["receipt_id"]] = row
+        else:
+            with self._lock:
+                records = {key: row for key, row in self._pending.items() if row["due_at"] <= now}
+                records = dict(list(records.items())[:limit])
+                for key, row in records.items():
+                    self._pending[key] = {**row, "due_at": now + dt.timedelta(minutes=1)}
+        if not records:
+            return
+        receipts = self._post("getReceipts", {"ids": list(records)})
+        if not isinstance(receipts, dict):
+            raise RuntimeError("Expo push returned invalid receipts")
+        for key, row in records.items():
+            receipt = receipts.get(key)
+            if receipt is None and now - row["created_at"] < dt.timedelta(hours=24):
+                continue
+            if isinstance(receipt, dict) and receipt.get("status") == "error":
+                self._handle_error(receipt, row["endpoint"])
+            if scalable:
+                with self.store.atomic():
+                    self.store.raw_put(self.store.ref("push_receipts", key), None)
+            else:
+                with self._lock:
+                    self._pending.pop(key, None)
+
+
+class RoutedPushNotifier:
+    """Routes browser/native messages and rechecks preferences before delivery."""
+
+    def __init__(self, *, config: PushConfig, store: Store, browser) -> None:
+        self.config, self.store, self.browser = config, store, browser
+        self.native = ExpoPushDelivery(config=config, store=store)
+        self._queue: queue.Queue[PushMessage | None] = queue.Queue()
+        self._worker = threading.Thread(target=self._work, name="push-router", daemon=True)
+        self._worker.start()
+
+    def enqueue(self, messages: Sequence[PushMessage]) -> None:
+        for message in messages:
+            self._queue.put(message)
+
+    def deliver(self, message: PushMessage) -> None:
+        # A queued push must not survive opt-out, logout, or endpoint reassignment.
+        # Transactional point reads bypass the query store's stale read cache.
+        with self.store.atomic() if getattr(self.store, "scalable", False) else nullcontext():
+            subscription = self.store.get_push_subscription_by_endpoint(message.subscription.endpoint)
+            if subscription is None or subscription.user_id != message.subscription.user_id:
+                return
+            user = self.store.get_user(subscription.user_id)
+            if user is None or not user.notifications_enabled:
+                return
+        expiration = subscription.expiration_time
+        if expiration is not None and expiration.tzinfo is None:
+            expiration = expiration.replace(tzinfo=dt.timezone.utc)
+        if expiration is not None and expiration <= dt.datetime.now(dt.timezone.utc):
+            self.store.delete_push_subscription_by_endpoint(subscription.endpoint)
+            return
+        if subscription.delivery == "expo":
+            if self.config.native_enabled:
+                self.native.deliver(message)
+        else:
+            self.browser.deliver(message)
+
+    def run_receipts(self, limit: int = 10) -> None:
+        if self.config.native_enabled:
+            self.native.run_receipts(limit)
+
+    def _work(self) -> None:
+        while True:
+            try:
+                message = self._queue.get(timeout=30)
+            except queue.Empty:
+                if not getattr(self.store, "scalable", False):
+                    try:
+                        self.run_receipts()
+                    except Exception:
+                        logger.warning("native push receipt check failed")
+                continue
+            try:
+                if message is None:
+                    return
+                self.deliver(message)
+            except Exception:
+                logger.warning("push delivery failed")
+            finally:
+                self._queue.task_done()
+
+    def close(self) -> None:
+        self._queue.put(None)
+        self._worker.join(timeout=10)
+        self.browser.close()
 
 
 # VAPID keys (RFC 8292): one EC P-256 pair per deployment. The private key signs every

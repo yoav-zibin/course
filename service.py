@@ -18,7 +18,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from pydantic import JsonValue
 
@@ -49,6 +49,7 @@ from game_platform.models import (
     Seat,
     Translation,
     User,
+    UserNotification,
     WebPushSubscription,
 )
 from game_platform.game_logic import (
@@ -1057,6 +1058,8 @@ class GamePlatform:
         user_id: str,
         display_name: str | None = None,
         locale: str | None = None,
+        notifications_enabled: bool | None = None,
+        notification_prompt_seen: bool | None = None,
     ) -> User:
         """Changes the given fields of a user; [None] leaves a field as it is."""
         with self._lock:
@@ -1065,11 +1068,15 @@ class GamePlatform:
                 raise NotFoundError("user not found")
             if user.id != caller_id:
                 raise ForbiddenError("users can only change themselves")
-            changes: dict[str, str] = {}
+            changes: dict[str, Any] = {}
             if display_name is not None and display_name != user.display_name:
                 changes["display_name"] = display_name
             if locale is not None and locale != user.locale:
                 changes["locale"] = locale
+            if notifications_enabled is not None:
+                changes["notifications_enabled"] = notifications_enabled
+            if notification_prompt_seen is not None:
+                changes["notification_prompt_seen"] = notification_prompt_seen
             if not changes:
                 return user
             user = replace(user, updated_at=self._clock(), **changes)
@@ -1621,6 +1628,8 @@ class GamePlatform:
             updated_invite = invite
             if invite.created_by_user_id == from_user_id:
                 updated_invite = replace(updated_invite, created_by_user_id=into_user_id)
+            if invite.recipient_user_id == from_user_id:
+                updated_invite = replace(updated_invite, recipient_user_id=into_user_id)
             if any(a.user_id == from_user_id for a in invite.acceptances):
                 updated_invite = replace(
                     updated_invite,
@@ -1655,6 +1664,12 @@ class GamePlatform:
                 invited_by = source_inviter
         into = replace(
             into,
+            notifications_enabled=into.notifications_enabled and source.notifications_enabled,
+            notification_prompt_seen=into.notification_prompt_seen or source.notification_prompt_seen,
+            notifications=tuple(sorted(
+                {item.id: item for item in (*source.notifications, *into.notifications)}.values(),
+                key=lambda item: (item.created_at, item.id), reverse=True,
+            ))[:100],
             linked_accounts=(*into.linked_accounts, *moved),
             token_balance=into.token_balance + source.token_balance,
             verified_login_bonus_granted=(
@@ -1688,6 +1703,7 @@ class GamePlatform:
                     old,
                     replaced_by_user_id=into_user_id,
                     token_balance=0,
+                    notifications=(),
                     linked_accounts=(),
                     replaced_user_ids=(),
                     updated_at=self._clock(),
@@ -2829,6 +2845,13 @@ class GamePlatform:
                     match_id=rematch.id,
                 )
             self._save(replace(match, rematch_match_id=rematch.id))
+            requester = self._require_user(caller_id)
+            self._notify_match_event(
+                "notify.rematch_request", match=rematch,
+                recipient_ids=[uid for uid in match.active_human_user_ids if uid != caller_id],
+                actor_name=requester.display_name, tag_suffix="rematch",
+                url=f"/static/portal.html#rematch={match.id}",
+            )
             return rematch
 
     def _check_can_stake(self, user_id: str, amount: int) -> None:
@@ -4134,6 +4157,7 @@ class GamePlatform:
         match_id: str,
         expires_in_seconds: int | None = None,
         max_uses: int | None = None,
+        recipient_user_id: str | None = None,
     ) -> Invite:
         """Any player in the match (or its owner) can create invites to it."""
         with self._lock:
@@ -4142,11 +4166,20 @@ class GamePlatform:
                 raise ForbiddenError("you are not a player in this match")
             if match.status == "over":
                 raise ConflictError("the match is over")
+            recipient = None
+            if recipient_user_id is not None:
+                resolved_id = self._referrer_id(recipient_user_id)
+                if resolved_id is None:
+                    raise NotFoundError("user not found")
+                recipient = self._require_user(resolved_id)
+                if match.involves(recipient.id):
+                    raise ConflictError("this player is already in the match")
             now = self._clock()
             invite = Invite(
                 token=self._new_invite_token(),
                 match_id=match.id,
                 created_by_user_id=caller_id,
+                recipient_user_id=recipient.id if recipient else None,
                 created_at=now,
                 expires_at=None
                 if expires_in_seconds is None
@@ -4154,6 +4187,13 @@ class GamePlatform:
                 max_uses=max_uses,
             )
             self._store.put_invite(invite)
+            if recipient is not None:
+                inviter = self._require_user(caller_id)
+                self._notify_match_event(
+                    "notify.invite_request", match=match,
+                    recipient_ids=[recipient.id], actor_name=inviter.display_name,
+                    tag_suffix="invite", url=f"/i/{invite.token}",
+                )
             return invite
 
     def view_invite(self, token: str) -> InviteView:
@@ -4391,6 +4431,8 @@ class GamePlatform:
         p256dh: str,
         auth: str,
         expiration_time: dt.datetime | None,
+        delivery: Literal["webpush", "expo"] = "webpush",
+        platform: Literal["android", "ios"] | None = None,
     ) -> tuple[WebPushSubscription, bool]:
         """Registers or refreshes the caller's browser push subscription.
 
@@ -4409,28 +4451,34 @@ class GamePlatform:
                     p256dh=p256dh,
                     auth=auth,
                     expiration_time=expiration_time,
+                    delivery=delivery,
+                    platform=platform,
                     updated_at=now,
                 )
-                self._store.put_push_subscription(subscription)
-                return subscription, False
-            subscription = WebPushSubscription(
-                id=self._new_id(),
-                user_id=caller_id,
-                endpoint=endpoint,
-                p256dh=p256dh,
-                auth=auth,
-                expiration_time=expiration_time,
-                created_at=now,
-                updated_at=now,
-            )
+            else:
+                subscription = WebPushSubscription(
+                    id=self._new_id(),
+                    user_id=caller_id,
+                    endpoint=endpoint,
+                    p256dh=p256dh,
+                    auth=auth,
+                    expiration_time=expiration_time,
+                    delivery=delivery,
+                    platform=platform,
+                    created_at=now,
+                    updated_at=now,
+                )
             self._store.put_push_subscription(subscription)
-            # Bound the data file: past the cap, the caller's oldest ones go.
+            # Apply the same bound to account reassignment as to new endpoints.
+            # Retain the device currently being registered, even if its endpoint
+            # was first created under a different account a long time ago.
             mine = self._store.list_push_subscriptions(user_id=caller_id)
             excess = len(mine) - self._max_push_subscriptions_per_user
             if excess > 0:
-                for old in sorted(mine, key=lambda s: s.created_at)[:excess]:
+                others = [item for item in mine if item.id != subscription.id]
+                for old in sorted(others, key=lambda s: s.created_at)[:excess]:
                     self._store.delete_push_subscription(old.id)
-            return subscription, True
+            return subscription, existing is None
 
     def list_push_subscriptions(self, *, caller_id: str) -> list[WebPushSubscription]:
         with self._lock:
@@ -4466,6 +4514,8 @@ class GamePlatform:
         """Queues a test notification to all of the caller's subscriptions."""
         with self._lock:
             user = self._require_user(caller_id)
+            if not user.notifications_enabled:
+                raise ConflictError("notifications are turned off")
             subscriptions = self._store.list_push_subscriptions(user_id=caller_id)
             if not subscriptions:
                 raise NotFoundError("push subscription not found")
@@ -4491,36 +4541,76 @@ class GamePlatform:
         recipient_ids: Iterable[str],
         actor_name: str = "",
         tag_suffix: str,
+        url: str | None = None,
     ) -> None:
         """Queues a localized notification to every push subscription of every
         recipient. [key] is an i18n catalog key whose {game}/{name} placeholders are
         filled with the match's game name and [actor_name]. The caller holds the
         lock; delivery itself is the notifier's background work, off the request path.
         """
-        subscriptions: list[tuple[str, WebPushSubscription]] = []
+        game = self._store.get_game_version(match.game_id, match.game_version)
+        game_name = game.name if game is not None else ""
+        target_url = url or f"/static/portal.html#match={match.id}"
+        messages = []
         for user_id in dict.fromkeys(recipient_ids):
             user = self._store.get_user(user_id)
             if user is None:
                 continue
             locale = i18n.normalize_locale(user.locale) or i18n.DEFAULT_LOCALE
+            entry = UserNotification(
+                id=self._new_id(), event=key.removeprefix("notify."),
+                title=game_name,
+                body=i18n.translate(key, locale, game=game_name, name=actor_name),
+                url=target_url, created_at=self._clock(),
+            )
+            self._store.put_user(replace(
+                user, notifications=(entry, *user.notifications)[:100],
+            ))
+            if not user.notifications_enabled:
+                continue
             for subscription in self._store.list_push_subscriptions(user_id=user_id):
-                subscriptions.append((locale, subscription))
-        if not subscriptions:
-            return
-        game = self._store.get_game_version(match.game_id, match.game_version)
-        game_name = game.name if game is not None else ""
-        self._push_notifier.enqueue(
-            [
-                PushMessage(
+                messages.append(PushMessage(
                     subscription=subscription,
-                    title=game_name,
-                    body=i18n.translate(key, locale, game=game_name, name=actor_name),
-                    url=f"/static/portal.html#match={match.id}",
+                    title=entry.title,
+                    body=entry.body,
+                    url=target_url,
                     tag=f"match-{match.id}-{tag_suffix}",
-                )
-                for locale, subscription in subscriptions
-            ]
-        )
+                    notification_id=entry.id,
+                ))
+        if messages:
+            self._push_notifier.enqueue(messages)
+
+    def list_notifications(self, *, caller_id: str, limit: int = 20,
+                           cursor: str | None = None) -> dict[str, Any]:
+        """A bounded private inbox, independent of push permission and preference."""
+        with self._lock:
+            user = self._require_user(caller_id)
+            entries = user.notifications
+            start = 0
+            if cursor is not None:
+                index = next((i for i, item in enumerate(entries) if item.id == cursor), None)
+                if index is None:
+                    raise InvalidRequestError("invalid notification cursor")
+                start = index + 1
+            page = entries[start:start + limit]
+            return {
+                "items": page,
+                "next_cursor": page[-1].id if page and start + len(page) < len(entries) else None,
+                "unread_count": sum(item.read_at is None for item in entries),
+            }
+
+    def read_notification(self, *, caller_id: str, notification_id: str) -> UserNotification:
+        with self._lock:
+            user = self._require_user(caller_id)
+            item = next((item for item in user.notifications if item.id == notification_id), None)
+            if item is None:
+                raise NotFoundError("notification not found")
+            if item.read_at is None:
+                item = replace(item, read_at=self._clock())
+                self._store.put_user(replace(user, notifications=tuple(
+                    item if entry.id == item.id else entry for entry in user.notifications
+                )))
+            return item
 
     # Debugging
 
@@ -5099,9 +5189,9 @@ class GamePlatform:
                           pending_leave=None)
         saved = self._save(updated)
         self._notify_match_event(
-            "notify.timed_out_over", match=saved,
+            "notify.match_over", match=saved,
             recipient_ids=[*saved.human_user_ids, *(t.user_id for t in saved.timeouts)],
-            tag_suffix="timeout",
+            tag_suffix="over",
         )
         return saved
 

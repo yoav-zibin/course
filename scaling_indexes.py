@@ -75,6 +75,7 @@ def index_config(namespace):
         "bug_reports": {"status": "order"},
         "jobs": {"due_at": "order"},
         "outbox": {"due_at": "order"},
+        "push_receipts": {"due_at": "order"},
     }
     overrides = []
     for kind in sorted(COLLECTIONS):

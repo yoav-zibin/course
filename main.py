@@ -105,6 +105,8 @@ def main() -> None:
     push_config = config.push
     if env_key := os.environ.get("GAME_PLATFORM_VAPID_PRIVATE_KEY"):
         push_config = push_config.model_copy(update={"vapid_private_key": env_key})
+    if expo_token := os.environ.get("GAME_PLATFORM_EXPO_ACCESS_TOKEN"):
+        push_config = push_config.model_copy(update={"expo_access_token": expo_token})
 
     observability.setup_logging(
         config.log_level, config.monitoring.log_format, config.monitoring.log_file

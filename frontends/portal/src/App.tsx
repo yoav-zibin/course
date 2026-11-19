@@ -19,6 +19,10 @@ import {getDirection} from './platform/i18n';
 import {configureReporter,createReporter,reportClientIssue} from './core/reporting';
 import {ErrorBoundary} from './ui/ErrorBoundary';
 import {readLocalUiTest} from './platform/legacy';
+import {notificationTarget} from './core/notifications';
+import type {InAppNotification} from './core/types';
+import {useNotificationDelivery} from './ui/useNotificationDelivery';
+import {NotificationInbox, NotificationPrompt} from './ui/Notifications';
 
 function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const {width} = useWindowDimensions();
@@ -27,10 +31,13 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const [screen, setScreen] = useState<Screen>('games');
   const [account, setAccount] = useState(false), [focus,setFocus]=useState(false);
   const [notice, setNotice] = useState('');
+  const [inbox,setInbox] = useState(false), [notificationBanner,setNotificationBanner] = useState<InAppNotification|null>(null);
+  const observedNotifications = useRef<{scope:string; ids:Set<string>; initialized:boolean}>({scope:'',ids:new Set(),initialized:false});
   const [appSession,setAppSession] = useState('');
   const [pendingInvite,setPendingInvite]=useState(''),[invitePreview,setInvitePreview]=useState<any>(null);
   const [layout, setLayout] = useState<'top'|'left'>('top');
   const knownPasswords=useRef(new Set<string>());
+  const notificationScope = useRef(''); notificationScope.current = JSON.stringify([p.baseUrl,p.account?.id]);
   for(const saved of p.accounts)knownPasswords.current.add(saved.password);
   rememberDiagnosticSecrets(knownPasswords.current);
   useEffect(()=>recordDiagnosticPage({screen,gameId:p.selectedGameId,matchId:p.selectedMatch?.id,focus}),[screen,p.selectedGameId,p.selectedMatch?.id,focus]);
@@ -42,6 +49,46 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const openGame = async (id: string) => {await p.actions.selectGame(id); setScreen('games'); writeRoute(`game=${encodeURIComponent(id)}`);};
   const openMatch = async (id: string) => {await p.actions.selectMatch(id); setScreen('matches'); writeRoute(`match=${encodeURIComponent(id)}`);};
   const openInvite=async(token:string)=>{setPendingInvite(token);setInvitePreview(await p.actions.request('GET',`/invites/${encodeURIComponent(token)}`));};
+
+  const openNotificationUrl = async (raw: string) => {
+    const scope = notificationScope.current, guard = () => {if (scope !== notificationScope.current) throw new Error('Account changed; refresh to continue.');};
+    const target = notificationTarget(raw, p.baseUrl); if (!target) throw new Error(copyText('This notification link is unavailable.'));
+    if (target.kind === 'invite') {const preview = await p.actions.request('GET', `/invites/${encodeURIComponent(target.id)}`); guard(); setPendingInvite(target.id); setInvitePreview(preview);}
+    else if (target.kind === 'rematch') {const next = await p.actions.request('POST', `/matches/${encodeURIComponent(target.id)}/rematch`); guard(); await openMatch(next.id);}
+    else await openMatch(target.id);
+  };
+  const notificationDelivery = useNotificationDelivery(p, openNotificationUrl, setNotice, localOnly);
+  const openNotification = async (item: InAppNotification) => {
+    await openNotificationUrl(item.url);
+    await p.actions.readNotification(item.id);
+    setInbox(false); setNotificationBanner(null);
+  };
+  useEffect(() => {
+    setInbox(false); setNotificationBanner(null);
+    observedNotifications.current = {scope:JSON.stringify([p.baseUrl,p.account?.id]),ids:new Set(),initialized:false};
+  }, [p.baseUrl,p.account?.id]);
+  useEffect(() => {
+    if (!p.ready || !p.account || localOnly) return;
+    let stopped = false, timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {if (AppState.currentState === 'active' && (Platform.OS !== 'web' || !document.hidden)) await p.actions.refreshNotifications();}
+      catch { /* Keep the last inbox available during a lost connection. */ }
+      finally {if (!stopped) timer = setTimeout(poll,8000);}
+    };
+    void poll(); return () => {stopped = true; clearTimeout(timer);};
+  }, [p.ready,p.baseUrl,p.account?.id]);
+  useEffect(() => {
+    const observed = observedNotifications.current;
+    const fresh = p.notifications.find(item => !item.read_at && !observed.ids.has(item.id));
+    if (observed.initialized && fresh) setNotificationBanner(fresh);
+    if (p.notifications.length || p.ready) observed.initialized = true;
+    for (const item of p.notifications) observed.ids.add(item.id);
+  }, [p.notifications]);
+  useEffect(() => {
+    if (!p.notificationPrompt || p.notificationPromptReady || !notificationDelivery.status) return;
+    if (notificationDelivery.status.subscribed || ['denied','unavailable'].includes(notificationDelivery.status.permission)) p.actions.dismissNotificationPrompt();
+    else void p.actions.claimNotificationPrompt().catch(() => p.actions.dismissNotificationPrompt());
+  }, [p.notificationPrompt,p.notificationPromptReady,notificationDelivery.status]);
 
   useEffect(() => {void run(async () => {
     const initialUrl=Platform.OS==='web'?window.location.href:(await Linking.getInitialURL())??null;
@@ -55,10 +102,12 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
       const hash = new URLSearchParams(url.hash.slice(1)), query = url.searchParams;
       const id = hash.get('match') || query.get('match');
       const game = hash.get('game') || query.get('game');
-      const invite = hash.get('invite') || query.get('invite');
+      const invite = hash.get('invite') || query.get('invite') || /^\/i\/([^/]+)$/.exec(url.pathname)?.[1];
+      const rematch = hash.get('rematch') || query.get('rematch');
       const appLogin = hash.get('app-login');
       if(appLogin){setAppSession(appLogin);return;}
-      if (id) await openMatch(id);
+      if (rematch) {const next = await p.actions.request('POST', `/matches/${encodeURIComponent(rematch)}/rematch`); await openMatch(next.id);}
+      else if (id) await openMatch(id);
       else if (game) await openGame(game);
       else if (invite) await openInvite(invite);
       else if (['games','matches','local','invites','settings'].includes(url.hash.slice(1))) setScreen(url.hash.slice(1) as Screen);
@@ -69,11 +118,11 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
     const subscription = Linking.addEventListener('url', ({url}) => {void run(async () => {
       await p.actions.rememberAttribution(url);
       const parsed = new URL(url), hash = new URLSearchParams(parsed.hash.slice(1));
-      const match = hash.get('match') || parsed.searchParams.get('match'), game = hash.get('game') || parsed.searchParams.get('game'), invite = hash.get('invite') || parsed.searchParams.get('invite');
-      if (match) await openMatch(match); else if (game) await openGame(game); else if (invite) await openInvite(invite);
+      const match = hash.get('match') || parsed.searchParams.get('match'), game = hash.get('game') || parsed.searchParams.get('game'), invite = hash.get('invite') || parsed.searchParams.get('invite') || /^\/i\/([^/]+)$/.exec(parsed.pathname)?.[1], rematch = hash.get('rematch') || parsed.searchParams.get('rematch');
+      if (rematch) {const next = await p.actions.request('POST', `/matches/${encodeURIComponent(rematch)}/rematch`); await openMatch(next.id);} else if (match) await openMatch(match); else if (game) await openGame(game); else if (invite) await openInvite(invite);
     });});
     const resume = AppState.addEventListener('change', state => {if (state === 'active') void run(() => p.actions.refresh());});
-    const pop = () => {void run(async () => {await p.actions.rememberAttribution(window.location.href);const hash = new URLSearchParams(window.location.hash.slice(1)); const id=hash.get('match'), game=hash.get('game'); if(id) {setScreen('matches');await p.actions.selectMatch(id);} else {p.actions.clearGame(); if(game) {setScreen('games');await p.actions.selectGame(game);} else setScreen((['games','matches','local','invites','settings'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'games') as Screen);}});};
+    const pop = () => {void run(async () => {await p.actions.rememberAttribution(window.location.href);const hash = new URLSearchParams(window.location.hash.slice(1)); const id=hash.get('match'), game=hash.get('game'), invite=hash.get('invite'), rematch=hash.get('rematch'); if(rematch) {const next=await p.actions.request('POST',`/matches/${encodeURIComponent(rematch)}/rematch`);await openMatch(next.id);} else if(invite) await openInvite(invite); else if(id) {setScreen('matches');await p.actions.selectMatch(id);} else {p.actions.clearGame(); if(game) {setScreen('games');await p.actions.selectGame(game);} else setScreen((['games','matches','local','invites','settings'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'games') as Screen);}});};
     if (Platform.OS === 'web') window.addEventListener('popstate',pop);
     return () => {subscription.remove(); resume.remove(); if (Platform.OS === 'web') window.removeEventListener('popstate',pop);};
   }, []);
@@ -117,7 +166,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const side = width >= 1000 && layout === 'left';
   const tabs = <Row style={side ? {flexDirection:'column',alignItems:'stretch'} : {gap:6}}>{links.map(link => <Button key={link.key} label={link.label} secondary compact selected={screen === link.key} onPress={() => navigate(link.key)}>{link.icon}  {link.label}{link.key==='matches' && p.myMatches.length ? ` · ${p.myMatches.length}` : ''}</Button>)}</Row>;
   const gameVisible = p.selectedMatch !== null;
-  return <Context.Provider value={{p,notify:setNotice,run,openAccount:()=>setAccount(true),navigate,openGame,openMatch}}>
+  return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>setAccount(true),navigate,openGame,openMatch}}>
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
       {!focus&&<View style={s.header}>
@@ -125,6 +174,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
         {width >= 800 && !side && tabs}
         <View style={{flex:1}} />
         {p.account && <Copy small style={{color:colors.accent}}>{(p.profile?.token_balance ?? p.account.token_balance ?? 0).toLocaleString()} ✦</Copy>}
+        {p.account&&<Button secondary compact label={copyText('Notifications')} onPress={()=>{setInbox(true);void p.actions.refreshNotifications().catch(()=>{});}}>{copyText('Notifications')}{p.unreadNotifications?` · ${p.unreadNotifications}`:''}</Button>}
         <Button secondary compact disabled={!p.ready} onPress={()=>setAccount(true)} label={p.account ? copyText("Account menu") : copyText("Log in")}>{p.account?.display_name || t('ui.auth.log_in','Log in')}</Button>
       </View>}
       {!focus&&width < 800 && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
@@ -134,6 +184,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
           {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {t('ui.offline.pending_moves','pending moves')}. {p.pending ? t('ui.offline.move_saved','Your move is saved on this device and will sync when connected.') : t('ui.offline.downloaded_play','Downloaded games are available on this device.')}</Notice>}
+          {notificationBanner&&<Card style={{padding:14,borderColor:colors.accent}}><Copy style={{fontWeight:'700'}}>{notificationBanner.title}</Copy><Copy>{notificationBanner.body}</Copy><Row><Button compact onPress={()=>run(()=>openNotification(notificationBanner))}>{copyText('Open')}</Button><Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button></Row></Card>}
           {appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
           {pendingInvite&&<Card><Title small>{invitePreview?.created_by_display_name?copyText("{v0} invited you to play",{v0:invitePreview.created_by_display_name}):copyText("You’re invited to play")}</Title><Copy muted>{p.account?copyText("Join the match with your current account."):copyText("Log in or continue as a guest, then join this match.")}</Copy><Row><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const joined=await p.actions.acceptInvite(pendingInvite);setPendingInvite('');setInvitePreview(null);setScreen('matches');writeRoute(`match=${encodeURIComponent(joined.id)}`);})}>{p.account?copyText("Join match"):copyText("Log in to join")}</Button><Button secondary onPress={()=>{setPendingInvite('');setInvitePreview(null);writeRoute('games');}}>{copyText("Not now")}</Button></Row></Card>}
           {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
@@ -147,6 +198,8 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
         </ScrollView>
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />
+      <NotificationInbox visible={inbox} onClose={()=>setInbox(false)} onOpen={openNotification}/>
+      <NotificationPrompt/>
       {gameVisible&&<View style={{position:'absolute',right:8,top:insets.top+2,zIndex:100}}><Button secondary compact onPress={()=>{setFocus(value=>!value);recordDiagnosticEvent('focus_mode',{enabled:!focus});}}>{focus?copyText('Exit focus mode'):copyText('Focus mode')}</Button></View>}
     </SafeAreaView>
   </Context.Provider>;

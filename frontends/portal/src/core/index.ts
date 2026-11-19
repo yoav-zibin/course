@@ -5,6 +5,7 @@ import { AccountRepository, emptyAccountData, equal, requestId } from './reposit
 import {protectedResponsePaths} from './cache-policy';
 import {utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
+import {handsTurnToOpponent} from './notifications';
 import { importNativeLegacy, finishNativeImport } from './native-migration';
 import * as storage from '../platform/storage';
 import { loadAccounts, saveAccounts, loadCurrentAccount, currentAccountKey } from '../platform/credentials';
@@ -13,11 +14,11 @@ import { configureI18n, setLocale, getLocale, getDirection, gameTexts, localizeG
 import bundled from './bundled-tictactoe.json';
 import { browserLogin } from '../platform/browser-login';
 import { rememberUrlAttribution, newAccountAttribution, forgetInviter } from './attribution';
-import type { Account, AccountData, Game, Match, LocalMatch, ListKind, PortalState, PracticeOptions } from './types';
+import type { Account, AccountData, Game, Match, LocalMatch, ListKind, PortalState, PracticeOptions, InAppNotification } from './types';
 export * from './types';
 export { t } from '../platform/i18n';
 
-const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, accounts: [], profile: null, profiles: {}, authConfig: {}, games: [], popularGames: [], recentGames: [], myMatches: [], openMatches: [], savedGames: [], invites: [], localMatches: [], selectedMatch: null, selected: null, selectedGame: null, game: null, selectedGameId: null, history: null, replayIndex: null, pending: 0, conflicts: {}, archived: [], network: isOnline(), loading: false, error: null, storageError: null, locale: 'en', query: '', cursors: {} });
+const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, accounts: [], profile: null, profiles: {}, authConfig: {}, games: [], popularGames: [], recentGames: [], myMatches: [], openMatches: [], savedGames: [], invites: [], notifications: [], notificationCursor: null, unreadNotifications: 0, notificationPrompt: false, notificationPromptReady: false, localMatches: [], selectedMatch: null, selected: null, selectedGame: null, game: null, selectedGameId: null, history: null, replayIndex: null, pending: 0, conflicts: {}, archived: [], network: isOnline(), loading: false, error: null, storageError: null, locale: 'en', query: '', cursors: {} });
 const listPaths: Record<ListKind, string> = { games: '/games', myMatches: '/matches', openMatches: '/matches/open', savedGames: '/users/me/saved-games', invites: '/users/me/invites' };
 const unique = <T extends { id?: string; token?: string }>(values: T[]): T[] => [...new Map(values.map(v => [v.id || v.token, v])).values()];
 const savedList = <T>(value: unknown): T[] => Array.isArray(value) ? value : [];
@@ -37,6 +38,9 @@ export class PortalStore {
   private paginated = false;
   private refreshPromise: Promise<void> | null = null;
   private syncPromise: Promise<void> | null = null;
+  private notificationPromise: Promise<void> | null = null;
+  private notificationPromptClaim: Promise<void> | null = null;
+  private offeredNotificationPrompt = new Set<string>();
   private bootstrapPromise: Promise<void> | null = null;
   private stopConnectivity?: () => void;
   private observations = new Map<string, any[]>();
@@ -165,13 +169,62 @@ export class PortalStore {
       guard();
       if (this.state.selectedMatch) { await this.refreshMatch(); return; }
       const jobs: Promise<any>[] = [this.list('games'), this.list('openMatches'), this.read('/auth/config').then(authConfig => { guard(); this.patch({ authConfig }); }), this.read('/games/popular').then(popularGames => { guard(); this.patch({ popularGames: popularGames.map(localizeGame) }); })];
-      if (this.state.account) jobs.push(this.list('myMatches'), this.list('savedGames'), this.list('invites'), this.read('/users/me/recent-games').then(recentGames => { guard(); this.patch({ recentGames: recentGames.map(localizeGame) }); }), this.read(`/users/${encodeURIComponent(this.state.account.id)}`).then(profile => { guard(); this.patch({ profile }); }));
+      if (this.state.account) jobs.push(this.refreshNotifications(), this.list('myMatches'), this.list('savedGames'), this.list('invites'), this.read('/users/me/recent-games').then(recentGames => { guard(); this.patch({ recentGames: recentGames.map(localizeGame) }); }), this.read(`/users/${encodeURIComponent(this.state.account.id)}`).then(profile => { guard(); this.patch({ profile }); }));
       const results = await Promise.allSettled(jobs); guard();
       const first = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
       if (first && !this.state.games.length) this.patch({ error: first.reason?.message || 'Could not refresh' });
       await this.loadProfiles().catch(() => {});
     })().finally(() => { if (this.refreshPromise === pending) this.refreshPromise = null; });
     this.refreshPromise = pending; return pending;
+  }
+  async refreshNotifications(more = false): Promise<void> {
+    if (!this.state.account || this.localOnly || !isOnline()) return;
+    if (this.notificationPromise) return this.notificationPromise;
+    if (more && !this.state.notificationCursor) return;
+    const guard = this.capture(), cursor = more ? this.state.notificationCursor : null;
+    const query = new URLSearchParams({limit: '50'}); if (cursor) query.set('cursor', cursor);
+    const pending = (async () => {
+      const result = await this.request('GET', `/users/me/notifications?${query}`); guard();
+      if (!more) await this.refreshProfile().catch(() => {}); guard();
+      if (!Array.isArray(result.items)) return;
+      const read = new Map(this.state.notifications.filter(item => item.read_at).map(item => [item.id, item.read_at]));
+      const acknowledged = result.items.filter((item: InAppNotification) => !item.read_at && read.has(item.id)).length;
+      const incoming = (result.items as InAppNotification[]).map(item => read.has(item.id) ? {...item, read_at: read.get(item.id)!} : item);
+      const preserveTail = !more && this.state.notifications.length > 50;
+      const notifications = more ? unique([...this.state.notifications, ...incoming]) : preserveTail ? unique([...incoming, ...this.state.notifications.slice(50)]) : incoming;
+      this.patch({notifications, notificationCursor: preserveTail ? this.state.notificationCursor : result.next_cursor || null, unreadNotifications: result.unread_count === undefined ? notifications.filter(item => !item.read_at).length : Math.max(0,result.unread_count-acknowledged)});
+    })().finally(() => {if (this.notificationPromise === pending) this.notificationPromise = null;});
+    this.notificationPromise = pending; return pending;
+  }
+  async readNotification(id: string) {
+    const guard = this.capture();
+    const previous = this.state.notifications.find(item => item.id === id); if (!previous || previous.read_at) return;
+    const saved = await this.request('POST', `/users/me/notifications/${encodeURIComponent(id)}/read`); guard();
+    this.patch({notifications: this.state.notifications.map(item => item.id === id ? saved : item), unreadNotifications: Math.max(0, this.state.unreadNotifications - (this.state.notifications.find(item => item.id === id)?.read_at ? 0 : 1))});
+  }
+  private async offerNotificationPrompt(before: Match, after: Match) {
+    const account = this.state.account; if (!account || !handsTurnToOpponent(before, after, account.id)) return;
+    const key = JSON.stringify([this.state.baseUrl, account.id]);
+    if (this.offeredNotificationPrompt.has(key) || this.state.profile?.notification_prompt_seen || account.notification_prompt_seen || this.state.profile?.notifications_enabled === false || account.notifications_enabled === false) return;
+    this.offeredNotificationPrompt.add(key);
+    const guard = this.capture();
+    try {
+      await this.refreshProfile(); guard();
+      if (this.state.profile?.notification_prompt_seen || this.state.profile?.notifications_enabled === false) return;
+      this.patch({notificationPrompt: true});
+    } catch { /* Notification permission must never make an accepted move fail. */ }
+  }
+  async claimNotificationPrompt(): Promise<void> {
+    if (!this.state.account || !this.state.notificationPrompt || this.state.notificationPromptReady) return;
+    if (this.notificationPromptClaim) return this.notificationPromptClaim;
+    const guard = this.capture();
+    const pending = (async () => {
+      await this.refreshProfile(); guard();
+      if (this.state.profile?.notification_prompt_seen || this.state.profile?.notifications_enabled === false) {this.patch({notificationPrompt: false}); return;}
+      await this.updateProfile({notification_prompt_seen: true}); guard();
+      if (this.state.notificationPrompt) this.patch({notificationPromptReady: true});
+    })().finally(() => {if (this.notificationPromptClaim === pending) this.notificationPromptClaim = null;});
+    this.notificationPromptClaim = pending; return pending;
   }
   private async loadProfiles() {
     const guard = this.capture(); const ids = [...new Set([...this.state.myMatches, ...this.state.openMatches, ...(this.state.selectedMatch ? [this.state.selectedMatch] : [])].flatMap(m => m.players || []).map(p => p.user_id).filter(Boolean))].filter(id => !this.state.profiles[id!]).slice(0, 200);
@@ -249,7 +302,7 @@ export class PortalStore {
   }
   async switchAccount(id: string) {
     const account = this.state.accounts.find(a => a.id === id); if (!account) throw new Error('Account not found on this device');
-    const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.observations.clear();
+    const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.notificationPromptClaim = null; this.observations.clear();
     const write = this.accountSelectionWrites.then(async () => { if (transition === this.generation) await this.writeCurrentAccount(id, this.state.baseUrl); }); this.accountSelectionWrites = write.catch(() => {});
     await write.catch(() => {}); if (transition !== this.generation) throw new Error('Account changed; refresh to continue.');
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
@@ -260,7 +313,7 @@ export class PortalStore {
     const guard = this.capture(); const accounts = this.state.accounts.filter(a => a.id !== id); await saveAccounts(accounts, this.state.baseUrl).catch(() => { guard(); this.patch({ storageError: 'Device storage could not be updated. This session was logged out; saved credentials may remain on this device.' }); }); guard(); this.patch({ accounts });
     if (id !== this.state.account?.id) return;
     if (accounts.length) return this.switchAccount(accounts[0].id);
-    const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.observations.clear();
+    const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.notificationPromptClaim = null; this.observations.clear();
     await storage.removeItem(currentAccountKey(this.state.baseUrl)).catch(() => {}); if (transition !== this.generation) throw new Error('Account changed; refresh to continue.'); const { ready, baseUrl, authConfig, locale } = this.state;
     this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, authConfig, locale, network: !this.localOnly && isOnline() }); await this.reloadData(); await this.refresh();
   }
@@ -309,7 +362,8 @@ export class PortalStore {
     if (this.localOnly || !this.state.account || !isOnline() || (!freshRequestId && Date.now() < this.retryAfter)) return;
     if (this.syncPromise) return this.syncPromise;
     const account = this.state.account; const guard = this.capture();
-    const pending = syncAccount(this.api, this.repository, account, { paginated: this.paginated, guard, freshRequestId, matchId }).then(async data => { guard(); const previous = this.state.selectedMatch; this.patch({ network: true }); this.publishData(data); const selected = this.state.selectedMatch; if (selected && selected.move_count !== previous?.move_count) { await this.recoverPresentation(selected, previous || undefined).catch(() => {}); guard(); await this.refreshProfile().catch(() => {}); } }).catch(error => { guard(); if (!(error instanceof ApiError)) { this.retryAfter = Date.now() + 10000; this.patch({ network: false }); } throw error; }).finally(() => { if (this.syncPromise === pending) this.syncPromise = null; }); this.syncPromise = pending; return pending;
+    const confirmed: {before: Match; after: Match}[] = [];
+    const pending = syncAccount(this.api, this.repository, account, { paginated: this.paginated, guard, freshRequestId, matchId, onConfirmed: (before, after) => confirmed.push({before, after}) }).then(async data => { guard(); const previous = this.state.selectedMatch; this.patch({ network: true }); this.publishData(data); const selected = this.state.selectedMatch; if (selected && selected.move_count !== previous?.move_count) { await this.recoverPresentation(selected, previous || undefined).catch(() => {}); guard(); await this.refreshProfile().catch(() => {}); } for (const {before, after} of confirmed) {guard(); await this.offerNotificationPrompt(before, after);} }).catch(error => { guard(); if (!(error instanceof ApiError)) { this.retryAfter = Date.now() + 10000; this.patch({ network: false }); } throw error; }).finally(() => { if (this.syncPromise === pending) this.syncPromise = null; }); this.syncPromise = pending; return pending;
   }
   async submitMove(move: any) {
     const match = this.state.selectedMatch; if (!match) return;
@@ -327,7 +381,7 @@ export class PortalStore {
       // Storage-denied browsers may still play online. This is one fresh POST;
       // uncertainty freezes play until a subsequent authoritative GET.
       this.patch({ storageError: 'Device storage unavailable; this online action cannot be queued for offline retry.' });
-      try { const updated = await this.api.request<Match>('POST', `/matches/${encodeURIComponent(match.id)}/moves`, entry.body, account, entry.requestId); guard(); await this.cache(`/matches/${match.id}`, updated); this.patch({ selectedMatch: this.decorate(updated) }); await this.refreshProfile().catch(() => {}); return; }
+      try { const updated = await this.api.request<Match>('POST', `/matches/${encodeURIComponent(match.id)}/moves`, entry.body, account, entry.requestId); guard(); await this.cache(`/matches/${match.id}`, updated); this.patch({ selectedMatch: this.decorate(updated) }); await this.refreshProfile().catch(() => {}); guard(); await this.offerNotificationPrompt(match, updated); return; }
       catch (requestError) { guard(); this.data.conflicts[match.id] = { message: 'The outcome of this unsaved action is unknown. Refresh the match before trying again.' }; this.patch({ selectedMatch: this.decorate(match) }); throw requestError; }
     }
     guard(); await this.reloadData();
@@ -446,6 +500,7 @@ export class PortalStore {
     return { type: 'state_changed', state: view.state ?? null, view: view.state ?? null, players: match.players.map(p => ({ player_index: p.player_index, player_id: p.id, kind: p.kind, name: p.name || (p.user_id ? this.state.profiles[p.user_id]?.display_name || (p.user_id === this.state.account?.id ? this.state.account.display_name : `Player ${p.player_index + 1}`) : `Computer ${p.player_index + 1}`), picture_url: p.user_id ? this.state.profiles[p.user_id]?.picture_url || '' : '' })), turn_of_player_indices: view.turn_of_player_indices, turn_of_player_index: view.turn_of_player_indices?.[0] ?? null, my_player_index: seat, acting_for_player_index: allowed ? seat : null, status: view.status, end_reason: view.end_reason, move_count: view.move_count, last_move_player_index: replay === null ? match.last_move_player_index ?? null : replayActor, token_pot: view.token_pot || 0, replay: replay === null ? null : { index: replay, total: match.move_count }, presentation_history: this.presentationHistory().slice(-12), locale: getLocale(), direction: getDirection(), strings: texts?.strings || this.state.game?.declarative_ui?.strings || {} };
   }
   actions = {
+    refreshNotifications: (more = false) => this.refreshNotifications(more), readNotification: (id: string) => this.perform(() => this.readNotification(id), false), claimNotificationPrompt: () => this.claimNotificationPrompt(), dismissNotificationPrompt: () => this.patch({notificationPrompt: false, notificationPromptReady: false}),
     bootstrap: (baseUrl?: string, localOnly = false,initialUrl?:string) => this.bootstrap(baseUrl, localOnly,initialUrl), refresh: () => this.refresh(), refreshMatch: () => this.refreshMatch(),
     rememberAttribution:(url:string)=>rememberUrlAttribution(url,this.state.baseUrl,this.state.accounts),
     request: (method: string, path: string, body?: any) => this.perform(() => this.request(method, path, body), false),

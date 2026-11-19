@@ -2698,5 +2698,275 @@
     "zh": "请选择有效的本地玩家人数和真人席位。",
     "hi": "स्थानीय खिलाड़ियों की मान्य संख्या और मानव खिलाड़ी की सीट चुनें।",
     "ar": "اختر أعدادًا صالحة للاعبين المحليين ومقعدًا للاعب البشري."
+  },
+  "Push notifications": {
+    "es": "Notificaciones push",
+    "fr": "Notifications push",
+    "de": "Push-Benachrichtigungen",
+    "pt": "Notificações push",
+    "zh": "推送通知",
+    "hi": "पुश सूचनाएँ",
+    "ar": "الإشعارات الفورية"
+  },
+  "Turn alerts, invitations, rematch requests, and match results. In-app notifications remain available when push is off.": {
+    "es": "Avisos de turno, invitaciones, solicitudes de revancha y resultados. Las notificaciones dentro de la aplicación siguen disponibles si desactivas las push.",
+    "fr": "Alertes de tour, invitations, demandes de revanche et résultats. Les notifications dans l’application restent disponibles lorsque les notifications push sont désactivées.",
+    "de": "Zughinweise, Einladungen, Revancheanfragen und Ergebnisse. Benachrichtigungen in der App bleiben verfügbar, wenn Push deaktiviert ist.",
+    "pt": "Alertas de turno, convites, pedidos de revanche e resultados. As notificações no aplicativo continuam disponíveis com o push desativado.",
+    "zh": "回合提醒、邀请、再赛请求和比赛结果。关闭推送后，仍可查看应用内通知。",
+    "hi": "बारी की सूचनाएँ, निमंत्रण, दोबारा खेलने के अनुरोध और मैच के नतीजे। पुश बंद होने पर भी ऐप में सूचनाएँ उपलब्ध रहती हैं।",
+    "ar": "تنبيهات الأدوار والدعوات وطلبات إعادة اللعب ونتائج المباريات. تبقى الإشعارات داخل التطبيق متاحة عند إيقاف الإشعارات الفورية."
+  },
+  "Push notifications are off for your account.": {
+    "es": "Las notificaciones push están desactivadas para tu cuenta.",
+    "fr": "Les notifications push sont désactivées pour votre compte.",
+    "de": "Push-Benachrichtigungen sind für dein Konto deaktiviert.",
+    "pt": "As notificações push estão desativadas para sua conta.",
+    "zh": "你的账户已关闭推送通知。",
+    "hi": "आपके खाते के लिए पुश सूचनाएँ बंद हैं।",
+    "ar": "الإشعارات الفورية متوقفة لحسابك."
+  },
+  "Enabled on this device": {
+    "es": "Activadas en este dispositivo",
+    "fr": "Activées sur cet appareil",
+    "de": "Auf diesem Gerät aktiviert",
+    "pt": "Ativadas neste dispositivo",
+    "zh": "已在此设备上启用",
+    "hi": "इस डिवाइस पर चालू हैं",
+    "ar": "مفعّلة على هذا الجهاز"
+  },
+  "Notifications are blocked. Allow them in your browser or device settings.": {
+    "es": "Las notificaciones están bloqueadas. Permítelas en los ajustes del navegador o dispositivo.",
+    "fr": "Les notifications sont bloquées. Autorisez-les dans les paramètres du navigateur ou de l’appareil.",
+    "de": "Benachrichtigungen sind blockiert. Erlaube sie in deinen Browser- oder Geräteeinstellungen.",
+    "pt": "As notificações estão bloqueadas. Permita-as nas configurações do navegador ou dispositivo.",
+    "zh": "通知已被阻止。请在浏览器或设备设置中允许通知。",
+    "hi": "सूचनाएँ ब्लॉक हैं। ब्राउज़र या डिवाइस की सेटिंग में उन्हें अनुमति दें।",
+    "ar": "الإشعارات محظورة. اسمح بها في إعدادات المتصفح أو الجهاز."
+  },
+  "Push notifications are unavailable on this device.": {
+    "es": "Las notificaciones push no están disponibles en este dispositivo.",
+    "fr": "Les notifications push ne sont pas disponibles sur cet appareil.",
+    "de": "Push-Benachrichtigungen sind auf diesem Gerät nicht verfügbar.",
+    "pt": "As notificações push não estão disponíveis neste dispositivo.",
+    "zh": "此设备不支持推送通知。",
+    "hi": "इस डिवाइस पर पुश सूचनाएँ उपलब्ध नहीं हैं।",
+    "ar": "الإشعارات الفورية غير متاحة على هذا الجهاز."
+  },
+  "Not enabled on this device": {
+    "es": "No están activadas en este dispositivo",
+    "fr": "Non activées sur cet appareil",
+    "de": "Auf diesem Gerät nicht aktiviert",
+    "pt": "Não estão ativadas neste dispositivo",
+    "zh": "未在此设备上启用",
+    "hi": "इस डिवाइस पर चालू नहीं हैं",
+    "ar": "غير مفعّلة على هذا الجهاز"
+  },
+  "Enable on this device": {
+    "es": "Activar en este dispositivo",
+    "fr": "Activer sur cet appareil",
+    "de": "Auf diesem Gerät aktivieren",
+    "pt": "Ativar neste dispositivo",
+    "zh": "在此设备上启用",
+    "hi": "इस डिवाइस पर चालू करें",
+    "ar": "تفعيل على هذا الجهاز"
+  },
+  "Notifications": {
+    "es": "Notificaciones",
+    "fr": "Notifications",
+    "de": "Benachrichtigungen",
+    "pt": "Notificações",
+    "zh": "通知",
+    "hi": "सूचनाएँ",
+    "ar": "الإشعارات"
+  },
+  "Your match updates and requests appear here, even when push notifications are off.": {
+    "es": "Aquí aparecen las novedades y solicitudes de tus partidas, incluso si las notificaciones push están desactivadas.",
+    "fr": "Les mises à jour et demandes de vos parties apparaissent ici, même si les notifications push sont désactivées.",
+    "de": "Hier erscheinen Spielaktualisierungen und Anfragen, auch wenn Push-Benachrichtigungen deaktiviert sind.",
+    "pt": "As atualizações e solicitações das partidas aparecem aqui, mesmo com as notificações push desativadas.",
+    "zh": "即使关闭推送通知，你的比赛动态和请求仍会显示在这里。",
+    "hi": "पुश सूचनाएँ बंद होने पर भी आपके मैच के अपडेट और अनुरोध यहाँ दिखाई देते हैं।",
+    "ar": "تظهر هنا تحديثات مبارياتك والطلبات حتى عند إيقاف الإشعارات الفورية."
+  },
+  "No notifications yet.": {
+    "es": "Todavía no hay notificaciones.",
+    "fr": "Aucune notification pour le moment.",
+    "de": "Noch keine Benachrichtigungen.",
+    "pt": "Nenhuma notificação ainda.",
+    "zh": "暂无通知。",
+    "hi": "अभी कोई सूचना नहीं है।",
+    "ar": "لا توجد إشعارات بعد."
+  },
+  "Join rematch": {
+    "es": "Unirse a la revancha",
+    "fr": "Rejoindre la revanche",
+    "de": "Revanche beitreten",
+    "pt": "Entrar na revanche",
+    "zh": "加入再赛",
+    "hi": "दोबारा मैच में शामिल हों",
+    "ar": "الانضمام إلى إعادة اللعب"
+  },
+  "View invitation": {
+    "es": "Ver invitación",
+    "fr": "Voir l’invitation",
+    "de": "Einladung ansehen",
+    "pt": "Ver convite",
+    "zh": "查看邀请",
+    "hi": "निमंत्रण देखें",
+    "ar": "عرض الدعوة"
+  },
+  "Open": {
+    "es": "Abrir",
+    "fr": "Ouvrir",
+    "de": "Öffnen",
+    "pt": "Abrir",
+    "zh": "打开",
+    "hi": "खोलें",
+    "ar": "فتح"
+  },
+  "Mark read": {
+    "es": "Marcar como leída",
+    "fr": "Marquer comme lue",
+    "de": "Als gelesen markieren",
+    "pt": "Marcar como lida",
+    "zh": "标为已读",
+    "hi": "पढ़ा हुआ चिह्नित करें",
+    "ar": "وضع علامة مقروء"
+  },
+  "Load more notifications": {
+    "es": "Cargar más notificaciones",
+    "fr": "Charger plus de notifications",
+    "de": "Weitere Benachrichtigungen laden",
+    "pt": "Carregar mais notificações",
+    "zh": "加载更多通知",
+    "hi": "और सूचनाएँ लोड करें",
+    "ar": "تحميل المزيد من الإشعارات"
+  },
+  "Know when it’s your turn": {
+    "es": "Entérate cuando sea tu turno",
+    "fr": "Sachez quand c’est votre tour",
+    "de": "Erfahre, wann du am Zug bist",
+    "pt": "Saiba quando for sua vez",
+    "zh": "轮到你时及时知晓",
+    "hi": "अपनी बारी आने पर जानें",
+    "ar": "اعرف متى يحين دورك"
+  },
+  "Your opponent has the turn. Enable notifications for your next turn, invitations, rematch requests, and match results.": {
+    "es": "Ahora es el turno de tu oponente. Activa las notificaciones para tu próximo turno, invitaciones, solicitudes de revancha y resultados.",
+    "fr": "C’est au tour de votre adversaire. Activez les notifications pour votre prochain tour, les invitations, les demandes de revanche et les résultats.",
+    "de": "Dein Gegner ist am Zug. Aktiviere Benachrichtigungen für deinen nächsten Zug, Einladungen, Revancheanfragen und Ergebnisse.",
+    "pt": "É a vez do seu oponente. Ative notificações para seu próximo turno, convites, pedidos de revanche e resultados.",
+    "zh": "现在轮到对手。启用通知，即可收到下次轮到你、邀请、再赛请求和比赛结果的提醒。",
+    "hi": "अब विरोधी की बारी है। अपनी अगली बारी, निमंत्रण, दोबारा खेलने के अनुरोध और मैच के नतीजों के लिए सूचनाएँ चालू करें।",
+    "ar": "حان دور منافسك. فعّل الإشعارات لدورك التالي والدعوات وطلبات إعادة اللعب ونتائج المباريات."
+  },
+  "You can change this anytime in your profile.": {
+    "es": "Puedes cambiar esto en cualquier momento en tu perfil.",
+    "fr": "Vous pouvez modifier ce choix à tout moment dans votre profil.",
+    "de": "Du kannst dies jederzeit in deinem Profil ändern.",
+    "pt": "Você pode alterar isso a qualquer momento no seu perfil.",
+    "zh": "你可以随时在个人资料中更改此设置。",
+    "hi": "आप इसे अपनी प्रोफ़ाइल में कभी भी बदल सकते हैं।",
+    "ar": "يمكنك تغيير ذلك في أي وقت من ملفك الشخصي."
+  },
+  "Enable notifications": {
+    "es": "Activar notificaciones",
+    "fr": "Activer les notifications",
+    "de": "Benachrichtigungen aktivieren",
+    "pt": "Ativar notificações",
+    "zh": "启用通知",
+    "hi": "सूचनाएँ चालू करें",
+    "ar": "تفعيل الإشعارات"
+  },
+  "Your player code: {v0}": {
+    "es": "Tu código de jugador: {v0}",
+    "fr": "Votre code de joueur : {v0}",
+    "de": "Dein Spielercode: {v0}",
+    "pt": "Seu código de jogador: {v0}",
+    "zh": "你的玩家代码：{v0}",
+    "hi": "आपका खिलाड़ी कोड: {v0}",
+    "ar": "رمز اللاعب الخاص بك: {v0}"
+  },
+  "Player code or ID": {
+    "es": "Código o ID del jugador",
+    "fr": "Code ou identifiant du joueur",
+    "de": "Spielercode oder ID",
+    "pt": "Código ou ID do jogador",
+    "zh": "玩家代码或 ID",
+    "hi": "खिलाड़ी कोड या आईडी",
+    "ar": "رمز اللاعب أو معرّفه"
+  },
+  "Invitation sent.": {
+    "es": "Invitación enviada.",
+    "fr": "Invitation envoyée.",
+    "de": "Einladung gesendet.",
+    "pt": "Convite enviado.",
+    "zh": "邀请已发送。",
+    "hi": "निमंत्रण भेज दिया गया।",
+    "ar": "تم إرسال الدعوة."
+  },
+  "Send invitation": {
+    "es": "Enviar invitación",
+    "fr": "Envoyer l’invitation",
+    "de": "Einladung senden",
+    "pt": "Enviar convite",
+    "zh": "发送邀请",
+    "hi": "निमंत्रण भेजें",
+    "ar": "إرسال الدعوة"
+  },
+  "This notification link is unavailable.": {
+    "es": "Este enlace de notificación no está disponible.",
+    "fr": "Ce lien de notification n’est pas disponible.",
+    "de": "Dieser Benachrichtigungslink ist nicht verfügbar.",
+    "pt": "Este link de notificação não está disponível.",
+    "zh": "此通知链接不可用。",
+    "hi": "यह सूचना लिंक उपलब्ध नहीं है।",
+    "ar": "رابط الإشعار هذا غير متاح."
+  },
+  "Dismiss": {
+    "es": "Descartar",
+    "fr": "Fermer",
+    "de": "Schließen",
+    "pt": "Dispensar",
+    "zh": "关闭",
+    "hi": "हटाएँ",
+    "ar": "إغلاق"
+  },
+  "Push notifications require a physical device.": {
+    "es": "Las notificaciones push requieren un dispositivo físico.",
+    "fr": "Les notifications push nécessitent un appareil physique.",
+    "de": "Push-Benachrichtigungen erfordern ein physisches Gerät.",
+    "pt": "As notificações push exigem um dispositivo físico.",
+    "zh": "推送通知需要实体设备。",
+    "hi": "पुश सूचनाओं के लिए वास्तविक डिवाइस आवश्यक है।",
+    "ar": "تتطلب الإشعارات الفورية جهازًا فعليًا."
+  },
+  "Push notifications are not configured in this app build.": {
+    "es": "Las notificaciones push no están configuradas en esta versión de la aplicación.",
+    "fr": "Les notifications push ne sont pas configurées dans cette version de l’application.",
+    "de": "Push-Benachrichtigungen sind in dieser App-Version nicht eingerichtet.",
+    "pt": "As notificações push não estão configuradas nesta versão do aplicativo.",
+    "zh": "此应用版本尚未配置推送通知。",
+    "hi": "ऐप के इस संस्करण में पुश सूचनाएँ कॉन्फ़िगर नहीं हैं।",
+    "ar": "لم تُضبط الإشعارات الفورية في هذا الإصدار من التطبيق."
+  },
+  "Push notifications are not enabled on this server.": {
+    "es": "Las notificaciones push no están activadas en este servidor.",
+    "fr": "Les notifications push ne sont pas activées sur ce serveur.",
+    "de": "Push-Benachrichtigungen sind auf diesem Server nicht aktiviert.",
+    "pt": "As notificações push não estão ativadas neste servidor.",
+    "zh": "此服务器尚未启用推送通知。",
+    "hi": "इस सर्वर पर पुश सूचनाएँ चालू नहीं हैं।",
+    "ar": "الإشعارات الفورية غير مفعّلة على هذا الخادم."
+  },
+  "This browser does not support push notifications. On iPhone, add BuildPlay to your Home Screen first.": {
+    "es": "Este navegador no admite notificaciones push. En iPhone, añade primero BuildPlay a la pantalla de inicio.",
+    "fr": "Ce navigateur ne prend pas en charge les notifications push. Sur iPhone, ajoutez d’abord BuildPlay à l’écran d’accueil.",
+    "de": "Dieser Browser unterstützt keine Push-Benachrichtigungen. Füge BuildPlay auf dem iPhone zuerst zum Home-Bildschirm hinzu.",
+    "pt": "Este navegador não oferece notificações push. No iPhone, adicione primeiro o BuildPlay à tela de início.",
+    "zh": "此浏览器不支持推送通知。在 iPhone 上，请先将 BuildPlay 添加到主屏幕。",
+    "hi": "यह ब्राउज़र पुश सूचनाएँ समर्थित नहीं करता। iPhone पर पहले BuildPlay को होम स्क्रीन पर जोड़ें।",
+    "ar": "هذا المتصفح لا يدعم الإشعارات الفورية. على iPhone، أضف BuildPlay إلى الشاشة الرئيسية أولًا."
   }
 }

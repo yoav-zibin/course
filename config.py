@@ -88,6 +88,10 @@ class PushConfig(_Section):
     # (development only); "webpush" delivers real Web Push messages (RFC 8030),
     # signed with the VAPID key below.
     provider: Literal["log", "webpush"] = "log"
+    # Native tokens use the Expo gateway independently of browser VAPID keys.
+    # Clients also need an EAS project and its FCM/APNs credentials.
+    native_enabled: bool = True
+    expo_access_token: str = ""
     # VAPID private key (base64url-encoded PKCS#8 DER), generated with
     # --generate-vapid-keys. Needed when provider is "webpush". Prefer the
     # GAME_PLATFORM_VAPID_PRIVATE_KEY environment variable over storing the key here.

@@ -390,6 +390,8 @@ def _merge_invite(store, record, source_id, into_id):
     updated = record
     if record.created_by_user_id == source_id:
         updated = replace(updated, created_by_user_id=into_id)
+    if record.recipient_user_id == source_id:
+        updated = replace(updated, recipient_user_id=into_id)
     if any(a.user_id == source_id for a in updated.acceptances):
         updated = replace(
             updated,
@@ -430,6 +432,12 @@ def _merge_finalize(store, job):
             invited_by = source_inviter
     into = replace(
         into,
+        notifications_enabled=into.notifications_enabled and source.notifications_enabled,
+        notification_prompt_seen=into.notification_prompt_seen or source.notification_prompt_seen,
+        notifications=tuple(sorted(
+            {item.id: item for item in (*source.notifications, *into.notifications)}.values(),
+            key=lambda item: (item.created_at, item.id), reverse=True,
+        ))[:100],
         token_balance=into.token_balance + source.token_balance,
         verified_login_bonus_granted=(
             into.verified_login_bonus_granted or source.verified_login_bonus_granted
@@ -458,6 +466,7 @@ def _merge_finalize(store, job):
                 linked_accounts=(),
                 replaced_user_ids=(),
                 token_balance=0,
+                notifications=(),
                 updated_at=_now(),
             )
         else:

@@ -36,6 +36,7 @@ from game_platform.models import (
     SeatKind,
     Translation,
     User,
+    UserNotification,
     WebPushSubscription,
 )
 from game_platform.i18n import LOCALE_CODES, Locale, get_locale, normalize_locale
@@ -147,11 +148,13 @@ class UserUpdate(_Request):
 
     display_name: Name | None = None
     locale: LocaleCode | None = None
+    notifications_enabled: StrictBool | None = None
+    notification_prompt_seen: StrictBool | None = None
 
     @model_validator(mode="after")
     def _require_a_change(self) -> "UserUpdate":
         if not self.model_fields_set:
-            raise ValueError("give display_name, locale or both")
+            raise ValueError("give at least one profile field")
         for field in sorted(self.model_fields_set):
             if getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
@@ -180,12 +183,16 @@ class UserOut(BaseModel):
     # The user's own short invite code (links look like /r/<code>). Only in responses
     # about the caller's own account; None for other users.
     referral_code: str | None = None
+    notifications_enabled: bool | None = None
+    notification_prompt_seen: bool | None = None
 
     @classmethod
     def of(cls, user: User, *, own: bool = False) -> "UserOut":
         return cls(
             id=user.id,
             referral_code=user.referral_code if own else None,
+            notifications_enabled=user.notifications_enabled if own else None,
+            notification_prompt_seen=user.notification_prompt_seen if own else None,
             display_name=user.display_name,
             picture_url=user.picture_url,
             locale=user.locale,
@@ -399,12 +406,37 @@ class PushSubscribe(_Request):
     expiration_time: dt.datetime | None = None
 
 
+class NativePushSubscribe(_Request):
+    token: Annotated[str, StringConstraints(pattern=r"^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]{1,256}\]$")]
+    platform: Literal["android", "ios"]
+
+
+class UserNotificationOut(BaseModel):
+    id: str
+    event: str
+    title: str
+    body: str
+    url: str
+    created_at: dt.datetime
+    read_at: dt.datetime | None
+
+    @classmethod
+    def of(cls, item: UserNotification) -> "UserNotificationOut":
+        return cls(**{field: getattr(item, field) for field in cls.model_fields})
+
+
+class NotificationsOut(CursorPageOut[UserNotificationOut]):
+    unread_count: int
+
+
 class PushSubscriptionOut(BaseModel):
     """One of the caller's subscriptions. The keys are not returned: the browser that
     owns the subscription already has them, and nobody else should."""
 
     id: str
     endpoint: str
+    delivery: Literal["webpush", "expo"] = "webpush"
+    platform: Literal["android", "ios"] | None = None
     expiration_time: dt.datetime | None
     created_at: dt.datetime
 
@@ -413,6 +445,8 @@ class PushSubscriptionOut(BaseModel):
         return cls(
             id=subscription.id,
             endpoint=subscription.endpoint,
+            delivery=subscription.delivery,
+            platform=subscription.platform,
             expiration_time=subscription.expiration_time,
             created_at=subscription.created_at,
         )
@@ -423,6 +457,7 @@ class PushConfigOut(BaseModel):
     Public information."""
 
     enabled: bool
+    native_enabled: bool = True
     vapid_public_key: str
 
 
@@ -940,6 +975,8 @@ class InviteCreate(_Request):
     ] | None = None
     # Omit for unlimited uses.
     max_uses: Annotated[int, Field(ge=1, le=MAX_PLAYERS)] | None = None
+    # An existing account ID or its five-digit player code. Omit for a share link.
+    recipient_user_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)] | None = None
 
 
 class InviteAcceptanceOut(BaseModel):
@@ -979,6 +1016,7 @@ class InviteOut(InviteLinks):
     token: str
     match_id: str
     created_by_user_id: str
+    recipient_user_id: str | None = None
     created_at: dt.datetime
     expires_at: dt.datetime | None
     max_uses: int | None
@@ -994,6 +1032,7 @@ class InviteOut(InviteLinks):
             token=invite.token,
             match_id=invite.match_id,
             created_by_user_id=invite.created_by_user_id,
+            recipient_user_id=invite.recipient_user_id,
             created_at=invite.created_at,
             expires_at=invite.expires_at,
             max_uses=invite.max_uses,

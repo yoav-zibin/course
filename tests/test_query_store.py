@@ -27,6 +27,137 @@ def api_for(store):
     return api
 
 
+def test_notification_inbox_rolls_back_and_reloads_without_collection_queries(store):
+    api = api_for(store)
+    platform = api.client.app.state.platform
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game = api.new_game(owner=alice)
+    match_id = api.new_match(owner=alice, game_id=game)
+    match = store.get_match(match_id)
+    with pytest.raises(RuntimeError):
+        with store.atomic():
+            platform._notify_match_event("notify.turn", match=match,
+                                         recipient_ids=[bob], tag_suffix="turn")
+            raise RuntimeError("rollback match change")
+    cold = QueryStore(store.client, namespace=store.namespace)
+    assert cold.get_user(bob).notifications == ()
+    with store.atomic():
+        platform._notify_match_event("notify.turn", match=match,
+                                     recipient_ids=[bob], tag_suffix="turn")
+    cold.clear_cache()
+    api.client.app.state.platform = ScalablePlatform(store=cold)
+    with patch.object(cold, "_query", side_effect=AssertionError("inbox queried a collection")):
+        page = api.ok("GET", "/users/me/notifications", as_user=bob)
+        assert page["unread_count"] == 1
+        entry, = page["items"]
+        assert entry["event"] == "turn"
+        read = api.ok("POST", f"/users/me/notifications/{entry['id']}/read", as_user=bob)
+        assert read["read_at"] is not None
+        assert api.ok("GET", "/users/me/notifications", as_user=bob)["unread_count"] == 0
+
+
+def test_notification_opt_out_history_and_directed_invites_survive_query_merge(store):
+    api = api_for(store)
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game = api.new_game(owner=alice)
+    match = api.new_match(owner=alice, game_id=game)
+    code = api.ok("GET", f"/users/{bob}", as_user=bob)["referral_code"]
+    invite = api.ok("POST", f"/matches/{match}/invites", as_user=alice,
+                    json={"recipient_user_id": code})
+    assert invite["recipient_user_id"] == bob
+    api.ok("PATCH", f"/users/{bob}", as_user=bob,
+           json={"notifications_enabled": False, "notification_prompt_seen": True})
+    merged = api.ok("POST", f"/users/{bob}/merge", as_user=bob,
+                    json={"into_user_id": alice, "into_password": api.passwords_by_user_id[alice]})
+    assert merged["notifications_enabled"] is False
+    assert merged["notification_prompt_seen"] is True
+    cold = QueryStore(store.client, namespace=store.namespace)
+    assert cold.get_user(alice).notifications[0].event == "invite_request"
+    assert cold.get_user(bob).notifications == ()
+    assert cold.get_invite(invite["token"]).recipient_user_id == alice
+
+
+def test_native_delivery_receipt_survives_restart_and_removes_invalid_token(store, monkeypatch):
+    import datetime as dt
+    from game_platform.config import PushConfig
+    from game_platform.push import ExpoPushDelivery
+    from game_platform.tests.test_native_push_delivery import setup_message, fake_gateway
+
+    fixture, message = setup_message()
+    store.put_user(fixture.get_user("alice"))
+    store.put_push_subscription(message.subscription)
+    dead = {"status": "error", "details": {"error": "DeviceNotRegistered"}}
+    calls = fake_gateway(monkeypatch, [
+        {"status": "ok", "id": "receipt-device-1"},
+        {"receipt-device-1": dead},
+    ])
+    first = ExpoPushDelivery(config=PushConfig(), store=store)
+    first.deliver(message)
+    receipt_ref = store.ref("push_receipts", "receipt-device-1")
+    saved = store.raw_get(receipt_ref)
+    assert saved["endpoint"] == message.subscription.endpoint
+    # Make the durable receipt due, then use a new client and notifier instance.
+    store.raw_put(receipt_ref, {**saved, "due_at": dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=1)})
+    restarted_store = QueryStore(store.client, namespace=store.namespace)
+    restarted = ExpoPushDelivery(config=PushConfig(), store=restarted_store)
+    restarted.run_receipts()
+    assert calls[1][1]["json"] == {"ids": ["receipt-device-1"]}
+    assert restarted_store.get_push_subscription_by_endpoint(message.subscription.endpoint) is None
+    assert restarted_store.raw_get(receipt_ref) is None
+    assert list(restarted_store.collection("push_receipts").stream()) == []
+
+
+@pytest.mark.parametrize("change", ["opt_out", "reassigned", "removed"])
+def test_queued_native_delivery_rechecks_cross_process_changes_without_cached_consent(store, change):
+    from unittest.mock import Mock
+    from game_platform.config import PushConfig
+    from game_platform.push import RoutedPushNotifier
+    from game_platform.tests.test_native_push_delivery import setup_message
+
+    fixture, message = setup_message()
+    store.put_user(fixture.get_user("alice"))
+    store.put_push_subscription(message.subscription)
+    stale = QueryStore(store.client, namespace=store.namespace)
+    assert stale.get_user("alice").notifications_enabled
+    assert stale.get_push_subscription_by_endpoint(message.subscription.endpoint).user_id == "alice"
+    if change == "opt_out":
+        store.put_user(replace(store.get_user("alice"), notifications_enabled=False))
+    elif change == "reassigned":
+        store.put_push_subscription(replace(message.subscription, user_id="other"))
+    else:
+        store.delete_push_subscription_by_endpoint(message.subscription.endpoint)
+    # Ordinary reads can retain another process's old value during the cache's
+    # refresh window. A delivery decision must use the transactional fresh view.
+    assert stale.get_user("alice").notifications_enabled
+    notifier = RoutedPushNotifier(config=PushConfig(), store=stale, browser=Mock())
+    try:
+        notifier.native.deliver = Mock()
+        notifier.deliver(message)
+        notifier.native.deliver.assert_not_called()
+    finally:
+        notifier.close()
+
+
+def test_native_subscription_reassignment_keeps_query_mode_cap(store):
+    api = api_for(store)
+    api.client.app.state.platform._max_push_subscriptions_per_user = 2
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+
+    def register(user, token):
+        return api.ok("POST", "/push/native-subscriptions", as_user=user,
+                      json={"token": f"ExpoPushToken[{token}]", "platform": "ios"})
+
+    old = register(alice, "older-device")
+    register(bob, "bob-device-1")
+    register(bob, "bob-device-2")
+    assert register(bob, "older-device")["id"] == old["id"]
+    cold = QueryStore(store.client, namespace=store.namespace)
+    subscriptions = cold.list_push_subscriptions(user_id=bob)
+    assert len(subscriptions) == 2
+    assert old["id"] in {item.id for item in subscriptions}
+    assert cold.list_push_subscriptions(user_id=alice) == []
+
+
 def test_legacy_catalog_and_popularity_use_metadata_without_transactions_or_code_reads(store):
     api = api_for(store)
     owner = api.new_user('catalog reader')

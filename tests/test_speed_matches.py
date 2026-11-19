@@ -469,7 +469,7 @@ def test_two_simultaneous_checks_time_out_only_once() -> None:
     assert len(match.timeouts) == 1
     assert {len(r.timeouts) for r in results} == {1}
     assert [m.body for m in world.notifier.messages].count(
-        "Duel ended: time ran out"
+        "The match in Duel is over"
     ) == 1
 
 
@@ -526,7 +526,7 @@ def test_rematches_keep_the_setting_and_quick_matches_stay_regular() -> None:
 # Notifications
 
 
-def test_the_timed_out_player_is_notified_about_the_takeover() -> None:
+def test_timeout_sends_only_the_ordinary_match_over_event() -> None:
     world = World()
     for user in (world.ann, world.bob, world.cy):
         world.subscribe(user)
@@ -535,7 +535,10 @@ def test_the_timed_out_player_is_notified_about_the_takeover() -> None:
     world.clock.advance(61)
     world.get(match_id)
     sent = [(m.subscription.user_id, m.body) for m in world.notifier.messages]
-    assert sorted(sent) == sorted((u, "Duel ended: time ran out") for u in (world.ann, world.bob, world.cy))
+    assert sorted(sent) == sorted((u, "The match in Duel is over") for u in (world.ann, world.bob, world.cy))
+    assert all(m.tag == f"match-{match_id}-over" for m in world.notifier.messages)
+    assert all(item.event == "match_over" for user in (world.ann, world.bob, world.cy)
+               for item in world.platform.get_user(user).notifications[:1])
 
 
 def test_everyone_is_notified_when_the_match_ends_on_time() -> None:
@@ -547,7 +550,7 @@ def test_everyone_is_notified_when_the_match_ends_on_time() -> None:
     world.clock.advance(61)
     world.get(match_id)
     sent = sorted((m.subscription.user_id, m.body) for m in world.notifier.messages)
-    assert sent == sorted([(world.ann, "Duel ended: time ran out"), (world.bob, "Duel ended: time ran out")])
+    assert sent == sorted([(world.ann, "The match in Duel is over"), (world.bob, "The match in Duel is over")])
 
 
 def test_repeated_timeout_reads_do_not_notify_twice() -> None:

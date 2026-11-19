@@ -40,6 +40,7 @@ jobs:
     env:
       BUILDPLAY_VARIANT: debug
       EXPO_PUBLIC_API_URL: https://buildplay.fun
+      EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
     defaults:
       run:
         working-directory: frontends/portal
@@ -57,6 +58,10 @@ jobs:
       - uses: android-actions/setup-android@v3
         with: {packages: platform-tools}
       - run: npm ci
+      - name: Prepare optional Android push configuration
+        env:
+          BUILDPLAY_ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+        run: node scripts/configure-notification-build.mjs
       - run: npx expo prebuild --platform android --no-install --no-clean
       - name: Build APK with embedded JavaScript
         run: |
@@ -137,6 +142,7 @@ jobs:
     timeout-minutes: 60
     env:
       EXPO_PUBLIC_API_URL: https://buildplay.fun
+      EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
     defaults:
       run:
         working-directory: frontends/portal
@@ -259,6 +265,8 @@ jobs:
     env:
       IOS_PORTAL_BUNDLE_ID: ${{ vars.IOS_PORTAL_BUNDLE_ID }}
       EXPO_PUBLIC_API_URL: https://buildplay.fun
+      EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
+      BUILDPLAY_IOS_PUSH_ENABLED: ${{ vars.IOS_PUSH_ENABLED == 'true' && '1' || '0' }}
     defaults:
       run:
         working-directory: frontends/portal

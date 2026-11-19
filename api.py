@@ -73,6 +73,9 @@ from game_platform.schemas import (
     MoveOut,
     PhoneStart,
     PushConfigOut,
+    NativePushSubscribe,
+    NotificationsOut,
+    UserNotificationOut,
     PushSubscribe,
     PushSubscriptionOut,
     QuickMatchRequest,
@@ -501,6 +504,27 @@ def create_user(
 # The caller's own data. Declared before /users/{user_id} so "me" isn't taken for an id.
 
 
+@router.get("/users/me/notifications")
+def list_notifications(
+    platform: Platform, caller_id: CallerId,
+    limit: Annotated[int, Field(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Field(max_length=200)] = None,
+) -> NotificationsOut:
+    page = platform.list_notifications(caller_id=caller_id, limit=limit, cursor=cursor)
+    return NotificationsOut(
+        items=[UserNotificationOut.of(item) for item in page["items"]],
+        next_cursor=page["next_cursor"], unread_count=page["unread_count"],
+    )
+
+
+@router.post("/users/me/notifications/{notification_id}/read")
+def read_notification(platform: Platform, caller_id: CallerId,
+                      notification_id: str) -> UserNotificationOut:
+    return UserNotificationOut.of(platform.read_notification(
+        caller_id=caller_id, notification_id=notification_id,
+    ))
+
+
 @router.get("/users/me/saved-games")
 def list_saved_games(platform: Platform, caller_id: CallerId) -> list[GameOut]:
     """The caller's library of saved games, most recently saved first."""
@@ -597,6 +621,8 @@ def update_user(
         user_id=user_id,
         display_name=body.display_name,
         locale=body.locale,
+        notifications_enabled=body.notifications_enabled,
+        notification_prompt_seen=body.notification_prompt_seen,
     )
     return UserOut.of(user, own=True)
 
@@ -1269,6 +1295,7 @@ def create_invite(
         match_id=match_id,
         expires_in_seconds=body.expires_in_seconds,
         max_uses=body.max_uses,
+        recipient_user_id=body.recipient_user_id,
     )
     return InviteOut.of_invite(invite, base_url=_public_base_url(request))
 
@@ -1466,6 +1493,7 @@ def push_config(request: Request) -> PushConfigOut:
     config = _push_config_of(request)
     return PushConfigOut(
         enabled=config.provider != "log",
+        native_enabled=config.native_enabled,
         vapid_public_key=vapid_public_key(config.vapid_private_key)
         if config.vapid_private_key
         else "",
@@ -1492,6 +1520,23 @@ def subscribe_push(
         p256dh=body.keys.p256dh,
         auth=body.keys.auth,
         expiration_time=body.expiration_time,
+    )
+    if created:
+        response.status_code = HTTPStatus.CREATED
+    return PushSubscriptionOut.of(subscription)
+
+
+@push_router.post("/native-subscriptions")
+def subscribe_native_push(
+    platform: Platform, caller_id: CallerId, body: NativePushSubscribe,
+    response: Response, request: Request,
+) -> PushSubscriptionOut:
+    if not _push_config_of(request).native_enabled:
+        raise HTTPException(HTTPStatus.SERVICE_UNAVAILABLE, "native notifications are not enabled")
+    subscription, created = platform.subscribe_push(
+        caller_id=caller_id, endpoint="expo:" + body.token,
+        p256dh="", auth="", expiration_time=None,
+        delivery="expo", platform=body.platform,
     )
     if created:
         response.status_code = HTTPStatus.CREATED

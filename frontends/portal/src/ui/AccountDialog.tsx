@@ -4,6 +4,7 @@ import {Image, View} from 'react-native';
 import {Button, Card, Choices, Copy, Dialog, Field, Notice, Row, Title, colors} from './components';
 import {text,useApp} from './context';
 import GoogleLogin from './GoogleLogin';
+import {NotificationPreferences} from './Notifications';
 import {getLocales} from '../platform/i18n';
 
 export function AccountDialog({visible,onClose}: {visible:boolean;onClose:()=>void}) {
@@ -20,6 +21,7 @@ export function AccountDialog({visible,onClose}: {visible:boolean;onClose:()=>vo
       <Row><Button compact secondary onPress={()=>setEditing(!editing)}>{t('ui.auth.edit_name','Edit profile')}</Button><Button compact secondary onPress={()=>act(async()=>{await p.actions.logout();onClose();})}>{t('ui.auth.log_out','Log out')}</Button></Row>
       {editing&&<><Field label={t('ui.auth.display_name','Display name')} value={name} onChangeText={setName} maxLength={200}/><Button disabled={!name.trim()} onPress={()=>act(async()=>{await p.actions.updateProfile({display_name:name.trim()});setEditing(false);})}>{t('ui.action.save','Save')}</Button></>}
     </Card>}
+    {p.account&&<>{(p.profile?.referral_code||p.account.referral_code)&&<Copy selectable small>{copyText('Your player code: {v0}',{v0:p.profile?.referral_code||p.account.referral_code})}</Copy>}<NotificationPreferences/></>}
     {p.accounts.length>1&&<View style={{gap:10}}><Copy small muted>{t('ui.auth.switch','Switch account')}</Copy>{p.accounts.filter(a=>a.id!==p.account?.id).map(a=><Button key={a.id} secondary onPress={()=>act(async()=>{await p.actions.switchAccount(a.id);onClose();})}>{a.display_name}</Button>)}</View>}
     {p.account&&<><Title small>{t('ui.auth.add_login','Add a login or use another account')}</Title><Choices label={copyText("Account to use")} value={link} options={[{value:'link',label:copyText("Link to this account")},{value:'new',label:copyText("Use another account")}]} onChange={setLink}/></>}
     {p.authConfig?.google_client_id&&<GoogleLogin clientId={p.authConfig.google_client_id} link={Boolean(p.account&&link==='link')} onToken={token=>act(async()=>{await p.actions.google(token,Boolean(p.account&&link==='link'));onClose();})}/>}

@@ -286,14 +286,28 @@ A user's *total* invites count everyone they brought in transitively: the people
 invited, the people those people invited, and so on. See `/invites` under
 [Pages](#pages).
 
-### Web push notifications
+### Notifications
 
-The platform can push browser notifications when something happens in a match you're
-in: it's your turn, the match ended, a player joined your waiting match, or a player
-left mid-match (a computer takes over). Notifications are opt-in per browser: a
-frontend asks for the browser's notification permission, subscribes (Push API), and
-registers the subscription with the server. Users who never enable them — and
-frontends that never implement them — are unaffected.
+Web, Android and iOS share a private in-app notification inbox with unread counts.
+It records turns, match endings, players joining or leaving, direct match invitations,
+and rematch requests. A timeout uses the ordinary match-ended notification; there is
+no separate timer alert. Opening an invitation previews it before joining; opening a
+rematch request joins the reserved rematch through the existing rematch API.
+
+Push is optional and controlled in the account profile. Turning it off stops push
+on every device while keeping the in-app inbox available. Device/browser permission
+is separate: enabling push registers this device only after permission is granted.
+The app offers permission once after the account's first confirmed multiplayer move
+that passes its turn to another human opponent. Local practice, computer-only
+opponents, failed moves and retaining the turn never trigger this prompt. The choice
+is retained on the account, including after reinstalling or merging accounts.
+
+Direct invitations use `POST /matches/{id}/invites` with optional `recipient_user_id`
+(a player ID or their five-digit invite code). An undirected share link sends no push.
+`GET /users/me/notifications?limit=20&cursor=...` returns the newest entries, an exact
+unread count and the next cursor; `POST /users/me/notifications/{id}/read` marks one
+read. The inbox retains the latest 100 entries per account and works independently of
+push subscription and permission. Requests are authenticated and scoped to the caller.
 
 The pieces:
 
@@ -312,15 +326,33 @@ The pieces:
   a push service answering 404 or 410 drops the dead subscription automatically.
 - **Payloads** are composed server-side and localized into the recipient's language
   (the `notify.*` catalog keys); they carry only a title, a body and the portal match
-  link — no credentials. A click focuses the portal (or opens it) at the match.
+  or invitation link, recipient ID and inbox entry ID — no account credentials.
+  A click focuses the portal (or opens it) at the match or request.
 - **Delivery** is best-effort and off the request path: the service queues
   notifications and a worker thread sends them, so a slow push service never stalls
   requests, and a lost notification is annoying, not corrupting. `push.ttl_seconds`
   bounds how long a push service keeps an undeliverable message. With the default
-  `"log"` provider, notifications are written to the server log instead — handy for
+  `"log"` provider, browser notifications are written to the server log instead — handy for
   development. `POST /push/test` queues a test notification to the caller, and
-  `GET /push/config` tells a frontend whether push is set up and which VAPID public
-  key to subscribe with.
+  `GET /push/config` tells a frontend whether browser/native push is enabled and
+  which VAPID public key to subscribe with. Delivery rechecks the current account
+  preference and endpoint ownership, so queued messages stop after opt-out or an
+  account change.
+
+Native apps use `expo-notifications` and the Expo Push Service. They register their
+token with `POST /push/native-subscriptions`; native and browser subscriptions share
+the same authenticated list/delete APIs. `push.native_enabled` enables server-side
+native delivery independently of VAPID, and `GAME_PLATFORM_EXPO_ACCESS_TOKEN` supplies
+an optional gateway token when enhanced push security is enabled in Expo. Delivery
+tickets are checked after 15 minutes; dead device tokens are removed. Production
+query mode persists these receipts and retries transient delivery failures.
+
+Native push requires an Expo/EAS project with Android FCM and Apple APNs credentials
+and a rebuilt app. The optional CI variables and secrets, CLI setup and credential
+requirements are documented in [the shared app guide](frontends/portal/README.md#native-push-setup).
+No Expo project or push credential is created by installing the dependency or by a
+normal build; unconfigured builds keep in-app notifications and display the device's
+push availability in the profile.
 
 Browsers require a secure context: serve the site over HTTPS (localhost works
 without). On iOS, push works only when the portal is installed to the home screen
@@ -670,7 +702,9 @@ stop the server at startup with an error naming the field.
 | `auth.email.smtp_password`        | `""`                                     | SMTP password |
 | `auth.email.smtp_from_address`    | `""`                                     | The From address login codes are sent from |
 | `auth.email.smtp_use_tls`         | `true`                                   | Use STARTTLS |
-| `push.provider`                   | `"log"`                                  | `"log"` writes notifications to the server log; `"webpush"` delivers real Web Push messages (see [Web push notifications](#web-push-notifications)) |
+| `push.provider`                   | `"log"`                                  | `"log"` writes browser notifications to the server log; `"webpush"` delivers real Web Push messages (see [Notifications](#notifications)) |
+| `push.native_enabled`             | `true`                                   | Deliver registered native tokens through Expo; app builds also need FCM/APNs credentials |
+| `push.expo_access_token`           | `""`                                     | Optional Expo gateway token; prefer `GAME_PLATFORM_EXPO_ACCESS_TOKEN` |
 | `push.vapid_private_key`          | `""`                                     | VAPID private key, from `--generate-vapid-keys`; needed for `"webpush"`. Prefer the `GAME_PLATFORM_VAPID_PRIVATE_KEY` environment variable over storing it in this file |
 | `push.vapid_subject`              | `""`                                     | Operator contact push services require with VAPID: a `mailto:` or `https:` URL; needed for `"webpush"` |
 | `push.ttl_seconds`                | `86400`                                  | A push service drops a notification it couldn't deliver after this many seconds |

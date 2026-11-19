@@ -62,9 +62,10 @@ builds and CI artifacts. Generated `android/`, `ios/` and web bundles are ignore
   the shared React Native web renderer; there is no second board implementation.
 - Google sign-in on native uses the system browser and a short-lived proof-bound
   handoff. Credentials and verifier values never enter callback URLs or games.
-- Web push uses the existing backend Web Push subscription API. Native apps have
-  the same in-app turn updates while active; background native push requires a
-  separately configured native push delivery service.
+- Web push uses the backend Web Push subscription API. Android and iOS use
+  `expo-notifications` and the Expo Push Service when the build has the platform
+  credentials described below. The notification inbox and active-app updates
+  also work in builds without those credentials.
 
 The QuickJS module has no application I/O bindings. Each execution gets a fresh
 context with time, memory, stack, input and output limits. Browser execution uses
@@ -86,6 +87,66 @@ the tested web bundle to the existing VM. `Portal apps` generates both native
 projects from this source, publishes a standalone Android APK, builds an iOS
 simulator app, and retains the existing opt-in TestFlight configuration. Keep
 production credentials, database namespace and signing settings outside source.
+
+## Native push setup
+
+The app includes native enrollment, token refresh, foreground alerts and tap/cold
+start routing. A new standalone build is required after configuring native push.
+Unconfigured builds continue to run and show that device notifications are
+unavailable; they do not request permission. Enabling notifications explicitly
+requests permission, while startup/resume reconciliation only registers an
+already permitted device. Account changes remove the previous account's device
+registration before registering the selected account.
+
+There is no existing Expo project configured for this repository. Complete the
+following setup with the account that should own BuildPlay:
+
+1. Run `npx --yes eas-cli login`, then `npx --yes eas-cli init` from
+   `frontends/portal`. Create/link the project and retain its project UUID.
+   Add that UUID as the GitHub Actions variable `EXPO_PROJECT_ID`. For local
+   builds, export `EXPO_PUBLIC_EAS_PROJECT_ID` with the same UUID; the dynamic
+   app config places it in `extra.eas.projectId`.
+2. For Android, create Firebase Android clients for the app identifiers you
+   distribute: `com.dapillah.gameportal.debug` for the rolling APK and
+   `com.dapillah.gameportal` for production. Download their `google-services.json`.
+   Add the JSON containing the debug client as the GitHub Actions secret
+   `ANDROID_GOOGLE_SERVICES_JSON`. CI validates the application identifier and
+   writes the file to its temporary directory before prebuild. Local builds use
+   `BUILDPLAY_GOOGLE_SERVICES_FILE=/absolute/path/google-services.json`.
+3. Configure the Firebase FCM v1 service account in the Expo project using
+   `npx --yes eas-cli credentials --platform android`, with
+   `EXPO_PUBLIC_EAS_PROJECT_ID` exported. The client `google-services.json` and
+   the FCM service-account credential serve different purposes; keep private
+   service-account keys outside source.
+4. For iOS, use `npx --yes eas-cli credentials --platform ios` to configure an
+   APNs key for the Apple team and existing `IOS_PORTAL_BUNDLE_ID`. Enable the
+   Push Notifications capability and ensure the distribution provisioning
+   profile includes it. After the Expo APNs credentials are ready, set the
+   GitHub variable `IOS_PUSH_ENABLED=true`. The existing TestFlight job will
+   include the production `aps-environment` entitlement. A local physical-device
+   build uses `BUILDPLAY_IOS_PUSH_ENABLED=1`; for a development APNs environment
+   also set `BUILDPLAY_APNS_ENVIRONMENT=development`.
+5. Rebuild and install on physical Android/iOS devices, sign in, and enable
+   notifications in the account profile. With that account, `POST /push/test` verifies the
+   configured delivery path. Check an incoming notification while the app is
+   active, while backgrounded, and after closing it; tapping should open the
+   referenced match/invite. Simulator builds remain useful for the inbox and
+   ordinary app smoke tests, but do not establish remote delivery readiness.
+
+The backend must advertise `native_enabled` in `GET /push/config` and deliver
+Expo subscriptions. Web push keeps its separate VAPID configuration. See the
+[Expo setup guide](https://docs.expo.dev/push-notifications/push-notifications-setup/)
+for account/platform credential provisioning and the
+[Expo notification API](https://docs.expo.dev/versions/v58.0.0/sdk/notifications/)
+for the SDK 58 enrollment and listener APIs. Android's `matches` channel is
+created before requesting permission or acquiring a device token.
+
+Android's counterpart to TestFlight is
+[Google Play internal or closed testing](https://support.google.com/googleplay/android-developer/answer/9845334),
+which installs and updates tester builds through the Play Store.
+[Firebase App Distribution](https://firebase.google.com/docs/app-distribution/) can
+also distribute test APKs. This repository currently publishes its rolling APK
+through GitHub Releases; Play/Firebase distribution is not configured by this change.
 
 The historical rolling Android debug APK used ephemeral CI signing keys. An
 installation signed with a different old key cannot be upgraded in place by a

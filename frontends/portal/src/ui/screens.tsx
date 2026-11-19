@@ -8,7 +8,8 @@ import {Button, Card, Choices, Copy, Dialog, Empty, Field, Notice, Row, Title, c
 import {text, useApp} from './context';
 import {MatchOutcome} from './MatchOutcome';
 import {GameInstructions} from './GameInstructions';
-import {enableNotifications, installPrompt} from './webApp';
+import {NotificationPreferences} from './Notifications';
+import {installPrompt} from './webApp';
 
 function useText() {const {p} = useApp(); return (key: string, fallback: string) => text(p,key,fallback);}
 function gameName(game: Game | undefined, id: string) {return game?.name || id.slice(0,8);}
@@ -121,7 +122,8 @@ export function Settings({layout,setLayout}: {layout:'top'|'left';setLayout:(val
   const {p,run,notify}=useApp(),t=useText();
   return <><Title>{t('ui.preferences.title','Preferences')}</Title><Card><Choices label={copyText("Navigation layout")} value={layout} options={[{value:'top',label:copyText("Top navigation")},{value:'left',label:copyText("Left navigation")}]} onChange={setLayout}/><Choices label={t('ui.language.label','Language')} value={p.locale} options={getLocales().map(item=>({value:item.code,label:item.native_name||item.name||item.code}))} onChange={value=>run(()=>p.actions.setLocale(value))}/></Card>
     <Card><Title small>{copyText("Offline storage")}</Title><Copy muted>{copyText("Downloaded game packages and local matches are saved per account. A pending online action keeps its original request ID until the server confirms it. Conflicts preserve your saved branch.")}</Copy><Copy small>{p.localMatches.length} {copyText("local matches ·")} {p.pending} {copyText("pending actions ·")} {Object.keys(p.conflicts).length} {copyText("conflicts")}</Copy><Button secondary onPress={()=>run(()=>p.actions.refresh())}>{copyText("Sync now")}</Button></Card>
-    {Platform.OS==='web'&&<Card><Title small>{copyText("Install & notifications")}</Title><Copy muted>{copyText("Add BuildPlay to your home screen for quick access and offline local games.")}</Copy><Button secondary onPress={()=>run(async()=>{const shown=await installPrompt();if(!shown)notify(copyText("Use your browser’s “Install app” or “Add to Home Screen” option."));})}>{copyText("Install BuildPlay")}</Button><Button secondary disabled={!p.account} onPress={()=>run(()=>enableNotifications(p))}>{copyText("Enable turn notifications")}</Button></Card>}
+    {Platform.OS==='web'&&<Card><Title small>{copyText("Install BuildPlay")}</Title><Copy muted>{copyText("Add BuildPlay to your home screen for quick access and offline local games.")}</Copy><Button secondary onPress={()=>run(async()=>{const shown=await installPrompt();if(!shown)notify(copyText("Use your browser’s “Install app” or “Add to Home Screen” option."));})}>{copyText("Install BuildPlay")}</Button></Card>}
+    {p.account&&<NotificationPreferences/>}
     <Card><Title small>{copyText("About BuildPlay")}</Title><Copy muted>{copyText("The same player app and game presentation on web, iPhone, and Android. Match rules, online turns, and token balances are validated by the server.")}</Copy><Copy small selectable>{copyText("Version 2.0.0 ·")} {p.baseUrl}</Copy></Card>
   </>;
 }
