@@ -1,8 +1,10 @@
 # Player bug reports and feature requests
 
 The Portal's persistent bug icon replaces the old feedback category picker and
-its game, match, user and footer entry points. The icon stays at the top left,
-above the BuildPlay header, in game focus mode and over dialogs. It captures the
+its game, match, user and footer entry points. The icon floats at the top left
+without reserving a header row, and can be dragged clear of other controls.
+Its position stays within the visible screen and follows the user across app
+screens and dialogs during the session, including game focus mode. It captures the
 current screen before opening the reporting dialog. The dialog previews the
 attachment and accepts one description of a bug or feature request.
 Native draft editing stays inside the displayed form, without relaying every
@@ -55,6 +57,11 @@ not enter ordinary HTTP request/response logs, and the hourly watcher logs
 counts and delivery status only. Private automation snapshots are written with
 mode 600 inside a mode-700 state directory. Do not commit them, copy them into
 public issues or print complete records into service journals.
+
+The footer's Privacy button opens the policy in a closable dialog using the
+app's shared theme. The policy remains available at `/static/privacy.html` for
+direct links. The report form keeps the screenshot preview and description
+field concise; the policy explains which diagnostics are included.
 
 The backend derives account context from the authenticated caller rather than
 trusting a client-supplied identity. It records ID, display name, email, locale,

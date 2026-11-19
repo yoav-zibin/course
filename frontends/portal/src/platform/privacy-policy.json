@@ -1,0 +1,90 @@
+{
+  "source": "static/privacy.html",
+  "blocks": [
+    {
+      "kind": "title",
+      "text": "Privacy Policy for BuildPlay"
+    },
+    {
+      "kind": "paragraph",
+      "text": "Last updated: November 19, 2026."
+    },
+    {
+      "kind": "paragraph",
+      "text": "BuildPlay ({link0}) is a platform for creating and playing board games online. This policy explains what information we collect and how we use it.",
+      "links": [
+        {
+          "placeholder": "link0",
+          "label": "buildplay.fun",
+          "url": "https://buildplay.fun/"
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "text": "Information we collect"
+    },
+    {
+      "kind": "bullet",
+      "text": "Account information. When you log in, we receive a unique identifier from the login method you choose (Google, phone number, or email address), plus the profile details your provider shares — currently your name and, for Google logins, your email address and profile picture. If you log in with a phone number or email address, we store that number or address so we can send you login codes."
+    },
+    {
+      "kind": "bullet",
+      "text": "Game activity. We store the games you create and the matches you play, including moves, so the site can function."
+    },
+    {
+      "kind": "bullet",
+      "text": "Usage analytics. We use Google Analytics to understand how visitors use the site (pages visited, approximate location, device type). Google Analytics collects this data under Google's own privacy policy; you can opt out with the {link0}.",
+      "links": [
+        {
+          "placeholder": "link0",
+          "label": "Google Analytics opt-out browser add-on",
+          "url": "https://tools.google.com/dlpage/gaoptout"
+        }
+      ]
+    },
+    {
+      "kind": "bullet",
+      "text": "Experiment measurements. We remember a campaign link in this browser when you visit one. We count campaign link visits in daily totals; signup, match-start, and return measurements are associated with your account so the platform can compare experiment outcomes. Account deletion removes the associated assignments and user-level experiment events."
+    },
+    {
+      "kind": "bullet",
+      "text": "Bug reports. When you open the bug reporter, we capture the current app screen for you to review. Sending a report shares that screenshot, your description, account identifier and profile name, app and device details, and recent app logs, errors, API request timings, navigation and interaction events. Recent diagnostics are kept in a bounded in-memory buffer and included when you send a report. We filter credentials from diagnostic text and do not record request bodies or text you type into other forms. Screenshots may show information visible in the app; review the preview before sending."
+    },
+    {
+      "kind": "heading",
+      "text": "How we use it"
+    },
+    {
+      "kind": "paragraph",
+      "text": "We use this information only to operate BuildPlay: to keep you logged in, to show you your games and matches, and to let you play with others. Usage analytics help us understand and improve the site. We do not sell your personal information, and we do not share it with third parties except the login and messaging providers needed to verify you (Google, Twilio, or our email provider), Google Analytics for usage measurement, and OpenAI Codex for reviewing and repairing submitted bug reports, and only for those purposes. Bug reports are available to platform administrators and the authorized repair workflow, rather than other players."
+    },
+    {
+      "kind": "heading",
+      "text": "Data retention and deletion"
+    },
+    {
+      "kind": "paragraph",
+      "text": "Your account data is kept while your account exists. If you merge one account into another, the merged-away account is kept as an alias of the surviving account (so old logins keep working) and its games and matches move to the survivor. Submitted bug reports and their resolution history are kept as private support records to investigate problems and verify fixes. Contact us to request removal of personal information from a report."
+    },
+    {
+      "kind": "heading",
+      "text": "Contact"
+    },
+    {
+      "kind": "paragraph",
+      "text": "Questions about this policy: {link0}.",
+      "links": [
+        {
+          "placeholder": "link0",
+          "label": "yoavgamingcoursezibin@gmail.com",
+          "url": "mailto:yoavgamingcoursezibin@gmail.com"
+        }
+      ]
+    },
+    {
+      "kind": "footer",
+      "text": "© 2026 BuildPlay."
+    }
+  ]
+}

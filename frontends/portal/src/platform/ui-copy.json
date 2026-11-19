@@ -2968,5 +2968,158 @@
     "zh": "此浏览器不支持推送通知。在 iPhone 上，请先将 BuildPlay 添加到主屏幕。",
     "hi": "यह ब्राउज़र पुश सूचनाएँ समर्थित नहीं करता। iPhone पर पहले BuildPlay को होम स्क्रीन पर जोड़ें।",
     "ar": "هذا المتصفح لا يدعم الإشعارات الفورية. على iPhone، أضف BuildPlay إلى الشاشة الرئيسية أولًا."
+  },
+  "Privacy Policy for BuildPlay": {
+    "es": "Política de privacidad de BuildPlay",
+    "fr": "Politique de confidentialité de BuildPlay",
+    "de": "Datenschutzerklärung für BuildPlay",
+    "pt": "Política de Privacidade do BuildPlay",
+    "zh": "BuildPlay 隐私政策",
+    "hi": "BuildPlay की गोपनीयता नीति",
+    "ar": "سياسة الخصوصية في BuildPlay"
+  },
+  "Last updated: November 19, 2026.": {
+    "es": "Última actualización: 19 de noviembre de 2026.",
+    "fr": "Dernière mise à jour : 19 novembre 2026.",
+    "de": "Zuletzt aktualisiert: 19. November 2026.",
+    "pt": "Última atualização: 19 de novembro de 2026.",
+    "zh": "最后更新：2026年11月19日。",
+    "hi": "अंतिम अपडेट: 19 नवंबर, 2026।",
+    "ar": "آخر تحديث: 19 نوفمبر 2026."
+  },
+  "BuildPlay ({link0}) is a platform for creating and playing board games online. This policy explains what information we collect and how we use it.": {
+    "es": "BuildPlay ({link0}) es una plataforma para crear y jugar juegos de mesa en línea. Esta política explica qué información recopilamos y cómo la usamos.",
+    "fr": "BuildPlay ({link0}) est une plateforme permettant de créer des jeux de société et d’y jouer en ligne. Cette politique explique les informations que nous recueillons et la manière dont nous les utilisons.",
+    "de": "BuildPlay ({link0}) ist eine Plattform zum Erstellen und Online-Spielen von Brettspielen. Diese Erklärung erläutert, welche Informationen wir erheben und wie wir sie verwenden.",
+    "pt": "O BuildPlay ({link0}) é uma plataforma para criar e jogar jogos de tabuleiro on-line. Esta política explica quais informações coletamos e como as usamos.",
+    "zh": "BuildPlay（{link0}）是一个用于创建和在线游玩桌面游戏的平台。本政策说明我们收集哪些信息以及如何使用这些信息。",
+    "hi": "BuildPlay ({link0}) ऑनलाइन बोर्ड गेम बनाने और खेलने का एक प्लेटफ़ॉर्म है। यह नीति बताती है कि हम कौन-सी जानकारी इकट्ठा करते हैं और उसका उपयोग कैसे करते हैं।",
+    "ar": "BuildPlay ({link0}) منصة لإنشاء ألعاب الطاولة ولعبها عبر الإنترنت. توضح هذه السياسة المعلومات التي نجمعها وكيف نستخدمها."
+  },
+  "Information we collect": {
+    "es": "Información que recopilamos",
+    "fr": "Informations que nous recueillons",
+    "de": "Von uns erhobene Informationen",
+    "pt": "Informações que coletamos",
+    "zh": "我们收集的信息",
+    "hi": "हम कौन-सी जानकारी इकट्ठा करते हैं",
+    "ar": "المعلومات التي نجمعها"
+  },
+  "Account information. When you log in, we receive a unique identifier from the login method you choose (Google, phone number, or email address), plus the profile details your provider shares — currently your name and, for Google logins, your email address and profile picture. If you log in with a phone number or email address, we store that number or address so we can send you login codes.": {
+    "es": "Información de la cuenta. Cuando inicias sesión, recibimos un identificador único del método de acceso que eliges (Google, número de teléfono o dirección de correo electrónico), además de los datos del perfil que comparte tu proveedor: actualmente tu nombre y, en los accesos con Google, tu dirección de correo electrónico y foto de perfil. Si inicias sesión con un número de teléfono o una dirección de correo electrónico, guardamos ese número o dirección para poder enviarte códigos de acceso.",
+    "fr": "Informations de compte. Lorsque vous vous connectez, nous recevons un identifiant unique de la méthode de connexion choisie (Google, numéro de téléphone ou adresse e-mail), ainsi que les informations de profil partagées par votre fournisseur : actuellement votre nom et, pour les connexions Google, votre adresse e-mail et votre photo de profil. Si vous vous connectez avec un numéro de téléphone ou une adresse e-mail, nous conservons ce numéro ou cette adresse afin de pouvoir vous envoyer des codes de connexion.",
+    "de": "Kontoinformationen. Wenn du dich anmeldest, erhalten wir eine eindeutige Kennung von der gewählten Anmeldemethode (Google, Telefonnummer oder E-Mail-Adresse) sowie die Profildaten, die dein Anbieter weitergibt: derzeit deinen Namen und bei Google-Anmeldungen deine E-Mail-Adresse und dein Profilbild. Wenn du dich mit einer Telefonnummer oder E-Mail-Adresse anmeldest, speichern wir diese Nummer oder Adresse, damit wir dir Anmeldecodes senden können.",
+    "pt": "Informações da conta. Quando você faz login, recebemos um identificador único do método de acesso escolhido (Google, número de telefone ou endereço de e-mail), além dos dados de perfil compartilhados pelo provedor: atualmente seu nome e, nos logins com Google, seu endereço de e-mail e sua foto de perfil. Se você faz login com um número de telefone ou endereço de e-mail, armazenamos esse número ou endereço para poder enviar códigos de acesso.",
+    "zh": "账户信息。当你登录时，我们会从你选择的登录方式（Google、电话号码或电子邮件地址）获得一个唯一标识符，以及服务提供商分享的个人资料信息：目前包括你的姓名；使用 Google 登录时，还包括你的电子邮件地址和头像。如果你使用电话号码或电子邮件地址登录，我们会存储该号码或地址，以便向你发送登录验证码。",
+    "hi": "खाते की जानकारी। जब आप लॉग इन करते हैं, तो आपके चुने हुए लॉगिन तरीके (Google, फ़ोन नंबर या ईमेल पते) से हमें एक विशिष्ट पहचानकर्ता मिलता है। साथ ही, आपका प्रदाता जो प्रोफ़ाइल जानकारी साझा करता है, वह भी मिलती है: वर्तमान में आपका नाम और Google लॉगिन के लिए आपका ईमेल पता व प्रोफ़ाइल चित्र। यदि आप फ़ोन नंबर या ईमेल पते से लॉग इन करते हैं, तो हम वह नंबर या पता रखते हैं ताकि आपको लॉगिन कोड भेज सकें।",
+    "ar": "معلومات الحساب. عند تسجيل دخولك، نتلقى معرّفًا فريدًا من وسيلة تسجيل الدخول التي تختارها (Google أو رقم الهاتف أو عنوان البريد الإلكتروني)، بالإضافة إلى تفاصيل الملف الشخصي التي يشاركها مزودك: وهي حاليًا اسمك، ولتسجيل الدخول عبر Google، عنوان بريدك الإلكتروني وصورة ملفك الشخصي. إذا سجلت الدخول برقم هاتف أو عنوان بريد إلكتروني، نخزن ذلك الرقم أو العنوان لكي نرسل إليك رموز تسجيل الدخول."
+  },
+  "Game activity. We store the games you create and the matches you play, including moves, so the site can function.": {
+    "es": "Actividad de juego. Guardamos los juegos que creas y las partidas que juegas, incluidos los movimientos, para que el sitio pueda funcionar.",
+    "fr": "Activité de jeu. Nous conservons les jeux que vous créez et les parties que vous jouez, y compris les coups, afin que le site puisse fonctionner.",
+    "de": "Spielaktivität. Wir speichern die Spiele, die du erstellst, und die Partien, die du spielst, einschließlich der Züge, damit die Website funktionieren kann.",
+    "pt": "Atividade de jogo. Armazenamos os jogos que você cria e as partidas que joga, incluindo as jogadas, para que o site possa funcionar.",
+    "zh": "游戏活动。我们会存储你创建的游戏和参与的对局，包括走棋记录，以便网站正常运行。",
+    "hi": "गेम गतिविधि। साइट के काम करने के लिए हम आपके बनाए हुए गेम और आपके खेले गए मैच, उनकी चालों सहित, सहेजते हैं।",
+    "ar": "نشاط اللعب. نخزن الألعاب التي تنشئها والمباريات التي تلعبها، بما في ذلك الحركات، كي يعمل الموقع."
+  },
+  "Usage analytics. We use Google Analytics to understand how visitors use the site (pages visited, approximate location, device type). Google Analytics collects this data under Google's own privacy policy; you can opt out with the {link0}.": {
+    "es": "Análisis de uso. Usamos Google Analytics para entender cómo usan el sitio sus visitantes (páginas visitadas, ubicación aproximada y tipo de dispositivo). Google Analytics recopila estos datos conforme a la política de privacidad de Google; puedes inhabilitarlo con el {link0}.",
+    "fr": "Statistiques d’utilisation. Nous utilisons Google Analytics pour comprendre comment les visiteurs utilisent le site (pages consultées, position approximative et type d’appareil). Google Analytics recueille ces données conformément à la politique de confidentialité de Google ; vous pouvez désactiver ce suivi avec le {link0}.",
+    "de": "Nutzungsanalyse. Wir verwenden Google Analytics, um zu verstehen, wie Besucher die Website nutzen (besuchte Seiten, ungefährer Standort und Gerätetyp). Google Analytics erhebt diese Daten gemäß der Datenschutzerklärung von Google. Mit dem {link0} kannst du die Erfassung deaktivieren.",
+    "pt": "Análise de uso. Usamos o Google Analytics para entender como os visitantes usam o site (páginas visitadas, localização aproximada e tipo de dispositivo). O Google Analytics coleta esses dados de acordo com a política de privacidade do Google; você pode desativar essa coleta com o {link0}.",
+    "zh": "使用分析。我们使用 Google Analytics 了解访客如何使用网站（访问的页面、大致位置和设备类型）。Google Analytics 依据 Google 自身的隐私政策收集这些数据；你可以通过{link0}选择停用。",
+    "hi": "उपयोग संबंधी विश्लेषण। हम Google Analytics से समझते हैं कि आगंतुक साइट का उपयोग कैसे करते हैं (देखे गए पेज, अनुमानित स्थान और डिवाइस का प्रकार)। Google Analytics यह डेटा Google की अपनी गोपनीयता नीति के अंतर्गत इकट्ठा करता है; आप {link0} से इसे बंद कर सकते हैं।",
+    "ar": "تحليلات الاستخدام. نستخدم Google Analytics لفهم كيفية استخدام الزوار للموقع (الصفحات التي يزورونها والموقع التقريبي ونوع الجهاز). يجمع Google Analytics هذه البيانات وفقًا لسياسة الخصوصية الخاصة بـ Google؛ ويمكنك إيقاف هذا الجمع باستخدام {link0}."
+  },
+  "Experiment measurements. We remember a campaign link in this browser when you visit one. We count campaign link visits in daily totals; signup, match-start, and return measurements are associated with your account so the platform can compare experiment outcomes. Account deletion removes the associated assignments and user-level experiment events.": {
+    "es": "Mediciones de experimentos. Recordamos un enlace de campaña en este navegador cuando lo visitas. Contamos las visitas a los enlaces de campaña en totales diarios; las mediciones de registro, inicio de partida y regreso se asocian con tu cuenta para que la plataforma pueda comparar los resultados de los experimentos. Al eliminar la cuenta, se eliminan las asignaciones asociadas y los eventos de experimentos del usuario.",
+    "fr": "Mesures des expériences. Lorsque vous ouvrez un lien de campagne, nous le mémorisons dans ce navigateur. Nous comptons les visites des liens de campagne dans des totaux quotidiens ; les mesures d’inscription, de début de partie et de retour sont associées à votre compte afin que la plateforme puisse comparer les résultats des expériences. La suppression du compte supprime les affectations associées et les événements d’expérience liés à l’utilisateur.",
+    "de": "Experimentmessungen. Wenn du einen Kampagnenlink öffnest, merken wir ihn uns in diesem Browser. Wir zählen Besuche von Kampagnenlinks in täglichen Summen. Messungen zu Registrierung, Partiestart und Rückkehr werden deinem Konto zugeordnet, damit die Plattform Experimentergebnisse vergleichen kann. Beim Löschen des Kontos werden die zugehörigen Zuweisungen und nutzerbezogenen Experimentereignisse entfernt.",
+    "pt": "Medições de experimentos. Quando você visita um link de campanha, nós o lembramos neste navegador. Contamos as visitas aos links de campanha em totais diários; as medições de cadastro, início de partida e retorno são associadas à sua conta para que a plataforma possa comparar os resultados dos experimentos. A exclusão da conta remove as atribuições associadas e os eventos de experimentos relacionados ao usuário.",
+    "zh": "实验衡量。当你访问推广活动链接时，我们会在此浏览器中记住该链接。我们按日汇总推广活动链接的访问次数；注册、开始对局和回访的衡量数据会与你的账户关联，以便平台比较实验结果。删除账户会移除相关分配记录及用户层面的实验事件。",
+    "hi": "प्रयोगों के मापन। जब आप किसी अभियान के लिंक पर जाते हैं, तो हम उसे इस ब्राउज़र में याद रखते हैं। हम अभियान के लिंक पर होने वाली विज़िट को दैनिक कुल में गिनते हैं; साइनअप, मैच शुरू करने और वापस आने के मापन आपके खाते से जुड़े होते हैं, ताकि प्लेटफ़ॉर्म प्रयोगों के परिणामों की तुलना कर सके। खाता हटाने पर संबंधित आवंटन और उपयोगकर्ता-स्तर के प्रयोग संबंधी इवेंट हटा दिए जाते हैं।",
+    "ar": "قياسات التجارب. نتذكر رابط الحملة في هذا المتصفح عند زيارتك له. نحصي زيارات روابط الحملات ضمن إجماليات يومية؛ وترتبط قياسات التسجيل وبدء المباريات والعودة بحسابك لكي تتمكن المنصة من مقارنة نتائج التجارب. يؤدي حذف الحساب إلى إزالة التعيينات المرتبطة به وأحداث التجارب على مستوى المستخدم."
+  },
+  "Bug reports. When you open the bug reporter, we capture the current app screen for you to review. Sending a report shares that screenshot, your description, account identifier and profile name, app and device details, and recent app logs, errors, API request timings, navigation and interaction events. Recent diagnostics are kept in a bounded in-memory buffer and included when you send a report. We filter credentials from diagnostic text and do not record request bodies or text you type into other forms. Screenshots may show information visible in the app; review the preview before sending.": {
+    "es": "Informes de errores. Cuando abres el informe de errores, capturamos la pantalla actual de la aplicación para que la revises. Al enviar un informe compartes esa captura, tu descripción, el identificador y nombre de perfil de tu cuenta, detalles de la aplicación y del dispositivo, y registros, errores, tiempos de solicitudes API y eventos recientes de navegación e interacción. Los diagnósticos recientes se conservan en un búfer de memoria de tamaño limitado y se incluyen cuando envías un informe. Filtramos las credenciales del texto de diagnóstico y no registramos el contenido de las solicitudes ni el texto que escribes en otros formularios. Las capturas pueden mostrar información visible en la aplicación; revisa la vista previa antes de enviarlas.",
+    "fr": "Rapports de bugs. Lorsque vous ouvrez le formulaire de signalement, nous capturons l’écran actuel de l’application pour que vous puissiez le vérifier. L’envoi d’un rapport partage cette capture, votre description, l’identifiant et le nom de profil de votre compte, des détails sur l’application et l’appareil, ainsi que les journaux, erreurs, durées des requêtes API et événements récents de navigation et d’interaction. Les diagnostics récents sont conservés dans une mémoire tampon de taille limitée et inclus lorsque vous envoyez un rapport. Nous filtrons les identifiants secrets dans les textes de diagnostic et n’enregistrons ni le contenu des requêtes ni le texte que vous saisissez dans d’autres formulaires. Les captures peuvent montrer des informations visibles dans l’application ; vérifiez l’aperçu avant l’envoi.",
+    "de": "Fehlerberichte. Wenn du die Fehlermeldung öffnest, erfassen wir den aktuellen App-Bildschirm, damit du ihn prüfen kannst. Mit dem Senden eines Berichts übermittelst du diesen Screenshot, deine Beschreibung, deine Kontokennung und deinen Profilnamen, App- und Gerätedaten sowie aktuelle App-Protokolle, Fehler, API-Anfragezeiten, Navigations- und Interaktionsereignisse. Aktuelle Diagnosen werden in einem begrenzten Arbeitsspeicherpuffer gespeichert und beim Senden eines Berichts übermittelt. Wir filtern Zugangsdaten aus Diagnosetexten und erfassen weder Inhalte von Anfragen noch Texte, die du in andere Formulare eingibst. Screenshots können in der App sichtbare Informationen zeigen. Prüfe daher die Vorschau vor dem Senden.",
+    "pt": "Relatos de erros. Ao abrir o formulário de relato de erros, capturamos a tela atual do aplicativo para você revisar. Enviar um relato compartilha essa captura, sua descrição, o identificador e o nome de perfil da conta, detalhes do aplicativo e do dispositivo, além de registros, erros, tempos de solicitações API e eventos recentes de navegação e interação. Os diagnósticos recentes ficam em um buffer de memória de tamanho limitado e são incluídos quando você envia um relato. Filtramos credenciais dos textos de diagnóstico e não registramos conteúdos de solicitações nem textos que você digita em outros formulários. As capturas podem mostrar informações visíveis no aplicativo; revise a prévia antes de enviar.",
+    "zh": "错误报告。 打开错误报告表单时，我们会截取当前应用屏幕供你查看。发送报告会共享该截图、你的描述、账户标识符和个人资料名称、应用及设备详情，以及近期应用日志、错误、API 请求耗时、导航和交互事件。近期诊断信息保存在大小受限的内存缓冲区中，并在你发送报告时一并提交。我们会从诊断文本中过滤凭据，不记录请求正文或你在其他表单中输入的文本。屏幕截图可能显示应用中可见的信息；发送前请查看预览。",
+    "hi": "बग रिपोर्ट। जब आप बग रिपोर्ट फ़ॉर्म खोलते हैं, हम आपकी समीक्षा के लिए ऐप की वर्तमान स्क्रीन कैप्चर करते हैं। रिपोर्ट भेजने पर वह स्क्रीनशॉट, आपका विवरण, खाते का पहचानकर्ता और प्रोफ़ाइल नाम, ऐप और डिवाइस का विवरण तथा हाल के ऐप लॉग, त्रुटियां, API अनुरोधों का समय, नेविगेशन और इंटरैक्शन घटनाएं साझा की जाती हैं। हाल की निदान जानकारी सीमित आकार के मेमोरी बफ़र में रखी जाती है और रिपोर्ट भेजते समय शामिल की जाती है। हम निदान टेक्स्ट से लॉगिन संबंधी गुप्त जानकारी हटाते हैं और अनुरोधों की सामग्री या अन्य फ़ॉर्म में आपके टाइप किए गए टेक्स्ट को रिकॉर्ड नहीं करते। स्क्रीनशॉट में ऐप में दिखाई देने वाली जानकारी हो सकती है; भेजने से पहले पूर्वावलोकन देखें।",
+    "ar": "بلاغات الأخطاء. عند فتح نموذج الإبلاغ عن الأخطاء، نلتقط شاشة التطبيق الحالية لتراجعها. يؤدي إرسال البلاغ إلى مشاركة لقطة الشاشة ووصفك ومعرّف حسابك واسم ملفك الشخصي وتفاصيل التطبيق والجهاز وسجلات التطبيق والأخطاء الأخيرة وأوقات طلبات API وأحداث التنقل والتفاعل. تُحفظ بيانات التشخيص الأخيرة في ذاكرة مؤقتة محدودة الحجم وتُدرج عند إرسال البلاغ. نرشّح بيانات الاعتماد من نصوص التشخيص ولا نسجل محتويات الطلبات أو النص الذي تكتبه في النماذج الأخرى. قد تعرض لقطات الشاشة معلومات ظاهرة في التطبيق؛ راجع المعاينة قبل الإرسال."
+  },
+  "How we use it": {
+    "es": "Cómo la usamos",
+    "fr": "Comment nous les utilisons",
+    "de": "So verwenden wir sie",
+    "pt": "Como as usamos",
+    "zh": "我们如何使用这些信息",
+    "hi": "हम इसका उपयोग कैसे करते हैं",
+    "ar": "كيف نستخدمها"
+  },
+  "We use this information only to operate BuildPlay: to keep you logged in, to show you your games and matches, and to let you play with others. Usage analytics help us understand and improve the site. We do not sell your personal information, and we do not share it with third parties except the login and messaging providers needed to verify you (Google, Twilio, or our email provider), Google Analytics for usage measurement, and OpenAI Codex for reviewing and repairing submitted bug reports, and only for those purposes. Bug reports are available to platform administrators and the authorized repair workflow, rather than other players.": {
+    "es": "Usamos esta información únicamente para operar BuildPlay: mantener tu sesión iniciada, mostrarte tus juegos y partidas y permitirte jugar con otras personas. Los análisis de uso nos ayudan a entender y mejorar el sitio. No vendemos tu información personal ni la compartimos con terceros, excepto con los proveedores de inicio de sesión y mensajería necesarios para verificarte (Google, Twilio o nuestro proveedor de correo electrónico), con Google Analytics para medir el uso y con OpenAI Codex para revisar y corregir los informes de errores enviados, y únicamente para esos fines. Los informes de errores están disponibles para los administradores de la plataforma y el flujo de reparación autorizado, no para otros jugadores.",
+    "fr": "Nous utilisons ces informations uniquement pour faire fonctionner BuildPlay : maintenir votre connexion, afficher vos jeux et vos parties et vous permettre de jouer avec d’autres personnes. Les statistiques d’utilisation nous aident à comprendre et à améliorer le site. Nous ne vendons pas vos informations personnelles et ne les partageons pas avec des tiers, sauf avec les fournisseurs de connexion et de messagerie nécessaires à votre vérification (Google, Twilio ou notre fournisseur de messagerie), Google Analytics pour mesurer l’utilisation et OpenAI Codex pour examiner les rapports de bugs soumis et y apporter des correctifs, uniquement à ces fins. Les rapports de bugs sont accessibles aux administrateurs de la plateforme et au processus de réparation autorisé, et non aux autres joueurs.",
+    "de": "Wir verwenden diese Informationen nur für den Betrieb von BuildPlay: um dich angemeldet zu halten, dir deine Spiele und Partien zu zeigen und dich mit anderen spielen zu lassen. Nutzungsanalysen helfen uns, die Website zu verstehen und zu verbessern. Wir verkaufen deine personenbezogenen Daten nicht und geben sie nur an die für deine Verifizierung benötigten Anmelde- und Nachrichtendienste (Google, Twilio oder unseren E-Mail-Anbieter), an Google Analytics zur Nutzungsmessung und an OpenAI Codex zur Prüfung und Behebung eingereichter Fehlerberichte weiter, jeweils ausschließlich zu diesen Zwecken. Fehlerberichte sind für Plattformadministratoren und den autorisierten Reparaturablauf zugänglich, nicht für andere Spieler.",
+    "pt": "Usamos essas informações apenas para operar o BuildPlay: manter você conectado, mostrar seus jogos e partidas e permitir que jogue com outras pessoas. As análises de uso nos ajudam a entender e melhorar o site. Não vendemos suas informações pessoais nem as compartilhamos com terceiros, exceto com os provedores de login e mensagens necessários para verificar sua identidade (Google, Twilio ou nosso provedor de e-mail), com o Google Analytics para medir o uso e com o OpenAI Codex para revisar e corrigir os relatos de erros enviados, exclusivamente para essas finalidades. Os relatos de erros ficam disponíveis para os administradores da plataforma e o fluxo de reparação autorizado, e não para outros jogadores.",
+    "zh": "我们仅将这些信息用于运营 BuildPlay：保持你的登录状态、向你显示游戏和对局，以及让你与他人一起游玩。使用分析有助于我们了解和改进网站。我们不会出售你的个人信息，也不会与第三方共享，以下情况除外：为验证你身份所需的登录和消息服务提供商（Google、Twilio 或我们的电子邮件提供商）、用于使用情况衡量的 Google Analytics，以及用于审查和修复已提交错误报告的 OpenAI Codex；共享仅限上述用途。错误报告仅供平台管理员和获授权的修复流程访问，不向其他玩家开放。",
+    "hi": "हम इस जानकारी का उपयोग केवल BuildPlay चलाने के लिए करते हैं: आपको लॉग इन रखने, आपके गेम और मैच दिखाने तथा दूसरों के साथ खेलने देने के लिए। उपयोग संबंधी विश्लेषण हमें साइट को समझने और बेहतर बनाने में मदद करते हैं। हम आपकी व्यक्तिगत जानकारी नहीं बेचते और इसे तीसरे पक्ष से साझा नहीं करते, सिवाय आपकी पुष्टि के लिए आवश्यक लॉगिन और संदेश प्रदाताओं (Google, Twilio या हमारे ईमेल प्रदाता), उपयोग मापने के लिए Google Analytics और भेजी गई बग रिपोर्ट की समीक्षा तथा सुधार के लिए OpenAI Codex के साथ, और केवल इन्हीं उद्देश्यों के लिए। बग रिपोर्ट प्लेटफ़ॉर्म प्रशासकों और अधिकृत सुधार प्रक्रिया के लिए उपलब्ध होती हैं, अन्य खिलाड़ियों के लिए नहीं।",
+    "ar": "نستخدم هذه المعلومات لتشغيل BuildPlay فقط: للإبقاء على تسجيل دخولك، وعرض ألعابك ومبارياتك، وإتاحة اللعب مع الآخرين. تساعدنا تحليلات الاستخدام على فهم الموقع وتحسينه. لا نبيع معلوماتك الشخصية ولا نشاركها مع أطراف أخرى، باستثناء مزودي تسجيل الدخول والمراسلة اللازمين للتحقق منك (Google أو Twilio أو مزود البريد الإلكتروني لدينا)، وGoogle Analytics لقياس الاستخدام، وOpenAI Codex لمراجعة بلاغات الأخطاء المقدمة وإصلاحها، ولتلك الأغراض فقط. تتاح بلاغات الأخطاء لمسؤولي المنصة ولسير عمل الإصلاح المصرح به، وليس للاعبين الآخرين."
+  },
+  "Data retention and deletion": {
+    "es": "Conservación y eliminación de datos",
+    "fr": "Conservation et suppression des données",
+    "de": "Aufbewahrung und Löschung von Daten",
+    "pt": "Retenção e exclusão de dados",
+    "zh": "数据保留与删除",
+    "hi": "डेटा रखना और हटाना",
+    "ar": "الاحتفاظ بالبيانات وحذفها"
+  },
+  "Your account data is kept while your account exists. If you merge one account into another, the merged-away account is kept as an alias of the surviving account (so old logins keep working) and its games and matches move to the survivor. Submitted bug reports and their resolution history are kept as private support records to investigate problems and verify fixes. Contact us to request removal of personal information from a report.": {
+    "es": "Los datos de tu cuenta se conservan mientras exista tu cuenta. Si fusionas una cuenta con otra, la cuenta fusionada se conserva como alias de la cuenta que permanece (para que sigan funcionando los inicios de sesión anteriores), y sus juegos y partidas se transfieren a ella. Los informes de errores enviados y su historial de resolución se conservan como registros privados de soporte para investigar problemas y verificar las correcciones. Ponte en contacto con nosotros para solicitar la eliminación de información personal de un informe.",
+    "fr": "Les données de votre compte sont conservées tant que votre compte existe. Si vous fusionnez un compte avec un autre, le compte fusionné est conservé comme alias du compte restant (afin que les anciennes connexions continuent de fonctionner), et ses jeux et parties sont transférés au compte restant. Les rapports de bugs soumis et leur historique de résolution sont conservés comme dossiers d’assistance privés pour examiner les problèmes et vérifier les correctifs. Contactez-nous pour demander la suppression d’informations personnelles dans un rapport.",
+    "de": "Deine Kontodaten werden aufbewahrt, solange dein Konto besteht. Wenn du ein Konto mit einem anderen zusammenführst, bleibt das aufgelöste Konto als Alias des verbleibenden Kontos erhalten, damit bisherige Anmeldungen weiterhin funktionieren. Seine Spiele und Partien werden auf das verbleibende Konto übertragen. Eingereichte Fehlerberichte und ihr Lösungsverlauf werden als private Supportunterlagen aufbewahrt, um Probleme zu untersuchen und Korrekturen zu überprüfen. Kontaktiere uns, um die Entfernung personenbezogener Daten aus einem Bericht zu beantragen.",
+    "pt": "Os dados da sua conta são mantidos enquanto ela existir. Se você mesclar uma conta com outra, a conta mesclada é mantida como um alias da conta restante (para que os logins antigos continuem funcionando), e seus jogos e partidas passam para a conta restante. Os relatos de erros enviados e seu histórico de resolução são mantidos como registros privados de suporte para investigar problemas e verificar correções. Entre em contato conosco para solicitar a remoção de informações pessoais de um relato.",
+    "zh": "只要你的账户存在，我们就会保留账户数据。如果你将一个账户合并到另一个账户，被合并的账户会作为保留账户的别名继续存在（以便旧的登录方式仍可使用），其游戏和对局会转移到保留账户。已提交的错误报告及其处理历史会作为私人支持记录保存，用于调查问题和验证修复。若需删除报告中的个人信息，请联系我们。",
+    "hi": "आपके खाते का डेटा तब तक रखा जाता है जब तक आपका खाता मौजूद रहता है। यदि आप एक खाते को दूसरे में मिलाते हैं, तो मिलाया गया खाता शेष खाते के उपनाम के रूप में रखा जाता है (ताकि पुराने लॉगिन काम करते रहें), और उसके गेम तथा मैच शेष खाते में चले जाते हैं। भेजी गई बग रिपोर्ट और उनके समाधान का इतिहास समस्याओं की जांच और सुधारों की पुष्टि के लिए निजी सहायता रिकॉर्ड के रूप में रखे जाते हैं। रिपोर्ट से व्यक्तिगत जानकारी हटवाने का अनुरोध करने के लिए हमसे संपर्क करें।",
+    "ar": "تُحفظ بيانات حسابك ما دام حسابك موجودًا. إذا دمجت حسابًا في آخر، يُحتفظ بالحساب المدمج كاسم بديل للحساب المتبقي (حتى تستمر طرق تسجيل الدخول القديمة في العمل)، وتنتقل ألعابه ومبارياته إلى الحساب المتبقي. تُحفظ بلاغات الأخطاء المقدمة وسجل حلولها كسجلات دعم خاصة للتحقيق في المشكلات والتحقق من الإصلاحات. تواصل معنا لطلب إزالة المعلومات الشخصية من بلاغ."
+  },
+  "Contact": {
+    "es": "Contacto",
+    "fr": "Contact",
+    "de": "Kontakt",
+    "pt": "Contato",
+    "zh": "联系我们",
+    "hi": "संपर्क",
+    "ar": "التواصل"
+  },
+  "Questions about this policy: {link0}.": {
+    "es": "Preguntas sobre esta política: {link0}.",
+    "fr": "Questions sur cette politique : {link0}.",
+    "de": "Fragen zu dieser Erklärung: {link0}.",
+    "pt": "Dúvidas sobre esta política: {link0}.",
+    "zh": "如对本政策有疑问，请联系：{link0}。",
+    "hi": "इस नीति के बारे में सवाल: {link0}।",
+    "ar": "للأسئلة حول هذه السياسة: {link0}."
+  },
+  "© 2026 BuildPlay.": {
+    "es": "© 2026 BuildPlay.",
+    "fr": "© 2026 BuildPlay.",
+    "de": "© 2026 BuildPlay.",
+    "pt": "© 2026 BuildPlay.",
+    "zh": "© 2026 BuildPlay。",
+    "hi": "© 2026 BuildPlay।",
+    "ar": "© 2026 BuildPlay."
+  },
+  "Google Analytics opt-out browser add-on": {
+    "es": "complemento de navegador para inhabilitar Google Analytics",
+    "fr": "module complémentaire de navigateur pour désactiver Google Analytics",
+    "de": "Browser-Add-on zur Deaktivierung von Google Analytics",
+    "pt": "complemento do navegador para desativação do Google Analytics",
+    "zh": "Google Analytics 停用浏览器插件",
+    "hi": "Google Analytics से ऑप्ट आउट करने वाला ब्राउज़र ऐड-ऑन",
+    "ar": "إضافة المتصفح لإيقاف Google Analytics"
   }
 }

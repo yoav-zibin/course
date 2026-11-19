@@ -201,17 +201,50 @@ class NativeSmoke:
             raise RuntimeError("The standalone BuildPlay launch activity was not found")
         self.command("shell", "am", "start", "-W", "-n", component, "--ez", "buildplayLocalUiTest", "true")
 
-    def assert_bug_control(self, stage: str, *, above_logo: bool = False):
+    def assert_bug_control(self, stage: str, *, clear_logo: bool = False):
         node = self.wait(self.BUG_BUTTON, clickable=True, scroll=False)
         box = bounds(node)
-        if box is None or box[0] > self.width * .2 or box[1] > self.height * .2:
-            raise RuntimeError(f"Bug control is not at the top left during {stage}")
-        if above_logo:
+        if box is None or box[0] < 0 or box[1] < 0 or box[2] > self.width or box[3] > self.height:
+            raise RuntimeError(f"Bug control is outside the screen during {stage}")
+        if clear_logo:
+            if box[0] > self.width * .2 or box[1] > self.height * .2:
+                raise RuntimeError("Default bug control is not at the top left")
             logo = self.find(self.dump(), "BuildPlay home")
             logo_box = bounds(logo) if logo is not None else None
-            if logo_box is None or box[3] > logo_box[1]:
-                raise RuntimeError("Bug control is not above the BuildPlay logo")
-        self.events.append({"assertion": "bug-control-visible-at-top-left", "stage": stage, "bounds": box})
+            if logo_box is None or intersection(box, logo_box) is not None:
+                raise RuntimeError("Bug control covers the BuildPlay logo")
+            if logo_box[1] >= box[3]:
+                raise RuntimeError("Bug control still reserves a separate header row")
+        elif getattr(self, "bug_drag_origin", None) is not None and abs(box[0] - self.bug_drag_origin[0]) < self.width * .05:
+            raise RuntimeError(f"Chosen bug control position was reset during {stage}")
+        self.events.append({"assertion": "bug-control-visible-in-screen", "stage": stage, "bounds": box})
+
+    def drag_bug_control(self):
+        """Move the real native control without opening or submitting a report."""
+        original = bounds(self.wait(self.BUG_BUTTON, clickable=True, scroll=False))
+        if original is None:
+            raise RuntimeError("Bug control has no physical drag bounds")
+        x, y = (original[0] + original[2]) // 2, (original[1] + original[3]) // 2
+        self.command("shell", "input", "swipe", str(x), str(y), str(round(self.width * .25)), str(round(self.height * .15)), "700")
+        moved = None
+        # A mistaken press can finish screenshot capture asynchronously. Watch
+        # beyond its eight-second timeout so a drag cannot secretly open it.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            tree = self.dump()
+            if self.find(tree, self.BUG_DIALOG) is not None:
+                raise RuntimeError("Dragging the bug control opened the bug reporter")
+            control = self.find(tree, self.BUG_BUTTON, clickable=True)
+            box = bounds(control) if control is not None else None
+            if box is not None and abs(box[0] - original[0]) > self.width * .05:
+                moved = box
+            time.sleep(.2)
+        if moved is None:
+            raise RuntimeError("The native bug control did not move after a physical drag")
+        self.bug_drag_origin = original
+        self.assert_bug_control("after-physical-drag")
+        self.events.append({"assertion": "native-bug-drag-moves-without-opening-report", "from": original, "to": moved})
+        self.capture("bug-00-floating-drag")
 
     def bug_report_from_account(self):
         """Exercise the real native Modal window without transmitting a report.
@@ -220,7 +253,8 @@ class NativeSmoke:
         presses Send report, creates an account, or changes saved credentials.
         Capturing the current window and editing a draft work fully offline.
         """
-        self.assert_bug_control("home", above_logo=True)
+        self.assert_bug_control("home", clear_logo=True)
+        self.drag_bug_control()
         self.tap_node(self.wait(("Account menu", "Log in"), clickable=True))
         self.wait("Close dialog")
         self.wait("Language", scroll=True, dialog=True)

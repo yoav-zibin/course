@@ -113,14 +113,60 @@ def test_native_draft_must_keep_keyboard_focus_after_controlled_updates():
     assert value.find(tree, "Local smoke draft", editable=True, focused=True) is not None
 
 
-def test_bug_control_is_above_logo_and_must_stay_in_top_left_corner():
+def test_default_bug_control_floats_beside_logo_without_covering_it_or_reserving_a_row():
     value = driver()
     bug = ET.Element("node", {"bounds": "[15,70][123,166]"})
     value.wait = lambda *args, **options: bug
-    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="BuildPlay home" bounds="[60,180][500,280]"/></hierarchy>''')
-    value.assert_bug_control("home", above_logo=True)
+    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="BuildPlay home" bounds="[150,110][570,210]"/></hierarchy>''')
+    value.assert_bug_control("home", clear_logo=True)
+    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="BuildPlay home" bounds="[60,110][500,210]"/></hierarchy>''')
+    with pytest.raises(RuntimeError, match="covers"):
+        value.assert_bug_control("home", clear_logo=True)
+    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="BuildPlay home" bounds="[150,180][570,280]"/></hierarchy>''')
+    with pytest.raises(RuntimeError, match="separate header row"):
+        value.assert_bug_control("home", clear_logo=True)
     bug.set("bounds", "[400,70][508,166]")
     with pytest.raises(RuntimeError, match="top left"):
+        value.assert_bug_control("home", clear_logo=True)
+    value.assert_bug_control("account-modal")
+    bug.set("bounds", "[1000,70][1108,166]")
+    with pytest.raises(RuntimeError, match="outside"):
+        value.assert_bug_control("account-modal")
+
+
+def test_native_drag_requires_a_real_move_without_opening_the_report(monkeypatch):
+    value = driver()
+    original = ET.Element("node", {"bounds": "[15,70][123,166]"})
+    value.wait = lambda *args, **options: original
+    tree = ET.fromstring('''<hierarchy><node content-desc="Report a bug or request a feature" clickable="true" bounds="[210,300][318,396]"/></hierarchy>''')
+    value.dump = lambda: tree
+    commands, stages = [], []
+    value.command = lambda *args: commands.append(args)
+    value.assert_bug_control = lambda stage: stages.append(stage)
+    clock = [0.0]
+    monkeypatch.setattr(smoke.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(smoke.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + 10))
+    value.drag_bug_control()
+    assert commands[0][:3] == ("shell", "input", "swipe")
+    assert "after-physical-drag" in stages
+    assert any(event.get("assertion") == "native-bug-drag-moves-without-opening-report" for event in value.events)
+    node = next(tree.iter("node"))
+    node.set("bounds", "[15,70][123,166]")
+    with pytest.raises(RuntimeError, match="did not move"):
+        value.drag_bug_control()
+    ET.SubElement(tree, "node", {"text": value.BUG_DIALOG, "bounds": "[100,300][900,450]"})
+    with pytest.raises(RuntimeError, match="opened the bug reporter"):
+        value.drag_bug_control()
+
+
+def test_chosen_bug_position_must_not_reset_when_opening_a_modal():
+    value = driver()
+    value.bug_drag_origin = (15, 70, 123, 166)
+    node = ET.Element("node", {"bounds": "[210,370][318,466]"})
+    value.wait = lambda *args, **options: node
+    value.assert_bug_control("account-modal")
+    node.set("bounds", "[15,70][123,166]")
+    with pytest.raises(RuntimeError, match="position was reset"):
         value.assert_bug_control("account-modal")
 
 
@@ -131,6 +177,7 @@ def test_native_report_draft_restores_account_after_keyboard_and_never_sends():
     value.tap = lambda label, **options: taps.append(label)
     value.tap_node = lambda node: None
     value.assert_bug_control = lambda stage, **options: stages.append(stage)
+    value.drag_bug_control = lambda: stages.append("physical-drag")
     value.dump = lambda: ET.Element("hierarchy")
     keyboard_dismissed = False
 
@@ -153,6 +200,7 @@ def test_native_report_draft_restores_account_after_keyboard_and_never_sends():
     assert ("shell", "input", "text", "Local%ssmoke%sdraft") in commands
     assert commands.count(("shell", "input", "keyevent", "4")) == 2 and keyboard_dismissed
     assert "account-restored-after-report" in stages
+    assert "physical-drag" in stages
     assert any(event.get("assertion") == "closing-bug-report-restores-account-modal-without-sending" for event in value.events)
 
 
@@ -163,6 +211,7 @@ def test_missing_native_screenshot_preview_fails_before_editing_or_sending():
     value.tap = lambda *args, **options: None
     value.tap_node = lambda node: None
     value.assert_bug_control = lambda *args, **options: None
+    value.drag_bug_control = lambda: None
 
     def wait(label, **options):
         if label == value.BUG_SCREENSHOT:

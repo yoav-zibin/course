@@ -26,7 +26,6 @@ function BugReportForm({p,screenshot,captureError,captured,draft,onClose,onSent}
     <Copy muted>{copyText("Describe what happened, what you expected, or the feature you would like.")}</Copy>
     {screenshot&&<Image source={{uri:screenshot}} accessibilityLabel={copyText("Screenshot captured before opening this report")} resizeMode="contain" style={{width:'100%',height:220,borderRadius:8,backgroundColor:'#10141f'}}/>}
     {captureError&&<Notice error>{copyText("Screenshot unavailable: {v0}",{v0:captureError})}</Notice>}
-    <Copy small muted>{copyText("Your screenshot, recent app logs, errors, API timings, pages, device details, and account identity will be included. Passwords and API request bodies are excluded from diagnostics.")}</Copy>
     <Field label={copyText("Bug or feature request")} multiline value={text} onChangeText={value=>{draft.current=value;setText(value);}} maxLength={10000}/>
     {error&&<Notice error>{error}</Notice>}
     <Button disabled={text.trim().length<5||!p.network} onPress={async()=>{

@@ -9,6 +9,7 @@ import {Button, Card, Copy, Notice, Row, Title, colors} from './ui/components';
 import {Context, Screen, text} from './ui/context';
 import {Catalog, GameDetail, Matches, LocalMatches, Invitations, Settings} from './ui/screens';
 import {AccountDialog} from './ui/AccountDialog';
+import {PrivacyDialog} from './ui/PrivacyDialog';
 import {MatchStage} from './ui/MatchStage';
 import {BugReporter} from './ui/BugReporter';
 import {BugButton} from './ui/BugButton';
@@ -29,7 +30,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const insets = useSafeAreaInsets();
   const localOnly=useRef(readLocalUiTest()).current;
   const [screen, setScreen] = useState<Screen>('games');
-  const [account, setAccount] = useState(false), [focus,setFocus]=useState(false);
+  const [account, setAccount] = useState(false), [focus,setFocus]=useState(false), [privacy,setPrivacy]=useState(false);
   const [notice, setNotice] = useState('');
   const [inbox,setInbox] = useState(false), [notificationBanner,setNotificationBanner] = useState<InAppNotification|null>(null);
   const observedNotifications = useRef<{scope:string; ids:Set<string>; initialized:boolean}>({scope:'',ids:new Set(),initialized:false});
@@ -135,13 +136,14 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   useEffect(()=>{
     if(Platform.OS!=='android')return;
     const listener=BackHandler.addEventListener('hardwareBackPress',()=>{
+      if(privacy){setPrivacy(false);return true;}
       if(account){setAccount(false);return true;}
       if(p.selectedMatch){navigate(p.selectedMatch.localMode?'local':'matches');return true;}
       if(p.selectedGameId){p.actions.clearGame();setScreen('games');return true;}
       if(screen!=='games'){navigate('games');return true;}
       return false;
     });return()=>listener.remove();
-  },[account,screen,p.selectedMatch?.id,p.selectedGameId]);
+  },[privacy,account,screen,p.selectedMatch?.id,p.selectedGameId]);
   useEffect(()=>{
     if(!p.ready)return;
     if(localOnly){configureReporter(()=>{});return;}
@@ -194,10 +196,11 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
             : screen==='local' ? <LocalMatches />
             : screen==='invites' ? <Invitations />
             : <Settings layout={layout} setLayout={next=>{setLayout(next); void AsyncStorage.setItem('buildplay.navigation.v2',next);}} />}
-          {!focus&&<Row style={s.footer}><Copy small muted>BuildPlay</Copy><Button secondary compact onPress={()=>navigate('settings')}>{t('ui.preferences.title','Preferences')}</Button><Button secondary compact onPress={()=>Linking.openURL(`${p.baseUrl}/static/privacy.html`)}>{t('ui.privacy.title','Privacy')}</Button><Copy small muted>{p.network ? copyText("● Online") : copyText("○ Offline")}</Copy></Row>}
+          {!focus&&<Row style={s.footer}><Copy small muted>BuildPlay</Copy><Button secondary compact onPress={()=>navigate('settings')}>{t('ui.preferences.title','Preferences')}</Button><Button secondary compact onPress={()=>setPrivacy(true)}>{t('ui.privacy.title','Privacy')}</Button><Copy small muted>{p.network ? copyText("● Online") : copyText("○ Offline")}</Copy></Row>}
         </ScrollView>
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />
+      <PrivacyDialog visible={privacy} onClose={()=>setPrivacy(false)} />
       <NotificationInbox visible={inbox} onClose={()=>setInbox(false)} onOpen={openNotification}/>
       <NotificationPrompt/>
       {gameVisible&&<View style={{position:'absolute',right:8,top:insets.top+2,zIndex:100}}><Button secondary compact onPress={()=>{setFocus(value=>!value);recordDiagnosticEvent('focus_mode',{enabled:!focus});}}>{focus?copyText('Exit focus mode'):copyText('Focus mode')}</Button></View>}
@@ -210,7 +213,7 @@ export default function App() {
   return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p}/>}</ErrorBoundary><BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton/></SafeAreaProvider>;
 }
 const s = StyleSheet.create({
-  safe:{flex:1,backgroundColor:colors.background}, header:{minHeight:104,paddingHorizontal:20,paddingTop:38,paddingBottom:12,borderBottomWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
+  safe:{flex:1,backgroundColor:colors.background}, header:{minHeight:74,paddingHorizontal:20,paddingLeft:50,paddingVertical:12,borderBottomWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
   brand:{fontSize:25,fontWeight:'800',letterSpacing:-1},
   mobileTabs:{maxHeight:58,flexGrow:0,backgroundColor:colors.surface}, sidebar:{width:230,backgroundColor:colors.surface,padding:18,gap:12,borderRightWidth:1,borderColor:colors.border},
   content:{width:'100%',maxWidth:1240,alignSelf:'center',gap:22,flexGrow:1},loading:{minHeight:300,alignItems:'center',justifyContent:'center',gap:20},footer:{marginTop:28,paddingTop:22,paddingBottom:20,borderTopWidth:1,borderColor:colors.border,justifyContent:'center'},
