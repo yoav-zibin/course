@@ -18,9 +18,11 @@ buildplay-play-ci@buildplay-101e9.iam.gserviceaccount.com
 ```
 
 The initial publishing-access probe returned HTTP `403`. After the Console grant,
-creating an edit and reading tracks both returned HTTP `200`; the existing
-internal release has version code `2`. The first automatic upload is being
-verified separately from this access check.
+creating an edit and reading tracks both returned HTTP `200`. The first automatic
+release, version code `501` from source `6c77d9d`, was uploaded and committed by
+[this successful workflow run](https://github.com/yoav-zibin/course/actions/runs/44604465618).
+An independent read-back confirmed internal track status `completed` and a stored
+bundle SHA-256 matching the signed CI artifact. The production track remains empty.
 
 An owner or administrator must invite this service account through **Play
 Console → Users and permissions** and grant it access to `fun.buildplay` with:
