@@ -187,6 +187,32 @@ test('campaign arrival persists before login and attributes the guest signup',as
   }
 });
 
+test('navigation stays directly accessible without a hamburger, including saved menu preferences',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('buildplay.navigation.v2','hamburger'));
+  await page.goto('/portal');
+  await expect(page.getByRole('button',{name:'Navigation menu',exact:true})).toHaveCount(0);
+  await expect(page.getByText('☰',{exact:true})).toHaveCount(0);
+  for(const name of ['Games','Matches','On this device','Invites'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(1);
+  await page.getByRole('button',{name:'Invites',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Log in',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Close dialog',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await page.getByRole('button',{name:'Preferences',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Navigation layout: Menu',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Navigation layout: Top navigation',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Navigation layout: Left navigation',exact:true}).click();
+  for(const width of [1200,900,390]){
+    await page.setViewportSize({width,height:850});
+    await page.getByRole('button',{name:'On this device',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'On this device',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Invites',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Navigation menu',exact:true})).toHaveCount(0);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  }
+});
+
 test('guest identity survives reload, shared navigation stays responsive, and feedback works',async({page})=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).first().click();

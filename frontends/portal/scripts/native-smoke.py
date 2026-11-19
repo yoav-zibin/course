@@ -256,12 +256,6 @@ class NativeSmoke:
 
     def run(self):
         self.launch()
-        # The navigation menu exposes every destination even on narrow phones
-        # where the horizontal tabs need scrolling.
-        try:
-            self.tap("Navigation menu", scroll=False)
-        except RuntimeError:
-            pass  # Tablet/landscape navigation can already be expanded.
         self.tap("On this device")
         self.tap("Pass and play")
         self.tap_cell(1)

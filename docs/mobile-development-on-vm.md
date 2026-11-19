@@ -186,9 +186,22 @@ must use the same embedded synthetic group for the old and new app.
 real-device or TestFlight archives.** Real upgrades must retain their original
 App ID prefix, bundle identifier and team.
 
-Use `macos-26-intel` for this Expo version. Its Xcode26.6 toolchain compiled the
-shared app successfully. The macOS15 image's Xcode26.3 failed Swift concurrency
-checks in Expo's dependencies, so it is no longer offered as a fallback.
+Simulator builds and launch checks use the validated `macos-26-intel` image
+with Xcode 26.6. The TestFlight job uses the Apple Silicon `xcode-27` image and
+pins Xcode 27.1, matching [Expo SDK 58's recommended build image](https://docs.expo.dev/build-reference/infrastructure/).
+Its iOS 27.1 SDK satisfies Apple's April 2027 minimum SDK requirement and avoids
+the ITMS-90725 warning emitted for iOS 26.5 builds. This changes the build SDK;
+it does not raise the app's minimum supported iOS version. The bundle identifier,
+Apple team, Keychain access and existing distribution signing remain the same.
+
+Before export, [scripts/verify-ios-distribution-sdk.py](../scripts/verify-ios-distribution-sdk.py)
+reads the compiled archive's `Info.plist` and requires device-platform metadata,
+iPhoneOS SDK 27 or later, Xcode 27 or later, and resolved application scene
+delegates. Expo SDK 58's generated project already adopts the scene lifecycle
+required by iOS 27. The
+check rejects an old archive even if the runner selected a newer Xcode. The
+macOS 15 image's Xcode 26.3 failed Swift concurrency checks in Expo's dependencies
+and remains excluded.
 The simulator build and startup checks run in separate jobs. The startup job
 downloads the compiled app, prepares Xcode's runtime caches, and uses a fresh
 Mac with bounded boot, install and launch phases. Retrying a failed startup job

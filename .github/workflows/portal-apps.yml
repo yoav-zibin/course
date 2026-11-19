@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       ios_runner:
-        description: Mac runner with the validated Expo Xcode toolchain
+        description: Simulator runner (distribution uses the Xcode 27 runner)
         type: choice
         required: true
         default: macos-26-intel
@@ -252,7 +252,9 @@ jobs:
     name: BuildPlay iOS (TestFlight upload)
     if: vars.TESTFLIGHT_ENABLED == 'true' && vars.IOS_PORTAL_BUNDLE_ID != '' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: ios-smoke
-    runs-on: ${{ inputs.ios_runner || 'macos-26-intel' }}
+    # Expo SDK 58's recommended Xcode 27.1 toolchain satisfies Apple's
+    # iOS 27 SDK requirement for App Store Connect uploads from April 2027.
+    runs-on: xcode-27
     timeout-minutes: 50
     env:
       IOS_PORTAL_BUNDLE_ID: ${{ vars.IOS_PORTAL_BUNDLE_ID }}
@@ -269,7 +271,11 @@ jobs:
           cache-dependency-path: frontends/portal/package-lock.json
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '27.1'
+      - name: Record distribution toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
       - run: npm ci
       - run: npx expo prebuild --platform ios --no-install --no-clean
       - working-directory: frontends/portal/ios
@@ -293,6 +299,7 @@ jobs:
           archive_app="$GITHUB_WORKSPACE/BuildPlay.xcarchive/Products/Applications/BuildPlay.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$archive_app/Info.plist")" = "$IOS_PORTAL_BUNDLE_ID"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$archive_app/Info.plist")" = "${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          python3 "$GITHUB_WORKSPACE/scripts/verify-ios-distribution-sdk.py" "$archive_app"
       - name: Export IPA with existing cloud signing access
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}

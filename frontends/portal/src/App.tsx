@@ -23,16 +23,16 @@ function PortalApp() {
   const localOnly=useRef(readLocalUiTest()).current;
   const [screen, setScreen] = useState<Screen>('games');
   const [account, setAccount] = useState(false), [feedback, setFeedback] = useState(false);
-  const [notice, setNotice] = useState(''), [menu, setMenu] = useState(false);
+  const [notice, setNotice] = useState('');
   const [appSession,setAppSession] = useState('');
   const [pendingInvite,setPendingInvite]=useState(''),[invitePreview,setInvitePreview]=useState<any>(null);
-  const [layout, setLayout] = useState<'top'|'left'|'hamburger'>('top');
+  const [layout, setLayout] = useState<'top'|'left'>('top');
   const knownPasswords=useRef(new Set<string>());
   for(const saved of p.accounts)knownPasswords.current.add(saved.password);
   const t = (key: string, fallback: string) => text(p,key,fallback);
   const run = useCallback(async (task: () => Promise<unknown>) => {try { await task(); } catch (error) {setNotice(error instanceof Error ? error.message : String(error));}}, []);
   const writeRoute = (fragment: string) => { if (Platform.OS === 'web') {const url = new URL(window.location.href); url.hash = fragment; window.history.pushState(null, '', url);}};
-  const navigate = (next: Screen) => {if(next==='games')p.actions.clearGame();else p.actions.clearMatch(); setScreen(next); setMenu(false); writeRoute(next);};
+  const navigate = (next: Screen) => {if(next==='games')p.actions.clearGame();else p.actions.clearMatch(); setScreen(next); writeRoute(next);};
   const openGame = async (id: string) => {await p.actions.selectGame(id); setScreen('games'); writeRoute(`game=${encodeURIComponent(id)}`);};
   const openMatch = async (id: string) => {await p.actions.selectMatch(id); setScreen('matches'); writeRoute(`match=${encodeURIComponent(id)}`);};
   const openInvite=async(token:string)=>{setPendingInvite(token);setInvitePreview(await p.actions.request('GET',`/invites/${encodeURIComponent(token)}`));};
@@ -41,7 +41,7 @@ function PortalApp() {
     const initialUrl=Platform.OS==='web'?window.location.href:(await Linking.getInitialURL())??null;
     await p.actions.bootstrap(undefined,localOnly,initialUrl??undefined);
     const savedLayout = await AsyncStorage.getItem('buildplay.navigation.v2');
-    if (savedLayout === 'left' || savedLayout === 'hamburger') setLayout(savedLayout);
+    if (savedLayout === 'left') setLayout(savedLayout);
     if (Platform.OS === 'web') installWebApp();
     const receive = async (raw: string | null) => {
       if (!raw) return;
@@ -81,13 +81,12 @@ function PortalApp() {
     if(Platform.OS!=='android')return;
     const listener=BackHandler.addEventListener('hardwareBackPress',()=>{
       if(account){setAccount(false);return true;}
-      if(menu){setMenu(false);return true;}
       if(p.selectedMatch){navigate(p.selectedMatch.localMode?'local':'matches');return true;}
       if(p.selectedGameId){p.actions.clearGame();setScreen('games');return true;}
       if(screen!=='games'){navigate('games');return true;}
       return false;
     });return()=>listener.remove();
-  },[account,menu,screen,p.selectedMatch?.id,p.selectedGameId]);
+  },[account,screen,p.selectedMatch?.id,p.selectedGameId]);
   useEffect(()=>{
     if(!p.ready)return;
     if(localOnly){configureReporter(()=>{});return;}
@@ -117,14 +116,12 @@ function PortalApp() {
       <StatusBar style="light" />
       <View style={s.header}>
         <Pressable accessibilityRole="link" accessibilityLabel={copyText("BuildPlay home")} onPress={()=>navigate('games')} style={{flexShrink:0}}><Copy style={s.brand}>BuildPlay<Copy style={{color:colors.accent,fontSize:25}}>●</Copy></Copy></Pressable>
-        {width >= 800 && layout === 'top' && tabs}
+        {width >= 800 && !side && tabs}
         <View style={{flex:1}} />
         {p.account && <Copy small style={{color:colors.accent}}>{(p.profile?.token_balance ?? p.account.token_balance ?? 0).toLocaleString()} ✦</Copy>}
         <Button secondary compact disabled={!p.ready} onPress={()=>setAccount(true)} label={p.account ? copyText("Account menu") : copyText("Log in")}>{p.account?.display_name || t('ui.auth.log_in','Log in')}</Button>
-        {(width < 800 || layout === 'hamburger') && <Button secondary compact label={copyText("Navigation menu")} onPress={()=>setMenu(!menu)}>☰</Button>}
       </View>
-      {menu && <View style={s.menu}>{tabs}<Button compact secondary onPress={()=>navigate('settings')}>⚙ {t('ui.preferences.title','Preferences')}</Button></View>}
-      {width < 800 && !menu && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.slice(0,3).map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
+      {width < 800 && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
         {side && <View style={s.sidebar}>{tabs}<View style={{flex:1}}/><Button secondary onPress={()=>navigate('settings')}>⚙ {t('ui.preferences.title','Preferences')}</Button></View>}
         <ScrollView style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500}]} keyboardShouldPersistTaps="handled">
@@ -154,7 +151,7 @@ export default function App() {
 }
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background}, header:{minHeight:74,paddingHorizontal:20,paddingVertical:12,borderBottomWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
-  brand:{fontSize:25,fontWeight:'800',letterSpacing:-1},menu:{backgroundColor:colors.surface,padding:16,gap:12,borderBottomWidth:1,borderColor:colors.border},
+  brand:{fontSize:25,fontWeight:'800',letterSpacing:-1},
   mobileTabs:{maxHeight:58,flexGrow:0,backgroundColor:colors.surface}, sidebar:{width:230,backgroundColor:colors.surface,padding:18,gap:12,borderRightWidth:1,borderColor:colors.border},
   content:{width:'100%',maxWidth:1240,alignSelf:'center',gap:22,flexGrow:1},loading:{minHeight:300,alignItems:'center',justifyContent:'center',gap:20},footer:{marginTop:28,paddingTop:22,paddingBottom:20,borderTopWidth:1,borderColor:colors.border,justifyContent:'center'},
 });
