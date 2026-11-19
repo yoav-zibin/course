@@ -45,3 +45,11 @@ run for review. Updates send only the Boolean and the authorization secret;
 rules, presentation and validation artifacts are omitted. Already-correct flags
 are accepted on reruns, including the new versions created by a prior run. The
 secret stays in its private file and is never included in output or reports.
+
+When concurrent updates to `main` keep superseding automatic deployments, the
+`Deploy tested main revision` workflow accepts a completed, successful push-to-main
+CI/CD run ID. It verifies the required checks and artifact provenance, deploys
+that exact source and web build, preserves private configuration, and restores
+the previous release if verification fails. It refuses to replace a newer
+production revision. Trigger it with `gh workflow run deploy-tested.yml --ref main
+-f ci_run_id=RUN_ID`, then apply the reviewed flags after deployment succeeds.

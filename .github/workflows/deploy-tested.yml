@@ -1,0 +1,186 @@
+name: Deploy tested main revision
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Fully successful push-to-main CI/CD run whose exact revision and web artifact to deploy
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.repository == 'yoav-zibin/course'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency: deploy
+    steps:
+      - name: Verify successful CI provenance and exact web artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, io, json, os, pathlib, re, subprocess, tarfile, zipfile
+          repo, run_id = os.environ['GITHUB_REPOSITORY'], os.environ['CI_RUN_ID']
+          assert repo == 'yoav-zibin/course' and re.fullmatch(r'[1-9][0-9]{0,19}', run_id)
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+          run = api(f'actions/runs/{run_id}')
+          assert run['repository']['full_name'] == repo and run['head_repository']['full_name'] == repo
+          assert (run['name'], run['path'], run['event'], run['head_branch'], run['status'], run['conclusion']) == (
+              'CI/CD', '.github/workflows/ci.yml', 'push', 'main', 'completed', 'success')
+          sha = run['head_sha']
+          assert re.fullmatch(r'[0-9a-f]{40}', sha)
+          comparison = api(f'compare/{sha}...main')
+          assert comparison['merge_base_commit']['sha'] == sha and comparison['status'] in ('ahead', 'identical')
+          jobs = api(f'actions/runs/{run_id}/jobs?filter=latest&per_page=100')
+          assert jobs['total_count'] <= 100
+          for name in ('Shared portal and web build', 'production-runtime', 'unit-tests', 'ui-tests'):
+              selected = [job for job in jobs['jobs'] if job['name'] == name]
+              assert len(selected) == 1 and selected[0]['conclusion'] == 'success', name
+          listed = api(f'actions/runs/{run_id}/artifacts?per_page=100')
+          assert listed['total_count'] <= 100
+          selected = [item for item in listed['artifacts'] if item['name'] == 'BuildPlay-web']
+          assert len(selected) == 1
+          artifact = selected[0]
+          provenance = artifact['workflow_run']
+          assert not artifact['expired'] and 0 < artifact['size_in_bytes'] < 100_000_000
+          assert provenance['id'] == int(run_id) and provenance['head_sha'] == sha and provenance['head_branch'] == 'main'
+          assert provenance['repository_id'] == provenance['head_repository_id'] == run['repository']['id']
+          archive = subprocess.check_output(['gh', 'api', '--allow-escape-sequences', f'repos/{repo}/actions/artifacts/{artifact["id"]}/zip'])
+          assert artifact['digest'] == 'sha256:' + hashlib.sha256(archive).hexdigest()
+          with zipfile.ZipFile(io.BytesIO(archive)) as zipped:
+              assert zipped.namelist() == ['portal-web.tar.gz'] and zipped.getinfo('portal-web.tar.gz').file_size < 100_000_000
+              payload = zipped.read('portal-web.tar.gz')
+          with tarfile.open(fileobj=io.BytesIO(payload), mode='r:gz') as tar:
+              members = tar.getmembers()
+              assert 0 < len(members) <= 50_000 and sum(item.size for item in members) < 300_000_000
+              names = [item.name for item in members]
+              assert len(names) == len(set(names))
+              for item in members:
+                  path = pathlib.PurePosixPath(item.name)
+                  assert not path.is_absolute() and path.parts[0] == 'app' and '..' not in path.parts and '\\' not in item.name
+                  assert item.name.rstrip('/') == str(path), 'Archive paths must be canonical'
+                  assert item.isfile() or item.isdir(), 'Links and special files are forbidden'
+              assert tar.getmember('app').isdir()
+              for required in ('app/version.json', 'app/entry.json', 'app/index.html'):
+                  assert tar.getmember(required).isfile()
+              assert json.load(tar.extractfile('app/version.json'))['commit'] == sha
+              scripts = json.load(tar.extractfile('app/entry.json'))['scripts']
+              assert scripts and all(re.fullmatch(r'/static/app/_expo/static/js/web/[A-Za-z0-9._-]+\.js', value) for value in scripts)
+              assert all(tar.getmember('app/' + value.removeprefix('/static/app/')).isfile() for value in scripts)
+          pathlib.Path('portal-web.tar.gz').write_bytes(payload)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'TESTED_SHA={sha}\nCI_RUN_ID={run_id}\nARCHIVE_SHA={hashlib.sha256(payload).hexdigest()}\n')
+          print(f'Validated successful CI run {run_id} and artifact for {sha}.')
+          PY
+      - name: Deploy exact tested source and web build, preserving private configuration
+        env:
+          VM_HOST: ${{ secrets.GCP_VM_HOST }}
+          VM_USER: ${{ secrets.GCP_VM_USER }}
+          VM_SSH_KEY: ${{ secrets.GCP_VM_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          install -m 700 -d ~/.ssh
+          key="$RUNNER_TEMP/deploy-tested-key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$VM_SSH_KEY" > "$key"
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+          staging=$(ssh -i "$key" "$VM_USER@$VM_HOST" 'umask 077; mktemp -d /tmp/buildplay-tested.XXXXXXXX')
+          [[ "$staging" =~ ^/tmp/buildplay-tested\.[A-Za-z0-9]{8}$ ]]
+          scp -i "$key" portal-web.tar.gz "$VM_USER@$VM_HOST:$staging/portal-web.tar.gz"
+          ssh -i "$key" "$VM_USER@$VM_HOST" \
+            "sudo bash -s -- '$TESTED_SHA' '$ARCHIVE_SHA' '$CI_RUN_ID' '$staging' '$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'" <<'REMOTE'
+          set -Eeuo pipefail
+          sha=$1; archive_sha=$2; ci_run=$3; staging=$4; deployment=$5
+          [[ "$sha" =~ ^[0-9a-f]{40}$ && "$archive_sha" =~ ^[0-9a-f]{64}$ && "$ci_run" =~ ^[0-9]+$ ]]
+          [[ "$staging" =~ ^/tmp/buildplay-tested\.[A-Za-z0-9]{8}$ && "$deployment" =~ ^[0-9]+-[0-9]+$ ]]
+          cd /opt/game-platform/game_platform
+          git diff --quiet
+          git diff --cached --quiet
+          git fetch --quiet origin main >/dev/null 2>&1 || { echo 'Production source fetch failed.'; exit 1; }
+          git merge-base --is-ancestor "$sha" origin/main
+          previous=$(git rev-parse HEAD)
+          git merge-base --is-ancestor "$previous" "$sha" || { echo 'Refusing to roll production back or cross unrelated history.'; exit 1; }
+          test -L static/app
+          previous_app=$(readlink static/app)
+          printf '%s  %s\n' "$archive_sha" "$staging/portal-web.tar.gz" | sha256sum --check --status
+          # Save only revision/link identifiers, privately, before changing source or serving assets.
+          record="/opt/game-platform/release-state/tested-$deployment"
+          umask 077
+          test ! -e "$record"
+          install -d -m 700 "$record"
+          printf '%s\n' "$previous" > "$record/previous-head"
+          printf '%s\n' "$previous_app" > "$record/previous-app"
+          printf '%s\n' "$sha" "$ci_run" "$archive_sha" > "$record/tested-release"
+          release="/opt/game-platform/web-builds/tested-$deployment-$sha"
+          test ! -e "$release"
+          install -d -m 755 "$release"
+          tar -xzf "$staging/portal-web.tar.gz" -C "$release" --no-same-owner --no-same-permissions
+          chmod -R a+rX "$release"
+          git show "$sha:requirements.txt" > "$staging/requirements.txt"
+          git show "$previous:requirements.txt" > "$staging/previous-requirements.txt"
+          rollback() {
+            status=$?
+            trap - ERR
+            set +e
+            current=$(git rev-parse HEAD)
+            if [ "$current" != "$sha" ] && [ "$current" != "$previous" ]; then
+              echo 'Deployment failed; refusing rollback because production source moved unexpectedly.'
+              exit "$status"
+            fi
+            restored=true
+            git -c core.hooksPath=/dev/null checkout --quiet --detach "$previous" || restored=false
+            ln -s "$previous_app" "static/.app-rollback-$deployment" || restored=false
+            mv -Tf "static/.app-rollback-$deployment" static/app || restored=false
+            /opt/game-platform/.venv/bin/python -m pip install --disable-pip-version-check --quiet -r "$staging/previous-requirements.txt" >/dev/null 2>&1 || restored=false
+            systemctl restart game-platform.service || restored=false
+            test "$(git rev-parse HEAD)" = "$previous" || restored=false
+            test "$(readlink static/app)" = "$previous_app" || restored=false
+            if [ "$restored" = true ]; then echo 'Deployment failed; restored prior revision and web link.';
+            else echo 'Deployment failed; automatic recovery was incomplete. Private recovery records are retained.'; fi
+            exit "$status"
+          }
+          trap rollback ERR
+          /opt/game-platform/.venv/bin/python -m pip install --disable-pip-version-check --quiet -r "$staging/requirements.txt"
+          git diff --quiet
+          git diff --cached --quiet
+          git -c core.hooksPath=/dev/null checkout --quiet --detach "$sha"
+          ln -s "$release/app" "static/.app-tested-$deployment"
+          mv -Tf "static/.app-tested-$deployment" static/app
+          systemctl restart game-platform.service
+          test "$(git rev-parse HEAD)" = "$sha"
+          test "$(readlink static/app)" = "$release/app"
+          git diff --quiet
+          git diff --cached --quiet
+          EXPECTED_REVISION="$sha" python3 - <<'PY'
+          import json, os, re, time, urllib.request
+          def read(path):
+              with urllib.request.urlopen('https://buildplay.fun' + path, timeout=10) as response:
+                  return response.read()
+          deadline = time.monotonic() + 180
+          while time.monotonic() < deadline:
+              try:
+                  read('/health')
+                  assert json.loads(read('/static/app/version.json'))['commit'] == os.environ['EXPECTED_REVISION']
+                  assert '/static/app/_expo/static/js/web/' in read('/portal').decode()
+                  assert json.loads(read('/games/schema'))['properties']['all_state_public']['type'] == 'boolean'
+                  asset = json.loads(read('/static/app/entry.json'))['scripts'][0]
+                  assert re.fullmatch(r'/static/app/_expo/static/js/web/[A-Za-z0-9._-]+\.js', asset)
+                  read(asset)
+                  print('Verified exact deployed revision, health, portal asset and public-state API schema.')
+                  break
+              except Exception:
+                  time.sleep(5)
+          else:
+              raise SystemExit('Deployed service verification failed; prior revision/link are retained privately in release-state.')
+          PY
+          trap - ERR
+          rm -rf "$staging"
+          REMOTE
