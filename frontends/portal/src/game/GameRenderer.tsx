@@ -1,3 +1,4 @@
+import {recordDiagnosticLog,recordDiagnosticEvent} from '../core/diagnostics';
 import {copyText} from '../platform/i18n';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
@@ -32,6 +33,7 @@ export function GameRenderer(props: GameRendererProps) {
     try { return {spec: validateSpec(copy(props.spec))}; }
     catch (error) { return {error: errorOf(error)}; }
   }, [serialized]);
+  useEffect(()=>{if(checked.error)recordDiagnosticLog('error','visible_game_error',checked.error);},[checked.error]);
   if (!checked.spec) return <Text accessibilityRole="alert" style={styles.error}>{checked.error?.message || copyText("Invalid game package")}</Text>;
   return <Renderer {...props} key={`${props.contextKey || ''}:${serialized}:viewer:${props.message.my_player_index??'spectator'}`} spec={checked.spec} />;
 }
@@ -87,7 +89,7 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
 
   const report = useCallback((reason: unknown) => {
     if (!alive.current) return;
-    const failure = errorOf(reason); setError(failure.message); callbacks.current.onError?.(failure);
+    const failure = errorOf(reason); recordDiagnosticLog('error','visible_game_error',failure); setError(failure.message); callbacks.current.onError?.(failure);
   }, []);
 
   useEffect(()=>{
@@ -133,7 +135,7 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
     callbacks.current.onScene?.(copy(next),copy(latest.current!));
     if (result.make_move !== undefined) {
       sent.current=true;setBusy(true);
-      try { await callbacks.current.onMove(copy(result.make_move)); }
+      try { recordDiagnosticEvent('game_move');await callbacks.current.onMove(copy(result.make_move)); }
       catch (reason) { if(atRevision===revision.current){sent.current=false;setBusy(false);} report(reason); }
     }
   },[spec,report]);

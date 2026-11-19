@@ -72,6 +72,7 @@ def index_config(namespace):
         },
         "feedback_targets": {"problem": "desc"},
         "game_server_bugs": {"examined": "order"},
+        "bug_reports": {"status": "order"},
         "jobs": {"due_at": "order"},
         "outbox": {"due_at": "order"},
     }

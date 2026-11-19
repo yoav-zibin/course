@@ -33,6 +33,14 @@ from game_platform.models import (
 
 
 class Store(Protocol):
+    def create_bug_report(self, row: dict[str, Any], *, rate_keys: list[str]) -> None: ...
+
+    def get_bug_report(self, report_id: str) -> dict[str, Any] | None: ...
+
+    def list_bug_reports(self, *, status: str | None, limit: int, after: str | None = None) -> tuple[list[dict[str, Any]], str | None]: ...
+
+    def set_bug_report_status(self, report_id: str, change: dict[str, Any], *, changed_by: str, now: str) -> dict[str, Any] | None: ...
+
     def put_game_server_bug(self, row: dict[str, Any]) -> None: ...
 
     def get_game_server_bug(self, bug_id: str) -> dict[str, Any] | None: ...
@@ -240,6 +248,8 @@ class Snapshot:
     game_version_errors: tuple[GameVersionError, ...] = ()
     # Private reproductions and completed reviews, absent from older files.
     game_server_bugs: tuple[dict[str, Any], ...] = ()
+    bug_reports: tuple[dict[str, Any], ...] = ()
+    bug_report_limits: dict[str, dict[str, Any]] | None = None
     # Optional so existing data files load without a migration. Failed
     # random-walk test seeds per game, replayed as regression seeds.
     game_test_seeds: tuple[GameTestSeeds, ...] = ()
@@ -282,6 +292,9 @@ class InMemoryStore:
         self._game_version_errors: list[GameVersionError] = []
         self._game_server_bugs: dict[str, dict[str, Any]] = {}
         self._game_server_bug_lock = threading.RLock()
+        self._bug_reports: dict[str, dict[str, Any]] = {}
+        self._bug_report_limits: dict[str, dict[str, Any]] = {}
+        self._bug_report_lock = threading.RLock()
         self._game_test_seeds: dict[str, GameTestSeeds] = {}
         self._translations: dict[tuple[str, str], Translation] = {}
         self._experiments: dict[str, Experiment] = {}
@@ -314,6 +327,8 @@ class InMemoryStore:
         store._game_version_errors.extend(snapshot.game_version_errors)
         for row in snapshot.game_server_bugs:
             store.put_game_server_bug(row)
+        store._bug_reports = {row["id"]: copy.deepcopy(row) for row in snapshot.bug_reports}
+        store._bug_report_limits = copy.deepcopy(snapshot.bug_report_limits or {})
         for record in snapshot.game_test_seeds:
             store.put_game_test_seeds(record)
         store.put_translations(snapshot.translations)
@@ -348,6 +363,8 @@ class InMemoryStore:
             invites=tuple(self._invites.values()),
             game_version_errors=tuple(self._game_version_errors),
             game_server_bugs=tuple(copy.deepcopy(list(self._game_server_bugs.values()))),
+            bug_reports=tuple(copy.deepcopy(list(self._bug_reports.values()))),
+            bug_report_limits=copy.deepcopy(self._bug_report_limits),
             game_test_seeds=tuple(self._game_test_seeds.values()),
             translations=tuple(self._translations.values()),
             experiments=tuple(self._experiments.values()),
@@ -650,6 +667,40 @@ class InMemoryStore:
     def put_game_server_bug(self, row: dict[str, Any]) -> None:
         with self._game_server_bug_lock:
             self._game_server_bugs[row["id"]] = copy.deepcopy(row)
+
+    def create_bug_report(self, row, *, rate_keys):
+        from game_platform.bug_reports import take_report_slot
+        with self._bug_report_lock:
+            updates = {key: take_report_slot(self._bug_report_limits.get(key), row["created_at"])
+                       for key in rate_keys}
+            self._bug_reports[row["id"]] = copy.deepcopy(row)
+            self._bug_report_limits.update(updates)
+
+    def get_bug_report(self, report_id):
+        with self._bug_report_lock:
+            return copy.deepcopy(self._bug_reports.get(report_id))
+
+    def list_bug_reports(self, *, status, limit, after=None):
+        from game_platform.bug_reports import report_summary
+        from game_platform.paging import page_size
+        page_size(limit)
+        order = lambda report_id: hashlib.sha256(report_id.encode()).hexdigest()
+        with self._bug_report_lock:
+            rows = [row for report_id, row in sorted(self._bug_reports.items(), key=lambda item: order(item[0]))
+                    if (after is None or order(report_id) > order(after))
+                    and (status is None or row["status"] == status)]
+            selected = rows[:limit]
+            return [copy.deepcopy(report_summary(row)) for row in selected], selected[-1]["id"] if len(rows) > limit else None
+
+    def set_bug_report_status(self, report_id, change, *, changed_by, now):
+        from game_platform.bug_reports import changed_report, report_summary
+        with self._bug_report_lock:
+            row = self._bug_reports.get(report_id)
+            if row is None:
+                return None
+            row = changed_report(row, change, changed_by=changed_by, now=now)
+            self._bug_reports[report_id] = row
+            return copy.deepcopy(report_summary(row))
 
     def get_game_server_bug(self, bug_id: str) -> dict[str, Any] | None:
         with self._game_server_bug_lock:

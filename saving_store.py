@@ -140,6 +140,26 @@ class SavingStore:
 
     # [Store] interface: reads delegate; writes delegate and schedule a save.
 
+    def create_bug_report(self, row, *, rate_keys):
+        with self._lock:
+            self._inner.create_bug_report(row, rate_keys=rate_keys)
+            self._set_dirty()
+
+    def get_bug_report(self, report_id):
+        with self._lock:
+            return self._inner.get_bug_report(report_id)
+
+    def list_bug_reports(self, *, status, limit, after=None):
+        with self._lock:
+            return self._inner.list_bug_reports(status=status, limit=limit, after=after)
+
+    def set_bug_report_status(self, report_id, change, *, changed_by, now):
+        with self._lock:
+            row = self._inner.set_bug_report_status(report_id, change, changed_by=changed_by, now=now)
+            if row is not None:
+                self._set_dirty()
+            return row
+
     def record_game_match_start(self, game_id: str, player_count: int) -> None:
         with self._lock:
             self._inner.record_game_match_start(game_id, player_count)

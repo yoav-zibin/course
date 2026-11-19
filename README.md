@@ -348,7 +348,8 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `PATCH /games/{id}` | game secret/master in body | Single game-content update API; include `game_addition_request_id_and_secret`. Content fields are optional; only changed fields and their dependencies are validated |
 | `DELETE /games/{id}` | game secret/master | Delete a game |
 | `POST /games/{id}/unpublish` | game secret/master | Hide a game from the public catalog |
-| `POST /feedback` | yes | Send a bug, a suggestion or a problem about a user, a game, a match or the platform `{kind, target_type, target_id?, text, page?}`; see [Feedback](#feedback) |
+| `POST /bug-reports` | optional | Send a screenshot, bug or feature description and recent app diagnostics; see [Bug reports](#bug-reports) |
+| `POST /feedback` | yes | Legacy feedback API `{kind, target_type, target_id?, text, page?}`; see [Feedback](#feedback) |
 | `POST /matches` | yes | Create a match `{game_id, num_computer_opponents, private?, turn_seconds?}` (`turn_seconds`: 60, 180 or 600 for a [speed match](#speed-matches)); the caller is player 0 |
 | `GET /matches?status=&game_id=` | yes | List the caller's matches (owned or seated, minus hidden ones) |
 | `GET /matches/{id}` |  | Get a match; anyone can view it, so it can be shared by URL. Speed matches include `turn_deadline` and `server_time` |
@@ -427,7 +428,23 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   for each original player until they come back (others get 409 while only held seats are
   free), and starts with no stake.
 
+### Bug reports
+
+The persistent bug icon at the top left captures the current screen before
+opening a screenshot preview and description field. It remains available in
+game focus mode and over dialogs. Reports include recent console logs, visible
+errors, API timings, UI events, page history and account/device context, with
+credentials removed from diagnostics. The private **Bug reports** admin tab
+shows evidence and tracks handling, escalation, resolution notes and fix commits.
+An hourly job queues pending repairs in the authorized Codex conversation;
+unclear or unsuitable requests wait for the owner's decision before changes.
+See [the report API, storage and hourly workflow](docs/bug-reports.md).
+
 ### Feedback
+
+The old category-based feedback UI has been replaced by the bug reporter above.
+These endpoints and the **Legacy feedback** admin tab remain for older clients
+and historical records.
 
 Any logged-in user (guests included) can send feedback in their own words:
 `POST /feedback {kind, target_type, target_id?, text, page?}`.
@@ -906,6 +923,9 @@ don't need a user's credentials:
 | `GET /admin/stats` | The statistics behind `/stats` |
 | `GET /admin/invites` | The invite tree behind `/invites`: a summary, and per user their inviter, direct and total (transitive) invites and depth, sorted by total |
 | `GET /admin/feedback?kind=&target_type=&target_id=&status=` | Users' [feedback](#feedback), newest first (up to 200), and the 20 targets with the most "problem" reports |
+| `GET /admin/bug-reports?status=open&limit=50&cursor=` | Private report headers and next cursor; `status=all` includes handled and escalated reports |
+| `GET /admin/bug-reports/{id}` | Complete report with screenshot and diagnostic evidence |
+| `POST /admin/bug-reports/{id}/status` | Set `open`, `handling`, `escalated` or `handled`, with resolution notes, fix commit and optional concurrency expectations |
 | `POST /admin/feedback/{id}/status {status}` | Mark one [feedback](#feedback) `"reviewed"` or `"dismissed"`, or reopen it (`"open"`), recording who (the name typed in the admin login box) and when; returns it as listed |
 | `DELETE /admin/users/{id}` | Delete a user and the matches they own; platform games are retained, and they leave the matches they're seated in |
 | `DELETE /admin/games/{id}` | Delete a game and all of its matches (held pots are refunded, invites deleted); versions are kept |

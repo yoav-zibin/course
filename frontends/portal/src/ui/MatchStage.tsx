@@ -6,7 +6,6 @@ import {SvgUri} from 'react-native-svg';
 import {GameRenderer} from '../game/GameRenderer';
 import {Button,Card,Copy,Dialog,Empty,Field,Notice,Row,Title,colors} from './components';
 import {text,useApp} from './context';
-import {FeedbackDialog} from './FeedbackDialog';
 import {reportClientIssue} from '../core/reporting';
 import {MatchOutcome} from './MatchOutcome';
 import {GameInstructions} from './GameInstructions';
@@ -14,7 +13,7 @@ import {GameInstructions} from './GameInstructions';
 export function MatchStage() {
   const {p,run,navigate,notify,openMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
   const match=p.selectedMatch!, game=p.game;
-  const [share,setShare]=useState(false),[invite,setInvite]=useState<any>(null),[confirm,setConfirm]=useState(''),[feedback,setFeedback]=useState<any>(null),[clock,setClock]=useState(''),[rendererError,setRendererError]=useState('');
+  const [share,setShare]=useState(false),[invite,setInvite]=useState<any>(null),[confirm,setConfirm]=useState(''),[clock,setClock]=useState(''),[rendererError,setRendererError]=useState('');
   const [help,setHelp]=useState(false);
   const owner=match.owner_user_id===p.account?.id,local=Boolean(match.localMode),seat=match.players.find(player=>player.user_id===p.account?.id&&player.active!==false),participant=local||Boolean(seat),waiting=match.status==='waiting_for_players',over=match.status==='over';
   const turns=match.turn_of_player_indices||[],yourTurn=participant&&Boolean(seat&&turns.includes(seat.player_index));
@@ -54,7 +53,7 @@ export function MatchStage() {
     <MatchOutcome match={match}/>
     <Row>{match.players.map(player=>{const profile=player.user_id?p.profiles[player.user_id]:null;const label=player.name||profile?.display_name||(player.user_id===p.account?.id?p.account?.display_name:null)||(player.kind==='computer'?copyText("Computer {v0}",{v0:player.player_index+1}):copyText("Player {v0}",{v0:player.player_index+1}));return <Card key={player.player_index} style={{padding:12,flexGrow:1,flexBasis:150,borderColor:turns.includes(player.player_index)?colors.accent:colors.border}}>
       <Row>{profile?.picture_url&&<Image source={{uri:new URL(profile.picture_url,p.baseUrl).href}} style={{width:32,height:32,borderRadius:16}}/>}<Copy style={{fontWeight:'600'}}>{player.kind==='computer'?'◈ ':''}{label}</Copy>{player.active===false&&<Copy small muted>{copyText("Left")}</Copy>}</Row>
-      {!local&&player.user_id&&player.user_id!==p.account?.id&&<Row><Button secondary compact label={copyText("Report {v0}",{v0:label})} onPress={()=>setFeedback({type:'user',id:player.user_id,name:label})}>{copyText("Report")}</Button>{owner&&waiting&&<Button danger compact onPress={()=>run(()=>p.actions.removePlayer(player.user_id!))}>{copyText("Remove")}</Button>}</Row>}
+      {!local&&player.user_id&&player.user_id!==p.account?.id&&<Row>{owner&&waiting&&<Button danger compact onPress={()=>run(()=>p.actions.removePlayer(player.user_id!))}>{copyText("Remove")}</Button>}</Row>}
     </Card>;})}</Row>
     {conflict&&<Notice error>{conflict.message}</Notice>}
     {conflict&&<Button danger onPress={()=>setConfirm('resolve')}>{copyText("Use server version…")}</Button>}
@@ -68,7 +67,6 @@ export function MatchStage() {
         {participant&&!over&&(waiting||game?.allows_leave_mid_match)&&<Button danger onPress={()=>setConfirm('leave')}>{t('ui.match.leave','Leave match')}</Button>}
         {owner&&(waiting||over)&&<Button danger onPress={()=>setConfirm('delete')}>{copyText("Delete match")}</Button>}
         {over&&participant&&<Button onPress={()=>run(async()=>{const next=await p.actions.matchAction('rematch');await openMatch(next.id);})}>{copyText("Play again")}</Button>}
-        <Button secondary onPress={()=>setFeedback({type:'match',id:match.id,name:game?.name||'match'})}>{copyText("Feedback")}</Button>
       </Row>
     </Card>}
     {waiting?<Card><Title small>{owner?copyText("Your lobby is ready"):copyText("Waiting for the host")}</Title><Copy muted>{owner?copyText("Share the match with a friend. Start when the required number of players has joined."):copyText("Join an open seat, then the host can start the game.")}</Copy>{owner&&!game?.allowed_player_counts.includes(match.players.length)&&<Copy small muted>{copyText("This game needs")} {game?.allowed_player_counts.join(', ')} {copyText("players.")}</Copy>}</Card>
@@ -87,6 +85,5 @@ export function MatchStage() {
       {confirm==='leave'&&match.pending_leave_payout!==null&&match.pending_leave_payout!==undefined&&<Copy>{copyText("Your payout:")} {match.pending_leave_payout} {copyText("tokens")}</Copy>}
       <Button danger onPress={()=>run(async()=>{if(confirm==='resolve')await p.actions.resolveConflict(match.id);else if(confirm==='delete'){await p.actions.deleteMatch();navigate('matches');}else if(!waiting){if(match.pending_leave_player_id){await p.actions.matchAction('playerLeft');setConfirm('');return;}await p.actions.matchAction('maybeLeave');return;}else await p.actions.matchAction('leave');setConfirm('');})}>{confirm==='resolve'?copyText("Use server version"):confirm==='delete'?copyText("Delete match"):!waiting&&!match.pending_leave_player_id?copyText("Preview leaving"):copyText("Confirm leaving")}</Button>
     </Dialog>
-    {feedback&&<FeedbackDialog visible onClose={()=>setFeedback(null)} target={feedback}/>}
   </>;
 }

@@ -1236,6 +1236,8 @@ def _omit_request_bodies(scope: Scope) -> bool:
     if root and path.startswith(root + "/"):
         path = path[len(root):]
     return (path == "/game-server-bugs" or path.startswith("/game-server-bugs/")
+            or path == "/bug-reports" or path.startswith("/bug-reports/")
+            or path == "/admin/bug-reports" or path.startswith("/admin/bug-reports/")
             or path == "/auth/app-sessions" or path.startswith("/auth/app-sessions/"))
 
 

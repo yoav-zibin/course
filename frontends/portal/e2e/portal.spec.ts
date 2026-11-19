@@ -260,16 +260,16 @@ test('a full legacy browser cache is evicted automatically while durable saves a
   await expect(page.getByText(/Could not save downloaded data|Saved data needs attention/)).toHaveCount(0);
 });
 
-test('guest identity survives reload, shared navigation stays responsive, and feedback works',async({page})=>{
+test('guest identity survives reload, shared navigation stays responsive, and bug reporting works',async({page})=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).first().click();
   await page.getByRole('textbox',{name:/Your name|Display name/}).fill('Shared guest');
   await page.getByRole('button',{name:/Continue as guest/}).click();
   await expect(page.getByRole('button',{name:'Account menu'})).toContainText('Shared guest');
   await page.reload();await expect(page.getByRole('button',{name:'Account menu'})).toContainText('Shared guest');
-  await page.getByRole('button',{name:'Feedback',exact:true}).click();
-  await page.getByRole('textbox',{name:/What happened/}).fill('The shared portal feedback acceptance check.');
-  await page.getByRole('button',{name:/^(Send|Send feedback)$/}).click();await expect(page.getByText('Thanks for the feedback!')).toBeVisible();
+  await page.getByRole('button',{name:'Report a bug or request a feature',exact:true}).click();
+  await page.getByRole('textbox',{name:'Bug or feature request'}).fill('The shared portal feedback acceptance check.');
+  await page.getByRole('button',{name:'Send report',exact:true}).click();await expect(page.getByText('Thanks! Your report was sent.')).toBeVisible();
   await page.getByRole('button',{name:'Close',exact:true}).click();
   await page.getByRole('button',{name:'Preferences',exact:true}).click();
   await page.getByRole('button',{name:'Navigation layout: Left navigation'}).click();

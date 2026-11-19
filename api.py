@@ -1626,6 +1626,11 @@ def feedback_page() -> FileResponse:
     return FileResponse(_STATIC_DIR / "feedback.html")
 
 
+@debug_router.get("/bug-reports", dependencies=[MasterPassword])
+def bug_reports_page() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "bug-reports.html")
+
+
 @debug_router.get("/admin", dependencies=[MasterPassword])
 def admin() -> FileResponse:
     """Hub page for the super-admin tools (API console, data browser,
@@ -2105,7 +2110,7 @@ class _PrivateResponseCacheMiddleware:
             and scope["method"] not in ("GET", "HEAD", "OPTIONS")
             or path == "/batch"
             or any(path == prefix or path.startswith(prefix + "/")
-                   for prefix in ("/auth", "/matches", "/v2/matches", "/admin", "/v2/admin", "/browse", "/stats", "/feedback", "/invites", "/game-test", "/game-server-bugs"))
+                   for prefix in ("/auth", "/matches", "/v2/matches", "/admin", "/v2/admin", "/browse", "/stats", "/feedback", "/invites", "/game-test", "/game-server-bugs", "/bug-reports"))
         )
 
         async def send_private(message: Message) -> None:
@@ -2245,6 +2250,8 @@ def create_app(
     app.include_router(make_proposals_router(_get_platform, _check_master_password))
     from game_platform.game_bugs import make_router as make_game_bugs_router
     app.include_router(make_game_bugs_router(_get_platform, _check_master_password))
+    from game_platform.bug_reports import make_router as make_bug_reports_router
+    app.include_router(make_bug_reports_router(_get_platform, _check_master_password, _get_caller_id_or_anonymous))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)

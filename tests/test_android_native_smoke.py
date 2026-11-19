@@ -81,3 +81,75 @@ def test_narrow_full_width_board_is_revealed_by_swiping_page_header():
     value.command = lambda *args: gestures.append(args)
     value.scroll_outside_canvas((0, 884, 720, 1280), (0, 228, 720, 1280), upwards=True, distance=300)
     assert gestures == [("shell", "input", "swipe", "360", "872", "360", "572", "700")]
+
+
+def test_report_field_lookup_requires_an_editable_input_even_when_its_label_is_visible():
+    value = driver()
+    tree = ET.fromstring('''<hierarchy>
+      <node text="Bug or feature request" class="android.widget.TextView" bounds="[80,900][900,950]"/>
+      <node content-desc="Bug or feature request" class="android.widget.EditText" bounds="[80,960][900,1150]"/>
+    </hierarchy>''')
+    field = value.find(tree, value.BUG_FIELD, editable=True)
+    assert field is not None and field.get("class") == "android.widget.EditText"
+    tree.remove(field)
+    assert value.find(tree, value.BUG_FIELD, editable=True) is None
+
+
+def test_bug_control_is_above_logo_and_must_stay_in_top_left_corner():
+    value = driver()
+    bug = ET.Element("node", {"bounds": "[15,70][123,166]"})
+    value.wait = lambda *args, **options: bug
+    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="BuildPlay home" bounds="[60,180][500,280]"/></hierarchy>''')
+    value.assert_bug_control("home", above_logo=True)
+    bug.set("bounds", "[400,70][508,166]")
+    with pytest.raises(RuntimeError, match="top left"):
+        value.assert_bug_control("account-modal")
+
+
+def test_native_report_draft_restores_account_after_keyboard_and_never_sends():
+    value = driver()
+    commands, taps, controls, stages = [], [], [], []
+    value.command = lambda *args: commands.append(args)
+    value.tap = lambda label, **options: taps.append(label)
+    value.tap_node = lambda node: None
+    value.assert_bug_control = lambda stage, **options: stages.append(stage)
+    value.dump = lambda: ET.Element("hierarchy")
+    keyboard_dismissed = False
+
+    def wait(label, **options):
+        nonlocal keyboard_dismissed
+        controls.append((label, options))
+        if label == "Language" and options.get("timeout") == 4:
+            keyboard_dismissed = True
+            raise RuntimeError("Keyboard closed; report still owns the modal")
+        return ET.Element("node", {"class": "android.widget.EditText"})
+
+    value.wait = wait
+    value.bug_report_from_account()
+    assert value.BUG_BUTTON in taps and "Close dialog" in taps
+    assert "Send report" not in taps and all("Send report" not in command for command in commands)
+    assert (value.BUG_SCREENSHOT, {"scroll": True, "dialog": True}) in controls
+    assert (value.BUG_FIELD, {"editable": True, "scroll": True, "dialog": True}) in controls
+    assert ("shell", "input", "text", "Local%ssmoke%sdraft") in commands
+    assert commands.count(("shell", "input", "keyevent", "4")) == 2 and keyboard_dismissed
+    assert "account-restored-after-report" in stages
+    assert any(event.get("assertion") == "closing-bug-report-restores-account-modal-without-sending" for event in value.events)
+
+
+def test_missing_native_screenshot_preview_fails_before_editing_or_sending():
+    value = driver()
+    commands = []
+    value.command = lambda *args: commands.append(args)
+    value.tap = lambda *args, **options: None
+    value.tap_node = lambda node: None
+    value.assert_bug_control = lambda *args, **options: None
+
+    def wait(label, **options):
+        if label == value.BUG_SCREENSHOT:
+            raise RuntimeError("Native screenshot preview is absent")
+        return ET.Element("node")
+
+    value.wait = wait
+    with pytest.raises(RuntimeError, match="screenshot preview"):
+        value.bug_report_from_account()
+    assert not commands

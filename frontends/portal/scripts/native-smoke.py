@@ -67,6 +67,11 @@ def fixture_cell_point(spec: dict, number: int, canvas: tuple[int, int, int, int
 
 
 class NativeSmoke:
+    BUG_BUTTON = "Report a bug or request a feature"
+    BUG_DIALOG = "Report a bug or feature request"
+    BUG_FIELD = "Bug or feature request"
+    BUG_SCREENSHOT = "Screenshot captured before opening this report"
+
     def __init__(self, package: str, output: Path, adb: str):
         self.package, self.output, self.adb = package, output, adb
         output.mkdir(parents=True, exist_ok=True)
@@ -101,11 +106,13 @@ class NativeSmoke:
     def labels(node: ET.Element) -> list[str]:
         return [normalized(node.get(key, "")) for key in ("content-desc", "text") if node.get(key)]
 
-    def find(self, tree: ET.Element, label: str, *, contains: bool = False, clickable: bool = False) -> ET.Element | None:
+    def find(self, tree: ET.Element, label: str, *, contains: bool = False, clickable: bool = False, editable: bool = False) -> ET.Element | None:
         wanted = normalized(label)
         parents = {child: parent for parent in tree.iter() for child in parent}
         candidates: list[tuple[int, int, ET.Element]] = []
         for node in tree.iter("node"):
+            if editable and node.get("class") != "android.widget.EditText":
+                continue
             values = self.labels(node)
             if not any(wanted in value if contains else wanted == value for value in values):
                 continue
@@ -137,17 +144,25 @@ class NativeSmoke:
         x, low, high = self.width - 5, int(self.height * .82), int(self.height * .32)
         self.command("shell", "input", "swipe", str(x), str(low if upwards else high), str(x), str(high if upwards else low), "350")
 
-    def wait(self, label: str, *, contains: bool = False, timeout: int = 35, scroll: bool = False, clickable: bool = False) -> ET.Element:
+    def wait(self, label: str | tuple[str, ...], *, contains: bool = False, timeout: int = 35, scroll: bool = False, clickable: bool = False, editable: bool = False, dialog: bool = False) -> ET.Element:
         deadline, attempts, last_error = time.monotonic() + timeout, 0, ""
         while time.monotonic() < deadline:
             try:
                 tree = self.dump()
-                target = self.find(tree, label, contains=contains, clickable=clickable)
-                if target is not None:
-                    return target
+                for option in (label,) if isinstance(label, str) else label:
+                    target = self.find(tree, option, contains=contains, clickable=clickable, editable=editable)
+                    if target is not None:
+                        return target
                 attempts += 1
                 if scroll and attempts % 2 == 0:
-                    self.scroll(upwards=attempts % 12 < 8)
+                    if dialog:
+                        # A native Modal owns a separate ScrollView; swiping
+                        # the page's outside margin cannot reveal its fields.
+                        x, low, high = self.width // 2, int(self.height * .76), int(self.height * .32)
+                        upward = attempts % 12 < 8
+                        self.command("shell", "input", "swipe", str(x), str(low if upward else high), str(x), str(high if upward else low), "350")
+                    else:
+                        self.scroll(upwards=attempts % 12 < 8)
             except (RuntimeError, ET.ParseError, subprocess.TimeoutExpired) as error:
                 last_error = str(error)
             time.sleep(.4)
@@ -183,6 +198,59 @@ class NativeSmoke:
         if not component:
             raise RuntimeError("The standalone BuildPlay launch activity was not found")
         self.command("shell", "am", "start", "-W", "-n", component, "--ez", "buildplayLocalUiTest", "true")
+
+    def assert_bug_control(self, stage: str, *, above_logo: bool = False):
+        node = self.wait(self.BUG_BUTTON, clickable=True, scroll=False)
+        box = bounds(node)
+        if box is None or box[0] > self.width * .2 or box[1] > self.height * .2:
+            raise RuntimeError(f"Bug control is not at the top left during {stage}")
+        if above_logo:
+            logo = self.find(self.dump(), "BuildPlay home")
+            logo_box = bounds(logo) if logo is not None else None
+            if logo_box is None or box[3] > logo_box[1]:
+                raise RuntimeError("Bug control is not above the BuildPlay logo")
+        self.events.append({"assertion": "bug-control-visible-at-top-left", "stage": stage, "bounds": box})
+
+    def bug_report_from_account(self):
+        """Exercise the real native Modal window without transmitting a report.
+
+        launch() enables the existing local-only test mode. The smoke never
+        presses Send report, creates an account, or changes saved credentials.
+        Capturing the current window and editing a draft work fully offline.
+        """
+        self.assert_bug_control("home", above_logo=True)
+        self.tap_node(self.wait(("Account menu", "Log in"), clickable=True))
+        self.wait("Close dialog")
+        self.wait("Language", scroll=True, dialog=True)
+        self.assert_bug_control("account-modal")
+        self.capture("bug-01-account-modal")
+
+        self.tap(self.BUG_BUTTON, scroll=False)
+        self.wait(self.BUG_DIALOG, timeout=20)
+        self.wait(self.BUG_SCREENSHOT, scroll=True, dialog=True)
+        self.assert_bug_control("report-over-account-modal")
+        self.capture("bug-02-report-preview")
+        field = self.wait(self.BUG_FIELD, editable=True, scroll=True, dialog=True)
+        self.tap_node(field)
+        self.command("shell", "input", "text", "Local%ssmoke%sdraft")
+        self.wait("Local smoke draft", editable=True, scroll=True, dialog=True)
+        self.events.append({"assertion": "native-bug-report-from-account-has-screenshot-and-editable-draft"})
+        self.capture("bug-03-editable-draft")
+
+        # Back may first dismiss the keyboard. The report must then close
+        # while retaining the Account dialog that owned its native window.
+        self.command("shell", "input", "keyevent", "4")
+        try:
+            self.wait("Language", timeout=4)
+        except RuntimeError:
+            self.command("shell", "input", "keyevent", "4")
+            self.wait("Language")
+        if self.find(self.dump(), self.BUG_DIALOG) is not None:
+            raise RuntimeError("Closing the bug report did not restore the Account dialog")
+        self.assert_bug_control("account-restored-after-report")
+        self.events.append({"assertion": "closing-bug-report-restores-account-modal-without-sending"})
+        self.tap("Close dialog", scroll=False)
+        self.wait("On this device")
 
     def fitted_canvas(self) -> tuple[ET.Element, tuple[int, int, int, int]]:
         """Reveal a full canvas before using its dimensions for SVG projection."""
@@ -256,8 +324,15 @@ class NativeSmoke:
 
     def run(self):
         self.launch()
+        self.wait("On this device")
+        self.bug_report_from_account()
         self.tap("On this device")
         self.tap("Pass and play")
+        self.tap("Focus mode", scroll=False)
+        self.wait("Exit focus mode")
+        self.assert_bug_control("game-focus-mode")
+        self.capture("bug-04-focus-mode")
+        self.tap("Exit focus mode", scroll=False)
         self.tap_cell(1)
         self.wait("I'm ready", scroll=True)
         self.capture("game-01-handoff")
@@ -296,7 +371,7 @@ class NativeSmoke:
         self.tap("Live board")
         self.wait("Finished", contains=True, scroll=True)
         self.capture("game-10-live-finished")
-        print("Native gameplay passed: SVG taps, isolated QuickJS rules, durable handoff, process restart, Back navigation, win and replay.")
+        print("Native gameplay passed: bug control over Account and focus mode, offline screenshot/draft, SVG taps, isolated QuickJS rules, durable handoff, process restart, Back navigation, win and replay.")
 
 
 def main():

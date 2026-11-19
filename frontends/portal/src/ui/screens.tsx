@@ -6,7 +6,6 @@ import {getLocales} from '../platform/i18n';
 import type {Game, Match} from '../core/types';
 import {Button, Card, Choices, Copy, Dialog, Empty, Field, Notice, Row, Title, colors} from './components';
 import {text, useApp} from './context';
-import {FeedbackDialog} from './FeedbackDialog';
 import {MatchOutcome} from './MatchOutcome';
 import {GameInstructions} from './GameInstructions';
 import {enableNotifications, installPrompt} from './webApp';
@@ -51,13 +50,13 @@ export function Catalog() {
 export function GameDetail() {
   const {p,run,openAccount,openMatch} = useApp(),t=useText();
   const game=p.selectedGame;
-  const [computers,setComputers]=useState(0),[humans,setHumans]=useState(2),[stake,setStake]=useState(0),[speed,setSpeed]=useState(0),[privateMatch,setPrivate]=useState(true),[feedback,setFeedback]=useState(false);
+  const [computers,setComputers]=useState(0),[humans,setHumans]=useState(2),[stake,setStake]=useState(0),[speed,setSpeed]=useState(0),[privateMatch,setPrivate]=useState(true);
   useEffect(()=>{if(game){const min=Math.min(...game.allowed_player_counts);setHumans(min);setComputers(min===1?0:Math.max(0,min-1));}},[game?.id]);
   if(!game)return <Empty>{copyText("Loading game…")}</Empty>;
   const solo=game.allowed_player_counts.length===1&&game.allowed_player_counts[0]===1;
   const start=async(local=false,computer=false)=>{let match;if(local){match=await p.actions.startPractice(game.id,{humans:computer?1:humans,computers:computer?Math.max(0,Math.min(...game.allowed_player_counts)-1):0});}else{if(!p.account){openAccount();return;}match=await p.actions.createMatch({game_id:game.id,num_computer_opponents:computers,private:privateMatch,bet_per_player:solo?0:stake,turn_seconds:solo||!speed?null:speed});}await openMatch(match.id);};
   return <>
-    <Row><Button secondary compact onPress={()=>p.actions.clearGame()}>← {t('ui.portal.back_to_games','All games')}</Button><View style={{flex:1}}/><Button secondary compact onPress={()=>setFeedback(true)}>{t('ui.feedback.game','Feedback on this game')}</Button></Row>
+    <Row><Button secondary compact onPress={()=>p.actions.clearGame()}>← {t('ui.portal.back_to_games','All games')}</Button></Row>
     <Card style={{borderTopWidth:3,borderTopColor:colors.purple}}><Title>{game.name}</Title><Copy muted>{game.description}</Copy><Copy small style={{color:colors.blue}}>{game.allowed_player_counts.join(', ')} {copyText("players · v")}{game.version}</Copy></Card>
     <Title small>{t('ui.portal.choose_play_mode','How would you like to play?')}</Title>
     <View style={s.columns}>
@@ -77,7 +76,6 @@ export function GameDetail() {
       </Card>
     </View>
     {(game.tutorial_text || game.game_logic_rules || game.game_ui_rules) && <Card><Title small>{t('ui.game.rules','How to play')}</Title><GameInstructions game={game}/></Card>}
-    <FeedbackDialog visible={feedback} onClose={()=>setFeedback(false)} target={{type:'game',id:game.id,name:game.name}}/>
   </>;
 }
 

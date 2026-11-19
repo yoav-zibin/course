@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BuildPlay · Bug reports</title>
+  <link rel="stylesheet" href="/static/common.css?v=22">
+  <script>if(new URLSearchParams(location.search).has('frame'))document.documentElement.classList.add('framed');</script>
+  <style>
+    main { flex:1; min-height:0; overflow:auto; padding:var(--space-lg); }
+    .toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-md); margin-bottom:var(--space-md); }
+    #error { color:var(--color-error); white-space:pre-wrap; }
+    #reports { display:grid; gap:var(--space-md); }
+    article { background:var(--color-bg-1); border:1px solid var(--color-border-2); border-radius:var(--radius-md); padding:var(--space-md); }
+    .muted { color:var(--color-text-tertiary); font-size:var(--font-size-sm); overflow-wrap:anywhere; }
+    .report-text { white-space:pre-wrap; overflow-wrap:anywhere; }
+    .report-image { display:block; max-width:100%; max-height:65vh; object-fit:contain; margin:var(--space-md) 0; }
+    pre { max-height:50vh; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
+    textarea, .commit { display:block; box-sizing:border-box; width:100%; margin:6px 0 var(--space-md); }
+    textarea { min-height:90px; }
+    .actions { display:flex; flex-wrap:wrap; gap:var(--space-sm); }
+    #more { margin-top:var(--space-md); }
+  </style>
+</head>
+<body>
+  <header class="topbar"><h1>BuildPlay · Bug reports</h1></header>
+  <main>
+    <div class="toolbar">
+      <button id="refresh" type="button">Refresh</button>
+      <label>Status <select id="status"><option value="open">Open</option><option value="handling">Handling</option><option value="escalated">Needs your decision</option><option value="handled">Handled</option><option value="all">All</option></select></label>
+      <span id="freshness" class="muted" role="status"></span>
+    </div>
+    <p>Reports include the screenshot and recent app diagnostics. Uncertain requests wait for your decision; reopen an escalated report after deciding how to proceed.</p>
+    <p id="error" role="alert"></p>
+    <div id="reports"></div>
+    <button id="more" type="button" hidden>Load more</button>
+  </main>
+  <script src="/static/common.js?v=39"></script>
+  <script src="/static/bug-reports.js?v=1"></script>
+</body>
+</html>

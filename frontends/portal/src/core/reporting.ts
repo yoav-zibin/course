@@ -1,3 +1,4 @@
+import {recordDiagnosticLog} from './diagnostics';
 type Transport=(url:string,options:RequestInit)=>Promise<unknown>;
 export function createReporter(base:string,passwords:()=>Iterable<string>,transport:Transport=fetch){
   const sent=new Set<string>();
@@ -17,4 +18,4 @@ export function createReporter(base:string,passwords:()=>Iterable<string>,transp
 }
 let report:(kind:string,error:unknown)=>void=()=>{};
 export function configureReporter(next:typeof report){report=next;}
-export function reportClientIssue(kind:string,error:unknown){report(kind,error);}
+export function reportClientIssue(kind:string,error:unknown){recordDiagnosticLog('error',kind,error);report(kind,error);}

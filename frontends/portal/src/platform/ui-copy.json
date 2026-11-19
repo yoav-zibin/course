@@ -801,13 +801,13 @@
     "ar": "غادر"
   },
   "Report {v0}": {
-    "es": "Denunciar a {v0}",
-    "fr": "Signaler {v0}",
-    "de": "{v0} melden",
-    "pt": "Denunciar {v0}",
-    "zh": "举报 {v0}",
-    "hi": "{v0} की शिकायत करें",
-    "ar": "الإبلاغ عن {v0}"
+    "es": "Informe {v0}",
+    "fr": "Rapport {v0}",
+    "de": "Bericht {v0}",
+    "pt": "Relato {v0}",
+    "zh": "报告 {v0}",
+    "hi": "रिपोर्ट {v0}",
+    "ar": "البلاغ {v0}"
   },
   "Report": {
     "es": "⚑ Reportar",
@@ -2581,5 +2581,104 @@
     "zh": "等待同步",
     "hi": "सिंक की प्रतीक्षा में",
     "ar": "بانتظار المزامنة"
+  },
+  "Report a bug or request a feature": {
+    "es": "Informar de un error o solicitar una función",
+    "fr": "Signaler un bug ou demander une fonctionnalité",
+    "de": "Fehler melden oder Funktion wünschen",
+    "pt": "Relatar um erro ou solicitar um recurso",
+    "zh": "报告错误或请求功能",
+    "hi": "बग की रिपोर्ट करें या सुविधा का अनुरोध करें",
+    "ar": "الإبلاغ عن خطأ أو طلب ميزة"
+  },
+  "Report a bug or feature request": {
+    "es": "Informar de un error o solicitar una función",
+    "fr": "Signaler un bug ou demander une fonctionnalité",
+    "de": "Fehler melden oder Funktion wünschen",
+    "pt": "Relatar um erro ou solicitar um recurso",
+    "zh": "报告错误或请求功能",
+    "hi": "बग या सुविधा अनुरोध की रिपोर्ट करें",
+    "ar": "الإبلاغ عن خطأ أو طلب ميزة"
+  },
+  "Thanks! Your report was sent.": {
+    "es": "¡Gracias! Se ha enviado tu informe.",
+    "fr": "Merci ! Votre rapport a été envoyé.",
+    "de": "Danke! Dein Bericht wurde gesendet.",
+    "pt": "Obrigado! Seu relato foi enviado.",
+    "zh": "谢谢！报告已发送。",
+    "hi": "धन्यवाद! आपकी रिपोर्ट भेज दी गई है।",
+    "ar": "شكرًا! تم إرسال بلاغك."
+  },
+  "Describe what happened, what you expected, or the feature you would like.": {
+    "es": "Describe qué ocurrió, qué esperabas o qué función te gustaría tener.",
+    "fr": "Décrivez ce qui s’est passé, ce que vous attendiez ou la fonctionnalité souhaitée.",
+    "de": "Beschreibe, was passiert ist, was du erwartet hast oder welche Funktion du dir wünschst.",
+    "pt": "Descreva o que aconteceu, o que esperava ou o recurso que gostaria de ter.",
+    "zh": "请描述发生了什么、预期结果或您希望添加的功能。",
+    "hi": "बताएं कि क्या हुआ, आपने क्या अपेक्षा की थी, या आप कौन सी सुविधा चाहते हैं।",
+    "ar": "صِف ما حدث وما توقعته، أو الميزة التي ترغب بها."
+  },
+  "Screenshot captured before opening this report": {
+    "es": "Captura tomada antes de abrir este informe",
+    "fr": "Capture prise avant l’ouverture de ce rapport",
+    "de": "Vor dem Öffnen dieses Berichts erstellter Screenshot",
+    "pt": "Captura feita antes de abrir este relato",
+    "zh": "打开此报告前截取的屏幕截图",
+    "hi": "यह रिपोर्ट खोलने से पहले लिया गया स्क्रीनशॉट",
+    "ar": "لقطة الشاشة الملتقطة قبل فتح هذا البلاغ"
+  },
+  "Screenshot unavailable: {v0}": {
+    "es": "Captura no disponible: {v0}",
+    "fr": "Capture indisponible : {v0}",
+    "de": "Screenshot nicht verfügbar: {v0}",
+    "pt": "Captura indisponível: {v0}",
+    "zh": "无法获取屏幕截图：{v0}",
+    "hi": "स्क्रीनशॉट उपलब्ध नहीं: {v0}",
+    "ar": "لقطة الشاشة غير متاحة: {v0}"
+  },
+  "Bug or feature request": {
+    "es": "Error o solicitud de función",
+    "fr": "Bug ou demande de fonctionnalité",
+    "de": "Fehler oder Funktionswunsch",
+    "pt": "Erro ou solicitação de recurso",
+    "zh": "错误或功能请求",
+    "hi": "बग या सुविधा अनुरोध",
+    "ar": "خطأ أو طلب ميزة"
+  },
+  "Send report": {
+    "es": "Enviar informe",
+    "fr": "Envoyer le rapport",
+    "de": "Bericht senden",
+    "pt": "Enviar relato",
+    "zh": "发送报告",
+    "hi": "रिपोर्ट भेजें",
+    "ar": "إرسال البلاغ"
+  },
+  "Focus mode": {
+    "es": "Modo de concentración",
+    "fr": "Mode concentration",
+    "de": "Fokusmodus",
+    "pt": "Modo de foco",
+    "zh": "专注模式",
+    "hi": "फ़ोकस मोड",
+    "ar": "وضع التركيز"
+  },
+  "Exit focus mode": {
+    "es": "Salir del modo de concentración",
+    "fr": "Quitter le mode concentration",
+    "de": "Fokusmodus beenden",
+    "pt": "Sair do modo de foco",
+    "zh": "退出专注模式",
+    "hi": "फ़ोकस मोड से बाहर निकलें",
+    "ar": "الخروج من وضع التركيز"
+  },
+  "Your screenshot, recent app logs, errors, API timings, pages, device details, and account identity will be included. Passwords and API request bodies are excluded from diagnostics.": {
+    "es": "Se incluirán tu captura, los registros y errores recientes, tiempos de API, páginas, detalles del dispositivo y tu identidad. Los diagnósticos no incluyen contraseñas ni contenido de las solicitudes de API.",
+    "fr": "Votre capture, les journaux et erreurs récents, les durées des appels API, les pages, les détails de l’appareil et votre identité seront inclus. Les diagnostics excluent les mots de passe et le contenu des requêtes API.",
+    "de": "Enthalten sind dein Screenshot, aktuelle App-Protokolle, Fehler, API-Zeiten, Seiten, Gerätedaten und Kontoidentität. Passwörter und Inhalte von API-Anfragen sind von den Diagnosen ausgeschlossen.",
+    "pt": "Serão incluídos sua captura, registros e erros recentes, tempos de API, páginas, detalhes do dispositivo e identidade da conta. Senhas e conteúdos das solicitações de API não entram nos diagnósticos.",
+    "zh": "报告将包含屏幕截图、近期应用日志、错误、API 耗时、浏览页面、设备详情及账户身份。诊断信息不包含密码或 API 请求正文。",
+    "hi": "आपका स्क्रीनशॉट, हाल के ऐप लॉग, त्रुटियां, API का समय, पेज, डिवाइस की जानकारी और खाते की पहचान शामिल होगी। निदान में पासवर्ड और API अनुरोधों की सामग्री शामिल नहीं होती।",
+    "ar": "سيتم تضمين لقطة الشاشة وسجلات التطبيق والأخطاء الأخيرة وأوقات واجهة API والصفحات وتفاصيل الجهاز وهوية الحساب. لا تتضمن بيانات التشخيص كلمات المرور أو محتويات طلبات API."
   }
 }

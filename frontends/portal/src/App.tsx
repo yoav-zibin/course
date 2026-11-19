@@ -10,7 +10,9 @@ import {Context, Screen, text} from './ui/context';
 import {Catalog, GameDetail, Matches, LocalMatches, Invitations, Settings} from './ui/screens';
 import {AccountDialog} from './ui/AccountDialog';
 import {MatchStage} from './ui/MatchStage';
-import {FeedbackDialog} from './ui/FeedbackDialog';
+import {BugReporter} from './ui/BugReporter';
+import {BugButton} from './ui/BugButton';
+import {recordDiagnosticPage,recordDiagnosticEvent,rememberDiagnosticSecrets} from './core/diagnostics';
 import {installWebApp} from './ui/webApp';
 import {EmbeddedGameHost} from './game/EmbeddedGameHost';
 import {getDirection} from './platform/i18n';
@@ -18,17 +20,20 @@ import {configureReporter,createReporter,reportClientIssue} from './core/reporti
 import {ErrorBoundary} from './ui/ErrorBoundary';
 import {readLocalUiTest} from './platform/legacy';
 
-function PortalApp() {
-  const p = usePortal(), {width} = useWindowDimensions();
+function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
+  const {width} = useWindowDimensions();
   const localOnly=useRef(readLocalUiTest()).current;
   const [screen, setScreen] = useState<Screen>('games');
-  const [account, setAccount] = useState(false), [feedback, setFeedback] = useState(false);
+  const [account, setAccount] = useState(false), [focus,setFocus]=useState(false);
   const [notice, setNotice] = useState('');
   const [appSession,setAppSession] = useState('');
   const [pendingInvite,setPendingInvite]=useState(''),[invitePreview,setInvitePreview]=useState<any>(null);
   const [layout, setLayout] = useState<'top'|'left'>('top');
   const knownPasswords=useRef(new Set<string>());
   for(const saved of p.accounts)knownPasswords.current.add(saved.password);
+  rememberDiagnosticSecrets(knownPasswords.current);
+  useEffect(()=>recordDiagnosticPage({screen,gameId:p.selectedGameId,matchId:p.selectedMatch?.id,focus}),[screen,p.selectedGameId,p.selectedMatch?.id,focus]);
+  useEffect(()=>{if(!p.selectedMatch)setFocus(false);},[p.selectedMatch?.id]);
   const t = (key: string, fallback: string) => text(p,key,fallback);
   const run = useCallback(async (task: () => Promise<unknown>) => {try { await task(); } catch (error) {setNotice(error instanceof Error ? error.message : String(error));}}, []);
   const writeRoute = (fragment: string) => { if (Platform.OS === 'web') {const url = new URL(window.location.href); url.hash = fragment; window.history.pushState(null, '', url);}};
@@ -114,17 +119,17 @@ function PortalApp() {
   return <Context.Provider value={{p,notify:setNotice,run,openAccount:()=>setAccount(true),navigate,openGame,openMatch}}>
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
-      <View style={s.header}>
+      {!focus&&<View style={s.header}>
         <Pressable accessibilityRole="link" accessibilityLabel={copyText("BuildPlay home")} onPress={()=>navigate('games')} style={{flexShrink:0}}><Copy style={s.brand}>BuildPlay<Copy style={{color:colors.accent,fontSize:25}}>●</Copy></Copy></Pressable>
         {width >= 800 && !side && tabs}
         <View style={{flex:1}} />
         {p.account && <Copy small style={{color:colors.accent}}>{(p.profile?.token_balance ?? p.account.token_balance ?? 0).toLocaleString()} ✦</Copy>}
         <Button secondary compact disabled={!p.ready} onPress={()=>setAccount(true)} label={p.account ? copyText("Account menu") : copyText("Log in")}>{p.account?.display_name || t('ui.auth.log_in','Log in')}</Button>
-      </View>
-      {width < 800 && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
+      </View>}
+      {!focus&&width < 800 && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
-        {side && <View style={s.sidebar}>{tabs}<View style={{flex:1}}/><Button secondary onPress={()=>navigate('settings')}>⚙ {t('ui.preferences.title','Preferences')}</Button></View>}
-        <ScrollView style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500}]} keyboardShouldPersistTaps="handled">
+        {!focus&&side && <View style={s.sidebar}>{tabs}<View style={{flex:1}}/><Button secondary onPress={()=>navigate('settings')}>⚙ {t('ui.preferences.title','Preferences')}</Button></View>}
+        <ScrollView style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},focus&&{paddingTop:42}]} keyboardShouldPersistTaps="handled">
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
           {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {t('ui.offline.pending_moves','pending moves')}. {p.pending ? t('ui.offline.move_saved','Your move is saved on this device and will sync when connected.') : t('ui.offline.downloaded_play','Downloaded games are available on this device.')}</Notice>}
@@ -137,20 +142,21 @@ function PortalApp() {
             : screen==='local' ? <LocalMatches />
             : screen==='invites' ? <Invitations />
             : <Settings layout={layout} setLayout={next=>{setLayout(next); void AsyncStorage.setItem('buildplay.navigation.v2',next);}} />}
-          <Row style={s.footer}><Copy small muted>BuildPlay</Copy><Button secondary compact onPress={()=>setFeedback(true)}>{t('ui.feedback.general','Feedback')}</Button><Button secondary compact onPress={()=>navigate('settings')}>{t('ui.preferences.title','Preferences')}</Button><Button secondary compact onPress={()=>Linking.openURL(`${p.baseUrl}/static/privacy.html`)}>{t('ui.privacy.title','Privacy')}</Button><Copy small muted>{p.network ? copyText("● Online") : copyText("○ Offline")}</Copy></Row>
+          {!focus&&<Row style={s.footer}><Copy small muted>BuildPlay</Copy><Button secondary compact onPress={()=>navigate('settings')}>{t('ui.preferences.title','Preferences')}</Button><Button secondary compact onPress={()=>Linking.openURL(`${p.baseUrl}/static/privacy.html`)}>{t('ui.privacy.title','Privacy')}</Button><Copy small muted>{p.network ? copyText("● Online") : copyText("○ Offline")}</Copy></Row>}
         </ScrollView>
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />
-      <FeedbackDialog visible={feedback} onClose={()=>setFeedback(false)} target={{type:'platform'}} />
+      {gameVisible&&<View style={{position:'absolute',right:8,top:2,zIndex:100}}><Button secondary compact onPress={()=>{setFocus(value=>!value);recordDiagnosticEvent('focus_mode',{enabled:!focus});}}>{focus?copyText('Exit focus mode'):copyText('Focus mode')}</Button></View>}
     </SafeAreaView>
   </Context.Provider>;
 }
 export default function App() {
+  const p=usePortal();
   const embedded=Platform.OS==='web'?document.getElementById('declarative-spec'):null;
-  return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp />}</ErrorBoundary></SafeAreaProvider>;
+  return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p}/>}</ErrorBoundary><BugReporter p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton/></SafeAreaProvider>;
 }
 const s = StyleSheet.create({
-  safe:{flex:1,backgroundColor:colors.background}, header:{minHeight:74,paddingHorizontal:20,paddingVertical:12,borderBottomWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
+  safe:{flex:1,backgroundColor:colors.background}, header:{minHeight:104,paddingHorizontal:20,paddingTop:38,paddingBottom:12,borderBottomWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
   brand:{fontSize:25,fontWeight:'800',letterSpacing:-1},
   mobileTabs:{maxHeight:58,flexGrow:0,backgroundColor:colors.surface}, sidebar:{width:230,backgroundColor:colors.surface,padding:18,gap:12,borderRightWidth:1,borderColor:colors.border},
   content:{width:'100%',maxWidth:1240,alignSelf:'center',gap:22,flexGrow:1},loading:{minHeight:300,alignItems:'center',justifyContent:'center',gap:20},footer:{marginTop:28,paddingTop:22,paddingBottom:20,borderTopWidth:1,borderColor:colors.border,justifyContent:'center'},

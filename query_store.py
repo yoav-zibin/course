@@ -89,6 +89,8 @@ INTERNAL_COLLECTIONS = frozenset(
         "game_test_traces",
         "game_proposals",
         "game_server_bugs",
+        "bug_reports",
+        "bug_report_limits",
     }
 )
 COLLECTIONS = frozenset(TYPES) | INTERNAL_COLLECTIONS
@@ -1327,6 +1329,52 @@ class QueryStore:
     def _game_server_bug_summary(row):
         return {name: value for name, value in row.items()
                 if name != "evidence" and not name.startswith("__bug_payload_")}
+
+    def create_bug_report(self, row, *, rate_keys):
+        from game_platform.bug_reports import report_summary, take_report_slot
+        with self.atomic():
+            limits = [(self.ref("bug_report_limits", key), None) for key in rate_keys]
+            limits = [(ref, take_report_slot(self.raw_get(ref), row["created_at"])) for ref, _ in limits]
+            ref = self.ref("bug_reports", row["id"])
+            # One unindexed payload document keeps list/claim operations small.
+            # JSON preserves diagnostic integers outside Firestore's int64 range.
+            payload = json.dumps({key: row[key] for key in ("screenshot", "diagnostics")},
+                                 ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+            self.raw_put(ref.collection("body").document("report"), {"json": payload})
+            self.raw_put(ref, report_summary(row))
+            for limit_ref, data in limits:
+                self.raw_put(limit_ref, data)
+
+    def get_bug_report(self, report_id):
+        ref = self.ref("bug_reports", report_id)
+        # Fresh review reads avoid another process's one-second stale cache.
+        header = self._read_doc(ref)
+        if header is None:
+            return None
+        payload = self._read_doc(ref.collection("body").document("report"))
+        if payload is None:
+            raise ValueError("bug report evidence is incomplete")
+        return {**header, **json.loads(payload["json"])}
+
+    def list_bug_reports(self, *, status, limit, after=None):
+        from game_platform.paging import page_size
+        page_size(limit)
+        filters = () if status is None else (("status", "==", status),)
+        docs = self._run_query("bug_reports", filters, limit=limit + 1,
+                               after=key(after) if after is not None else None, transaction=None)
+        rows = [doc.to_dict() for doc in docs[:limit]]
+        return rows, rows[-1]["id"] if len(docs) > limit else None
+
+    def set_bug_report_status(self, report_id, change, *, changed_by, now):
+        from game_platform.bug_reports import changed_report
+        ref = self.ref("bug_reports", report_id)
+        with self.atomic():
+            row = self.raw_get(ref)
+            if row is None:
+                return None
+            row = changed_report(row, change, changed_by=changed_by, now=now)
+            self.raw_put(ref, row)
+        return row
 
     def put_game_server_bug(self, row):
         """Persist failure evidence independently of the failed match operation.

@@ -1,6 +1,9 @@
+import {registerNativeDialog,useNativeBugReport} from './bugModal';
+import {recordDiagnosticLog,recordDiagnosticEvent} from '../core/diagnostics';
+import {BugButton} from './BugButton';
 import {copyText} from '../platform/i18n';
-import React, { ReactNode, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
+import React, { ReactNode, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 
 export const colors = {
   background: '#10141f', surface: '#171c2a', raised: '#222a3d', border: '#3b4760',
@@ -22,7 +25,7 @@ export function Button({children, onPress, secondary, danger, disabled, busy, la
   const [working, setWorking] = useState(false);
   const pending = busy || working;
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{disabled: Boolean(disabled || pending), selected}} testID={testID}
-    disabled={disabled || pending} onPress={async () => {if (!onPress || working) return; setWorking(true); try { await onPress(); } finally { setWorking(false); }}}
+    disabled={disabled || pending} onPress={async () => {if (!onPress || working) return; recordDiagnosticEvent('press',{label:label||textContent(children)}); setWorking(true); try { await onPress(); } finally { setWorking(false); }}}
     style={({pressed, focused}: any) => [styles.button, secondary && styles.secondary, danger && styles.danger, selected && styles.selected, compact && {paddingVertical: 8, paddingHorizontal: 12, minHeight: 40}, (disabled || pending) && {opacity: 0.5}, pressed && {opacity: 0.8}, focused && {outlineColor: colors.blue, outlineStyle: 'solid', outlineWidth: 2}]}>
     {pending && <ActivityIndicator color={secondary ? colors.accent : colors.ink} size="small" />}
     <Text style={[styles.buttonText, secondary && {color: colors.text}, danger && {color: colors.error}, selected && {color: colors.accent}]}>{children}</Text>
@@ -48,15 +51,25 @@ export function Card({children, style, testID}: {children: ReactNode; style?: Vi
   return <View testID={testID} style={[styles.card, style]}>{children}</View>;
 }
 
+function textContent(value:ReactNode):string {return React.Children.toArray(value).map(child=>typeof child==='string'||typeof child==='number'?String(child):React.isValidElement<{children?:ReactNode}>(child)?textContent(child.props.children):'').join(' ').slice(0,1000);}
 export function Notice({children, error, onDismiss}: {children: ReactNode; error?: boolean; onDismiss?: () => void}) {
+  const message=textContent(children);
+  useEffect(()=>{if(error)recordDiagnosticLog('error','visible_error',message);},[error,message]);
   return <View accessibilityRole="alert" style={[styles.notice, error && {borderColor: colors.error}]}><Copy style={[{flex: 1}, error && {color: colors.error}]}>{children}</Copy>{onDismiss && <Button secondary compact label={copyText("Dismiss message")} onPress={onDismiss}>×</Button>}</View>;
 }
 
-export function Dialog({visible, title, children, onClose, wide}: {visible: boolean; title: string; children: ReactNode; onClose: () => void; wide?: boolean}) {
-  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} accessibilityViewIsModal>
-    <View style={styles.modalShade}><View style={[styles.modal, wide && {maxWidth: 760}]}><Row style={{justifyContent: 'space-between'}}><Title small>{title}</Title><Button compact secondary label={copyText("Close dialog")} onPress={onClose}>×</Button></Row>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{gap: 18, paddingBottom: 10}}>{children}</ScrollView>
-    </View></View>
+export function DialogContent({title,children,onClose,wide}: {title:string;children:ReactNode;onClose:()=>void;wide?:boolean}) {
+  return <View style={styles.modalShade}><View style={[styles.modal,wide&&{maxWidth:760}]}><Row style={{justifyContent:'space-between'}}><Title small>{title}</Title><Button compact secondary label={copyText('Close dialog')} onPress={onClose}>×</Button></Row><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:18,paddingBottom:10}}>{children}</ScrollView></View></View>;
+}
+export function Dialog({visible,title,children,onClose,wide,reporting}: {visible:boolean;title:string;children:ReactNode;onClose:()=>void;wide?:boolean;reporting?:boolean}) {
+  const id=useRef(Symbol('dialog')).current,captureView=useRef<React.ComponentRef<typeof View>>(null),report=useNativeBugReport();
+  useEffect(()=>{if(Platform.OS!=='web'&&visible&&!reporting)return registerNativeDialog(id,captureView);},[visible,reporting,id]);
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={()=>{if(report)report.onClose();else onClose();}} accessibilityViewIsModal>
+    <View ref={captureView} collapsable={false} style={{flex:1}}>
+    <View style={{flex:1}} accessibilityElementsHidden={Boolean(report&&!reporting)} importantForAccessibility={report&&!reporting?'no-hide-descendants':'auto'}><DialogContent title={title} onClose={onClose} wide={wide}>{children}</DialogContent></View>
+    {Platform.OS!=='web'&&report&&!reporting&&<View style={[StyleSheet.absoluteFill,{zIndex:2147483646,elevation:99}]}>{report.content}</View>}
+    {Platform.OS!=='web'&&<BugButton/>}
+    </View>
   </Modal>;
 }
 

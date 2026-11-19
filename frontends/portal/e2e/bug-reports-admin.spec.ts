@@ -1,0 +1,31 @@
+import {test,expect} from '@playwright/test';
+
+test('private bug report review displays evidence safely and records an escalation',async({page,context,request,baseURL})=>{
+  if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Requires a disposable loopback server.');
+  const description=`Review report ${Date.now()} ${Math.random()} <img src=x onerror=alert(1)>`;
+  const screenshot='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=';
+  const sent=await request.post('/bug-reports',{data:{text:description,screenshot,diagnostics:{logs:[{message:'A useful diagnostic <script>alert(1)</script>'}]}}});
+  expect(sent.status()).toBe(201);
+  const id=(await sent.json()).id;
+  await context.setHTTPCredentials({username:'review-test',password:'e2e-test-master'});
+  await page.goto('/admin#bug-reports');
+  const review=page.frameLocator('iframe[data-tab="bug-reports"]');
+  const report=review.locator('article').filter({hasText:description});
+  await expect(report).toBeVisible();
+  await report.getByText('Screenshot, diagnostics and resolution',{exact:true}).click();
+  const preview=report.getByRole('img',{name:'Screen captured before opening the bug reporter'});
+  await expect(preview).toHaveAttribute('src',screenshot);
+  await report.getByText('User and app diagnostics',{exact:true}).click();
+  await expect(report.locator('pre')).toContainText('A useful diagnostic <script>alert(1)</script>');
+  await expect(report.locator('script')).toHaveCount(0);
+  await report.getByRole('button',{name:'Escalate to owner',exact:true}).click();
+  await expect(report.getByRole('alert')).toHaveText("Enter the resolution or the reason this needs the owner's decision.");
+  await report.getByRole('textbox',{name:'Resolution or escalation reason',exact:true}).fill('Needs owner decision before changing game behavior.');
+  await report.getByRole('button',{name:'Escalate to owner',exact:true}).click();
+  await expect(report).toHaveCount(0);
+  await review.getByRole('combobox',{name:'Status',exact:true}).selectOption('escalated');
+  const escalated=review.locator('article').filter({hasText:id});
+  await expect(escalated).toBeVisible();
+  await escalated.getByText('Screenshot, diagnostics and resolution',{exact:true}).click();
+  await expect(escalated.getByRole('textbox',{name:'Resolution or escalation reason',exact:true})).toHaveValue('Needs owner decision before changing game behavior.');
+});
