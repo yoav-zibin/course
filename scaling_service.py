@@ -440,7 +440,7 @@ class ScalablePlatform(GamePlatform):
         with self._store.atomic():
             user = self._require_user(user_id)
             if self._resolve_replaced(user).deletion_requested_at is not None:
-                raise ConflictError("cancel scheduled account deletion before administrative deletion")
+                raise ConflictError("use the scheduled account deletion or cancel its request first")
             store = self._store
             for match in store.list_matches_involving(user_id):
                 if match.owner_user_id == user_id:

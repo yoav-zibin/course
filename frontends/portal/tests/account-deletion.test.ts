@@ -30,7 +30,10 @@ async function fixture(alias = false) {
       if(method==='POST')Object.assign(profiles[id],{deletion_requested_at:requested,deletion_scheduled_at:deadline});
       else Object.assign(profiles[id],{deletion_requested_at:null,deletion_scheduled_at:null});
       const result={...profiles[id]};await delayedMutation?.(id);value=result;
-    }else if(url.pathname===`/users/${id}`){value={...profiles[id]};await delayedRead?.(id,value);}
+    }else if(url.pathname===`/users/${id}`){
+      if(method==='PATCH')Object.assign(profiles[id],JSON.parse(String(init.body)));
+      value={...profiles[id]};if(method==='GET')await delayedRead?.(id,value);
+    }
     else if(url.pathname==='/users'&&url.searchParams.has('ids')){value=url.searchParams.get('ids')!.split(',').map(key=>({...profiles[key]}));for(const item of value)await delayedRead?.(item.id,item);}
     return new Response(JSON.stringify(value),{status:200});
   }) as typeof fetch;
@@ -79,12 +82,52 @@ test('a stale profile poll cannot restore a schedule after confirmed undo',async
   }finally{release();f.restore();}
 });
 
+test('restoring an old cached profile cannot undo a confirmed notification preference',async()=>{
+  const f=await fixture();let release!:()=>void,entered!:()=>void,pending:Promise<unknown>|undefined;
+  const gate=new Promise<void>(r=>{release=r;}),started=new Promise<void>(r=>{entered=r;});
+  try{
+    await f.store.actions.updateProfile({notifications_enabled:false});
+    assert.equal(f.profiles.alice.notifications_enabled,false);
+    assert.equal(f.store.getSnapshot().profile.notifications_enabled,false);
+    f.delayRead(async()=>{entered();await gate;});
+    // A background refresh restores saved data before its fresh profile arrives.
+    pending=f.store.actions.refresh();await started;
+    assert.equal(f.store.getSnapshot().profile.notifications_enabled,false);
+  }finally{release();await pending;f.restore();}
+});
+
 test('offline scheduling and undo make no HTTP mutation and retain the last confirmed status',async()=>{
   const f=await fixture();try{
     f.network.onLine=false;await assert.rejects(f.store.actions.requestAccountDeletion(),/internet/);assert.equal(f.mutations.length,0);
     f.network.onLine=true;await f.store.actions.requestAccountDeletion();f.network.onLine=false;
     await assert.rejects(f.store.actions.cancelAccountDeletion(),/internet/);assert.equal(f.mutations.length,1);assert.equal(f.store.getSnapshot().profile.deletion_scheduled_at,deadline);
   }finally{f.restore();}
+});
+
+for(const operation of ['profile','sync'] as const)test(`a late ${operation} result cannot re-enable deletion controls after going offline`,async()=>{
+  const originalAdd=Object.getOwnPropertyDescriptor(globalThis,'addEventListener'),originalRemove=Object.getOwnPropertyDescriptor(globalThis,'removeEventListener');
+  const events=new EventTarget();
+  Object.defineProperty(globalThis,'addEventListener',{configurable:true,value:events.addEventListener.bind(events)});
+  Object.defineProperty(globalThis,'removeEventListener',{configurable:true,value:events.removeEventListener.bind(events)});
+  const f=await fixture();let release!:()=>void,entered!:()=>void;
+  const gate=new Promise<void>(r=>{release=r;}),started=new Promise<void>(r=>{entered=r;});
+  try{
+    if(operation==='profile')f.delayRead(async()=>{entered();await gate;});
+    else{
+      const repo=(f.store as any).repository,read=repo.read.bind(repo);
+      repo.read=async(id:string)=>{const result=await read(id);entered();await gate;return result;};
+    }
+    const pending=operation==='profile'?(f.store as any).refreshProfile():(f.store as any).sync();
+    await started;f.network.onLine=false;events.dispatchEvent(new Event('offline'));
+    assert.equal(f.store.getSnapshot().network,false);
+    release();await pending;
+    assert.equal(f.store.getSnapshot().network,false);
+    await assert.rejects(f.store.actions.requestAccountDeletion(),/internet/);assert.equal(f.mutations.length,0);
+  }finally{
+    release();f.restore();
+    if(originalAdd)Object.defineProperty(globalThis,'addEventListener',originalAdd);else delete (globalThis as any).addEventListener;
+    if(originalRemove)Object.defineProperty(globalThis,'removeEventListener',originalRemove);else delete (globalThis as any).removeEventListener;
+  }
 });
 
 test('deadline display follows the exact undo boundary and never offers undo once purge starts',()=>{

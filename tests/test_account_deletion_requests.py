@@ -151,6 +151,30 @@ def test_legacy_admin_delete_cannot_abandon_a_pending_full_purge():
     assert api.platform._store.get_user(user).deletion_scheduled_at == NOW + dt.timedelta(hours=24)
 
 
+@pytest.mark.parametrize("locale", ["es", "ar"])
+def test_query_admin_delete_refusal_uses_the_shared_localized_lifecycle_error(locale):
+    from game_platform import i18n
+    from game_platform.scaling_service import ScalablePlatform
+    from game_platform.tests.fake_firestore import query_store
+
+    store = query_store("deletion_admin_locale")
+    try:
+        api = fixed_api(store=store)
+        api.platform = ScalablePlatform(store=store, clock=lambda: NOW)
+        api.client.app.state.platform = api.platform
+        user = api.new_user("Pending deletion")
+        api.ok("POST", PATH, as_user=user, json={"confirmed": True})
+        response = api.request("DELETE", f"/admin/users/{user}", params={"lang": locale})
+        assert response.status_code == 409
+        assert response.json() == {
+            "code": "account_deletion_admin_pending",
+            "detail": i18n.messages(locale)["error.account_deletion_admin_pending"],
+        }
+        assert store.get_user(user).deletion_scheduled_at == NOW + dt.timedelta(hours=24)
+    finally:
+        store.close()
+
+
 def test_purging_auth_rechecks_fresh_transaction_instead_of_stale_profile_cache():
     class CachedStore(InMemoryStore):
         def __init__(self):
