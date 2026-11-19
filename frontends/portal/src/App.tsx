@@ -1,6 +1,6 @@
 import {copyText} from './platform/i18n';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, AppState, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions} from 'react-native';
+import {ActivityIndicator, AppState, BackHandler, Linking, Platform, ScrollView, StyleSheet, View, useWindowDimensions} from 'react-native';
 import {SafeAreaProvider, SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {StatusBar} from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,6 +25,7 @@ import {notificationTarget} from './core/notifications';
 import type {InAppNotification} from './core/types';
 import {useNotificationDelivery} from './ui/useNotificationDelivery';
 import {NotificationInbox, NotificationPrompt} from './ui/Notifications';
+import {PortalHeader} from './ui/PortalHeader';
 
 function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const {width} = useWindowDimensions();
@@ -167,7 +168,8 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
     {key:'local',label:t('ui.practice.local_matches','On this device'),icon:'▣'}, {key:'invites',label:t('ui.invite.title','Invites'),icon:'↗'},
   ];
   const side = width >= 1000 && layout === 'left';
-  const tabs = <Row style={side ? {flexDirection:'column',alignItems:'stretch'} : {gap:6}}>{links.map(link => <Button key={link.key} label={link.label} secondary compact selected={screen === link.key} onPress={() => navigate(link.key)}>{link.icon}  {link.label}{link.key==='matches' && p.myMatches.length ? ` · ${p.myMatches.length}` : ''}</Button>)}</Row>;
+  const inlineNavigation=width>=1280&&!side;
+  const tabs = <Row style={side ? {flexDirection:'column',alignItems:'stretch'} : {gap:6,flexWrap:'nowrap'}}>{links.map(link => <Button key={link.key} label={link.label} secondary compact selected={screen === link.key} onPress={() => navigate(link.key)}>{link.icon}  {link.label}{link.key==='matches' && p.myMatches.length ? ` · ${p.myMatches.length}` : ''}</Button>)}</Row>;
   const gameVisible = p.selectedMatch !== null;
   // New destinations start at the top; updates within a match keep its position.
   const contentKey = gameVisible ? `match:${p.selectedMatch!.id}` : screen === 'games' && p.selectedGameId ? `game:${p.selectedGameId}` : screen;
@@ -175,16 +177,9 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>setAccount(true),navigate,openGame,openMatch}}>
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
-      {!focus&&<View style={s.header}>
-        <Pressable accessibilityRole="link" accessibilityLabel={copyText("BuildPlay home")} onPress={()=>navigate('games')} style={{flexShrink:0}}><Copy style={s.brand}>BuildPlay<Copy style={{color:colors.accent,fontSize:25}}>●</Copy></Copy></Pressable>
-        {width >= 800 && !side && tabs}
-        <View style={{flex:1}} />
-        {p.account && <Copy small style={{color:colors.accent}}>{(p.profile?.token_balance ?? p.account.token_balance ?? 0).toLocaleString()} ✦</Copy>}
-        {p.account&&<Button secondary compact label={copyText('Notifications')} onPress={()=>{setInbox(true);void p.actions.refreshNotifications().catch(()=>{});}}>{copyText('Notifications')}{p.unreadNotifications?` · ${p.unreadNotifications}`:''}</Button>}
-        {gameVisible&&<Button secondary compact onPress={toggleFocus}>{copyText('Focus mode')}</Button>}
-        <Button secondary compact disabled={!p.ready} onPress={()=>setAccount(true)} label={p.account ? copyText("Account menu") : copyText("Log in")}>{p.account?.display_name || t('ui.auth.log_in','Log in')}</Button>
-      </View>}
-      {!focus&&width < 800 && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
+      {!focus&&<PortalHeader width={width} locale={p.locale} baseUrl={p.baseUrl} account={p.account} balance={p.profile?.token_balance??p.account?.token_balance??0} unread={p.unreadNotifications} ready={p.ready} gameVisible={gameVisible} navigation={inlineNavigation?tabs:undefined}
+        onHome={()=>navigate('games')} onAccount={()=>setAccount(true)} onNotifications={()=>{setInbox(true);void p.actions.refreshNotifications().catch(()=>{});}} onFocus={toggleFocus}/>}
+      {!focus&&!side&&!inlineNavigation&&<ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
       <AccountDeletionBanner/>
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
         {!focus&&side && <View style={s.sidebar}>{tabs}<View style={{flex:1}}/><Button secondary onPress={()=>navigate('settings')}>⚙ {t('ui.preferences.title','Preferences')}</Button></View>}
@@ -219,8 +214,7 @@ export default function App() {
   return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p}/>}</ErrorBoundary><BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton/></SafeAreaProvider>;
 }
 const s = StyleSheet.create({
-  safe:{flex:1,backgroundColor:colors.background}, header:{minHeight:74,paddingHorizontal:20,paddingLeft:50,paddingVertical:12,borderBottomWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',gap:16,flexWrap:'wrap'},
-  brand:{fontSize:25,fontWeight:'800',letterSpacing:-1},
+  safe:{flex:1,backgroundColor:colors.background},
   mobileTabs:{maxHeight:58,flexGrow:0,backgroundColor:colors.surface}, sidebar:{width:230,backgroundColor:colors.surface,padding:18,gap:12,borderRightWidth:1,borderColor:colors.border},
   content:{width:'100%',maxWidth:1240,alignSelf:'center',gap:22,flexGrow:1},loading:{minHeight:300,alignItems:'center',justifyContent:'center',gap:20},footer:{marginTop:28,paddingTop:22,paddingBottom:20,borderTopWidth:1,borderColor:colors.border,justifyContent:'center'},
 });

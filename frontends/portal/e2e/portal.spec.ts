@@ -176,9 +176,9 @@ test('campaign arrival persists before login and attributes the guest signup',as
     const signup=await signupRequest;
     expect(signup.headers()['x-campaign-code']).toBe(key);
     expect(signup.headers()['authorization']).toBeUndefined();
-    await expect(page.getByRole('button',{name:'Account menu'})).toContainText(guestName);
+    await expect(page.getByRole('button',{name:'Account menu'})).toHaveAccessibleDescription(guestName);
     await page.reload();
-    await expect(page.getByRole('button',{name:'Account menu'})).toContainText(guestName);
+    await expect(page.getByRole('button',{name:'Account menu'})).toHaveAccessibleDescription(guestName);
     expect(await page.evaluate(()=>localStorage.getItem('game-platform.experiment-campaign.v1'))).toBe(key);
     const stats=await request.get('/admin/experiments',{headers:E2E_ADMIN_HEADERS});
     expect(stats.ok()).toBeTruthy();
@@ -268,8 +268,8 @@ test('guest identity survives reload, shared navigation stays responsive, and bu
   await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).first().click();
   await page.getByRole('textbox',{name:/Your name|Display name/}).fill('Shared guest');
   await page.getByRole('button',{name:/Continue as guest/}).click();
-  await expect(page.getByRole('button',{name:'Account menu'})).toContainText('Shared guest');
-  await page.reload();await expect(page.getByRole('button',{name:'Account menu'})).toContainText('Shared guest');
+  await expect(page.getByRole('button',{name:'Account menu'})).toHaveAccessibleDescription('Shared guest');
+  await page.reload();await expect(page.getByRole('button',{name:'Account menu'})).toHaveAccessibleDescription('Shared guest');
   await page.getByRole('button',{name:'Report a bug or request a feature',exact:true}).click();
   await page.getByRole('textbox',{name:'Bug or feature request'}).fill('The shared portal feedback acceptance check.');
   await page.getByRole('button',{name:'Send report',exact:true}).click();await expect(page.getByText('Thanks! Your report was sent.')).toBeVisible();

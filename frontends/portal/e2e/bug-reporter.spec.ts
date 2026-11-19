@@ -12,7 +12,7 @@ test('switching accounts keeps an earlier private report and diagnostics out of 
     localStorage.setItem('game-platform.current-account.v1',accounts[0].id);
   },[alice,bob]);
   await page.goto('/portal');
-  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(alice.display_name);
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(alice.display_name);
   await page.evaluate(()=>console.error('private-account-alice-diagnostic-marker'));
   const bug=page.getByRole('button',{name:label,exact:true});
   const input=page.getByRole('textbox',{name:'Bug or feature request'});
@@ -21,7 +21,7 @@ test('switching accounts keeps an earlier private report and diagnostics out of 
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
   await page.getByRole('button',{name:'Account menu',exact:true}).click();
   await page.getByRole('button',{name:bob.display_name,exact:true}).click();
-  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(bob.display_name);
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(bob.display_name);
   await bug.click();await expect(input).toHaveValue('');
   expect(await page.getByRole('img',{name:'Screenshot captured before opening this report'}).getAttribute('src')).not.toBe(earlierScreenshot);
   await input.fill('Bob has a different report for his own session.');
@@ -36,7 +36,7 @@ test('switching accounts keeps an earlier private report and diagnostics out of 
   await page.getByRole('button',{name:'Close',exact:true}).click();
   await page.getByRole('button',{name:'Account menu',exact:true}).click();
   await page.getByRole('button',{name:alice.display_name,exact:true}).click();
-  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(alice.display_name);
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(alice.display_name);
   await bug.click();await expect(input).toHaveValue('Alice private match report must stay with Alice.');
 });
 
@@ -48,7 +48,7 @@ test('an account change cancels a screenshot captured for the previous account',
     localStorage.setItem('game-platform.current-account.v1',accounts[0].id);
   },[alice,bob]);
   await page.goto('/portal');
-  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(alice.display_name);
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(alice.display_name);
   await page.evaluate(()=>{
     const decode=HTMLImageElement.prototype.decode;
     HTMLImageElement.prototype.decode=function(){
@@ -62,7 +62,7 @@ test('an account change cancels a screenshot captured for the previous account',
   await expect.poll(()=>page.evaluate(()=>typeof(window as any).__releasePrivateCapture)).toBe('function');
   await page.getByRole('button',{name:'Account menu',exact:true}).click();
   await page.getByRole('button',{name:bob.display_name,exact:true}).click();
-  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(bob.display_name);
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(bob.display_name);
   await page.evaluate(()=>(window as any).__releasePrivateCapture());
   await expect(page.getByRole('textbox',{name:'Bug or feature request'})).toHaveCount(0);
 });
@@ -75,7 +75,7 @@ test('a rejected capture from a previous account cannot enter the next report di
     localStorage.setItem('game-platform.current-account.v1',accounts[0].id);
   },[alice,bob]);
   await page.goto('/portal');
-  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(alice.display_name);
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(alice.display_name);
   await page.evaluate(()=>{
     const decode=HTMLImageElement.prototype.decode;let hold=true;
     HTMLImageElement.prototype.decode=function(){
@@ -91,7 +91,7 @@ test('a rejected capture from a previous account cannot enter the next report di
   await expect.poll(()=>page.evaluate(()=>typeof(window as any).__rejectPrivateCapture)).toBe('function');
   await page.getByRole('button',{name:'Account menu',exact:true}).click();
   await page.getByRole('button',{name:bob.display_name,exact:true}).click();
-  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toContainText(bob.display_name);
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(bob.display_name);
   await page.evaluate(()=>(window as any).__rejectPrivateCapture());
   await bug.click();
   await page.getByRole('textbox',{name:'Bug or feature request'}).fill('Bob report must exclude the old capture failure.');
