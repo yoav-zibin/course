@@ -66,6 +66,19 @@ test('short-screen height fitting preserves 32px physical bodies and destination
   }
 });
 
+for(const viewport of [{width:320,height:480},{width:844,height:390}])test(`scaled offset grid target bounds retain their matching physical tap destinations at ${viewport.width}x${viewport.height}`,async({page,request})=>{
+  const pkg={...spec(`const gameUI={reduce(m){return {scene:{targets:Array.from({length:9},(_,cell)=>({id:'cell_'+cell,board:'board',position:{cell:String(cell)},label:'Cell '+(cell+1)}))},...(m.type==='ui_event'?{make_move:{cell:Number(m.event.id.slice(5))}}:{})}}};`),
+    viewport:{width:600,height:560},boards:[{id:'board',kind:'grid',x:24,y:100,width:400,height:400,rows:3,columns:3}]};
+    await page.setViewportSize(viewport);await mount(page,request,pkg);
+    for(const [index,cell] of [1,4,3].entries()){
+      if(index)await send(page,state({move_count:index+1}));
+      const target=page.getByRole('button',{name:`Cell ${cell}`,exact:true});await expect(target).toHaveAttribute('aria-disabled','false');
+      await target.scrollIntoViewIfNeeded();const node=(await target.boundingBox())!,body=(await target.locator('rect').boundingBox())!;
+      expect(Math.abs(node.x-body.x)).toBeLessThanOrEqual(1);expect(Math.abs(node.y-body.y)).toBeLessThanOrEqual(1);
+      await target.click();await expect.poll(()=>moves(page)).toEqual([1,4,3].slice(0,index+1).map(value=>({cell:value-1})));
+    }
+});
+
 test('scene controls wrap complete 200-codepoint Unicode names inside the native viewport',async({page,request})=>{
   const pkg=spec(`const gameUI={reduce(m){const s=m.type==='ui_event'?m.state_changed:m;return {scene:{controls:[{id:'status',kind:'button',label:s.view.name||'Player',disabled:true}]}}}};`);
   const names=['مرحباالعالم世界🙂Ω'.repeat(20),'Alice العربية 中文 👩🏽‍🚀🦊'.repeat(20)].map(name=>Array.from(name).slice(0,200).join(''));

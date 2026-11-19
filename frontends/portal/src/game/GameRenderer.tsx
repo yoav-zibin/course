@@ -463,12 +463,15 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
 
 const TargetGraphic=memo(function TargetGraphic({target,spec,enabled,selected,onPress}:{target:Target;spec:GameSpec;enabled:boolean;selected:boolean;onPress:()=>void}) {
   const point=position(spec,target),box=targetBox(spec,target),art=!!target.asset;
-  return <G transform={`translate(${point.x} ${point.y})`} opacity={enabled?selected?1:.72:.18}
+  // Keep the accessible group's geometry in scene coordinates. Android SVG
+  // virtual-node bounds misplace a translated group under a scaled viewBox;
+  // its reported Cell 1 rectangle can otherwise physically hit Cell 4.
+  return <G opacity={enabled?selected?1:.72:.18}
     accessible accessibilityRole="button" accessibilityLabel={target.aria_label||target.label||copyText("Destination {v0}",{v0:target.id})} accessibilityState={{disabled:!enabled,selected}}
     onPress={enabled?onPress:undefined}>
-    <Rect x={box.x-point.x} y={box.y-point.y} width={box.width} height={box.height} rx={5} fill={art?'transparent':target.color||'#b8ef5b'} stroke={selected?'#ffffff':'#c9ff63'} strokeWidth={selected?4:2}/>
-    <Asset spec={spec} id={target.asset} x={box.x-point.x} y={box.y-point.y} width={box.width} height={box.height}/>
-    {!!target.label&&!art&&<SvgText textAnchor="middle" alignmentBaseline="central" fill="#102330" fontSize={14}>{target.label}</SvgText>}
+    <Rect x={box.x} y={box.y} width={box.width} height={box.height} rx={5} fill={art?'transparent':target.color||'#b8ef5b'} stroke={selected?'#ffffff':'#c9ff63'} strokeWidth={selected?4:2}/>
+    <Asset spec={spec} id={target.asset} x={box.x} y={box.y} width={box.width} height={box.height}/>
+    {!!target.label&&!art&&<SvgText x={point.x} y={point.y} textAnchor="middle" alignmentBaseline="central" fill="#102330" fontSize={14}>{target.label}</SvgText>}
   </G>;
 });
 
