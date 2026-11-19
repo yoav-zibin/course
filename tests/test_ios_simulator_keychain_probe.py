@@ -1,6 +1,10 @@
 """The fast probe requires real synthetic Keychain operations, not launch alone."""
 import importlib.util
 from pathlib import Path
+import json
+import os
+import plistlib
+import time
 
 import pytest
 
@@ -55,3 +59,51 @@ def test_compile_embeds_both_sections_only_in_simulator_targets(architecture):
     assert "/XML with spaces" in args and "/DER with spaces" in args
     assert all(name in args for name in ("UIKit", "Foundation", "Security"))
     assert "-sectcreate,__TEXT" not in " ".join(args)
+
+
+def container(root, name, *, identity=probe.BUNDLE_ID, modified=None):
+    path = root / "Containers/Data/Application" / name
+    (path / "Documents").mkdir(parents=True)
+    (path / ".com.apple.mobile_container_manager.metadata.plist").write_bytes(plistlib.dumps({"MCMMetadataIdentifier": identity}))
+    result = path / "Documents/keychain-proof.json"
+    result.write_text(json.dumps(success()))
+    if modified is not None:
+        os.utime(result, (modified, modified))
+    return result
+
+
+def test_owned_filesystem_proof_requires_current_launch_and_matching_container(tmp_path):
+    started = time.time()
+    container(tmp_path, "wrong-app", identity="other.app")
+    container(tmp_path, "stale", modified=started - 60)
+    expected = container(tmp_path, "current", modified=started + 1)
+    assert probe.find_owned_proof(tmp_path, started) == expected
+
+
+def test_duplicate_matching_proofs_fail_closed(tmp_path):
+    container(tmp_path, "first")
+    container(tmp_path, "second")
+    with pytest.raises(ValueError, match="More than one"):
+        probe.find_owned_proof(tmp_path, time.time())
+
+
+def test_owned_scan_does_not_follow_a_proof_symlink_outside_its_container(tmp_path):
+    owned = tmp_path / "owned"
+    candidate = container(owned, "current")
+    candidate.unlink()
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps(success()))
+    candidate.symlink_to(outside)
+    assert probe.find_owned_proof(owned, time.time()) is None
+
+
+def test_proof_scan_is_bounded_by_result_size_and_container_count(tmp_path):
+    candidate = container(tmp_path, "oversize")
+    candidate.write_bytes(b'x' * 16_385)
+    with pytest.raises(ValueError, match="byte limit"):
+        probe.find_owned_proof(tmp_path, time.time())
+    candidate.unlink()
+    for index in range(257):
+        (tmp_path / "Containers/Data/Application" / str(index)).mkdir()
+    with pytest.raises(ValueError, match="inventory"):
+        probe.find_owned_proof(tmp_path, time.time())

@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -58,14 +59,16 @@ static NSDictionary *probe(BOOL explicitGroup) {
   [controller.view addSubview:label];
   self.window.rootViewController = controller;
   [self.window makeKeyAndVisible];
-  dispatch_async(dispatch_get_main_queue(), ^{
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     NSDictionary *proof = @{ @"default":probe(NO), @"private_group":probe(YES) };
     NSData *json = [NSJSONSerialization dataWithJSONObject:proof options:NSJSONWritingPrettyPrinted error:NULL];
     NSString *path = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/keychain-proof.json"];
     [[NSFileManager defaultManager] createDirectoryAtPath:[path stringByDeletingLastPathComponent]
       withIntermediateDirectories:YES attributes:nil error:NULL];
     [json writeToFile:path atomically:YES];
-    label.text = @"Keychain probe finished.\nOnly synthetic status data was recorded.";
+    dispatch_async(dispatch_get_main_queue(), ^{
+      label.text = @"Keychain probe finished.\nOnly synthetic status data was recorded.";
+    });
   });
   return YES;
 }
@@ -100,6 +103,42 @@ def validate_signature(signature):
     return signature
 
 
+def find_owned_proof(owned_data, launched_at):
+    """Read only this fresh device's matching app container; never query CoreSimulator IPC."""
+    root = Path(owned_data).resolve()
+    applications = root / "Containers/Data/Application"
+    if not applications.is_dir():
+        return None
+    containers = []
+    for container in applications.iterdir():
+        containers.append(container)
+        if len(containers) > 256:
+            raise ValueError("Owned simulator has an unexpectedly large app-container inventory")
+    found = []
+    for container in containers:
+        if container.is_symlink() or not container.is_dir() or not container.resolve().is_relative_to(root):
+            continue
+        metadata = container / ".com.apple.mobile_container_manager.metadata.plist"
+        if metadata.is_symlink() or not metadata.is_file() or metadata.stat().st_size > 65_536:
+            continue
+        try:
+            identity = plistlib.loads(metadata.read_bytes()).get("MCMMetadataIdentifier")
+        except (ValueError, plistlib.InvalidFileException):
+            continue
+        if identity != BUNDLE_ID:
+            continue
+        candidate = container / "Documents/keychain-proof.json"
+        if (candidate.is_symlink() or not candidate.is_file() or not candidate.resolve().is_relative_to(container.resolve())
+                or candidate.stat().st_mtime < launched_at - 2):
+            continue
+        if candidate.stat().st_size > 16_384:
+            raise ValueError("The owned probe result exceeds its byte limit")
+        found.append(candidate)
+    if len(found) > 1:
+        raise ValueError("More than one current matching probe result exists")
+    return found[0] if found else None
+
+
 def compile_command(architecture, sdk, source, binary, xml, der):
     if architecture not in ARCHITECTURES:
         raise ValueError("Unsupported simulator architecture")
@@ -114,6 +153,37 @@ def execute(output):
     phase = load_helper("run-ios-smoke-phase").run_phase
     selector = load_helper("select-ios-simulator").select_simulator
     simulator_id = None
+    launched_at = None
+
+    def save_owned_proof():
+        if not simulator_id or launched_at is None:
+            return None
+        owned_data = Path.home() / "Library/Developer/CoreSimulator/Devices" / simulator_id / "data"
+        path = find_owned_proof(owned_data, launched_at)
+        if path is None:
+            return None
+        proof = json.loads(path.read_text())
+        (output / "keychain-proof.json").write_text(json.dumps(proof, indent=2) + "\n")
+        (output / "proof-source.json").write_text(json.dumps({"bundle_identifier": BUNDLE_ID,
+            "owned_probe_udid": simulator_id, "launched_at": launched_at, "proof_mtime": path.stat().st_mtime,
+            "matching_container": path.parent.parent.name}, indent=2) + "\n")
+        return proof
+
+    def save_crashes():
+        if launched_at is None or not simulator_id:
+            return
+        roots = [Path.home() / "Library/Logs/DiagnosticReports",
+            Path.home() / "Library/Developer/CoreSimulator/Devices" / simulator_id / "data/Library/Logs/CrashReporter"]
+        destination = output / "probe-crashes"
+        for index, root in enumerate(roots):
+            copied = 0
+            for report in root.glob("BuildPlayKeychainProbe*.ips"):
+                if copied >= 8:
+                    break
+                if not report.is_symlink() and report.is_file() and report.stat().st_mtime >= launched_at - 2 and report.stat().st_size <= 2_000_000:
+                    destination.mkdir(exist_ok=True)
+                    shutil.copyfile(report, destination / f"{index}-{report.name}")
+                    copied += 1
 
     def run(label, seconds, command):
         status = phase(label, seconds, output / (label + ".log"), list(map(str, command)))
@@ -164,34 +234,36 @@ def execute(output):
             old_gate = os.environ.get("SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST")
             os.environ["SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST"] = "1"
             try:
+                launched_at = time.time()
                 run("launch", 180, ["xcrun", "simctl", "launch", simulator_id, BUNDLE_ID])
             finally:
                 if old_gate is None:
                     os.environ.pop("SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST", None)
                 else:
                     os.environ["SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST"] = old_gate
-            container = Path(capture("data-container", 45, ["xcrun", "simctl", "get_app_container", simulator_id, BUNDLE_ID, "data"]))
-            owned_data = Path.home() / "Library/Developer/CoreSimulator/Devices" / simulator_id / "data"
-            if not container.resolve().is_relative_to(owned_data.resolve()):
-                raise ValueError("Probe result container is outside its owned simulator")
-            proof_path = container / "Documents/keychain-proof.json"
+            # Screenshot is diagnostic only. A slow screenshot must not prevent
+            # collecting the six real Keychain statuses through the filesystem.
+            phase("launch-screenshot", 45, output / "launch-screenshot.log", ["xcrun", "simctl", "io", simulator_id, "screenshot", str(output / "keychain-probe.png")])
             deadline = time.monotonic() + 120
-            while not proof_path.is_file() and time.monotonic() < deadline:
+            proof = save_owned_proof()
+            while proof is None and time.monotonic() < deadline:
                 time.sleep(1)
-            if not proof_path.is_file() or proof_path.stat().st_size > 16_384:
+                proof = save_owned_proof()
+            if proof is None:
                 raise ValueError("The isolated app did not produce a bounded Keychain result")
-            proof = json.loads(proof_path.read_text())
-            (output / "keychain-proof.json").write_text(json.dumps(proof, indent=2) + "\n")
             validate_proof(proof)
-            run("screenshot", 45, ["xcrun", "simctl", "io", simulator_id, "screenshot", output / "keychain-probe.png"])
             print("Keychain probe passed: all six SecItem statuses are 0; both synthetic values round-trip.", flush=True)
             return 0
     except Exception:
         if simulator_id:
             try:
-                phases = [json.loads(line) for line in (output / "phases.jsonl").read_text().splitlines()]
-                window = load_helper("ios-smoke-diagnostic-window").diagnostic_window(phases)
+                save_owned_proof()
+                save_crashes()
+                start = dt.datetime.fromtimestamp(launched_at, dt.timezone.utc) if launched_at else dt.datetime.now(dt.timezone.utc)
+                window = {"start": (start - dt.timedelta(seconds=5)).strftime("%Y-%m-%d %H:%M:%S%z"),
+                    "end": (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=5)).strftime("%Y-%m-%d %H:%M:%S%z")}
                 (output / "failure-window.json").write_text(json.dumps(window, indent=2) + "\n")
+                phase("failure-probe-processes", 30, output / "failure-probe-processes.log", ["xcrun", "simctl", "spawn", simulator_id, "launchctl", "list"], retain_tail=True)
                 bounds = ["--start", window["start"], "--end", window["end"], "--style", "compact"]
                 predicate = 'process == "BuildPlayKeychainProbe" OR process == "SpringBoard" OR process == "runningboardd" OR process == "amfid" OR process == "installd" OR process == "securityd"'
                 phase("failure-simulator-log", 30, output / "failure-simulator.log", ["xcrun", "simctl", "spawn", simulator_id, "log", "show", *bounds, "--predicate", predicate], retain_tail=True)
@@ -201,6 +273,11 @@ def execute(output):
         raise
     finally:
         if simulator_id:
+            try:
+                save_owned_proof()
+                save_crashes()
+            except (ValueError, OSError):
+                print("Final owned probe snapshot could not complete.", flush=True)
             for label, operation in (("shutdown", "shutdown"), ("delete", "delete")):
                 phase(label, 30, output / (label + ".log"), ["xcrun", "simctl", operation, simulator_id])
 
