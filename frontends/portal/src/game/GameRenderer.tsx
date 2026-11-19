@@ -23,7 +23,6 @@ export type GameRendererProps = {
 
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const signs: Record<string, string> = {tap: '↖', move: '↔', rotate: '↻', flip: '⇋', scale: '↗'};
 const labels: Record<string, string> = {tap: 'Select', move: 'Move', rotate: 'Rotate', flip: 'Flip', scale: 'Resize'};
 
 function errorOf(value: unknown) { return value instanceof Error ? value : new Error(String(value)); }
@@ -70,7 +69,11 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const canvas = useRef<React.ComponentRef<typeof View>>(null), origin = useRef({x:0,y:0});
   const bounds = useMemo(()=>contentBounds(spec,display.scene),[spec,display.scene]);
   const smallestObject = useMemo(()=>Math.min(Infinity,
-    ...(display.scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>{const size=pieceSize(spec,piece);return Math.min(size.width,size.height)*(piece.scale??1);}),
+    ...(display.scene.pieces||[]).filter(piece=>!piece.hidden).flatMap(piece=>{const size=pieceSize(spec,piece);
+      // Thin passive walls/lines are decoration, not minimum-size tap targets.
+      // Including a new wall here enlarged the entire Quoridor canvas.
+      if(!pieceActions(piece).length&&Math.max(size.width,size.height)>3*Math.min(size.width,size.height))return [];
+      return [Math.min(size.width,size.height)*(piece.scale??1)];}),
     ...(display.scene.targets||[]).map(target=>{const size=targetBox(spec,target);return Math.min(size.width,size.height);}),
   ),[spec,display.scene]);
   const widthFittedHeight=width*bounds.height/bounds.width;
@@ -123,7 +126,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       const before=sceneRef.current;
       sceneRef.current=next;
       const replay=animate&&Boolean(latest.current?.replay);
-      setDisplay(old=>({scene:next,previous:before,animate,serial:old.serial+1,replay,ghosts:replay?historyChanges(before,next).removed:[]}));
+      setDisplay(old=>({scene:next,previous:before,animate,serial:old.serial+1,replay,ghosts:animate?historyChanges(before,next).removed.filter(piece=>replay||piece.animation?.kind==='move'):[]}));
       if(animate){
         const duration=Math.max(spec.motion?.move_ms??1440,...(next.pieces||[]).map(p=>(p.animation?.duration_ms||0)+(p.animation?.delay_ms||0)))+(spec.motion?.roll_settle_ms??0)+(spec.motion?.turn_pause_ms??0);
         motionUntil.current=Date.now()+duration;setMotionBusy(true);callbacks.current.onAnimationStateChange?.(true);
@@ -363,7 +366,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     <View ref={canvas} collapsable={false} focusable style={[styles.canvas,{height}]} {...webProps} {...responders.panHandlers}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);measureOrigin();}}
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations. Zoom controls are above the board.")}>
-      <Svg width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
+      <Svg fontFamily="sans-serif" width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
         {spec.boards.map(board=><BoardGraphic key={board.id} board={board} spec={spec}/>)}
         {display.scene.paths?.map(path=><Polyline key={path.id} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>)}
         {[...(display.scene.pieces||[])].sort((a,b)=>(a.z||0)-(b.z||0)).filter(piece=>!piece.hidden&&piece.id!==drag?.id).map(piece=><PieceGraphic key={piece.id} piece={piece} previous={display.previous.pieces?.find(old=>old.id===piece.id)}
@@ -443,7 +446,9 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const newEffect=previous?.animation?.key!==piece.animation?.key;
   const next=position(spec,piece),before=previous?position(spec,previous):next,type=spec.piece_types[piece.type],size=pieceSize(spec,piece);
   const moved=!!previous&&(before.x!==next.x||before.y!==next.y||(previous.rotation||0)!==(piece.rotation||0)||(previous.scale??1)!==(piece.scale??1));
-  const needsAnimation=animate&&(!!effect||moved||newEffect&&!!piece.animation&&piece.animation.kind!=='move');
+  const faceChanged=!!previous&&previous.face!==piece.face&&previous.face!==undefined;
+  const entering=!previous&&piece.animation?.kind==='move';
+  const needsAnimation=animate&&(!!effect||moved||faceChanged||entering||newEffect&&!!piece.animation&&piece.animation.kind!=='move');
   const duration=effect?(spec.motion?.move_ms??1440):piece.animation?.duration_ms??(piece.animation?.kind==='roll'?spec.motion?.roll_ms??650:spec.motion?.move_ms??1440);
   const delay=effect?0:piece.animation?.delay_ms??0;
   useEffect(()=>{
@@ -459,16 +464,20 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const actions=pieceActions(piece),outline=selected?'#b8ff67':enabled&&actions.length?'#79d5ff':'transparent';
   const roll=animate&&newEffect&&piece.animation?.kind==='roll'?(1-p)*360:0;
   const notice=piece.animation?.kind==='notice'?(animate&&newEffect&&p>.02&&p<.96?1:0):1;
-  const fade=effect==='enter'?p:effect==='change'?.25+.75*p:effect==='exit'?(p<.65?1-p/.65*.2:.8*(1-(p-.65)/.35)):1;
+  const fade=entering?p:effect==='enter'?p:effect==='change'?.25+.75*p:effect==='exit'?(p<.65?1-p/.65*.2:.8*(1-(p-.65)/.35)):1;
+  const flipping=animate&&faceChanged;
+  const shown=flipping&&p<.5?(previous||{...piece,face:'back' as const,text:''}):piece;
+  const shownType=spec.piece_types[shown.type];
   const accessibleName=`${pieceName(piece)}${enabled&&actions.length?`: ${actions.map(a=>copyText(labels[a])).join(', ')}`:''}`;
   const accessibility:Record<string,unknown>=effect==='exit'?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:'history-ghost',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
     accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length?onPress:undefined};
   return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale})`} opacity={(piece.opacity??1)*notice*fade} {...accessibility}>
-    {type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:((type.shape!=='text'&&type.shape!=='image')||piece.face==='back')?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={type.shape==='card'?7:4} fill={piece.face==='back'?'#324a88':type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
-    <Asset spec={spec} id={piece.face==='back'?type.back_asset:piece.asset||type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
-    {(piece.face==='back'||piece.text!==undefined)&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{piece.face==='back'?'◆':piece.text}</SvgText>}
+    <G transform={`scale(${flipping?Math.max(.025,Math.abs(Math.cos(Math.PI*p))):1} 1)`} pointerEvents="none">
+    {shownType.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={shownType.color||'#d2ff5a'} stroke={shownType.border_color||'#0d202c'} strokeWidth={2}/>:((shownType.shape!=='text'&&shownType.shape!=='image')||shown.face==='back')?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={shownType.shape==='card'?7:4} fill={shown.face==='back'?'#324a88':shownType.color||'#e4eced'} stroke={shownType.border_color||'#1d3544'} strokeWidth={2}/>:null}
+    <Asset spec={spec} id={shown.face==='back'?shownType.back_asset:shown.asset||shownType.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
+    {(shown.face==='back'||shown.text!==undefined)&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={shownType.text_color||(shownType.shape==='text'?'#ecf4fa':'#122735')} fontSize={shownType.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{shown.face==='back'?'◆':shown.text}</SvgText>}
+    </G>
     {type.action_outline!=='none'&&(type.action_outline==='ellipse'?<Ellipse rx={size.width/2+4} ry={size.height/2+4} fill="none" stroke={outline} strokeWidth={selected?4:2}/>:<Rect x={-size.width/2-4} y={-size.height/2-4} width={size.width+8} height={size.height+8} rx={8} fill="none" stroke={outline} strokeWidth={selected?4:2}/>)}
-    {enabled&&actions.length>0&&<G transform={`translate(${-size.width/2} ${-size.height/2-13})`} pointerEvents="none">{actions.map((action,index)=><G key={action} transform={`translate(${index*22} 0)`}><Rect x={0} y={-9} width={20} height={18} rx={5} fill="#122b3a" stroke="#75ceee"/><SvgText x={10} y={0} textAnchor="middle" alignmentBaseline="central" fill="#ffffff" fontSize={14}>{signs[action]}</SvgText></G>)}</G>}
   </G>;
 });
 
