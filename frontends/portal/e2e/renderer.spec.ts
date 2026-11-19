@@ -295,10 +295,12 @@ test('stored historical HTML hosts load the shared renderer through opaque frame
   await expect(shared.getByRole('button',{name:'Roll dice',exact:true})).toBeDisabled();
 });
 
-test('a draggable tappable piece preserves stationary clicks, focus, keyboard activation and real drops',async({page,request,isMobile})=>{
-  const pkg=spec(`const gameUI={reduce(m){return {scene:{pieces:[{id:'card',type:'card',board:'board',position:{cell:'0'},aria_label:'Playable card',actions:['tap','move'],move_targets:['destination']}],targets:[{id:'destination',board:'board',position:{cell:'2'},label:'Card destination'}]},...(m.type==='ui_event'?{make_move:{action:m.event.type}}:{})}}};`);
+for(const outline of ['rect','none'])test(`a draggable tappable piece preserves stationary clicks, focus, keyboard activation and real drops with ${outline} outline`,async({page,request,isMobile})=>{
+  const base=spec(`const gameUI={reduce(m){return {scene:{pieces:[{id:'card',type:'card',board:'board',position:{cell:'0'},aria_label:'Playable card',actions:['tap','move'],move_targets:['destination']}],targets:[{id:'destination',board:'board',position:{cell:'2'},label:'Card destination'}]},...(m.type==='ui_event'?{make_move:{action:m.event.type}}:{})}}};`);
+  const pkg={...base,piece_types:{...base.piece_types,card:{...base.piece_types.card,action_outline:outline}}};
   await mount(page,request,pkg);
   const card=page.getByRole('button',{name:/^Playable card/});await expect(card).toBeVisible();
+  expect(await card.evaluate(node=>{const box=node.getBoundingClientRect();return node.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));})).toBe(true);
   await card.click();await expect.poll(()=>moves(page)).toEqual([{action:'tap'}]);
   if(!isMobile)await expect(card).toBeFocused();
   await send(page,state({move_count:2}));await expect(card).toHaveAttribute('aria-disabled','false');
