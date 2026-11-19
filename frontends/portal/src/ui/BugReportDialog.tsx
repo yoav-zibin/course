@@ -5,7 +5,7 @@ export function BugReportDialog({visible,title,children,onClose,wide}: {visible:
   const active=useNativeDialogCount();
   // A draft update must reconcile the existing overlay in place. Clearing it
   // during each effect cleanup unmounts TextInput and drops keyboard focus.
-  useEffect(()=>{setNativeBugReport(visible&&active?{content:<DialogContent title={title} onClose={onClose} wide={wide}>{children}</DialogContent>,onClose}:null);},[visible,active,title,children,onClose,wide]);
+  useEffect(()=>{setNativeBugReport(visible&&active?{content:<DialogContent title={title} onClose={onClose} wide={wide} avoidKeyboard>{children}</DialogContent>,onClose}:null);},[visible,active,title,children,onClose,wide]);
   useEffect(()=>()=>setNativeBugReport(null),[]);
   return active?null:<Dialog visible={visible} title={title} onClose={onClose} wide={wide} reporting>{children}</Dialog>;
 }

@@ -5,6 +5,9 @@ its game, match, user and footer entry points. The icon stays at the top left,
 above the BuildPlay header, in game focus mode and over dialogs. It captures the
 current screen before opening the reporting dialog. The dialog previews the
 attachment and accepts one description of a bug or feature request.
+Native draft editing stays inside the displayed form, without relaying every
+controlled input value through the modal overlay. The report adjusts around
+the keyboard, and an unsent draft survives closing and reopening the dialog.
 
 Web screenshots use `html-to-image` to rasterize the visible viewport and
 preserve nested scroll positions in the rasterized copy. Password

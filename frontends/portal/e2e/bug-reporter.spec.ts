@@ -4,6 +4,23 @@ import {E2E_ADMIN_HEADERS} from './helpers';
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Bug reporter tests require a disposable loopback server.');});
 const label='Report a bug or request a feature';
 
+test('fast draft edits retain their input and survive closing above the account modal without sending',async({page})=>{
+  let sent=0;page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/bug-reports')sent++;});
+  await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).click();
+  await page.getByRole('button',{name:label,exact:true}).click();
+  const input=page.getByRole('textbox',{name:'Bug or feature request'}),draft='Local smoke draft with quick edits and no lost characters.';
+  await expect(input).toBeVisible();await input.click();
+  await input.evaluate(node=>{(window as any).__draftInput=node;});
+  await input.pressSequentially(draft,{delay:0});await expect(input).toHaveValue(draft);await expect(input).toBeFocused();
+  // A surrounding app render must reconcile this same field, not replace it.
+  const viewport=page.viewportSize()!;await page.setViewportSize({...viewport,height:viewport.height-40});
+  expect(await input.evaluate(node=>(window as any).__draftInput===node)).toBe(true);await expect(input).toHaveValue(draft);
+  await page.getByRole('dialog',{name:'Report a bug or feature request',exact:true}).getByRole('button',{name:'Close dialog',exact:true}).click();await expect(input).toHaveCount(0);
+  await page.getByRole('button',{name:label,exact:true}).click();await expect(input).toHaveValue(draft);
+  await input.click();await input.press('ControlOrMeta+End');await input.pressSequentially(' Still here.',{delay:0});
+  await expect(input).toHaveValue(draft+' Still here.');await expect(input).toBeFocused();expect(sent).toBe(0);
+});
+
 test('captures before opening, sends real screenshot with recent diagnostics, and remains above modal and focus mode',async({page,request})=>{
   await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).click();
   const bug=page.getByRole('button',{name:label,exact:true});await expect(bug).toBeVisible();

@@ -21,6 +21,23 @@ async function mount(page:Page,request:APIRequestContext,pkg=spec(),initial=stat
 async function send(page:Page,message:Record<string,unknown>){await page.evaluate(value=>window.postMessage(value,'*'),message);}
 async function moves(page:Page){return page.evaluate(()=>(window as any).__moves);}
 
+test('an occupied legal destination keeps the selected source for taps while other pieces remain draggable',async({page,request,isMobile})=>{
+  const pkg=spec(`const gameUI={reduce(message){const m=message.type==='ui_event'?message.state_changed:message;return {scene:{pieces:[
+    {id:'reserve',type:'token',board:'board',position:{cell:'0'},aria_label:'Reserve tile',actions:['move'],move_targets:['occupied']},
+    {id:'built',type:'token',board:'board',position:{cell:'2'},aria_label:'Built tile',actions:['move'],move_targets:['other']}],
+    targets:[{id:'occupied',board:'board',position:{cell:'2'},label:'Swap here'},{id:'other',board:'board',position:{cell:'3'},label:'Other destination'}],
+    labels:[{id:'revision',x:10,y:200,text:'Revision '+m.move_count}]},...(message.type==='ui_event'?{make_move:message.event}:{})};}};`);
+  await mount(page,request,pkg);await expect(page.getByText('Revision 1',{exact:true})).toBeVisible();
+  const reserve=page.getByRole('button',{name:'Reserve tile: Move',exact:true}),destination=page.getByRole('button',{name:'Swap here',exact:true});
+  if(isMobile){await reserve.tap();await destination.tap();}else{await reserve.click();await destination.click();}
+  await expect.poll(()=>moves(page)).toEqual([{type:'drop',id:'reserve',piece_id:'reserve',target_id:'occupied'}]);
+  await send(page,state({move_count:2}));await expect(page.getByText('Revision 2',{exact:true})).toBeVisible();
+  await reserve.click();const source=(await page.getByRole('button',{name:'Built tile: Move',exact:true}).boundingBox())!,target=(await page.getByRole('button',{name:'Other destination',exact:true}).boundingBox())!;
+  await page.mouse.move(source.x+source.width/2,source.y+source.height/2);await page.mouse.down();
+  await page.mouse.move(target.x+target.width/2,target.y+target.height/2,{steps:10});await page.mouse.up();
+  await expect.poll(()=>moves(page)).toEqual([{type:'drop',id:'reserve',piece_id:'reserve',target_id:'occupied'},{type:'drop',id:'built',piece_id:'built',target_id:'other'}]);
+});
+
 test('shared renderer isolates game code, guards replay, hides private identity and keeps controls accessible',async({page,request},info)=>{
   await mount(page,request);
   await expect(page.getByRole('button',{name:'Roll dice',exact:true})).toBeVisible();

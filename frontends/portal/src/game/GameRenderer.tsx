@@ -248,7 +248,10 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
       const target=canMove(latest.current,sent.current)?hitTarget(spec,scene,point,selectedPiece):undefined;
       gesture.current={kind:'press',first:at,last:at,camera:current.current.camera,piece:piece?.id,target:target?.id,moved:false,
         touch:Platform.OS!=='web'||(e as unknown as {pointerType?:string}).pointerType==='touch'};
-      if(piece?.move_targets?.length)actions.current.select(piece.id);
+      // A legal destination may contain another movable piece. Preserve the
+      // source for a tap there; a subsequent drag can still pick up that piece.
+      const selectedDestination=target&&selectedPiece?.move_targets?.includes(target.id);
+      if(piece?.move_targets?.length&&!selectedDestination)actions.current.select(piece.id);
     },
     onPanResponderStart:event=>{
       const touches=event.nativeEvent.touches||[],g=gesture.current;
@@ -283,6 +286,7 @@ function Renderer({spec, message, onMove, onError, deliveryKey,onAnimationStateC
       g.last=at;
       const piece=sceneRef.current.pieces?.find(p=>p.id===g.piece);
       if(piece?.move_targets?.length&&g.moved&&canMove(latest.current,sent.current)){
+        if(selectedRef.current!==piece.id)actions.current.select(piece.id);
         const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height),size=pieceSize(spec,piece);
         const lifted={x:clamp(at.x,size.width*scale/2+8,c.width-size.width*scale/2-8),
           y:clamp(at.y-(g.touch?Math.min(54,size.height*scale*.6+22):0),size.height*scale/2+8,c.height-size.height*scale/2-8)};
