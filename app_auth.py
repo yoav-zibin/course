@@ -105,8 +105,11 @@ def make_router(platform_dependency, caller_dependency) -> APIRouter:
 
     @router.post("/{token}/exchange")
     def exchange(token: str, body: ExchangeSession, response: Response, platform=Depends(platform_dependency)) -> AuthResponse:
-        user_id = sessions.exchange(token, body.verifier, body.code)
-        response.headers["Cache-Control"] = "no-store"
-        return AuthResponse.of(platform.get_user(user_id))
+        # Exchanging a previously completed browser session must consult the
+        # current account lifecycle, including an external purge worker's claim.
+        with platform._lock:
+            user_id = sessions.exchange(token, body.verifier, body.code)
+            response.headers["Cache-Control"] = "no-store"
+            return AuthResponse.of(platform._resolve_replaced(platform._require_user(user_id)))
 
     return router

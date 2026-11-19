@@ -13,6 +13,7 @@ from pydantic import (
     JsonValue,
     StringConstraints,
     StrictBool,
+    field_validator,
     model_validator,
 )
 from jsonschema.exceptions import SchemaError
@@ -185,6 +186,10 @@ class UserOut(BaseModel):
     referral_code: str | None = None
     notifications_enabled: bool | None = None
     notification_prompt_seen: bool | None = None
+    # Deletion lifecycle is private, like the wallet and notification settings.
+    deletion_requested_at: dt.datetime | None = None
+    deletion_scheduled_at: dt.datetime | None = None
+    deletion_started_at: dt.datetime | None = None
 
     @classmethod
     def of(cls, user: User, *, own: bool = False) -> "UserOut":
@@ -193,6 +198,9 @@ class UserOut(BaseModel):
             referral_code=user.referral_code if own else None,
             notifications_enabled=user.notifications_enabled if own else None,
             notification_prompt_seen=user.notification_prompt_seen if own else None,
+            deletion_requested_at=user.deletion_requested_at if own else None,
+            deletion_scheduled_at=user.deletion_scheduled_at if own else None,
+            deletion_started_at=user.deletion_started_at if own else None,
             display_name=user.display_name,
             picture_url=user.picture_url,
             locale=user.locale,
@@ -203,6 +211,17 @@ class UserOut(BaseModel):
             created_at=user.created_at,
             updated_at=user.updated_at,
         )
+
+
+class DeletionRequest(_Request):
+    confirmed: Literal[True]
+
+    @field_validator("confirmed", mode="before")
+    @classmethod
+    def _require_confirmation(cls, value):
+        if type(value) is not bool or value is not True:
+            raise ValueError("explicit confirmed:true is required")
+        return value
 
 
 class UserWithPasswordOut(UserOut):

@@ -182,5 +182,8 @@ jobs:
               raise SystemExit('Deployed service verification failed; prior revision/link are retained privately in release-state.')
           PY
           trap - ERR
+          if [ -f deploy/install-account-deletion-timer.sh ]; then
+            bash deploy/install-account-deletion-timer.sh
+          fi
           rm -rf "$staging"
           REMOTE

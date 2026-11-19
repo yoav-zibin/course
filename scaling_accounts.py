@@ -183,6 +183,7 @@ def _merge_step(store, job, ref):
 def _merge_stage_record(store, ref, stage, state, source_id, into_id):
     """Rewrite one record for [stage]; True when no records remain."""
     with store.atomic():
+        _check_merge_lifecycle(store, source_id, into_id)
         job = store.raw_get(ref)
         state = job.get("stages", {}).get(stage, {})
         if state.get("complete"):
@@ -404,11 +405,20 @@ def _merge_invite(store, record, source_id, into_id):
         store.put_invite(updated)
 
 
-def _merge_finalize(store, job):
-    source = _resolve(store, store.get_user(job["source_id"]))
-    into = _resolve(store, store.get_user(job["into_id"]))
+def _check_merge_lifecycle(store, source_id, into_id):
+    from game_platform.service import GamePlatform
+    source = _resolve(store, store.get_user(source_id))
+    into = _resolve(store, store.get_user(into_id))
     if source is None or into is None:
         raise ValueError("merge job references a missing user")
+    if source.replaced_by_user_id or into.replaced_by_user_id:
+        raise ValueError("merge job references a missing surviving account")
+    GamePlatform._check_merge_deletion(source, into)
+    return source, into
+
+
+def _merge_finalize(store, job):
+    source, into = _check_merge_lifecycle(store, job["source_id"], job["into_id"])
     if source.id == into.id:
         raise ValueError("cannot merge a user into itself")
     # Re-point linked-account reservations at the survivor before the source
@@ -491,10 +501,7 @@ def merge_users(store, *, run_id, source_id=None, into_id=None, max_records=100)
     with store.atomic():
         ref = _job_ref(store, run_id)
         job = store.raw_get(ref)
-        source = _resolve(store, store.get_user(job["source_id"]))
-        into = _resolve(store, store.get_user(job["into_id"]))
-        if source is None or into is None:
-            raise ValueError("merge job references a missing user")
+        source, into = _check_merge_lifecycle(store, job["source_id"], job["into_id"])
         if source.id == into.id:
             raise ValueError("cannot merge a user into itself")
         if (source.id, into.id) != (job["source_id"], job["into_id"]):

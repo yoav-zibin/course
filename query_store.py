@@ -92,6 +92,9 @@ INTERNAL_COLLECTIONS = frozenset(
         "game_server_bugs",
         "bug_reports",
         "bug_report_limits",
+        "account_deletions",
+        "account_deletion_fences",
+        "match_deletion_fences",
     }
 )
 COLLECTIONS = frozenset(TYPES) | INTERNAL_COLLECTIONS
@@ -313,6 +316,15 @@ class QueryStore:
             with self.atomic():
                 self.raw_put(ref, data)
             return
+        if data is not None:
+            kind = self._kind_for_path(ref.path)
+            if "/referral_nodes/" in ref.path:
+                self.assert_account_write_allowed([data.get("id"), data.get("parent_id")])
+            if kind in ("jobs", "failed_jobs", "requests", "outbox", "push_receipts", "matchmaking"):
+                self.assert_account_write_allowed(
+                    [data.get("user_id")], match_id=data.get("match_id"))
+            elif kind in ("feedback", "bug_reports"):
+                self.assert_account_write_allowed([data.get("reporter_user_id")])
         self.raw_get(ref)  # Includes absent documents in the transaction read set.
         self._local.uow["writes"][ref.path] = (ref, data)
         # Write through to the read cache only once the transaction commits
@@ -793,6 +805,8 @@ class QueryStore:
 
     def _put(self, kind, identity, record, **fields):
         with self.atomic():
+            if kind in ("libraries", "experiment_assignments", "experiment_events"):
+                self.assert_account_write_allowed([record.user_id])
             ref = self.ref(kind, identity)
             old = self.raw_get(ref)
             if kind in ("games", "game_versions"):
@@ -894,8 +908,18 @@ class QueryStore:
         # Tombstones allow bounded deletion; children are cleaned by maintenance.
         with self.atomic():
             ref = self.ref(kind, identity)
-            self._update_counts(kind, identity, self.raw_get(ref), None)
-            self.raw_put(ref, {"tombstone": True})
+            previous = self.raw_get(ref)
+            self._update_counts(kind, identity, previous, None)
+            tombstone = {"tombstone": True}
+            if kind == "matches":
+                # The body is erased now; retain only associations needed to
+                # discover and remove its remaining move children later. The
+                # one-time metadata backfill must not be undone by a deletion.
+                tombstone.update({name: previous[name] for name in (
+                    "historical_participants", "participants", "owner_user_id",
+                    "deletion_metadata_version") if previous and name in previous})
+                tombstone["id"] = identity
+            self.raw_put(ref, tombstone)
             self.raw_put(
                 self.ref("cleanup", kind + ":" + identity),
                 {
@@ -972,6 +996,8 @@ class QueryStore:
 
     def put_match(self, match):
         with self.atomic():
+            self.assert_account_write_allowed(
+                [match.owner_user_id, *match.human_user_ids], match_id=match.id)
             ref = self.ref("matches", match.id)
             old = self.raw_get(ref) or {}
             previous = old.get("move_count", 0)
@@ -1012,6 +1038,7 @@ class QueryStore:
                     | set(match.hidden_for_user_ids)
                     | {m.made_by_user_id for m in new_moves if m.made_by_user_id}
                 ),
+                deletion_metadata_version=old.get("deletion_metadata_version", 1 if not old else 0),
                 visible_to=[
                     u for u in participants if u not in match.hidden_for_user_ids
                 ],
@@ -1083,12 +1110,10 @@ class QueryStore:
 
     def put_user(self, user):
         with self.atomic():
+            self.assert_account_write_allowed([user.id])
             previous = self.raw_get(self.ref("users", user.id))
-            old_balance = (
-                ADAPTERS["users"].validate_json(previous["json"]).token_balance
-                if previous and not previous.get("tombstone")
-                else 0
-            )
+            old_user = ADAPTERS["users"].validate_json(previous["json"]) if previous and not previous.get("tombstone") else None
+            old_balance = old_user.token_balance if old_user else 0
             if not previous or old_balance != user.token_balance:
                 revision = (previous or {}).get("revision", 0) + 1
                 self.raw_put(
@@ -1101,9 +1126,14 @@ class QueryStore:
                         "created_at": dt.datetime.now(dt.timezone.utc),
                     },
                 )
-            if user.referral_code:
+            # Profile/lifecycle/inbox writes must not re-write hundreds of
+            # unchanged identity reservations and exhaust the transaction cap.
+            if user.referral_code and (old_user is None or old_user.referral_code != user.referral_code):
                 self._reserve("referrals", user.referral_code, user.id)
+            old_accounts = {(a.kind, a.identifier) for a in old_user.linked_accounts} if old_user else set()
             for account in user.linked_accounts:
+                if (account.kind, account.identifier) in old_accounts:
+                    continue
                 self._reserve(
                     "identities",
                     json.dumps([account.kind, account.identifier]),
@@ -1144,6 +1174,31 @@ class QueryStore:
 
     def get_user(self, user_id):
         return self._get("users", user_id)
+
+    def assert_account_write_allowed(self, user_ids=(), *, match_id=None):
+        """Fence stale/in-flight writers using fresh transaction reads.
+
+        The permanent rows contain only a boolean at a hashed document key;
+        physically deleting account/match payload must not permit resurrection.
+        """
+        if getattr(self._local, "account_deletion_maintenance", False):
+            return
+        if getattr(self._local, "uow", None) is None:
+            raise RuntimeError("lifecycle checks require an active unit of work")
+        if match_id and self.raw_get(self.ref("match_deletion_fences", match_id)):
+            raise conflict("the match has been deleted")
+        seen = set()
+        for user_id in filter(None, user_ids):
+            while user_id and user_id not in seen:
+                seen.add(user_id)
+                if self.raw_get(self.ref("account_deletion_fences", user_id)):
+                    raise conflict("account deletion has already started")
+                user = self.get_user(user_id)
+                if user is None:
+                    break
+                if user.deletion_started_at is not None:
+                    raise conflict("account deletion has already started")
+                user_id = user.replaced_by_user_id
 
     def list_users(self):
         return self._list("users")
@@ -1295,15 +1350,12 @@ class QueryStore:
                     self._delete("games", game_id)
 
     def put_invite(self, invite):
-        self._put(
-            "invites",
-            invite.token,
-            invite,
-            participants=sorted(
-                {invite.created_by_user_id, *(a.user_id for a in invite.acceptances),
-                 *([invite.recipient_user_id] if invite.recipient_user_id else [])}
-            ),
-        )
+        with self.atomic():
+            participants = sorted({invite.created_by_user_id,
+                *(a.user_id for a in invite.acceptances),
+                *([invite.recipient_user_id] if invite.recipient_user_id else [])})
+            self.assert_account_write_allowed(participants, match_id=invite.match_id)
+            self._put("invites", invite.token, invite, participants=participants)
 
     def get_invite(self, token):
         return self._get("invites", token)
@@ -1335,6 +1387,7 @@ class QueryStore:
     def create_bug_report(self, row, *, rate_keys):
         from game_platform.bug_reports import report_summary, take_report_slot
         with self.atomic():
+            self.assert_account_write_allowed([row.get("reporter_user_id")])
             limits = [(self.ref("bug_report_limits", key), None) for key in rate_keys]
             limits = [(ref, take_report_slot(self.raw_get(ref), row["created_at"])) for ref, _ in limits]
             ref = self.ref("bug_reports", row["id"])
@@ -1351,7 +1404,7 @@ class QueryStore:
         ref = self.ref("bug_reports", report_id)
         # Fresh review reads avoid another process's one-second stale cache.
         header = self._read_doc(ref)
-        if header is None:
+        if header is None or header.get("tombstone"):
             return None
         payload = self._read_doc(ref.collection("body").document("report"))
         if payload is None:
@@ -1383,11 +1436,22 @@ class QueryStore:
 
         The row's exact JSON goes in small unindexed chunks. Write its header
         last, so a visible bug never points at an incomplete reproduction.
-        These direct writes deliberately bypass raw_put's active transaction:
-        the game failure that caused this record usually aborts that transaction.
+        An independent unit of work preserves the evidence when the outer
+        game operation aborts, and respects irreversible deletion fences.
         """
-        payload = json.dumps(row, ensure_ascii=True, separators=(",", ":"),
-                             allow_nan=False)
+        # Preserve independent error evidence, while serializing it against a
+        # concurrent match purge. The failed outer operation must still abort.
+        previous = getattr(self._local, "uow", None)
+        self._local.uow = None
+        try:
+            with self.atomic():
+                self.assert_account_write_allowed(match_id=row.get("match_id"))
+                self._put_game_server_bug_record(row)
+        finally:
+            self._local.uow = previous
+
+    def _put_game_server_bug_record(self, row):
+        payload = json.dumps(row, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
         chunks = [payload[start:start + 180_000]
                   for start in range(0, len(payload), 180_000)]
         ref = self.ref("game_server_bugs", row["id"])
@@ -1396,16 +1460,13 @@ class QueryStore:
         # previously visible row while a replacement is being written.
         for index, chunk in enumerate(chunks):
             chunk_ref = ref.collection("evidence").document(f"{digest}_{index:06}")
-            with timed_external("firestore"):
-                chunk_ref.set({"text": chunk})
+            self.raw_put(chunk_ref, {"text": chunk})
         header = self._game_server_bug_summary(row)
         header.update(__bug_payload_chunks=len(chunks), __bug_payload_sha256=digest)
-        with timed_external("firestore"):
-            ref.set(header)
-        self._cache_committed(ref.path, header)
+        self.raw_put(ref, header)
 
     def _decode_game_server_bug(self, ref, header):
-        if header is None:
+        if header is None or header.get("tombstone"):
             return None
         digest = header["__bug_payload_sha256"]
         parts = []
@@ -1481,6 +1542,7 @@ class QueryStore:
 
     def put_push_subscription(self, subscription):
         with self.atomic():
+            self.assert_account_write_allowed([subscription.user_id])
             old = self.get_push_subscription_by_endpoint(subscription.endpoint)
             if old and old.id != subscription.id:
                 self._delete("push_subscriptions", old.id)

@@ -9,6 +9,7 @@ import {Button, Card, Copy, Notice, Row, Title, colors} from './ui/components';
 import {Context, Screen, text} from './ui/context';
 import {Catalog, GameDetail, Matches, LocalMatches, Invitations, Settings} from './ui/screens';
 import {AccountDialog} from './ui/AccountDialog';
+import {AccountDeletionBanner} from './ui/AccountDeletion';
 import {PrivacyDialog} from './ui/PrivacyDialog';
 import {MatchStage} from './ui/MatchStage';
 import {BugReporter} from './ui/BugReporter';
@@ -184,6 +185,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
         <Button secondary compact disabled={!p.ready} onPress={()=>setAccount(true)} label={p.account ? copyText("Account menu") : copyText("Log in")}>{p.account?.display_name || t('ui.auth.log_in','Log in')}</Button>
       </View>}
       {!focus&&width < 800 && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
+      <AccountDeletionBanner/>
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
         {!focus&&side && <View style={s.sidebar}>{tabs}<View style={{flex:1}}/><Button secondary onPress={()=>navigate('settings')}>⚙ {t('ui.preferences.title','Preferences')}</Button></View>}
         <ScrollView key={contentKey} style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},focus&&{paddingTop:42}]} keyboardShouldPersistTaps="handled">

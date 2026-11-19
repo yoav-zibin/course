@@ -17,7 +17,8 @@ def test_native_receipt_worker_due_time_remains_indexed_when_defaults_are_disabl
     assert fields["due_at"]["indexes"] == [
         {"queryScope": "COLLECTION", "order": "ASCENDING"},
     ]
-    assert set(fields) == {"*", "due_at"}  # Receipt endpoints remain unindexed.
+    assert set(fields) == {"*", "due_at", "user_id"}  # Endpoints/credentials remain unindexed.
+    assert fields["user_id"]["indexes"] == [{"queryScope": "COLLECTION", "order": "ASCENDING"}]
 
 
 def test_default_database_indexes_require_deliberate_opt_in():

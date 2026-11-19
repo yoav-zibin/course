@@ -36,6 +36,14 @@ logger = logging.getLogger(__name__)
 LOGIC_CACHE_LIMIT = 2000
 
 
+def _message_match_id(url):
+    from urllib.parse import urlsplit, parse_qs
+    parts = urlsplit(url)
+    values = parse_qs(parts.fragment or parts.query)
+    return next((values[name][0] for name in ("match", "rematch", "replay")
+                 if values.get(name)), None)
+
+
 class OutboxNotifier:
     def __init__(self, store, target, wake=None):
         self.store, self.target = store, target
@@ -50,6 +58,8 @@ class OutboxNotifier:
                     self.store.ref("outbox", secrets.token_hex(16)),
                     {
                         "json": TypeAdapter(PushMessage).dump_json(message).decode(),
+                        "user_id": message.subscription.user_id,
+                        "match_id": _message_match_id(message.url),
                         "due_at": dt.datetime.now(dt.timezone.utc),
                         "attempts": 0,
                     },
@@ -160,7 +170,7 @@ class ScalablePlatform(GamePlatform):
                 result = self._new_match(
                     game, caller_id=caller_id, matchmaking_player_count=target
                 )
-            self._store.raw_put(slot, {"match_id": result.id})
+            self._store.raw_put(slot, {"match_id": result.id, "user_id": caller_id})
             return result
 
     def referrals(self, *, caller_id):
@@ -372,6 +382,7 @@ class ScalablePlatform(GamePlatform):
                 "account lookup migration is required before online merging"
             )
         source, into = self._resolve_replaced(source), self._resolve_replaced(into)
+        self._check_merge_deletion(source, into)
         if source.id == into.id:
             raise InvalidRequestError("cannot merge a user into itself")
         store = self._store
@@ -428,6 +439,8 @@ class ScalablePlatform(GamePlatform):
 
         with self._store.atomic():
             user = self._require_user(user_id)
+            if self._resolve_replaced(user).deletion_requested_at is not None:
+                raise ConflictError("cancel scheduled account deletion before administrative deletion")
             store = self._store
             for match in store.list_matches_involving(user_id):
                 if match.owner_user_id == user_id:
@@ -758,6 +771,7 @@ class ScalablePlatform(GamePlatform):
                 {
                     "digest": digest,
                     "match_id": result.id,
+                    "user_id": kwargs["caller_id"],
                     "move_count": len(result.moves),
                     "expires_at": dt.datetime.now(dt.timezone.utc)
                     + dt.timedelta(days=30),

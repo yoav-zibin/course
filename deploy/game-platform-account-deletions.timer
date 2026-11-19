@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly BuildPlay account deletion cleanup
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+AccuracySec=1min
+Unit=game-platform-account-deletions.service
+
+[Install]
+WantedBy=timers.target

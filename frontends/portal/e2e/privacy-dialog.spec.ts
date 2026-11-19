@@ -1,5 +1,7 @@
 import {test,expect} from '@playwright/test';
 import copy from '../src/platform/ui-copy.json';
+import policy from '../src/platform/privacy-policy.json';
+const retention=policy.blocks.find(block=>block.text.startsWith('Your account data is kept'))!.text;
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Privacy dialog tests require a disposable loopback server.');
@@ -16,6 +18,8 @@ test('Privacy stays in a themed closable dialog and preserves the page underneat
   await expect(page.getByRole('heading',{name:'Privacy Policy for BuildPlay',exact:true})).toBeVisible();
   await expect(content).toContainText('Last updated: November 19, 2026.');
   await expect(content).toContainText('OpenAI Codex');
+  await expect(content).toContainText('are removed when account deletion completes.');
+  await expect(content).toContainText('You can undo the request for 24 hours');
   await expect(content.getByRole('link',{name:'Google Analytics opt-out browser add-on'})).toBeAttached();
   await expect(content.getByRole('link',{name:'yoavgamingcoursezibin@gmail.com'})).toBeAttached();
   expect(context.pages().length).toBe(pages);expect(page.url()).toBe(before);
@@ -44,6 +48,7 @@ test('the privacy dialog translates offline from the bundled policy copy',async(
   const content=page.getByTestId('privacy-policy-content');
   await expect(page.getByRole('heading',{name:(copy as Record<string,Record<string,string>>)['Privacy Policy for BuildPlay'].fr,exact:true})).toBeVisible();
   await expect(content).toContainText((copy as Record<string,Record<string,string>>)['How we use it'].fr);
+  await expect(content).toContainText((copy as Record<string,Record<string,string>>)[retention].fr);
   await page.getByRole('button',{name:copy['Close dialog'].fr,exact:true}).click();
   await expect(content).toHaveCount(0);
 });

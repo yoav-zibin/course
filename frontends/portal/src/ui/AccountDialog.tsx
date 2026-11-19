@@ -1,25 +1,39 @@
 import {copyText} from '../platform/i18n';
-import React, {useEffect, useState} from 'react';
-import {Image, Linking, View} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {Image, View} from 'react-native';
 import {Button, Card, Choices, Copy, Dialog, Field, Notice, Row, Title, colors} from './components';
 import {text,useApp} from './context';
 import GoogleLogin from './GoogleLogin';
 import {NotificationPreferences} from './Notifications';
 import {getLocales} from '../platform/i18n';
+import {accountDeletion} from '../core/account-deletion';
+import {AccountDeletionStatus} from './AccountDeletion';
 
 export function AccountDialog({visible,onClose}: {visible:boolean;onClose:()=>void}) {
   const {p,run,notify}=useApp(), t=(key:string,fallback:string)=>text(p,key,fallback);
   const [method,setMethod]=useState('guest'),[name,setName]=useState(''),[identifier,setIdentifier]=useState(''),[code,setCode]=useState(''),[verification,setVerification]=useState('');
   const [link,setLink]=useState('link'),[editing,setEditing]=useState(false),[error,setError]=useState('');
-  useEffect(()=>{setName(p.account?.display_name||'');setVerification('');setCode('');setError('');},[visible,p.account?.id]);
+  const [confirmDeletion,setConfirmDeletion]=useState(false);
+  const scope=JSON.stringify([p.baseUrl,p.account?.id]),current=useRef(scope);current.current=scope;
+  useEffect(()=>{setName(p.account?.display_name||'');setVerification('');setCode('');setError('');setConfirmDeletion(false);},[visible,scope]);
+  const deletion=accountDeletion(p.account,p.profile);
+  const close=()=>{setConfirmDeletion(false);onClose();};
   const methods=[{value:'guest',label:t('ui.auth.guest','Guest')},...(p.authConfig?.email_login_enabled?[{value:'email',label:t('ui.auth.email','Email')}]:[]),...(p.authConfig?.phone_login_enabled?[{value:'phone',label:t('ui.auth.phone','Phone')}]:[])];
-  const act=async(task:()=>Promise<unknown>)=>{setError('');try{await task();}catch(e){setError(e instanceof Error?e.message:String(e));}};
-  return <Dialog visible={visible} title={p.account?t('ui.auth.account','Your account'):t('ui.auth.log_in','Welcome to BuildPlay')} onClose={onClose}>
+  const act=async(task:()=>Promise<unknown>)=>{const own=scope;setError('');try{await task();}catch(e){if(current.current===own)setError(e instanceof Error?e.message:String(e));}};
+  return <Dialog visible={visible} title={p.account?t('ui.auth.account','Your account'):t('ui.auth.log_in','Welcome to BuildPlay')} onClose={close}>
     {error&&<Notice error>{error}</Notice>}
     <Choices label={t('ui.language.label','Language')} value={p.locale} options={getLocales().map(item=>({value:item.code,label:item.native_name||item.name||item.code}))} onChange={value=>act(()=>p.actions.setLocale(value))}/>
     {p.account&&<Card style={{padding:16}}><Row>{p.account.picture_url&&<Image source={{uri:new URL(p.account.picture_url,p.baseUrl).href}} style={{width:52,height:52,borderRadius:26}}/>}<View style={{flex:1,gap:4}}><Title small>{p.account.display_name}</Title><Copy small muted>{p.account.linked?.length?copyText("Verified account"):copyText("Guest account")} · {p.profile?.token_balance??0} {copyText("tokens")}</Copy></View></Row>
       <Row><Button compact secondary onPress={()=>setEditing(!editing)}>{t('ui.auth.edit_name','Edit profile')}</Button><Button compact secondary onPress={()=>act(async()=>{await p.actions.logout();onClose();})}>{t('ui.auth.log_out','Log out')}</Button></Row>
-      <Button compact secondary onPress={()=>act(()=>Linking.openURL(new URL('/delete-account',p.baseUrl).href))}>{copyText('Request account deletion')}</Button>
+      {deletion.pending?<AccountDeletionStatus onUndo={()=>act(()=>p.actions.cancelAccountDeletion())}/>:confirmDeletion?<View testID="account-deletion-confirmation" style={{gap:14}}>
+        <Title small>{copyText('Delete this account?')}</Title>
+        <Copy>{copyText('Deleting this account is permanent.')}</Copy>
+        <Copy>{copyText('Your account, profile and every match you participated in will be removed, including shared and completed matches. Published games will remain available.')}</Copy>
+        <Copy>{copyText('You can undo for 24 hours. Permanent deletion may take up to another hour.')}</Copy>
+        {!p.network&&<Copy>{copyText('Connect to the internet to update account deletion.')}</Copy>}
+        <Button danger disabled={!p.network||p.deletionUpdating} onPress={()=>act(async()=>{await p.actions.requestAccountDeletion();if(current.current===scope)setConfirmDeletion(false);})}>{copyText('Confirm account deletion')}</Button>
+        <Button secondary disabled={p.deletionUpdating} onPress={()=>setConfirmDeletion(false)}>{copyText('Keep my account')}</Button>
+      </View>:<Button compact secondary danger disabled={!p.network||p.deletionUpdating} onPress={()=>setConfirmDeletion(true)}>{copyText('Request account deletion')}</Button>}
       {editing&&<><Field label={t('ui.auth.display_name','Display name')} value={name} onChangeText={setName} maxLength={200}/><Button disabled={!name.trim()} onPress={()=>act(async()=>{await p.actions.updateProfile({display_name:name.trim()});setEditing(false);})}>{t('ui.action.save','Save')}</Button></>}
     </Card>}
     {p.account&&<>{(p.profile?.referral_code||p.account.referral_code)&&<Copy selectable small>{copyText('Your player code: {v0}',{v0:p.profile?.referral_code||p.account.referral_code})}</Copy>}<NotificationPreferences/></>}

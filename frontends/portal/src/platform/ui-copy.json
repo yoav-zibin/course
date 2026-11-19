@@ -3086,15 +3086,6 @@
     "hi": "डेटा रखना और हटाना",
     "ar": "الاحتفاظ بالبيانات وحذفها"
   },
-  "Your account data is kept while your account exists. If you merge one account into another, the merged-away account is kept as an alias of the surviving account (so old logins keep working) and its games and matches move to the survivor. Submitted bug reports and their resolution history are kept as private support records to investigate problems and verify fixes. Contact us to request removal of personal information from a report.": {
-    "es": "Los datos de tu cuenta se conservan mientras exista tu cuenta. Si fusionas una cuenta con otra, la cuenta fusionada se conserva como alias de la cuenta que permanece (para que sigan funcionando los inicios de sesión anteriores), y sus juegos y partidas se transfieren a ella. Los informes de errores enviados y su historial de resolución se conservan como registros privados de soporte para investigar problemas y verificar las correcciones. Ponte en contacto con nosotros para solicitar la eliminación de información personal de un informe.",
-    "fr": "Les données de votre compte sont conservées tant que votre compte existe. Si vous fusionnez un compte avec un autre, le compte fusionné est conservé comme alias du compte restant (afin que les anciennes connexions continuent de fonctionner), et ses jeux et parties sont transférés au compte restant. Les rapports de bugs soumis et leur historique de résolution sont conservés comme dossiers d’assistance privés pour examiner les problèmes et vérifier les correctifs. Contactez-nous pour demander la suppression d’informations personnelles dans un rapport.",
-    "de": "Deine Kontodaten werden aufbewahrt, solange dein Konto besteht. Wenn du ein Konto mit einem anderen zusammenführst, bleibt das aufgelöste Konto als Alias des verbleibenden Kontos erhalten, damit bisherige Anmeldungen weiterhin funktionieren. Seine Spiele und Partien werden auf das verbleibende Konto übertragen. Eingereichte Fehlerberichte und ihr Lösungsverlauf werden als private Supportunterlagen aufbewahrt, um Probleme zu untersuchen und Korrekturen zu überprüfen. Kontaktiere uns, um die Entfernung personenbezogener Daten aus einem Bericht zu beantragen.",
-    "pt": "Os dados da sua conta são mantidos enquanto ela existir. Se você mesclar uma conta com outra, a conta mesclada é mantida como um alias da conta restante (para que os logins antigos continuem funcionando), e seus jogos e partidas passam para a conta restante. Os relatos de erros enviados e seu histórico de resolução são mantidos como registros privados de suporte para investigar problemas e verificar correções. Entre em contato conosco para solicitar a remoção de informações pessoais de um relato.",
-    "zh": "只要你的账户存在，我们就会保留账户数据。如果你将一个账户合并到另一个账户，被合并的账户会作为保留账户的别名继续存在（以便旧的登录方式仍可使用），其游戏和对局会转移到保留账户。已提交的错误报告及其处理历史会作为私人支持记录保存，用于调查问题和验证修复。若需删除报告中的个人信息，请联系我们。",
-    "hi": "आपके खाते का डेटा तब तक रखा जाता है जब तक आपका खाता मौजूद रहता है। यदि आप एक खाते को दूसरे में मिलाते हैं, तो मिलाया गया खाता शेष खाते के उपनाम के रूप में रखा जाता है (ताकि पुराने लॉगिन काम करते रहें), और उसके गेम तथा मैच शेष खाते में चले जाते हैं। भेजी गई बग रिपोर्ट और उनके समाधान का इतिहास समस्याओं की जांच और सुधारों की पुष्टि के लिए निजी सहायता रिकॉर्ड के रूप में रखे जाते हैं। रिपोर्ट से व्यक्तिगत जानकारी हटवाने का अनुरोध करने के लिए हमसे संपर्क करें।",
-    "ar": "تُحفظ بيانات حسابك ما دام حسابك موجودًا. إذا دمجت حسابًا في آخر، يُحتفظ بالحساب المدمج كاسم بديل للحساب المتبقي (حتى تستمر طرق تسجيل الدخول القديمة في العمل)، وتنتقل ألعابه ومبارياته إلى الحساب المتبقي. تُحفظ بلاغات الأخطاء المقدمة وسجل حلولها كسجلات دعم خاصة للتحقيق في المشكلات والتحقق من الإصلاحات. تواصل معنا لطلب إزالة المعلومات الشخصية من بلاغ."
-  },
   "Contact": {
     "es": "Contacto",
     "fr": "Contact",
@@ -3139,5 +3130,140 @@
     "zh": "申请删除账户",
     "hi": "खाता हटाने का अनुरोध करें",
     "ar": "طلب حذف الحساب"
+  },
+  "Delete this account?": {
+    "es": "¿Eliminar esta cuenta?",
+    "fr": "Supprimer ce compte ?",
+    "de": "Dieses Konto löschen?",
+    "pt": "Excluir esta conta?",
+    "zh": "删除此账户？",
+    "hi": "यह खाता मिटाएँ?",
+    "ar": "هل تريد حذف هذا الحساب؟"
+  },
+  "Deleting this account is permanent.": {
+    "es": "Eliminar esta cuenta es irreversible.",
+    "fr": "La suppression de ce compte est définitive.",
+    "de": "Die Löschung dieses Kontos ist endgültig.",
+    "pt": "A exclusão desta conta é permanente.",
+    "zh": "此账户一旦删除便无法恢复。",
+    "hi": "इस खाते को मिटाना स्थायी है।",
+    "ar": "حذف هذا الحساب نهائي."
+  },
+  "Confirm account deletion": {
+    "es": "Confirmar eliminación de cuenta",
+    "fr": "Confirmer la suppression du compte",
+    "de": "Kontolöschung bestätigen",
+    "pt": "Confirmar exclusão da conta",
+    "zh": "确认删除账户",
+    "hi": "खाता मिटाने की पुष्टि करें",
+    "ar": "تأكيد حذف الحساب"
+  },
+  "Keep my account": {
+    "es": "Conservar mi cuenta",
+    "fr": "Conserver mon compte",
+    "de": "Mein Konto behalten",
+    "pt": "Manter minha conta",
+    "zh": "保留我的账户",
+    "hi": "मेरा खाता रखें",
+    "ar": "الاحتفاظ بحسابي"
+  },
+  "Account deletion scheduled": {
+    "es": "Eliminación de cuenta programada",
+    "fr": "Suppression du compte programmée",
+    "de": "Kontolöschung geplant",
+    "pt": "Exclusão da conta agendada",
+    "zh": "账户删除已安排",
+    "hi": "खाता मिटाना निर्धारित है",
+    "ar": "تمت جدولة حذف الحساب"
+  },
+  "Undo before {v0}.": {
+    "es": "Deshazlo antes de {v0}.",
+    "fr": "Annulez avant le {v0}.",
+    "de": "Mache die Löschung vor {v0} rückgängig.",
+    "pt": "Desfaça antes de {v0}.",
+    "zh": "请在{v0}之前撤销。",
+    "hi": "{v0} से पहले रद्द करें।",
+    "ar": "يمكنك التراجع قبل {v0}."
+  },
+  "Undo account deletion": {
+    "es": "Deshacer eliminación de cuenta",
+    "fr": "Annuler la suppression du compte",
+    "de": "Kontolöschung rückgängig machen",
+    "pt": "Desfazer exclusão da conta",
+    "zh": "撤销账户删除",
+    "hi": "खाता मिटाना रद्द करें",
+    "ar": "التراجع عن حذف الحساب"
+  },
+  "Account deletion is being processed.": {
+    "es": "Se está procesando la eliminación de la cuenta.",
+    "fr": "La suppression du compte est en cours.",
+    "de": "Die Kontolöschung wird verarbeitet.",
+    "pt": "A exclusão da conta está sendo processada.",
+    "zh": "正在处理账户删除。",
+    "hi": "खाता मिटाने की प्रक्रिया चल रही है।",
+    "ar": "جارٍ تنفيذ حذف الحساب."
+  },
+  "Connect to the internet to update account deletion.": {
+    "es": "Conéctate a internet para actualizar la eliminación de la cuenta.",
+    "fr": "Connectez-vous à Internet pour modifier la suppression du compte.",
+    "de": "Verbinde dich mit dem Internet, um die Kontolöschung zu ändern.",
+    "pt": "Conecte-se à internet para atualizar a exclusão da conta.",
+    "zh": "请连接互联网以更改账户删除安排。",
+    "hi": "खाता मिटाने का अनुरोध बदलने के लिए इंटरनेट से जुड़ें।",
+    "ar": "اتصل بالإنترنت لتحديث طلب حذف الحساب."
+  },
+  "Account deletion is already being updated.": {
+    "es": "Ya se está actualizando la eliminación de la cuenta.",
+    "fr": "La suppression du compte est déjà en cours de modification.",
+    "de": "Die Kontolöschung wird bereits aktualisiert.",
+    "pt": "A exclusão da conta já está sendo atualizada.",
+    "zh": "账户删除安排正在更新。",
+    "hi": "खाता मिटाने का अनुरोध पहले से अपडेट हो रहा है।",
+    "ar": "جارٍ تحديث طلب حذف الحساب بالفعل."
+  },
+  "Account deletion was updated on the server, but this device could not save its status. Refresh when connected to check it.": {
+    "es": "La eliminación de la cuenta se actualizó en el servidor, pero este dispositivo no pudo guardar su estado. Actualiza con conexión para comprobarlo.",
+    "fr": "La suppression du compte a été mise à jour sur le serveur, mais cet appareil n’a pas pu enregistrer son état. Actualisez une fois connecté pour le vérifier.",
+    "de": "Die Kontolöschung wurde auf dem Server aktualisiert, aber dieses Gerät konnte den Status nicht speichern. Aktualisiere mit Internetverbindung, um ihn zu prüfen.",
+    "pt": "A exclusão da conta foi atualizada no servidor, mas este dispositivo não pôde salvar o status. Atualize quando estiver conectado para verificar.",
+    "zh": "服务器已更新账户删除安排，但此设备无法保存状态。请联网后刷新以查看。",
+    "hi": "सर्वर पर खाता मिटाने का अनुरोध अपडेट हो गया, लेकिन यह डिवाइस उसकी स्थिति सहेज नहीं सका। इंटरनेट से जुड़ने पर रीफ़्रेश करके जाँचें।",
+    "ar": "تم تحديث طلب حذف الحساب على الخادم، لكن تعذّر حفظ حالته على هذا الجهاز. حدّث الصفحة عند الاتصال للتحقق منه."
+  },
+  "You can undo for 24 hours. Permanent deletion may take up to another hour.": {
+    "es": "Puedes deshacerlo durante 24 horas. La eliminación permanente puede tardar hasta una hora más.",
+    "fr": "Vous pouvez annuler pendant 24 heures. La suppression définitive peut prendre jusqu’à une heure de plus.",
+    "de": "Du kannst die Löschung 24 Stunden lang rückgängig machen. Die endgültige Löschung kann bis zu einer weiteren Stunde dauern.",
+    "pt": "Você pode desfazer por 24 horas. A exclusão permanente pode levar até mais uma hora.",
+    "zh": "您可在24小时内撤销。永久删除可能还需要最多1小时。",
+    "hi": "आप 24 घंटे तक रद्द कर सकते हैं। स्थायी रूप से मिटाने में एक और घंटा लग सकता है।",
+    "ar": "يمكنك التراجع لمدة 24 ساعة. قد يستغرق الحذف النهائي ساعة إضافية كحد أقصى."
+  },
+  "The undo deadline has passed. Your account is awaiting permanent deletion.": {
+    "es": "El plazo para deshacerlo ha terminado. Tu cuenta está pendiente de eliminación permanente.",
+    "fr": "Le délai d’annulation est écoulé. Votre compte est en attente de suppression définitive.",
+    "de": "Die Frist zum Rückgängigmachen ist abgelaufen. Dein Konto wartet auf die endgültige Löschung.",
+    "pt": "O prazo para desfazer terminou. Sua conta aguarda a exclusão permanente.",
+    "zh": "撤销期限已过。您的账户正在等待永久删除。",
+    "hi": "रद्द करने की समय सीमा बीत गई है। आपका खाता स्थायी रूप से मिटाए जाने की प्रतीक्षा में है।",
+    "ar": "انتهت مهلة التراجع. حسابك بانتظار الحذف النهائي."
+  },
+  "Your account, profile and every match you participated in will be removed, including shared and completed matches. Published games will remain available.": {
+    "es": "Se eliminarán tu cuenta, perfil y todas las partidas en las que participaste, incluidas las compartidas y terminadas. Los juegos publicados seguirán disponibles.",
+    "fr": "Votre compte, profil et toutes les parties auxquelles vous avez participé seront supprimés, y compris les parties partagées et terminées. Les jeux publiés resteront disponibles.",
+    "de": "Dein Konto, dein Profil und alle Partien, an denen du teilgenommen hast, werden entfernt, auch gemeinsame und abgeschlossene Partien. Veröffentlichte Spiele bleiben verfügbar.",
+    "pt": "Sua conta, perfil e todas as partidas de que participou serão removidos, incluindo partidas compartilhadas e concluídas. Os jogos publicados continuarão disponíveis.",
+    "zh": "您的账户、个人资料以及您参与过的所有对局都将被删除，包括共享及已结束的对局。已发布的游戏仍会保留。",
+    "hi": "आपका खाता, प्रोफ़ाइल और आपके खेले सभी मैच हटा दिए जाएँगे, जिनमें साझा और समाप्त मैच भी शामिल हैं। प्रकाशित गेम उपलब्ध रहेंगे।",
+    "ar": "سيُحذف حسابك وملفك الشخصي وكل مباراة شاركت فيها، بما في ذلك المباريات المشتركة والمكتملة. ستبقى الألعاب المنشورة متاحة."
+  },
+  "Your account data is kept while your account exists. If you merge one account into another, the merged-away account remains an alias of the surviving account so existing logins keep working. Your submitted bug reports, their resolution history and feedback are kept as private support records while your account exists and are removed when account deletion completes. To request deletion, log in, open your profile and select Request account deletion. You can undo the request for 24 hours; permanent deletion may take up to another hour.": {
+    "es": "Los datos de tu cuenta se conservan mientras exista tu cuenta. Si fusionas una cuenta con otra, la cuenta fusionada sigue siendo un alias de la cuenta que permanece para que los inicios de sesión existentes sigan funcionando. Tus informes de errores, su historial de resolución y tus comentarios se conservan como registros privados de soporte mientras exista tu cuenta y se eliminan cuando se completa la eliminación de la cuenta. Para solicitar la eliminación, inicia sesión, abre tu perfil y selecciona Solicitar la eliminación de la cuenta. Puedes deshacer la solicitud durante 24 horas; la eliminación permanente puede tardar hasta una hora más.",
+    "fr": "Les données de votre compte sont conservées tant que votre compte existe. Si vous fusionnez un compte avec un autre, le compte fusionné reste un alias du compte restant pour que les connexions existantes continuent de fonctionner. Vos rapports de bugs, leur historique de résolution et vos commentaires sont conservés comme dossiers d’assistance privés tant que votre compte existe et sont supprimés lorsque la suppression du compte est terminée. Pour demander la suppression, connectez-vous, ouvrez votre profil et sélectionnez Demander la suppression du compte. Vous pouvez annuler la demande pendant 24 heures ; la suppression définitive peut prendre jusqu’à une heure de plus.",
+    "de": "Deine Kontodaten werden aufbewahrt, solange dein Konto besteht. Wenn du ein Konto mit einem anderen zusammenführst, bleibt das aufgelöste Konto als Alias des verbleibenden Kontos erhalten, damit bestehende Anmeldungen weiterhin funktionieren. Deine eingereichten Fehlerberichte, ihr Lösungsverlauf und dein Feedback werden als private Supportunterlagen aufbewahrt, solange dein Konto besteht, und bei Abschluss der Kontolöschung entfernt. Um die Löschung zu beantragen, melde dich an, öffne dein Profil und wähle Kontolöschung beantragen. Du kannst den Antrag 24 Stunden lang rückgängig machen; die endgültige Löschung kann bis zu einer weiteren Stunde dauern.",
+    "pt": "Os dados da sua conta são mantidos enquanto ela existir. Se você mesclar uma conta com outra, a conta mesclada permanece como um alias da conta restante para que os logins existentes continuem funcionando. Seus relatos de erros, seu histórico de resolução e seus comentários são mantidos como registros privados de suporte enquanto sua conta existir e são removidos quando a exclusão da conta for concluída. Para solicitar a exclusão, faça login, abra seu perfil e selecione Solicitar a exclusão da conta. Você pode desfazer a solicitação por 24 horas; a exclusão permanente pode levar até mais uma hora.",
+    "zh": "只要您的账户存在，我们就会保留账户数据。如果您将一个账户合并到另一个账户，被合并的账户会作为保留账户的别名继续存在，以便原有登录方式仍可使用。您提交的错误报告、处理记录和反馈会在账户存在期间作为私人支持记录保存，并在账户删除完成时一并删除。若要申请删除，请登录、打开个人资料并选择“申请删除账户”。您可在24小时内撤销请求；永久删除可能还需要最多1小时。",
+    "hi": "आपके खाते का डेटा तब तक रखा जाता है जब तक आपका खाता मौजूद रहता है। यदि आप एक खाते को दूसरे में मिलाते हैं, तो मिलाया गया खाता शेष खाते के उपनाम के रूप में बना रहता है ताकि मौजूदा लॉगिन काम करते रहें। आपकी भेजी गई बग रिपोर्ट, उनके समाधान का इतिहास और फ़ीडबैक खाता मौजूद रहने तक निजी सहायता रिकॉर्ड के रूप में रखे जाते हैं और खाता मिटाने की प्रक्रिया पूरी होने पर हटा दिए जाते हैं। खाता मिटाने का अनुरोध करने के लिए लॉग इन करें, अपनी प्रोफ़ाइल खोलें और खाता हटाने का अनुरोध करें चुनें। आप 24 घंटे तक अनुरोध रद्द कर सकते हैं; स्थायी रूप से मिटाने में एक और घंटा लग सकता है।",
+    "ar": "تُحفظ بيانات حسابك ما دام حسابك موجودًا. إذا دمجت حسابًا في آخر، يبقى الحساب المدمج اسمًا بديلًا للحساب المتبقي حتى تستمر عمليات تسجيل الدخول الحالية في العمل. تُحفظ بلاغات الأخطاء التي أرسلتها وسجل حلولها وملاحظاتك كسجلات دعم خاصة ما دام حسابك موجودًا، وتُزال عند اكتمال حذف الحساب. لطلب الحذف، سجّل الدخول وافتح ملفك الشخصي واختر طلب حذف الحساب. يمكنك التراجع عن الطلب لمدة 24 ساعة؛ وقد يستغرق الحذف النهائي ساعة إضافية كحد أقصى."
   }
 }

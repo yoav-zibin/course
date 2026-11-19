@@ -48,6 +48,7 @@ from game_platform.schemas import (
     LocalesOut,
     AuthConfigOut,
     AuthResponse,
+    DeletionRequest,
     EmailStart,
     ExperimentActiveUpdate,
     GameOut,
@@ -101,6 +102,7 @@ from game_platform.service import (
     PlatformError,
     TooManyRequestsError,
     UnauthorizedError,
+    AccountDeletionInProgressError,
 )
 from game_platform.config import AuthConfig, PushConfig
 from game_platform.models import LinkedAccountKind
@@ -148,6 +150,8 @@ def _get_caller_id_or_none(
     account that already holds it); an anonymous call logs in or signs up."""
     try:
         return platform.authenticate(user_id=x_user_id, password=x_user_password).id
+    except AccountDeletionInProgressError:
+        raise
     except UnauthorizedError:
         return None
 
@@ -502,6 +506,18 @@ def create_user(
 
 
 # The caller's own data. Declared before /users/{user_id} so "me" isn't taken for an id.
+
+
+@router.post("/users/me/deletion-request")
+def request_account_deletion(platform: Platform, caller_id: CallerId, body: DeletionRequest) -> UserOut:
+    """Schedule confirmed account deletion after the 24-hour undo period."""
+    return UserOut.of(platform.request_account_deletion(caller_id=caller_id, confirmed=body.confirmed), own=True)
+
+
+@router.delete("/users/me/deletion-request")
+def cancel_account_deletion(platform: Platform, caller_id: CallerId) -> UserOut:
+    """Undo a deletion request before its deadline and before purge starts."""
+    return UserOut.of(platform.cancel_account_deletion(caller_id=caller_id), own=True)
 
 
 @router.get("/users/me/notifications")

@@ -65,7 +65,7 @@
     },
     {
       "kind": "paragraph",
-      "text": "Your account data is kept while your account exists. If you merge one account into another, the merged-away account is kept as an alias of the surviving account (so old logins keep working) and its games and matches move to the survivor. Submitted bug reports and their resolution history are kept as private support records to investigate problems and verify fixes. Contact us to request removal of personal information from a report."
+      "text": "Your account data is kept while your account exists. If you merge one account into another, the merged-away account remains an alias of the surviving account so existing logins keep working. Your submitted bug reports, their resolution history and feedback are kept as private support records while your account exists and are removed when account deletion completes. To request deletion, log in, open your profile and select Request account deletion. You can undo the request for 24 hours; permanent deletion may take up to another hour."
     },
     {
       "kind": "heading",

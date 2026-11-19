@@ -20,6 +20,9 @@ def test_create_and_get_a_guest_user(api: Api) -> None:
         "locale": "",
         "notifications_enabled": True,
         "notification_prompt_seen": False,
+        "deletion_requested_at": None,
+        "deletion_scheduled_at": None,
+        "deletion_started_at": None,
         "replaced_by_user_id": None,
         "replaced_user_ids": [],
         "password": user["password"],
@@ -168,7 +171,7 @@ class _CountingLock:
         return self._inner.__exit__(*args)
 
 
-def test_reading_a_user_and_checking_a_password_take_no_lock() -> None:
+def test_public_profile_reads_avoid_locks_but_credentials_check_fresh_state() -> None:
     store = InMemoryStore()
     store.operation_lock = _CountingLock()
     api = Api(store=store)
@@ -180,4 +183,6 @@ def test_reading_a_user_and_checking_a_password_take_no_lock() -> None:
         assert response.status_code == 200
         assert response.json()["referral_code"]  # authenticated, so it is the caller's own
     assert api.client.get(f"/users/{user['id']}").status_code == 200
-    assert store.operation_lock.entered == taken
+    # Only the three credential checks enter the transaction. Anonymous public
+    # profiles keep their cached read path; auth observes purge claims freshly.
+    assert store.operation_lock.entered == taken + 3

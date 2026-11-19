@@ -75,6 +75,9 @@ class User:
     locale: str = ""
     notifications_enabled: bool = True
     notification_prompt_seen: bool = False
+    deletion_requested_at: dt.datetime | None = None
+    deletion_scheduled_at: dt.datetime | None = None
+    deletion_started_at: dt.datetime | None = None
     # Newest first, at most 100 entries. Lives in the existing user document so
     # reading the inbox never needs a collection scan or a new Firestore index.
     notifications: tuple[UserNotification, ...] = ()

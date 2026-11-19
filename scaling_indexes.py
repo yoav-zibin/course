@@ -50,6 +50,7 @@ def index_config(namespace):
         "games": {"deleted": "order", "published": "order"},
         "game_popularity": {"score": "desc"},
         "matches": {
+            "owner_user_id": "order",
             "joinable": "order",
             "participants": "array",
             "historical_participants": "array",
@@ -61,7 +62,7 @@ def index_config(namespace):
             "match_id": "order",
             "participants": "array",
         },
-        "users": {"invited_by_user_id": "order"},
+        "users": {"invited_by_user_id": "order", "replaced_by_user_id": "order"},
         # Equality filters, newest first by document name (merged single-field indexes).
         "feedback": {
             "id": "order",  # an admin changing one feedback's status finds it by id
@@ -69,13 +70,20 @@ def index_config(namespace):
             "target_type": "order",
             "target_id": "order",
             "status": "order",
+            "reporter_user_id": "order",
         },
         "feedback_targets": {"problem": "desc"},
-        "game_server_bugs": {"examined": "order"},
-        "bug_reports": {"status": "order"},
-        "jobs": {"due_at": "order"},
-        "outbox": {"due_at": "order"},
-        "push_receipts": {"due_at": "order"},
+        "game_server_bugs": {"examined": "order", "match_id": "order"},
+        "bug_reports": {"status": "order", "reporter_user_id": "order"},
+        "jobs": {"due_at": "order", "match_id": "order"},
+        "failed_jobs": {"match_id": "order"},
+        "outbox": {"due_at": "order", "user_id": "order", "match_id": "order"},
+        "push_receipts": {"due_at": "order", "user_id": "order"},
+        "requests": {"match_id": "order", "user_id": "order"},
+        "matchmaking": {"match_id": "order", "user_id": "order"},
+        "token_ledger": {"user_id": "order"},
+        "account_deletions": {"due_at": "order"},
+        "cleanup": {"path": "order"},
     }
     overrides = []
     for kind in sorted(COLLECTIONS):

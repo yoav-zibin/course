@@ -146,6 +146,10 @@ class UnauthorizedError(PlatformError):
     """The caller did not identify itself as a known user."""
 
 
+class AccountDeletionInProgressError(UnauthorizedError):
+    """An authenticated account is frozen while its deletion is purged."""
+
+
 class ForbiddenError(PlatformError):
     """The caller is known but not allowed to do this."""
 
@@ -460,11 +464,12 @@ class GamePlatform:
         bundle_wait_seconds: float = 3.0,
         bundle_games_ttl_seconds: float = 10.0,
         require_game_strings: bool = False,
+        check_game_schemas: bool = True,
     ) -> None:
         self._store: Store = store if store is not None else InMemoryStore()
         missing_game_schemas = sorted(
             (game.id, game.version)
-            for game in _iter_all_game_versions(self._store)
+            for game in (_iter_all_game_versions(self._store) if check_game_schemas else ())
             if game.server_code is not None and game.game_schemas is None
         )
         if missing_game_schemas:
@@ -1067,9 +1072,7 @@ class GamePlatform:
     ) -> User:
         """Changes the given fields of a user; [None] leaves a field as it is."""
         with self._lock:
-            user = self._store.get_user(user_id)
-            if user is None:
-                raise NotFoundError("user not found")
+            user = self._require_user(user_id)
             if user.id != caller_id:
                 raise ForbiddenError("users can only change themselves")
             changes: dict[str, Any] = {}
@@ -1123,7 +1126,10 @@ class GamePlatform:
         user = self._store.get_user(user_id)
         if user is None:
             raise NotFoundError("user not found")
-        return self._resolve_replaced(user)
+        try:
+            return self._resolve_replaced(user)
+        except AccountDeletionInProgressError:
+            raise NotFoundError("user not found") from None
 
     def get_users(self, user_ids: list[str]) -> list[User]:
         """The users for [user_ids], in request order, skipping unknown ids.
@@ -1136,7 +1142,10 @@ class GamePlatform:
         for user_id in user_ids:
             user = self._store.get_user(user_id)
             if user is not None:
-                users.append(self._resolve_replaced(user))
+                try:
+                    users.append(self._resolve_replaced(user))
+                except (NotFoundError, AccountDeletionInProgressError):
+                    continue
         return users
 
     def authenticate(self, *, user_id: str | None, password: str | None) -> User:
@@ -1146,18 +1155,30 @@ class GamePlatform:
         A replaced user still authenticates with its old credentials; the
         returned user is the surviving account it was merged into.
 
-        Reads only, so no lock (see [get_user]); nearly every request calls this.
+        Query-store authentication uses a fresh transaction so a separate purge
+        worker cannot leave old credentials authenticated by the read cache.
         """
-        user = None if user_id is None else self._store.get_user(user_id)
-        if (
-            user is None
-            or password is None
-            or not hmac.compare_digest(password.encode(), user.password.encode())
-        ):
-            raise UnauthorizedError(
-                "missing or invalid X-User-Id / X-User-Password headers"
-            )
-        return self._resolve_replaced(user)
+        if user_id is None or password is None:
+            raise UnauthorizedError("missing or invalid X-User-Id / X-User-Password headers")
+        with self._lock:
+            user = self._store.get_user(user_id)
+            if (
+                user is None
+                or not hmac.compare_digest(password.encode(), user.password.encode())
+            ):
+                raise UnauthorizedError("missing or invalid X-User-Id / X-User-Password headers")
+            try:
+                return self._resolve_replaced(user)
+            except NotFoundError:
+                raise UnauthorizedError("missing or invalid X-User-Id / X-User-Password headers") from None
+
+    def request_account_deletion(self, *, caller_id: str, confirmed: bool) -> User:
+        from game_platform import account_deletion
+        return account_deletion.request(self, caller_id, confirmed=confirmed)
+
+    def cancel_account_deletion(self, *, caller_id: str) -> User:
+        from game_platform import account_deletion
+        return account_deletion.cancel(self, caller_id)
 
     # Third-party login and account merging
 
@@ -1165,6 +1186,9 @@ class GamePlatform:
         user = self._store.get_user(user_id)
         if user is None:
             raise NotFoundError("user not found")
+        # Keep the raw alias for callers proving its password, while resolving
+        # its survivor to verify that both still exist and can accept writes.
+        self._resolve_replaced(user)
         return user
 
     def _find_by_linked_account(
@@ -1177,21 +1201,30 @@ class GamePlatform:
     def _resolve_replaced(self, user: User) -> User:
         """Returns the surviving user for a replaced account.
 
-        Merges always flatten, so a replaced user points directly at the final
-        survivor: this is a single lookup. The extra hop below is purely
-        defensive (it should never trigger) so a corrupt record can never make
-        this return a replaced user. Reads only: callers may or may not hold the lock.
+        Normal merges flatten to one hop. The bounded walk also fails closed
+        for missing survivors, cycles, or a purge claim on any account in a
+        legacy chain. Callers issuing credentials hold the operation lock so
+        these reads consult the current transaction rather than the cache.
         """
-        if user.replaced_by_user_id is None:
-            return user
-        survivor = self._store.get_user(user.replaced_by_user_id)
-        if survivor is None:
-            return user
-        if survivor.replaced_by_user_id is not None:
-            final = self._store.get_user(survivor.replaced_by_user_id)
-            if final is not None:
-                return final
-        return survivor
+        seen = set()
+        while True:
+            if user.id in seen or len(seen) >= 16:
+                raise NotFoundError("user not found")
+            seen.add(user.id)
+            if user.deletion_started_at is not None:
+                raise AccountDeletionInProgressError("the account is being deleted")
+            if user.replaced_by_user_id is None:
+                return user
+            survivor = self._store.get_user(user.replaced_by_user_id)
+            if survivor is None:
+                raise NotFoundError("user not found")
+            user = survivor
+
+    @staticmethod
+    def _check_merge_deletion(source: User, into: User) -> None:
+        if any(user.deletion_requested_at is not None or user.deletion_scheduled_at is not None
+               or user.deletion_started_at is not None for user in (source, into)):
+            raise ConflictError("cancel the account deletion request before merging accounts")
 
     def _give_missing_referral_codes(self) -> None:
         """At startup: indexes the codes accounts have, and gives one to every account
@@ -1565,6 +1598,7 @@ class GamePlatform:
         """
         into = self._resolve_replaced(into)
         source = self._resolve_replaced(source)
+        self._check_merge_deletion(source, into)
         if source.id == into.id:
             raise InvalidRequestError("cannot merge a user into itself")
         from_user_id, into_user_id = source.id, into.id
@@ -4027,6 +4061,7 @@ class GamePlatform:
         if given, guards against two clients submitting the same move.
         """
         with self._lock:
+            self._require_user(caller_id)
             # Reading the match applies any timeout first (see _enforce_clock).
             match = self._get_match(match_id)
             if any(t.user_id == caller_id for t in match.timeouts) and (
@@ -5055,7 +5090,9 @@ class GamePlatform:
         """Deletes a user and their owned matches, preserving all platform games.
         Elsewhere, they leave the matches they're seated in."""
         with self._lock:
-            self._require_user(user_id)
+            user = self._require_user(user_id)
+            if self._resolve_replaced(user).deletion_requested_at is not None:
+                raise ConflictError("use the scheduled account deletion or cancel its request first")
             for match in self._store.list_matches_involving(user_id):
                 if match.owner_user_id == user_id:
                     self._delete_match_and_invites(match.id)
