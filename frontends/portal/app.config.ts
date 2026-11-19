@@ -8,7 +8,7 @@ const config: ExpoConfig = {
   ios: { bundleIdentifier: process.env.IOS_PORTAL_BUNDLE_ID || 'edu.columbia.gameportal.starter', supportsTablet: true,
     buildNumber: process.env.GITHUB_RUN_NUMBER ? `${process.env.GITHUB_RUN_NUMBER}.${process.env.GITHUB_RUN_ATTEMPT || '1'}` : '1',
     infoPlist: { ITSAppUsesNonExemptEncryption: false } },
-  android: { package: process.env.BUILDPLAY_VARIANT === 'debug' ? 'com.dapillah.gameportal.debug' : 'com.dapillah.gameportal',
+  android: { package: process.env.BUILDPLAY_VARIANT === 'debug' ? 'fun.buildplay.debug' : 'fun.buildplay',
     ...(googleServicesFile ? {googleServicesFile} : {}),
     adaptiveIcon: { foregroundImage: './assets/icon.png', backgroundColor: '#10141f' }, allowBackup: false, versionCode: 2 },
   web: { bundler: 'metro', output: 'single', favicon: './assets/icon.png', name: 'BuildPlay' },

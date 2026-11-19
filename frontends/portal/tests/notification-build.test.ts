@@ -23,7 +23,7 @@ test('standalone builds remain possible without Android notification credentials
 });
 
 test('CI prepares matching Firebase client config outside the checkout without printing it', () => {
-  const raw = JSON.stringify({project_info: {project_number: '123'}, client: [{client_info: {android_client_info: {package_name: 'com.dapillah.gameportal.debug'}}}], private_fixture: 'not-for-logs'});
+  const raw = JSON.stringify({project_info: {project_number: '123'}, client: [{client_info: {android_client_info: {package_name: 'fun.buildplay.debug'}}}], private_fixture: 'not-for-logs'});
   const f = run(raw);
   try {
     assert.equal(f.result.status, 0, f.result.stderr);
@@ -36,7 +36,7 @@ test('CI prepares matching Firebase client config outside the checkout without p
 });
 
 test('a production Firebase client cannot silently configure a debug APK', () => {
-  const f = run(JSON.stringify({project_info: {project_number: '123'}, client: [{client_info: {android_client_info: {package_name: 'com.dapillah.gameportal'}}}]}));
+  const f = run(JSON.stringify({project_info: {project_number: '123'}, client: [{client_info: {android_client_info: {package_name: 'fun.buildplay'}}}]}));
   try {assert.notEqual(f.result.status, 0); assert.match(f.result.stderr, /must contain a Firebase client/); assert.equal(existsSync(f.envFile), false);} finally {f.cleanup();}
 });
 

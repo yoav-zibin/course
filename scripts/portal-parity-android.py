@@ -18,7 +18,7 @@ import time
 
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE='600e8e35ab3d7338055e4f28eaa3d165be4bdba2'
-PACKAGE='com.dapillah.gameportal.debug'
+PACKAGE='fun.buildplay.debug'
 KEY='buildplay.shared.v1.visitor'
 DATA=f'/data/user/0/{PACKAGE}/files/BuildPlayShared'
 spec=importlib.util.spec_from_file_location('parity_native_smoke',ROOT/'frontends/portal/scripts/native-smoke.py')

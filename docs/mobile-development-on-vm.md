@@ -76,8 +76,8 @@ only with that explicit test flag and localhost, loopback IPs or Android's
 `10.0.2.2` host alias. Production bundles use HTTPS.
 
 The downloadable development application retains package
-`com.dapillah.gameportal.debug`; `BUILDPLAY_VARIANT=debug` selects it. The
-unsuffixed `com.dapillah.gameportal` remains the release identity. Never change
+`fun.buildplay.debug`; `BUILDPLAY_VARIANT=debug` selects it. The
+unsuffixed `fun.buildplay` remains the release identity. Never change
 an installed app's package merely to work around a signing error.
 
 The Expo template contains a public development signing key, providing stable

@@ -2,7 +2,7 @@
 set -euo pipefail
 apk_path=${1:?Provide the standalone APK path}
 results_path=${2:?Provide the results directory}
-package_name=${3:-com.dapillah.gameportal.debug}
+package_name=${3:-fun.buildplay.debug}
 mkdir -p "$results_path"
 adb wait-for-device
 adb install --no-streaming -r "$apk_path" > "$results_path/install.log"

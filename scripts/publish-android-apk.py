@@ -54,7 +54,7 @@ def apk_digest(apk):
         raise ValueError("The rolling asset must be named BuildPlay.apk")
     with zipfile.ZipFile(apk) as bundle:
         config = json.loads(bundle.read("assets/app.config"))
-        if config["android"]["package"] != "com.dapillah.gameportal.debug" or config["extra"]["apiUrl"] != "https://buildplay.fun":
+        if config["android"]["package"] != "fun.buildplay.debug" or config["extra"]["apiUrl"] != "https://buildplay.fun":
             raise ValueError("APK package/backend does not match the rolling development distribution")
         if not bundle.read("assets/index.android.bundle"):
             raise ValueError("APK has no embedded JavaScript")

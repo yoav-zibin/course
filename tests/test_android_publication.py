@@ -19,7 +19,7 @@ A, B, C = (character * 40 for character in "abc")
 def apk(tmp_path):
     path = tmp_path / "BuildPlay.apk"
     with zipfile.ZipFile(path, "w") as bundle:
-        bundle.writestr("assets/app.config", json.dumps({"android": {"package": "com.dapillah.gameportal.debug"}, "extra": {"apiUrl": "https://buildplay.fun"}}))
+        bundle.writestr("assets/app.config", json.dumps({"android": {"package": "fun.buildplay.debug"}, "extra": {"apiUrl": "https://buildplay.fun"}}))
         bundle.writestr("assets/index.android.bundle", b"embedded tested JavaScript")
         for abi in ["arm64-v8a", "armeabi-v7a", "x86", "x86_64"]:
             bundle.writestr(f"lib/{abi}/libbuildplay-runtime.so", b"library fixture")

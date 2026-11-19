@@ -7,7 +7,7 @@ const raw = process.env.BUILDPLAY_ANDROID_GOOGLE_SERVICES_JSON;
 if (raw) {
   let config;
   try {config = JSON.parse(raw);} catch {throw new Error('Android notification config must be valid JSON.');}
-  const appId = process.env.BUILDPLAY_VARIANT === 'debug' ? 'com.dapillah.gameportal.debug' : 'com.dapillah.gameportal';
+  const appId = process.env.BUILDPLAY_VARIANT === 'debug' ? 'fun.buildplay.debug' : 'fun.buildplay';
   if (!config?.project_info?.project_number || !Array.isArray(config.client) || !config.client.some(client => client.client_info?.android_client_info?.package_name === appId)) {
     throw new Error(`Android notification config must contain a Firebase client for ${appId}.`);
   }

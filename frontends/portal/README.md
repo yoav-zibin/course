@@ -109,8 +109,8 @@ following setup with the account that should own BuildPlay:
    builds, export `EXPO_PUBLIC_EAS_PROJECT_ID` with the same UUID; the dynamic
    app config places it in `extra.eas.projectId`.
 2. For Android, create Firebase Android clients for the app identifiers you
-   distribute: `com.dapillah.gameportal.debug` for the rolling APK and
-   `com.dapillah.gameportal` for production. Download their `google-services.json`.
+   distribute: `fun.buildplay.debug` for the rolling APK and
+   `fun.buildplay` for production. Download their `google-services.json`.
    Add the JSON containing the debug client as the GitHub Actions secret
    `ANDROID_GOOGLE_SERVICES_JSON`. CI validates the application identifier and
    writes the file to its temporary directory before prebuild. Local builds use
@@ -118,8 +118,8 @@ following setup with the account that should own BuildPlay:
 3. Configure the Firebase FCM v1 service account in the Expo project using
    `BUILDPLAY_VARIANT=debug npx --yes eas-cli credentials --platform android`, with
    `EXPO_PUBLIC_EAS_PROJECT_ID` exported. Verify the selected Android Application
-   identifier is `com.dapillah.gameportal.debug`. Repeat without the debug variant
-   for `com.dapillah.gameportal` when distributing production builds; Expo assigns
+   identifier is `fun.buildplay.debug`. Repeat without the debug variant
+   for `fun.buildplay` when distributing production builds; Expo assigns
    FCM credentials to each application identifier. The client `google-services.json` and
    the FCM service-account credential serve different purposes; keep private
    service-account keys outside source.
