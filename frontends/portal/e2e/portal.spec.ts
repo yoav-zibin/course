@@ -348,7 +348,7 @@ test('two browser players share turns, a lost reply cannot duplicate a move, and
   await restore(page,a);await page.goto(`/portal#match=${match.id}`);
   const partner=await browser.newContext({baseURL});const bob=await partner.newPage();await restore(bob,b);await bob.goto(`/portal#match=${match.id}`);
   await bob.getByRole('button',{name:'Join match',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Start game',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Start game',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Start match',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Start match',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   let lost=false;
   await page.route(`**/matches/${match.id}/moves`,async route=>{if(route.request().method()==='POST'&&!lost){lost=true;await route.fetch();await route.abort('failed');}else await route.continue();});

@@ -395,6 +395,7 @@
   "ui.match.paid_invite_human": "इस टोकन मैच में शामिल होने के लिए किसी असली खिलाड़ी को आमंत्रित करें।",
   "ui.match.remove_computer": "कंप्यूटर हटाएँ",
   "ui.match.start_game": "गेम शुरू करें",
+  "ui.match.start_match": "मैच शुरू करें",
   "ui.match.delete_match": "मैच हटाएँ",
   "ui.match.delete_confirm": "यह मैच सभी के लिए हटाएँ?",
   "ui.match.delete_ongoing_confirm": "यह चालू मैच सभी के लिए हटाएँ?",

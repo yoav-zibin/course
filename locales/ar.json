@@ -395,6 +395,7 @@
   "ui.match.paid_invite_human": "ادعُ لاعبًا حقيقيًا للانضمام إلى هذه المباراة بالرموز.",
   "ui.match.remove_computer": "إزالة الحاسوب",
   "ui.match.start_game": "ابدأ اللعبة",
+  "ui.match.start_match": "ابدأ المباراة",
   "ui.match.delete_match": "حذف المباراة",
   "ui.match.delete_confirm": "هل تريد حذف هذه المباراة للجميع؟",
   "ui.match.delete_ongoing_confirm": "هل تريد حذف هذه المباراة الجارية للجميع؟",

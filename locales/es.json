@@ -395,6 +395,7 @@
   "ui.match.paid_invite_human": "Invita a un jugador humano a unirse a esta partida con fichas.",
   "ui.match.remove_computer": "Quitar computadora",
   "ui.match.start_game": "Empezar partida",
+  "ui.match.start_match": "Empezar partida",
   "ui.match.delete_match": "Eliminar partida",
   "ui.match.delete_confirm": "¿Eliminar esta partida para todos?",
   "ui.match.delete_ongoing_confirm": "¿Eliminar esta partida en curso para todos?",

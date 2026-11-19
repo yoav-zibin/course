@@ -881,6 +881,15 @@
     "hi": "आपका भुगतान",
     "ar": "مكسبك"
   },
+  "Start match": {
+    "es": "Empezar partida",
+    "fr": "Démarrer la partie",
+    "de": "Partie starten",
+    "pt": "Iniciar partida",
+    "zh": "开始对局",
+    "hi": "मैच शुरू करें",
+    "ar": "ابدأ المباراة"
+  },
   "Start game": {
     "es": "Empezar partida",
     "fr": "Démarrer la partie",

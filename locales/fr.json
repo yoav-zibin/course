@@ -395,6 +395,7 @@
   "ui.match.paid_invite_human": "Invitez un joueur humain à rejoindre cette partie à jetons.",
   "ui.match.remove_computer": "Retirer l'ordinateur",
   "ui.match.start_game": "Démarrer la partie",
+  "ui.match.start_match": "Démarrer la partie",
   "ui.match.delete_match": "Supprimer la partie",
   "ui.match.delete_confirm": "Supprimer cette partie pour tout le monde ?",
   "ui.match.delete_ongoing_confirm": "Supprimer cette partie en cours pour tout le monde ?",

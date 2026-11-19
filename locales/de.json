@@ -395,6 +395,7 @@
   "ui.match.paid_invite_human": "Lade einen menschlichen Spieler zu diesem Chip-Spiel ein.",
   "ui.match.remove_computer": "Computer entfernen",
   "ui.match.start_game": "Spiel starten",
+  "ui.match.start_match": "Partie starten",
   "ui.match.delete_match": "Spiel löschen",
   "ui.match.delete_confirm": "Dieses Spiel für alle löschen?",
   "ui.match.delete_ongoing_confirm": "Dieses laufende Spiel für alle löschen?",

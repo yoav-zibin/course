@@ -395,6 +395,7 @@
   "ui.match.paid_invite_human": "邀请真人玩家加入这场代币对局。",
   "ui.match.remove_computer": "移除电脑",
   "ui.match.start_game": "开始游戏",
+  "ui.match.start_match": "开始对局",
   "ui.match.delete_match": "删除对局",
   "ui.match.delete_confirm": "为所有人删除此对局？",
   "ui.match.delete_ongoing_confirm": "为所有人删除这场进行中的对局？",

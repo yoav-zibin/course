@@ -395,6 +395,7 @@
   "ui.match.paid_invite_human": "Invite a human player to join this token match.",
   "ui.match.remove_computer": "Remove computer",
   "ui.match.start_game": "Start game",
+  "ui.match.start_match": "Start match",
   "ui.match.delete_match": "Delete match",
   "ui.match.delete_confirm": "Delete this match for everyone?",
   "ui.match.delete_ongoing_confirm": "Delete this ongoing match for everyone?",
