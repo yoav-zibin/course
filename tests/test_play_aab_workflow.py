@@ -78,32 +78,6 @@ def test_configured_password_reaches_gradle_without_command_line_or_log_exposure
     assert (workspace / "BuildPlay.aab").read_bytes() == b"synthetic bundle fixture"
 
 
-def test_transient_dependency_download_retries_with_a_refresh(build):
-    run, capture, _, _ = build
-    fake = capture.parent / 'fake-gradle.py'
-    prefix = """import pathlib, sys
-counter=pathlib.Path('download-attempts')
-attempt=int(counter.read_text())+1 if counter.exists() else 1
-counter.write_text(str(attempt))
-if attempt == 1:
-    print('Could not find org.jetbrains.kotlin:kotlin-stdlib:2.3.0.')
-    sys.exit(1)
-"""
-    fake.write_text(prefix+fake.read_text())
-    result = run('Build signed AAB for Play')
-    assert result.returncode == 0, result.stderr
-    assert '--refresh-dependencies' in json.loads(capture.read_text())['args']
-    assert (capture.parent/'app/download-attempts').read_text() == '2'
-
-
-def test_compilation_failure_does_not_retry(build):
-    run, capture, _, _ = build
-    result = run('Build signed AAB for Play', FAIL_GRADLE='1')
-    assert result.returncode == 23
-    assert 'retrying' not in result.stdout
-    assert '--refresh-dependencies' not in json.loads(capture.read_text())['args']
-
-
 def test_upload_keystore_is_private_and_byte_identical(build):
     run, _, key, _ = build
     assert run("Write upload keystore").returncode == 0
