@@ -298,14 +298,13 @@ class NativeSmoke:
         self.command("shell", "input", "swipe", str(x), str(bottom if upwards else top), str(x), str(bottom - distance if upwards else top + distance), "700")
 
     def tap_cell(self, number: int, *, finished: bool = False):
-        expected = "Finished" if finished else "I'm ready"
+        expected = "Finished" if finished else f"{len(self.played_cells) + 1} moves"
         # Exercise the normal camera control so the projection has a known
         # fitted view even if an earlier scrolling gesture moved the camera.
         self.tap("Reset board view")
         for attempt in range(4):
-            if attempt and self.find(self.dump(), expected, contains=finished) is not None:
-                self.played_cells.append(number)
-                return
+            if attempt and self.find(self.dump(), expected, contains=True) is not None:
+                break
             tree, canvas = self.fitted_canvas()
             labels = {label for node in tree.iter("node") for label in self.labels(node)}
             for played in self.played_cells:
@@ -320,12 +319,20 @@ class NativeSmoke:
             self.command("shell", "input", "tap", str(x), str(y))
             self.events.append({"action": "native-cell-tap", "cell": number, "attempt": attempt + 1, "x": x, "y": y, "canvas": canvas})
             try:
-                self.wait(expected, contains=finished, timeout=8, scroll=True)
-                self.played_cells.append(number)
-                return
+                self.wait(expected, contains=True, timeout=8, scroll=True)
+                break
             except RuntimeError:
                 pass
-        raise RuntimeError(f"Native SVG/QuickJS did not accept Cell {number}")
+        else:
+            raise RuntimeError(f"Native SVG/QuickJS did not accept Cell {number}")
+        self.played_cells.append(number)
+        if not finished:
+            self.assert_public_board()
+
+    def assert_public_board(self):
+        self.wait("Game board.", contains=True, scroll=True)
+        if self.find(self.dump(), "I'm ready") is not None:
+            raise RuntimeError("The public-state bundled game unexpectedly requires a handoff")
 
     def run(self):
         self.launch()
@@ -339,16 +346,17 @@ class NativeSmoke:
         self.capture("bug-04-focus-mode")
         self.tap("Exit focus mode", scroll=False)
         self.tap_cell(1)
-        self.wait("I'm ready", scroll=True)
-        self.capture("game-01-handoff")
+        self.capture("game-01-next-player-board")
 
-        # The board is saved before it changes. A real process restart must
-        # restore the pending handoff instead of exposing the next player's UI.
+        # The public board and next player's controls survive a real process
+        # restart without requiring a pass-and-play privacy handoff.
         self.command("shell", "am", "force-stop", self.package)
         self.launch()
-        self.wait("I'm ready", timeout=60, scroll=True)
-        self.events.append({"assertion": "handoff-restored-after-process-restart"})
-        self.capture("game-02-restored-handoff")
+        self.wait("1 moves", contains=True, timeout=60, scroll=True)
+        self.assert_public_board()
+        self.wait("Cell 4", scroll=True)
+        self.events.append({"assertion": "public-board-and-next-turn-restored-after-process-restart"})
+        self.capture("game-02-restored-public-board")
 
         self.command("shell", "input", "keyevent", "4")
         self.wait("Pass and play", scroll=True)
@@ -358,10 +366,9 @@ class NativeSmoke:
         # Select the saved card by its move count, so an unrelated migrated
         # local match cannot be opened accidentally.
         self.tap("1 moves", contains=True)
-        self.wait("I'm ready", scroll=True)
+        self.assert_public_board()
 
         for index, cell in enumerate((4, 2, 5, 3), start=2):
-            self.tap("I'm ready")
             self.tap_cell(cell, finished=cell == 3)
             self.capture(f"game-{index + 2:02d}-move-{index}")
         self.wait("Finished", contains=True, scroll=True)
@@ -376,7 +383,7 @@ class NativeSmoke:
         self.tap("Live board")
         self.wait("Finished", contains=True, scroll=True)
         self.capture("game-10-live-finished")
-        print("Native gameplay passed: bug control over Account and focus mode, offline screenshot/draft, SVG taps, isolated QuickJS rules, durable handoff, process restart, Back navigation, win and replay.")
+        print("Native gameplay passed: bug control over Account and focus mode, offline screenshot/draft, SVG taps, isolated QuickJS rules, continuous public board, process restart, Back navigation, win and replay.")
 
 
 def main():

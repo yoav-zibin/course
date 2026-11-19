@@ -1,4 +1,5 @@
 {
+  "all_state_public": true,
   "name": "4 player chess (Declarative)",
   "description": "Four players move around a shared cross-shaped chessboard. Capture opposing pieces and protect your king; the server determines legal moves and team victory.",
   "allowed_player_counts": [

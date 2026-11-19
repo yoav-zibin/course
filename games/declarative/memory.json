@@ -1,4 +1,5 @@
 {
+  "all_state_public": false,
   "name": "Memory pairs (Declarative)",
   "description": "Reveal two cards. A matching pair scores one and grants another turn. A mismatch passes the turn; the next reveal hides it. Most of eight pairs wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-memory-replace-before-publishing",

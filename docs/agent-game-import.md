@@ -70,6 +70,11 @@ with the game; agents do not submit a second potentially inconsistent copy.
 
 Optional: `language` (default `en`), `allows_join_mid_match` and
 `allows_leave_mid_match` (both default false). Do not enable unsupported handlers.
+`all_state_public` is a Boolean, default false. Set it to true only when every
+player can see all game state, as in chess or backgammon. Games with private
+hands, boards or identities must keep it false. Public-state games skip the
+device handoff between turns in local pass-and-play. The flag is versioned and
+included in catalog summaries and game details.
 `game_addition_request_id_and_secret` (required, 16–200 characters) is a long
 random secret the agent picks when creating the game. Keep it for future PATCH
 updates. Only its SHA-256 hash is stored on the game; API responses never return
@@ -96,7 +101,7 @@ A master-password update preserves the game's original secret.
 
 Every content field accepted by the complete import is optional in PATCH:
 `name`, `description`, `allowed_player_counts`, `allows_leave_mid_match`,
-`allows_join_mid_match`, `declarative_ui`, `client_code`, `server_code`,
+`allows_join_mid_match`, `all_state_public`, `declarative_ui`, `client_code`, `server_code`,
 `language`, `rules`, `ui_instructions`, `tutorial`, `images`, `unit_tests`,
 and `translations`. Omitted fields retain their current values. Supplied
 objects and lists replace that field, so send a complete replacement object
@@ -113,6 +118,7 @@ actual values, and validates the fields and dependencies that changed:
 | `server_code`, `unit_tests`, allowed player counts or join/leave behavior | Validate test artifacts, schemas and rosters; run approved examples, settlement and move checks, and random walks against the resulting server logic. A fresh recorded presentation test flow is not required when the presentation is unchanged. |
 | `declarative_ui` or its generated `client_code` | Validate the resulting presentation and localization, including its examples, and require the complete recorded `/game-test/*` flow for the resulting full payload. Review the changed scenes and interactions in the scene playground. |
 | Name, description, textual `rules`, `ui_instructions`, tutorial, images, language or translations | Validate the relevant text, translation, tutorial or image contracts and size limits. Do not run random walks or require a recorded presentation test flow for these edits alone. |
+| `all_state_public` | Validate the Boolean and size limits; no server-logic checks or recorded presentation test flow are required for this metadata edit. |
 | Supplied values equal the current values | No new game version or heavy validation. |
 
 Changing textual `rules` documents the game; changing `allowed_player_counts`

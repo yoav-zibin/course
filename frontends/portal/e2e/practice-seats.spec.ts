@@ -2,7 +2,7 @@ import {test,expect,type Page} from '@playwright/test';
 
 // A private host fixture: one round in seat order, with a private viewer marker.
 // This exercises the ordinary local controls, never a production game or audit.
-const fixture={id:'practice-seat-fixture',version:1,name:'Practice seat fixture',description:'Local player-count and seat regression fixture.',allowed_player_counts:[2,4],renderer_type:'declarative',
+const fixture={id:'practice-seat-fixture',version:1,name:'Practice seat fixture',description:'Local player-count and seat regression fixture.',allowed_player_counts:[2,4],renderer_type:'declarative',all_state_public:false,
   server_code:`const game={
     newMatch(ctx){return {state:{turn:0,winner:-1,done:false},turn:[ctx.players[0].id]};},
     applyMove(s,id,m,ctx){if(id!==ctx.players[s.turn].id||m.go!==true)throw new InvalidMove('Wrong player');s.turn++;s.done=s.turn===ctx.players.length;if(s.done)s.winner=ctx.players.length-1;return {state:s,turn:s.done?null:[ctx.players[s.turn].id]};},
@@ -48,7 +48,11 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
   const id=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
   for(let seat=0;seat<4;seat++){
-    if(seat)await page.getByRole('button',{name:'I’m ready',exact:true}).click();
+    if(seat){
+      await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();await expect(page.getByTestId('game-stage')).toHaveCount(0);
+      if(seat===1){await page.reload();await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();await expect(page.getByTestId('game-stage')).toHaveCount(0);}
+      await page.getByRole('button',{name:'I’m ready',exact:true}).click();
+    }
     await expect(page.getByText(`Your seat ${seat+1}`,{exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Advance',exact:true}).click();
   }

@@ -41,7 +41,9 @@ builds and CI artifacts. Generated `android/`, `ios/` and web bundles are ignore
   before retrying. One pending online action pauses further input for that match.
 - Local pass-and-play and computer practice use downloaded pinned rules and a
   separate local state/seed. They work offline. Bundled Tic-tac-toe is available
-  on a fresh installation. A handoff hides the next player's board until confirmed.
+  on a fresh installation. Games declaring `all_state_public: true` keep the board
+  visible between turns. Other games hide the next player's board until a handoff
+  is confirmed, including older games without this declaration.
   Game details let computer practice use any supported player count and human
   seat. The selected seat keeps its own view and controls after restart, history
   review and Play again; saved matches retain their original player positions.

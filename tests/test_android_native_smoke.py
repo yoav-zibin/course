@@ -55,16 +55,23 @@ def driver():
 
 def test_clipped_canvas_is_revealed_then_physical_tap_ignores_bad_virtual_bounds():
     value = driver()
-    trees = iter([android_tree("[0,1770][1080,2328]", 1), android_tree("[0,555][1080,1563]", 1)])
+    trees = iter([android_tree("[0,1770][1080,2328]", 1), android_tree("[0,555][1080,1563]", 1), android_tree("[0,555][1080,1563]", 4)])
     value.dump = lambda: next(trees)
     scrolls, touches = [], []
     value.scroll_outside_canvas = lambda canvas, viewport, upwards=True, distance=0: scrolls.append(upwards)
     value.command = lambda *args: touches.append(args)
-    value.wait = lambda label, **options: ET.Element("node") if label == "I'm ready" else pytest.fail(label)
+    waited = []
+
+    def wait(label, **options):
+        waited.append(label)
+        return ET.Element("node") if label in {"1 moves", "Game board."} else pytest.fail(label)
+
+    value.wait = wait
     value.tap_cell(1)
     assert scrolls == [True]
     assert touches == [("shell", "input", "tap", "163", "855")]
     assert value.played_cells == [1]
+    assert waited == ["1 moves", "Game board."]
 
 
 def test_a_wrong_previous_physical_cell_cannot_be_accepted_as_progress():

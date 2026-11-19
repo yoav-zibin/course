@@ -1,4 +1,5 @@
 {
+  "all_state_public": false,
   "name": "Battleship (Declarative)",
   "description": "Place a fleet of five ships, then take turns firing at hidden waters. A hit earns another shot; sink the opposing fleet to win.",
   "allowed_player_counts": [

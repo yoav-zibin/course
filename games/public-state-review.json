@@ -1,0 +1,1199 @@
+{
+  "reviewed_at": "2026-11-19",
+  "source": "https://buildplay.fun",
+  "definition": "All gameplay information is public throughout play. Private hands, concealed identities, face-down values and unrevealed deck or bag order make this false. Random outcomes generated on demand do not make public dice games hidden.",
+  "games": [
+    {
+      "id": "9ec4c247-3a06-4099-a529-7912e53f31fa",
+      "name": "4 player chess (Declarative)",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 1,
+      "server_code_sha256": "1cbef1ad4dfcb11cd909b127646503ab29e067529e9848ce610bf2b50ede35a0"
+    },
+    {
+      "id": "51ac3ade-c79d-4e17-a57e-1d087c50453f",
+      "name": "Aggravation",
+      "all_state_public": true,
+      "reason": "The view copies all state except settlement bookkeeping and adds legal moves.",
+      "version": 2,
+      "server_code_sha256": "c81c07f802b3e4be29a48a5b3eec31e63b75fb96cb4e3efb47be31f129e76cfb"
+    },
+    {
+      "id": "7f8dde79-ad30-4047-a9fa-9616b410c5df",
+      "name": "Alhambra",
+      "all_state_public": false,
+      "reason": "Private money-card hands and concealed decks/bag.",
+      "version": 2,
+      "server_code_sha256": "010249e7577f13be1795eab93141769d9c299bceb9e65d15a2ce49ca2f04a6d2"
+    },
+    {
+      "id": "c7d6cbeb-e209-4260-a1b5-fcb0cf14ed0e",
+      "name": "All Fives",
+      "all_state_public": false,
+      "reason": "Private domino hands and concealed boneyard.",
+      "version": 3,
+      "server_code_sha256": "7c2a0a85687e93afab81875ea7bf50b557e9e31d0e6242bcdb233c59903f3dc5"
+    },
+    {
+      "id": "ed313b19-3bb0-45b9-906a-e119e5456fe7",
+      "name": "Alquerque",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 3,
+      "server_code_sha256": "34a8dd1b9b685f2d86b71cceeaf5d8e7aed445438306a3ed037d2e09e0442422"
+    },
+    {
+      "id": "8c2b39bd-b75c-4178-93fd-52a5f09af0f2",
+      "name": "American Mahjong",
+      "all_state_public": false,
+      "reason": "Private mahjong hands and concealed wall.",
+      "version": 2,
+      "server_code_sha256": "1acc6d43f6e5756fe1372e9bbb4724a637cb8fc002820b028949f0c59d0e35cc"
+    },
+    {
+      "id": "3b2be137-e8dc-4226-aa2b-205e7a83ed9e",
+      "name": "Arimaa",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "265080de8715aabaa85a78d477567c201313106784e6edab7fd9eab870a0e87b"
+    },
+    {
+      "id": "2141bbb5-4729-4b2e-9fde-30f830469784",
+      "name": "Ayoayo",
+      "all_state_public": true,
+      "reason": "All pits, captured seeds and current player are public.",
+      "version": 2,
+      "server_code_sha256": "ff02637535a16b697018a6f59ad49e1cc0f09ec16528ca9d973eb5441e119f66"
+    },
+    {
+      "id": "5f5293c3-2a3a-4eec-b631-9debf59be0ca",
+      "name": "Backgammon",
+      "all_state_public": true,
+      "reason": "All checkers, bar/off counts, rolled dice, legal moves and accepted roll metadata are public.",
+      "version": 5,
+      "server_code_sha256": "6e798d6da75524ed6829e5c3e057401af72542a185e3f3b7a0cb822a3b13c0f4"
+    },
+    {
+      "id": "42bd63dd-baad-43b8-a354-c6d9b5d2e0be",
+      "name": "Balut",
+      "all_state_public": true,
+      "reason": "All dice, held dice and score sheets are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "09999882754fc1a5bfa9495daf677244ec7cfeaeaf30b2a03daafa8911608bce"
+    },
+    {
+      "id": "4d5a12b7-ff99-4b8a-890f-aea9315edd4f",
+      "name": "Banqi",
+      "all_state_public": false,
+      "reason": "Unflipped piece identities are stored in the board but viewFor replaces every facedown piece with -1.",
+      "version": 2,
+      "server_code_sha256": "c6b30afed1d617353ecab42a42b42c790cac38e0c6e0cb434ee2d8169ad91be1"
+    },
+    {
+      "id": "9570c7f2-816b-4d34-b89e-f9f37553da16",
+      "name": "Bao",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "5091546c933d3faa8cff88a3ae77db3cda84fa2f736c19afb5875b6029867d67"
+    },
+    {
+      "id": "c0db7c63-6643-4643-91c6-c22f4f0a0ced",
+      "name": "Battleship (Declarative)",
+      "all_state_public": false,
+      "reason": "Ship placements are visible only to their owner until sunk or game over.",
+      "version": 1,
+      "server_code_sha256": "eec7979cea3525748432462dc1f8424834e9cc471bf24a185609d716e31809a0"
+    },
+    {
+      "id": "b78abbca-59bd-444e-8d5c-034b4432d402",
+      "name": "Bergen",
+      "all_state_public": false,
+      "reason": "Private domino hands and concealed boneyard.",
+      "version": 2,
+      "server_code_sha256": "8eb4b942994fa5376e87ec9839d1121e091ca2b668a1b1a211337e29f4d1e28f"
+    },
+    {
+      "id": "19caa9ef-9bcf-46c4-8d3f-02fd160f13a1",
+      "name": "Bingo",
+      "all_state_public": false,
+      "reason": "Other bingo cards and remaining draw order are concealed.",
+      "version": 2,
+      "server_code_sha256": "e2035a188e261c9580ca6fbf4bf22ece233ed726a0d291331ee84cd3c902d40d"
+    },
+    {
+      "id": "2ffcbf31-e894-4cf7-a59e-8d49924c53fb",
+      "name": "Block Dominoes",
+      "all_state_public": false,
+      "reason": "Other players domino hands stay hidden.",
+      "version": 2,
+      "server_code_sha256": "b6a83638e3c6ac9f5f812d82c9c42a38fd909aa6eb35fc7da0660962c88555d1"
+    },
+    {
+      "id": "7ef83fe8-54d9-4e5b-aedc-3a22ea3a7bae",
+      "name": "Boggle",
+      "all_state_public": true,
+      "reason": "All letters, claims and scores are public; legal text input depends only on the active seat.",
+      "version": 1,
+      "server_code_sha256": "10d254c1c1c8106da6fd5db56fabac94941d8fc042c57782dcf3af907f70c13e"
+    },
+    {
+      "id": "2d9e678c-9315-4263-b1c6-02db2658b758",
+      "name": "Brazilian Draughts",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 1,
+      "server_code_sha256": "25e3b934b8a927b29cbf9981daaa9eec97641f40beb46a13863ed61eafbf76b3"
+    },
+    {
+      "id": "83e1f741-be5a-4951-943d-818a019bbb5d",
+      "name": "Bulls and Cows",
+      "all_state_public": false,
+      "reason": "Secret codes are generated at setup and answers stay hidden until the game ends.",
+      "version": 1,
+      "server_code_sha256": "02c9a978f92cd267e96b865bb840cc9f591d1e2e599f597daf25db99badc9cda"
+    },
+    {
+      "id": "ea7b11a5-0b81-488e-9fff-6b897e608bf9",
+      "name": "Bunco",
+      "all_state_public": true,
+      "reason": "Dice and round scores are public; future rolls are generated on demand.",
+      "version": 3,
+      "server_code_sha256": "4349b8a35f810c7590fde173db1e8755b01d41772a4391adafc830b3c1ca1776"
+    },
+    {
+      "id": "9bfbf1d3-1138-44e6-a937-7bf7dc281bbf",
+      "name": "Call Bridge",
+      "all_state_public": false,
+      "reason": "viewFor removes all hands and kitty, then adds back only the current viewer's hand.",
+      "version": 2,
+      "server_code_sha256": "58a4d841d40057d042b540a27aaf0f3b3602c4a768c75e3ad726dbed4e1df948"
+    },
+    {
+      "id": "429b0515-1cbe-4cd0-9519-e6a0242bec43",
+      "name": "Can't Stop",
+      "all_state_public": true,
+      "reason": "All progress, temporary markers and dice are public; future rolls are generated on demand.",
+      "version": 3,
+      "server_code_sha256": "d0c9dbe7bc61432c896b702709ddccbf0fc7d536b271f8f4737ca7faf780ad44"
+    },
+    {
+      "id": "7490fc55-5f88-4c05-ac55-f976b024555b",
+      "name": "Carcassonne: The River",
+      "all_state_public": false,
+      "reason": "Unrevealed tile deck order is concealed.",
+      "version": 2,
+      "server_code_sha256": "f778d1c365b0a5d90609be11ced6c65b8f6e0bda83c7dcafbb0a2044588b0a79"
+    },
+    {
+      "id": "14a518fa-51a1-47af-8821-8eb4011470d0",
+      "name": "Cartographers",
+      "all_state_public": false,
+      "reason": "The shuffled future exploration deck is concealed.",
+      "version": 2,
+      "server_code_sha256": "f92a0c7abf9f41a99df27fd7f5e7e55e3259464aa281cec005d6a446caca9160"
+    },
+    {
+      "id": "2b0eb3d7-d297-4aee-86e2-306fd5b29b2b",
+      "name": "Catan: Seafarers",
+      "all_state_public": false,
+      "reason": "Each player’s resource hand is concealed from opponents.",
+      "version": 2,
+      "server_code_sha256": "651b9e799bfa8e91654cdf27c143b81b13cedf20f38416522214a2ab83c677b6"
+    },
+    {
+      "id": "d5abb712-1eff-464a-9d1c-2dc4e9d1c15a",
+      "name": "Cee-lo",
+      "all_state_public": true,
+      "reason": "All rolled dice, ranks, points and current player are public; rolls happen on demand.",
+      "version": 3,
+      "server_code_sha256": "14c83ab9e06f1b4114f8aea16b7f1f496c2ab32a526b53c89f58e8afc3761ba3"
+    },
+    {
+      "id": "afd0bcc9-a810-4347-a7b3-6e6bb73e38e4",
+      "name": "Chaturaji",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "c07c7989efd0843a7d1548d0f777342f16d015649667b882f9ae1d544499ecd6"
+    },
+    {
+      "id": "578a73cd-2ba0-4da5-bc14-6fb233fe6a70",
+      "name": "Chaturanga",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "5813b0dc8b0996e6d8db166b04ee35faf923b148311fcd72730d6e1aa96b5c26"
+    },
+    {
+      "id": "ce9a2d4d-3bfd-46e0-94ce-f9d4ae10e500",
+      "name": "Chaupar",
+      "all_state_public": true,
+      "reason": "All pieces and current rolls are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "fbd42639c09c81cd46a851cba2ac110793ed52a6076eaa07907044718bc3666d"
+    },
+    {
+      "id": "04aad4ba-8cf6-4dd5-8d65-9dead4dab5ee",
+      "name": "Checkers (Declarative)",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 1,
+      "server_code_sha256": "91fb9b2bba483ee054032792f604f0b6afa073730cb784dbd2b4b5a163f9757e"
+    },
+    {
+      "id": "5ceeb4a4-da2f-4218-884e-d485968d9c78",
+      "name": "Chess (Declarative)",
+      "all_state_public": true,
+      "reason": "Board, castling rights, en passant, counters, history and last move are visible to every viewer.",
+      "version": 1,
+      "server_code_sha256": "68d15b9d2f1a5cbe6d23881c6daf10c8613cb123da290820b4ada28a98c3f560"
+    },
+    {
+      "id": "bd04e481-919c-4a25-8f17-81921e5d5fbf",
+      "name": "Chickenfoot",
+      "all_state_public": false,
+      "reason": "Private domino hands and concealed boneyard.",
+      "version": 2,
+      "server_code_sha256": "d91405723b2e3073821348619c14a1195b101ab27a742075eb51049372e17c80"
+    },
+    {
+      "id": "90645e1d-9893-4502-a489-f3a448e22eaf",
+      "name": "Chu Shogi",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "9a355624e0e15e60f27d4211c840d9400a86269275e1ba823a044a0a404a14c8"
+    },
+    {
+      "id": "440d928a-1ea4-4725-b791-3a3fb2f8c0b2",
+      "name": "Clue Master Detective",
+      "all_state_public": false,
+      "reason": "The solution, other hands and privately shown evidence cards are concealed.",
+      "version": 2,
+      "server_code_sha256": "27e7b31b8d290d644476c07cc677e70aa79725cd7d23becbb48d3e1adf039e30"
+    },
+    {
+      "id": "cb531697-f0a6-4835-8d74-9cf37379424a",
+      "name": "Codenames",
+      "all_state_public": false,
+      "reason": "The role key is available only to spymasters until the game ends.",
+      "version": 1,
+      "server_code_sha256": "dd12a3885b83cb916d61d11612a74fa9b7220ebc3c85023ff034fde0afc899c5"
+    },
+    {
+      "id": "8a4c712c-7dee-4967-b23e-23257cbafd5d",
+      "name": "Congkak",
+      "all_state_public": true,
+      "reason": "Every house, store and current turn is public on the shared board.",
+      "version": 2,
+      "server_code_sha256": "3dedc83fdcb563f1a209ea6986120df80fe26c26011ca97228c421d189a258a5"
+    },
+    {
+      "id": "e299b14e-480d-44f3-8132-74282a46cebc",
+      "name": "Connect Four",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 3,
+      "server_code_sha256": "e4fce270f9481cb7eb22d34c98c12441b7e4db8f859f4ec43019311f41135ae3"
+    },
+    {
+      "id": "cb76dfc6-a1a9-4a2a-9d0c-b978d9bad2d8",
+      "name": "Craps",
+      "all_state_public": true,
+      "reason": "All bets, chips and current dice are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "508bfe53a9a360797cbd604ee9a810d3124e7066cebdc9e0a833fc71c6439d3b"
+    },
+    {
+      "id": "af765df8-d2c2-4074-959d-dbd1a6f0c621",
+      "name": "Crazy Eights (Declarative)",
+      "all_state_public": false,
+      "reason": "Each viewer receives only their own hand; opponent hands and draw deck remain hidden.",
+      "version": 1,
+      "server_code_sha256": "5eeb46fabeb70c5ef370b0e40dbbee94fde35cd2926ad24630f3bac9517ac5a8"
+    },
+    {
+      "id": "a3d6d097-216d-4c8e-aa8c-16cc3d8c2d10",
+      "name": "Dara",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "61bb7576da8df9fd432f95ed31946a86688415352f2c1b72268dc889dfadd8ac"
+    },
+    {
+      "id": "ae0341d0-c1c5-4c2f-a6f4-a14f7fde0297",
+      "name": "Dice Throne",
+      "all_state_public": false,
+      "reason": "viewFor exposes only the viewer's hand and counts for opponents' hands and shuffled decks.",
+      "version": 2,
+      "server_code_sha256": "9009f427d125eafb48b13e60c5d7eef2dd91d30672311fe5b21a79795bea7b40"
+    },
+    {
+      "id": "671462d7-06f3-4793-9cd0-0d41d00a24d8",
+      "name": "Dobble",
+      "all_state_public": false,
+      "reason": "The remaining shuffled draw deck is concealed.",
+      "version": 2,
+      "server_code_sha256": "ae924fb08b1cff9465db6b08a688ab528c0e6344c9f8178579b0a91278c1b51c"
+    },
+    {
+      "id": "2c52e88d-f9e7-4210-bb35-233c9d08ef64",
+      "name": "Dobutsu Shogi",
+      "all_state_public": true,
+      "reason": "Every player sees all pieces and both captured-piece hands.",
+      "version": 2,
+      "server_code_sha256": "b9cf414226fcf6151a1a7b0e117788bc2513927535c70b46a96f408e51452e67"
+    },
+    {
+      "id": "a5275b2a-5fab-4d10-ad98-722537e06f94",
+      "name": "Domineering",
+      "all_state_public": true,
+      "reason": "The complete placement board and turn state are shared; only interactive legal targets vary by viewer.",
+      "version": 2,
+      "server_code_sha256": "e1382ffd3d3f067811175460672feab45f5bfecea90536f8bb8cbbfa41339e41"
+    },
+    {
+      "id": "da81c5be-d96a-45f4-9d0c-565ea248db9b",
+      "name": "Dominion: Intrigue",
+      "all_state_public": false,
+      "reason": "Other hands and draw deck contents/order are concealed.",
+      "version": 1,
+      "server_code_sha256": "9c6926f7712c970875292c2214e0ad52316b09517b2f2aa9386c0fb29591e843"
+    },
+    {
+      "id": "66859bb0-89fa-408f-aed3-3aab01eacb6a",
+      "name": "Dominion: Prosperity",
+      "all_state_public": false,
+      "reason": "Private card hands and concealed player decks.",
+      "version": 2,
+      "server_code_sha256": "74d4265fbb2b87985302ec6c91fb4ce34d0e175593efde0c3fa0548efb5d8593"
+    },
+    {
+      "id": "9dc613de-a407-4699-9500-6bc1c1c88554",
+      "name": "Dots",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "60c2ff131b01216bf6a2dd004300b66a2b6702fd128efcfe8933041c573c678c"
+    },
+    {
+      "id": "e637920c-25cf-496a-8385-ea5412d937bd",
+      "name": "Drop Dead",
+      "all_state_public": true,
+      "reason": "Scores, completed turns, remaining dice and every rolled die are public; future rolls are fresh RNG.",
+      "version": 2,
+      "server_code_sha256": "3b2317de4d4f633ddd62b45a36f0f3cfaf49738e354d918e0d2eedaed4f3e775"
+    },
+    {
+      "id": "b3d83492-de21-4487-8ce3-27e8d5bd66a2",
+      "name": "Elder Sign",
+      "all_state_public": false,
+      "reason": "The shuffled adventure deck is concealed; players only see its size.",
+      "version": 2,
+      "server_code_sha256": "86d1f4b03556dc40cf59732c5b971a000d9321552d4654caabd2701860839a50"
+    },
+    {
+      "id": "7ef98cb4-dc49-462e-8141-42d725910de4",
+      "name": "Farkle",
+      "all_state_public": true,
+      "reason": "All dice, turn totals and scores are public; future rolls are generated on demand.",
+      "version": 3,
+      "server_code_sha256": "f3bfce20b42ccaf357805687e19132607b3820cbed2bca83d0c972e18e6c3fa4"
+    },
+    {
+      "id": "7f433ce2-5af1-4d8a-b7b1-f447b3e8a872",
+      "name": "Fives and Threes",
+      "all_state_public": false,
+      "reason": "Private domino hands and concealed boneyard.",
+      "version": 2,
+      "server_code_sha256": "bb45dc48700cb7f5ee732fbdb35648616a6ee7524f6461ec50a5637ee9073e8a"
+    },
+    {
+      "id": "021eb545-0ebb-4067-9545-2fc7b4b66e78",
+      "name": "Funemployed",
+      "all_state_public": false,
+      "reason": "Private caption hands, hidden deck order and anonymous or unrevealed submissions.",
+      "version": 2,
+      "server_code_sha256": "601a98a408b4130b76eb82b60b25f287a7a64fd256bbb35a82079bfc43735b7a"
+    },
+    {
+      "id": "00d3e5dd-95b6-4972-abf3-f9da0f7d6982",
+      "name": "Generala",
+      "all_state_public": true,
+      "reason": "Score sheets, rolled dice, holds and turn are public; new dice are rolled on demand.",
+      "version": 2,
+      "server_code_sha256": "2b053dc63f431714893897b750e9b1902350e64a0e7c27b9252fcaee97c2eced"
+    },
+    {
+      "id": "76a773b9-b39c-4bfc-b9f5-63bdfe49465a",
+      "name": "Gin Rummy",
+      "all_state_public": false,
+      "reason": "Private card hands and concealed stock.",
+      "version": 2,
+      "server_code_sha256": "eafd52c03745b31ac0e9cae537305a698ed58593d9c90904018c52a31eb457bf"
+    },
+    {
+      "id": "6d9d0269-1e83-4d38-9529-6735e6eb1919",
+      "name": "Go Fish (Declarative)",
+      "all_state_public": false,
+      "reason": "Private card hands and concealed draw deck.",
+      "version": 1,
+      "server_code_sha256": "07ac8e9ac280930599f98ff65aab36c5ea44320816602e2cf81d3601baed2373"
+    },
+    {
+      "id": "acd57f82-4b87-4844-bd4a-b7a46d5dd567",
+      "name": "Gomoku",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "d3e63e3124be11d662ea35fc88f10647a88a921dedc28a2d685b1877e42b8cee"
+    },
+    {
+      "id": "b058f4fa-481f-464f-be8b-e54342199f2c",
+      "name": "Guess Who? (Declarative)",
+      "all_state_public": false,
+      "reason": "Secret characters are revealed only to their owner.",
+      "version": 1,
+      "server_code_sha256": "06b1390befd828202db1e72ed5d41de181d94a93125fa7954fcf8a6ba3fe8835"
+    },
+    {
+      "id": "ae165fd8-1691-4ce0-8ab7-2003de64d833",
+      "name": "Hanafuda",
+      "all_state_public": false,
+      "reason": "Each player sees only their own hand; the undealt card deck is concealed.",
+      "version": 2,
+      "server_code_sha256": "761358af7a9219a514d4a24553ec7068cbdb37690d0733875b7bf01a75a0501f"
+    },
+    {
+      "id": "c5ef8730-9876-4874-8a4d-0cf4065d5a9c",
+      "name": "Hearts (Declarative)",
+      "all_state_public": false,
+      "reason": "Other players’ card hands are concealed; only hand counts and public tricks are exposed.",
+      "version": 1,
+      "server_code_sha256": "030a16036a5fc1dc66b88992dbaa3e8b1c8a980b9071f95d53f18a1d8319e43d"
+    },
+    {
+      "id": "23d06957-0e6e-4845-a187-64209e17e6e6",
+      "name": "Hex",
+      "all_state_public": true,
+      "reason": "All board stones and turn are public; legal-action affordances depend on the active viewer.",
+      "version": 2,
+      "server_code_sha256": "646b6ab8b5612d175f27792f0655b878defe6ed35add6afa422df5609a83b8ee"
+    },
+    {
+      "id": "db333716-cdc9-442f-aa4d-6e2f3899ffbd",
+      "name": "Hong Kong Mahjong",
+      "all_state_public": false,
+      "reason": "Each player has a private concealed tile hand and a hidden wall; mjView filters them per viewer.",
+      "version": 2,
+      "server_code_sha256": "0a6431237e0b9650dbb5be6d6e52e5fb178f0faac10626228d64637017098fc2"
+    },
+    {
+      "id": "fd0d9e26-e912-4777-a13d-d03a30f7ab24",
+      "name": "Ingenious",
+      "all_state_public": false,
+      "reason": "Private tile racks and concealed bag.",
+      "version": 2,
+      "server_code_sha256": "b5f28497837512c8f1b95adeb78d5051c0e45ddbb876afb6e970749135011aef"
+    },
+    {
+      "id": "544109aa-ca2e-4ee3-b057-8d6165708992",
+      "name": "Janggi",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "544f1220fc4261d2470c733564db72716f6e4541d1044310f27ad043aa2dd9d6"
+    },
+    {
+      "id": "6c3f56da-2fb8-4f5c-925b-8f71131d5454",
+      "name": "Joking Hazard",
+      "all_state_public": false,
+      "reason": "Private caption hands, shuffled decks and unrevealed submissions are concealed.",
+      "version": 2,
+      "server_code_sha256": "f322ce7430c6be3a3f343fc6db3da364b36430ae91f801d4dd128174e17f97b6"
+    },
+    {
+      "id": "b2fd2252-182a-4946-b61f-e687acb2b825",
+      "name": "Jungle",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "85812ba9e56c0a4c7229439924f0b17bc4daee7bc6e07280ad8b9f1389eb8e1f"
+    },
+    {
+      "id": "f39c5a1c-99cd-4e45-abf0-2c396dd18972",
+      "name": "Junqi",
+      "all_state_public": false,
+      "reason": "Unrevealed opposing piece ranks are masked in each player’s board view.",
+      "version": 2,
+      "server_code_sha256": "983f9e9d2d5e14b758504627ff659e8ce55a5fd60630279ebbffadc5295721e2"
+    },
+    {
+      "id": "6c7f8716-06ca-42d2-9691-061e81fa14bd",
+      "name": "Karuba",
+      "all_state_public": false,
+      "reason": "The shuffled future tile call order is concealed.",
+      "version": 2,
+      "server_code_sha256": "9a51ea5c2cff21071f58db3200caed77d0ea1dcc88dcf89eb989ddc2543415a5"
+    },
+    {
+      "id": "62abade0-90f9-4e59-9673-9c3db6f60a3f",
+      "name": "King of New York",
+      "all_state_public": false,
+      "reason": "The remaining shuffled shop deck is concealed.",
+      "version": 2,
+      "server_code_sha256": "d5d210ab8150c9cf02eab3d5f5b42024c5809775c683b2fcb421c1d215f10878"
+    },
+    {
+      "id": "75023fd2-244e-4386-bab7-ed69a743e660",
+      "name": "Kismet",
+      "all_state_public": true,
+      "reason": "All dice, held dice and score sheets are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "28e752949e1e80e6c4617af7a6e9cd143d78a1bff8626e2b9ffb1db9aa4ddb87"
+    },
+    {
+      "id": "0c1abcbd-4c84-4925-a796-322ef22ea593",
+      "name": "Konane",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "eee1a2161f0b763940ed624786cd2db1deb9eee33d120b66c915ff5475aeadc3"
+    },
+    {
+      "id": "3755c93c-2997-4157-a662-936bdde2b517",
+      "name": "Las Vegas",
+      "all_state_public": true,
+      "reason": "Casino bills, dice and money are public; future rolls and bill deals are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "caf8146fd6dda90b95630aaa5fb1893aea0744c2395af1ff94407e4e568fd601"
+    },
+    {
+      "id": "e823fd3f-35e9-42f4-b758-4c6c88db4ecd",
+      "name": "Ludus Latrunculorum",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "5022a222683cafa477d0f4b9dc393a4cf840f88af5a23718140b4f2cd8061df2"
+    },
+    {
+      "id": "6c4e11ef-4ada-4fd4-b611-41b4441b6242",
+      "name": "Machi Koro",
+      "all_state_public": true,
+      "reason": "Coins, establishments, landmarks, market supply and rolled dice are public; later rolls use fresh RNG.",
+      "version": 2,
+      "server_code_sha256": "b47b209a404ddfb4492eacb91001fe0635cc4a68b0aec865c63dd683d88e01ad"
+    },
+    {
+      "id": "06970fa5-bfbe-47d8-8adb-0735ea322f64",
+      "name": "Makruk",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "c2390328bbcc8ba9d013e6dd3048462e1bc2241617c27c2f15cfaf1c5446d84e"
+    },
+    {
+      "id": "79a2b02e-25fb-4a90-b258-6ab37d39e6d7",
+      "name": "Mancala (Kalah)",
+      "all_state_public": true,
+      "reason": "Every pit and store count is visible on the shared Kalah board.",
+      "version": 2,
+      "server_code_sha256": "4503a33dcadca0947a1da3d4c386e0ab0ffdc4e04d70ef5b190931111d6a292b"
+    },
+    {
+      "id": "e7cb30e7-649f-4ea8-be24-5e45e1d71ecd",
+      "name": "Mangala",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "a7e8271d3a6c4987362e02d2e84d9d6513b5adf026da688b6537dd92e3a50a8f"
+    },
+    {
+      "id": "465ef3c8-feed-44a9-92ff-e22a76cf579f",
+      "name": "Mastermind",
+      "all_state_public": false,
+      "reason": "The secret codes are concealed until the game ends.",
+      "version": 1,
+      "server_code_sha256": "90e2a3ecd3bbcbc6973e3b6157e2daa279cd5d912c8befcd0b6dd6e7f46e5e38"
+    },
+    {
+      "id": "d80987cb-cda0-4861-97ee-e294dded92c1",
+      "name": "Matador",
+      "all_state_public": false,
+      "reason": "Private domino hands and concealed boneyard.",
+      "version": 2,
+      "server_code_sha256": "f78fce1b5437eb7a937370e15069429753f9a0a4bf4e5e74fb81a9f636ec969f"
+    },
+    {
+      "id": "da9757af-4ab4-4e8e-88ae-eb06f1cec5b5",
+      "name": "Mehen",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "a5c3fff19e5c94314d0132738ce44773dc268c7c8395442a784b1a373f3089eb"
+    },
+    {
+      "id": "5cb0e5e5-6583-404f-b5e4-a0c70d396873",
+      "name": "Memory pairs",
+      "all_state_public": false,
+      "reason": "Unmatched and unselected cards have hidden values; viewFor replaces them with -1.",
+      "version": 2,
+      "server_code_sha256": "1d44a96162b6edd716a925de551c3f5309e7bb6d198bf305177f225138114047"
+    },
+    {
+      "id": "661b2b16-acb2-4923-aaf8-abd3f58c558e",
+      "name": "Metro",
+      "all_state_public": false,
+      "reason": "viewFor exposes only the viewer's held tile and hides the shuffled tile pile and opponents' tiles.",
+      "version": 2,
+      "server_code_sha256": "2418bc2c1873ffdce94f06fc685657fb393214838259d8d188b93276f5500d57"
+    },
+    {
+      "id": "97ac7f0f-5566-4f80-96fb-6d14001e1a50",
+      "name": "Mexican Train",
+      "all_state_public": false,
+      "reason": "Private domino hands and concealed boneyard.",
+      "version": 2,
+      "server_code_sha256": "2f88b7463fcd8f4ddeef9742bf64b361c00cc9224b999de3b818b2540cc1b423"
+    },
+    {
+      "id": "3903561a-7257-4d5a-8786-a547dcb420ee",
+      "name": "Mia",
+      "all_state_public": false,
+      "reason": "Only the roller sees your_dice; other players must respond to a public claim without the dice values.",
+      "version": 3,
+      "server_code_sha256": "5abc7082e602d8af73849833bf4ea7ef9b2562c28d90f684dc19fa9183e721ee"
+    },
+    {
+      "id": "1a94829a-e417-4c3f-b344-c6581412dcb7",
+      "name": "Monopoly City",
+      "all_state_public": false,
+      "reason": "The shuffled chance deck order is concealed.",
+      "version": 1,
+      "server_code_sha256": "764a996ec99c039e37f624f512f2f83e1802c0d2ce33f3cd4fafc6541cb8a79c"
+    },
+    {
+      "id": "9161d33c-4617-4930-a5dd-f1f370b63b6a",
+      "name": "Morabaraba",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "9a7a2614111c653d4d469c948f35da5bdb1e1e3054d2f28b2eb20f41a2e7bed2"
+    },
+    {
+      "id": "dfe6fffd-d226-4e73-ab59-7e76d3700631",
+      "name": "Mu Torere",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 3,
+      "server_code_sha256": "6b14c15c26cef7289da30a007898dfe928d7d57ae8b3c1aff00782f4da72a22b"
+    },
+    {
+      "id": "bfb9889e-d45a-41d1-933a-cf805f8bf074",
+      "name": "Name That Tune",
+      "all_state_public": false,
+      "reason": "The tune identity and future tunes are concealed.",
+      "version": 2,
+      "server_code_sha256": "6fb01d60da1f8a1046499026c4ec0b397dd41bc135c1b5d1480e7bb5268fba8a"
+    },
+    {
+      "id": "7c6c36dc-2083-4ed7-ae02-693cb7bfc260",
+      "name": "Omweso",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "e648484a03149ec1ebda0e3b1c2664b31643b9c32687eadba46d8c2ddade6b62"
+    },
+    {
+      "id": "c867fdb8-3f5c-449d-a438-708e82a99613",
+      "name": "Ouk Chatrang",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "d597ce6eeefdd683c3b28038bad784884a74914bee2cc1b3ce0821683ea48c2f"
+    },
+    {
+      "id": "88763d72-3f53-4788-835e-89d6a64f8c59",
+      "name": "Pachisi",
+      "all_state_public": true,
+      "reason": "Piece positions, cowrie roll and capture status are public; later casts use fresh RNG.",
+      "version": 2,
+      "server_code_sha256": "33839f4245759eb849468ba5defbe1a617f2851f0b0ff0a4e3574f062b598e99"
+    },
+    {
+      "id": "d50b020c-1e2d-4fb9-a734-775e4248df43",
+      "name": "Pallanguzhi",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "d017e7e80ef45a9d72d35f7e12da2041b58e7a8503688272f12bb4ff926d3445"
+    },
+    {
+      "id": "cfc7c8bd-ce8f-4399-a6ab-f51237f438d0",
+      "name": "Parcheesi",
+      "all_state_public": true,
+      "reason": "All pieces and pending dice are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "510573373e362e9b5806117b0c73c314eb93f3fa1bfa906a68b71fafb9ca59c8"
+    },
+    {
+      "id": "b3ed58bc-d084-409d-b8d7-1a8a905fd222",
+      "name": "Patolli",
+      "all_state_public": true,
+      "reason": "All pieces, treasures and current roll are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "96ff5c9edb0cac043a2b7c94e70c3a1eba3cf76ac11d44e85e791e234278da8a"
+    },
+    {
+      "id": "bab54337-6139-4f65-9c98-19574479e187",
+      "name": "Perudo",
+      "all_state_public": false,
+      "reason": "Each player receives only their own dice hand.",
+      "version": 3,
+      "server_code_sha256": "1b89d976601ae0e03a5f403230f548f6828303d83a2c3b1a2d74ef5df83ec5e0"
+    },
+    {
+      "id": "e88b208a-a60f-47f2-954e-84fb2e03985a",
+      "name": "Pig (30 points)",
+      "all_state_public": true,
+      "reason": "All scores, turn totals and rolled dice are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "52e897a931177dce36b82985de0f49750fc9d5b92039fe5d86cf9abc4874657a"
+    },
+    {
+      "id": "52558ab7-e15e-4295-832a-31088ccd2ad1",
+      "name": "Poker",
+      "all_state_public": false,
+      "reason": "Private hole cards and concealed deck.",
+      "version": 2,
+      "server_code_sha256": "6f3d4f910ff1070d0469872e3ac531f109982634b2d47bcf3ebd8282eb305680"
+    },
+    {
+      "id": "466f4538-0022-4296-b006-b4a1002b559a",
+      "name": "Quarriors!",
+      "all_state_public": false,
+      "reason": "Bag order is concealed; the view exposes only type counts.",
+      "version": 2,
+      "server_code_sha256": "a29cc25b6de40b7824de594247e8ae4437298ad28790bd51e354f3af3c81fa71"
+    },
+    {
+      "id": "3d1ada9c-dadc-4f27-a024-e696c71b7e9e",
+      "name": "Queendomino",
+      "all_state_public": false,
+      "reason": "Unrevealed tile and building deck order is concealed.",
+      "version": 2,
+      "server_code_sha256": "cfa5eb8b1f700a447228f1bb625cdb9384753c2a5dca44d740d7ca4e7ba6a410"
+    },
+    {
+      "id": "ef602ade-7aa1-472e-879f-5813291017e3",
+      "name": "Quoridor (Declarative)",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 1,
+      "server_code_sha256": "dc0080c6fdb7d5a89cf55b90f2111b591347f1cec4adde8beab468a00634f5cf"
+    },
+    {
+      "id": "aee57c81-4b5c-4744-983f-02ce771eaf5e",
+      "name": "Reversi",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "0de931c8158ac129d1cfde94151700d830242a2c30f3577498dd705da1ce4aa8"
+    },
+    {
+      "id": "e370e114-3822-4aa3-b760-f84b89f651f5",
+      "name": "Riichi Mahjong",
+      "all_state_public": false,
+      "reason": "Private mahjong hands and concealed wall.",
+      "version": 2,
+      "server_code_sha256": "f56348767640de76adee70b97ad2ea9c77a7a0ea7caf6611dc23e7d6058b98c5"
+    },
+    {
+      "id": "9811c396-3166-4945-9754-a6bc7749354d",
+      "name": "Roll for the Galaxy",
+      "all_state_public": false,
+      "reason": "All player dice and tableaux are visible, but the shuffled development/world deck is exposed only as deckCount.",
+      "version": 2,
+      "server_code_sha256": "bbb7af0bd0ec302c1e99105c451a98f43847e26270465636cb7a01fb966f9e42"
+    },
+    {
+      "id": "c147e88e-6922-4044-8d99-90d48709022b",
+      "name": "Royal Game of Ur",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "fc2092eb2cfd9487d6430b740165abe86d199f8143bbfdb189f9a3d3449efbde"
+    },
+    {
+      "id": "c5b9bbc7-9aa1-4df3-a80f-c07dc6013ad9",
+      "name": "Rumis",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "322b9f7d57d7fed31eb988e3780ffedebb9dcdc3fd4de8c05dd9ad20dad2a572"
+    },
+    {
+      "id": "d340f1d1-31b3-4bde-b5f5-2d10c4a0591d",
+      "name": "Rummy 500",
+      "all_state_public": false,
+      "reason": "Private card hands and concealed stock.",
+      "version": 2,
+      "server_code_sha256": "5d738663b706136afdd59fbbec86d0b5be93a6f4d13b0c59e04755f4278aadd6"
+    },
+    {
+      "id": "6ab87318-7e51-495c-981e-5de9065fc290",
+      "name": "Samurai",
+      "all_state_public": false,
+      "reason": "viewFor includes only your_hand plus opponent hand/deck counts, hiding tile values and order.",
+      "version": 2,
+      "server_code_sha256": "9a6d2f90be95303d7656fa6911d5b43728be151a78c8500d7ed227d3e94121bb"
+    },
+    {
+      "id": "f06011b5-3444-4a20-af9d-83eac8d9de25",
+      "name": "Sebastopol",
+      "all_state_public": false,
+      "reason": "Other players domino hands stay hidden.",
+      "version": 2,
+      "server_code_sha256": "0d6a8a585d69efd255fba279e346f6a55c02c635c0e9e19deec8e203f6bf6153"
+    },
+    {
+      "id": "f6206e6c-a71b-4334-a979-6ae91a328906",
+      "name": "Seega",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "b95ba09dc458d6a5987975542be0552812d17419d13c7331da76c3191d4a8492"
+    },
+    {
+      "id": "5292ce7b-b39c-4a1c-a652-473a1e5a5881",
+      "name": "Senet",
+      "all_state_public": true,
+      "reason": "All pieces and current rolls are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "be0e1fe8c1c6f76938be5754cb3a5c5ce82d53248cc77a0a9e2d785f6381578c"
+    },
+    {
+      "id": "a80478f8-b0be-4a4a-96aa-fbb5a3427c4c",
+      "name": "Shatar",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "488a376bf76b90b2098bd90ca7a3311dcbfd6829425a274be8b2fd4b785301ba"
+    },
+    {
+      "id": "69f949b3-80f8-4022-824a-19957dc2cbad",
+      "name": "Shatranj",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "75acd2500fb6f8e83a62eb0fe6eaab445ccf6fdcb4e0ee72c8068b0e0e552e20"
+    },
+    {
+      "id": "4e0269b3-aab1-431d-b0da-cfd04c94a0f6",
+      "name": "Ship, Captain, and Crew",
+      "all_state_public": true,
+      "reason": "All current dice, set-aside dice and scores are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "fe6e5a5f5d3f74a04abb207dc323b1b5108dac3e1326151cca3bfc76cfbc157f"
+    },
+    {
+      "id": "95fba15d-bd9c-44b4-a392-0178839eb7c4",
+      "name": "Shisima",
+      "all_state_public": true,
+      "reason": "All board pieces, turn and win information are public.",
+      "version": 2,
+      "server_code_sha256": "be1ae24fcdaf322d269056723a569389d6d8234463fb892688c767dad25ac519"
+    },
+    {
+      "id": "6f5251ee-c77b-4273-9c96-3768895698ee",
+      "name": "Shut the Box",
+      "all_state_public": true,
+      "reason": "Open numbers, current dice and results are public; future rolls are generated on demand.",
+      "version": 3,
+      "server_code_sha256": "d9702b4d0e295b80e351dd714e3a872b45146f43e7e3835dea8007517b8d6cf9"
+    },
+    {
+      "id": "0d5944ed-34ba-48f5-a1c3-f7f08f12c8ca",
+      "name": "Simon Says",
+      "all_state_public": false,
+      "reason": "The sequence is concealed during recall.",
+      "version": 2,
+      "server_code_sha256": "be23766436c0c40219f5bb38ddc34aa5b0ca80b7e37500b2ee03b14eefada423"
+    },
+    {
+      "id": "05029c9d-c266-426e-b96c-b6dac311d90c",
+      "name": "Sittuyin",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "d6eb7d24cc905f1eae6523ed92aeaf97660f267cb2243a12d70b09378b2aa8ba"
+    },
+    {
+      "id": "caf68880-25a8-45b7-b109-19426ebec7b0",
+      "name": "Sniff",
+      "all_state_public": false,
+      "reason": "Private domino hands and a hidden boneyard; viewFor exposes only the viewer's hand and counts.",
+      "version": 2,
+      "server_code_sha256": "46453bf11505a3d998bf98f32fe23540a8f84e2ab0e359b6c0d5d144cd3cd6c5"
+    },
+    {
+      "id": "bd529179-8b31-4710-ae50-75e66a48d8b0",
+      "name": "Spades (Declarative)",
+      "all_state_public": false,
+      "reason": "Other players card hands stay hidden.",
+      "version": 1,
+      "server_code_sha256": "757cc9123364227bc261ac1a44b4bfe589acc92603f110be64e63e027e54fafd"
+    },
+    {
+      "id": "c06a9726-1f3d-49ba-a734-fb97dc3c12d8",
+      "name": "Spirit Island: Branch & Claw",
+      "all_state_public": false,
+      "reason": "Each player receives only their own power-card hand.",
+      "version": 1,
+      "server_code_sha256": "0b776ac962fce485ee717a25fb212c6940e6db9ed6bb9ff3211192802b6f86b9"
+    },
+    {
+      "id": "035dea3e-2234-4b3d-b689-87d253075573",
+      "name": "Star Wars: Destiny",
+      "all_state_public": false,
+      "reason": "Private card hands and concealed player decks.",
+      "version": 2,
+      "server_code_sha256": "2d251cf18ae201b00ed226598b7fffd4b03b3b21264fb0dcf9098335461ac3b7"
+    },
+    {
+      "id": "49b3a3f1-ebd1-43d2-ae79-f8cbcc54a3c9",
+      "name": "Sungka",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 3,
+      "server_code_sha256": "18be6bd489fddf331f2f975131844531875317911e39c97ef52a88cdd716d4c4"
+    },
+    {
+      "id": "11eadbfd-1a96-4881-b31a-4a684860dd32",
+      "name": "Tak",
+      "all_state_public": true,
+      "reason": "All board stacks, stone and capstone reserves, turn and legal moves are public.",
+      "version": 1,
+      "server_code_sha256": "90f6527bf0dafb19f3555ceb8c027309ab3dfc3842b1786dab931d0da0d9e8bb"
+    },
+    {
+      "id": "ff4a4668-8ec4-4274-b2d3-508cc64b282c",
+      "name": "Take-away Nim",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "4ff658d5fdc7c9aaa73752fb718ce04393bc08bf51825031a77d6dc32dc6b913"
+    },
+    {
+      "id": "d823dfb0-7629-40f4-8ac2-25e2251a0b89",
+      "name": "Tantrix",
+      "all_state_public": false,
+      "reason": "Hands and board are public but the shuffled tile bag is concealed; only its size is shown.",
+      "version": 2,
+      "server_code_sha256": "e98cf9362e45d51ff56e9ada905d36ec00e3de670637a6a84a162471e5b8c2a7"
+    },
+    {
+      "id": "7b3a7298-e909-4dde-af22-6a57551ab9b9",
+      "name": "Texas 42",
+      "all_state_public": false,
+      "reason": "Other players domino hands stay hidden.",
+      "version": 2,
+      "server_code_sha256": "172bfdd6a40511fb21624d365695963fd86201da5a501b621aa4ec36d35b3dc4"
+    },
+    {
+      "id": "9e9703ec-c229-4eaf-9516-ff98254a1dde",
+      "name": "The Amazing Labyrinth",
+      "all_state_public": false,
+      "reason": "Players receive only their own secret target.",
+      "version": 1,
+      "server_code_sha256": "203f16ad5da703b36e015197ed8e23221015d5a917d5e536193e0bc52ebc6630"
+    },
+    {
+      "id": "cd21eabe-2948-4a55-ba5e-306b1fb70235",
+      "name": "The Crew: The Quest for Planet Nine",
+      "all_state_public": false,
+      "reason": "Other players card hands stay hidden.",
+      "version": 2,
+      "server_code_sha256": "7abf4655b0e7ca4a91e5157505e4d22e452686cb5c213d5501316350735366f4"
+    },
+    {
+      "id": "6052458c-a65d-4c1b-973e-e78185875373",
+      "name": "The Duke",
+      "all_state_public": true,
+      "reason": "All board pieces and recruitment queues are public.",
+      "version": 1,
+      "server_code_sha256": "f6270d31ad0fde347c9ac9744b9e26e8dacffbb1ce1b73417cb11c18a3ce4f0c"
+    },
+    {
+      "id": "a37d8e53-5d67-457e-9f6b-3681ff4b6e47",
+      "name": "The Quacks of Quedlinburg",
+      "all_state_public": false,
+      "reason": "Each player sees only their own remaining bag.",
+      "version": 1,
+      "server_code_sha256": "86a3a7da2f0d78f0e8cef3a51e572d0eb7bb2281e02e4077e1ddd2a1e95acc08"
+    },
+    {
+      "id": "a4f9e4da-c1ca-491f-8c8b-66857a7ce4f7",
+      "name": "Three Men's Morris",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "57ec4e8cb07a1a7020f1e55a8144f89ee2b302c86c48ccaf39a7c3c056f83b8f"
+    },
+    {
+      "id": "84575973-a2e7-480b-8087-d6e6cb6b4979",
+      "name": "Through the Desert",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "98036840ab8010d7f49a034302ff22c6630a2624501de0ab6d7a825979aaa11c"
+    },
+    {
+      "id": "17d43903-4bcb-4401-bb21-c603499105e3",
+      "name": "Throw Throw Burrito",
+      "all_state_public": false,
+      "reason": "Private card hands and concealed draw deck.",
+      "version": 1,
+      "server_code_sha256": "2666d1efd5f4bceb1d569e0dc27fb34fa17fe9ea4a16b4feb6e55db3c31c32fc"
+    },
+    {
+      "id": "10c0a232-9644-4423-99d2-e7d1ce9ff474",
+      "name": "Tic-tac-toe",
+      "all_state_public": true,
+      "reason": "Board, marks and turn are public; only legal-action affordances depend on the active viewer.",
+      "version": 2,
+      "server_code_sha256": "409e6e673e845364e3d67df94871bd34f1a5fa68d3fda6c363d8304070c54612"
+    },
+    {
+      "id": "b920cb91-0d2f-4952-a7d9-48e17ccd5e6c",
+      "name": "Tichu",
+      "all_state_public": false,
+      "reason": "Each viewer receives only their own hand and passed cards; opponents' hands are hidden.",
+      "version": 1,
+      "server_code_sha256": "d38304ca4bd00539150f685e14401167d1ee493706b3010069e1f45ed9937221"
+    },
+    {
+      "id": "12cf77d0-60a9-4e88-8ce3-e59b2dcba445",
+      "name": "Ticket to Ride: Europe",
+      "all_state_public": false,
+      "reason": "Train cards, destination tickets, pending ticket choices and shuffled decks are private.",
+      "version": 2,
+      "server_code_sha256": "f11561177c248fe44dcf84dbdcc5e2afdb2d3a823e9c4b8d6896c7f951de19b1"
+    },
+    {
+      "id": "81721e8f-747f-4815-9d9f-d86d224b2892",
+      "name": "Toguz Korgool",
+      "all_state_public": true,
+      "reason": "All pits, kazan totals and tuz ownership are visible on the shared board.",
+      "version": 2,
+      "server_code_sha256": "c8255090b0041ac5bb6677e2216c3c6c355d5cc057046836e6f7c697712bde35"
+    },
+    {
+      "id": "1a9ff178-2195-48ef-9b43-b14197d37abd",
+      "name": "Tsuro",
+      "all_state_public": false,
+      "reason": "Private path-tile hands and concealed draw pile.",
+      "version": 2,
+      "server_code_sha256": "48161eef3c0c0f0f18d05067dbea8c22d8d33cde3a03b0e7f1732781f1dd8214"
+    },
+    {
+      "id": "f8845bc0-a552-491f-b2ef-abbd7582246a",
+      "name": "Twelve Men's Morris",
+      "all_state_public": true,
+      "reason": "All board pieces, reserves, placement phase and turn are public.",
+      "version": 2,
+      "server_code_sha256": "4e66c69732a3edbbbc0109a538ac4bc794901782a816600fa4e8c39f636a8301"
+    },
+    {
+      "id": "b85fa4c1-70e6-410c-9e09-c99f8557a065",
+      "name": "Ubongo",
+      "all_state_public": false,
+      "reason": "The shuffled future gem sequence is concealed.",
+      "version": 2,
+      "server_code_sha256": "1f1b3e7f228b7f24ccebf41fe1198d85db014d249d3334bab14c453d4b012e79"
+    },
+    {
+      "id": "356fb234-ea98-4051-a8b4-cac28b91f8af",
+      "name": "Uckers",
+      "all_state_public": true,
+      "reason": "All pieces and pending dice are public; future rolls are generated on demand.",
+      "version": 2,
+      "server_code_sha256": "c5b4aa7d9e90024e7be1b27cb53bbcfc37536959428662ffb7199ef86588d079"
+    },
+    {
+      "id": "b167b753-0bde-4ce8-960b-063b658bcce4",
+      "name": "Uno",
+      "all_state_public": false,
+      "reason": "Opponent hands and the draw pile are concealed until game end.",
+      "version": 2,
+      "server_code_sha256": "9e97c5618d044f345becd3e31ce3d4e98a6238ad36347d1042869b552b202d9f"
+    },
+    {
+      "id": "1a265560-3e73-4efb-ad9b-c6e2e6ed48f7",
+      "name": "What Do You Meme?",
+      "all_state_public": false,
+      "reason": "Private caption hands, hidden deck order and anonymous or unrevealed submissions.",
+      "version": 2,
+      "server_code_sha256": "9b19d950bbcbb2f3cfb2b95ad02841eff53aa910b45eb5aa33f28a377e8ad1db"
+    },
+    {
+      "id": "617f44ac-3bcf-464d-b2bd-cb74a2c82e30",
+      "name": "Wheel of Fortune",
+      "all_state_public": false,
+      "reason": "The unrevealed puzzle solution is concealed.",
+      "version": 2,
+      "server_code_sha256": "1d82df4930841cf2f15b2375baf6857172afc8b995d805d7b431ab7107d5b54d"
+    },
+    {
+      "id": "6823fc51-6d53-4cd9-aa72-61c370b42d26",
+      "name": "Yacht",
+      "all_state_public": true,
+      "reason": "Score sheets, rolled dice and holds are public; new dice are rolled on demand.",
+      "version": 2,
+      "server_code_sha256": "e41c42769f0a24c3c527a5373c87a68d720ceffbf92ec945cdf87aa115c9e671"
+    },
+    {
+      "id": "8343f669-f3bd-4c02-a3e9-cbd86d8da2ec",
+      "name": "YINSH",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 1,
+      "server_code_sha256": "85f608704d94e56be4ff02ffa74c0e54ddb10cc43719728403cb0debd93bf317"
+    },
+    {
+      "id": "d6b9ecb6-957f-4d1f-8d50-f999faf91047",
+      "name": "Yut Nori",
+      "all_state_public": true,
+      "reason": "All players see every mal position and all pending stick throws; later throws use fresh RNG.",
+      "version": 2,
+      "server_code_sha256": "b6c43d46b755f3495a922e5c54c115da985da5b8967dd8dfc6a24d409d1bf815"
+    },
+    {
+      "id": "f23bbd6a-c5f3-4aa7-83e9-aa5c99812aff",
+      "name": "Zamma",
+      "all_state_public": true,
+      "reason": "All board pieces, positions and gameplay counters are public.",
+      "version": 2,
+      "server_code_sha256": "8ca02f80e348170f7b411867393c27a9bbefb1936f8ac6b82e0c6bce024f7034"
+    },
+    {
+      "id": "a389a6e9-c04e-4ec3-a41a-4a7876108bb7",
+      "name": "Zendo",
+      "all_state_public": false,
+      "reason": "The selected secret rule is hidden from players; only classified examples are public.",
+      "version": 2,
+      "server_code_sha256": "cdf3820dc891dc1077ef4bc546709976e3e389cae5945616b4a2effdee339a34"
+    },
+    {
+      "id": "1da3b140-022d-43d5-961f-3e44fd8dcd41",
+      "name": "Zombie Dice",
+      "all_state_public": true,
+      "reason": "Dice colors and outcomes are public; cup draws and rolls are generated on demand.",
+      "version": 3,
+      "server_code_sha256": "40bc70cd7af59d2816e9d5c58b93da378f5b168660f1ebd845e713a50f491cac"
+    }
+  ]
+}

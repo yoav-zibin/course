@@ -1,4 +1,5 @@
 {
+  "all_state_public": true,
   "name": "Checkers (Declarative)",
   "description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
   "allowed_player_counts": [

@@ -1,4 +1,5 @@
 {
+  "all_state_public": true,
   "name": "Domineering (Declarative)",
   "description": "On a 6 by 6 board, player one places vertical dominoes and player two horizontal dominoes. Each covers two empty cells. A player with no placement loses.",
   "game_addition_request_id_and_secret": "example-only-declarative-domineering-replace-before-publishing",

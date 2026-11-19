@@ -1,4 +1,5 @@
 {
+  "all_state_public": true,
   "name": "Gomoku (Declarative)",
   "description": "Take turns placing stones on a 9 by 9 board. The first line of five or more wins. A full board is a draw.",
   "game_addition_request_id_and_secret": "example-only-declarative-gomoku-replace-before-publishing",

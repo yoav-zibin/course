@@ -1,4 +1,5 @@
 {
+  "all_state_public": false,
   "name": "Hearts (Declarative)",
   "description": "Follow the led suit when possible. Hearts are worth one point and the queen of spades is worth thirteen. The lowest score wins after thirteen tricks.",
   "allowed_player_counts": [

@@ -1,4 +1,5 @@
 {
+  "all_state_public": false,
   "name": "Go Fish (Declarative)",
   "description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
   "allowed_player_counts": [

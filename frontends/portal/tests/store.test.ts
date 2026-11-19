@@ -136,19 +136,20 @@ test('offline cached reads update recency and a recovered cache write publishes 
   }finally{restore();}
 });
 
-test('real bundled rules support durable pass-and-play, handoff, win, restart and replay', async () => {
+test('public bundled rules support continuous pass-and-play, win, restart and replay', async () => {
   browserStorage(); const restore = mockedFetch();
   try {
     const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test');
     await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0, names: ['Alex', 'Sam'] });
     const id = store.getSnapshot().selectedMatch!.id;
-    await store.actions.submitMove({ cell: 0 }); assert.equal(store.getSnapshot().selectedMatch!.awaitingHandoff, true);
+    await store.actions.submitMove({ cell: 0 }); assert.equal(store.getSnapshot().selectedMatch!.awaitingHandoff, false);
     assert.deepEqual(store.actions.presentationMessage().presentation_history, []);
-    assert.equal(store.actions.presentationMessage().acting_for_player_index, null);
-    await assert.rejects(store.actions.submitMove({ cell: 1 }), /next player is ready/);
+    assert.equal(store.actions.presentationMessage().acting_for_player_index, 1);
     const restarted = new PortalStore(testRuntime()); await restarted.bootstrap('https://local.test');
-    assert.equal(restarted.getSnapshot().selectedMatch!.id, id); assert.equal(restarted.getSnapshot().selectedMatch!.awaitingHandoff, true); assert.equal(restarted.getSnapshot().selectedMatch!.players[1].name, 'Sam');
-    for (const cell of [3,1,4,2]) { await restarted.actions.revealLocal(); await restarted.actions.submitMove({ cell }); }
+    assert.equal(restarted.getSnapshot().selectedMatch!.id, id); assert.equal(restarted.getSnapshot().selectedMatch!.awaitingHandoff, false); assert.equal(restarted.getSnapshot().selectedMatch!.players[1].name, 'Sam');
+    assert.equal(restarted.actions.presentationMessage().acting_for_player_index, 1);
+    await restarted.actions.replay(1); assert.equal(restarted.getSnapshot().replayIndex, 1); await restarted.actions.replay(null);
+    for (const cell of [3,1,4,2]) await restarted.actions.submitMove({ cell });
     const match = restarted.getSnapshot().selectedMatch!; assert.equal(match.status, 'over'); assert.equal(match.state.winner, 0); assert.equal(match.move_count, 5);
     await restarted.actions.loadHistory(); await restarted.actions.replay(2); const message = restarted.actions.presentationMessage(); assert.equal(message.replay.index, 2); assert.equal(message.acting_for_player_index, null); assert.equal(message.last_move_player_index,1); assert.equal(message.state.board[1], -1);
     await assert.rejects(restarted.actions.submitMove({ cell: 8 }), /live board/);
@@ -160,7 +161,7 @@ test('real bundled computer turns advance using the same shared offline engine',
     const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.startPractice('bundled-tictactoe', { humans: 1, computers: 1 });
     await store.actions.submitMove({ cell: 4 }); const match = store.getSnapshot().selectedMatch!;
     assert.equal(match.move_count, 2); assert.deepEqual(match.turn_of_player_indices, [0]); assert.equal(match.state.board.filter((v: number) => v !== -1).length, 2);
-    assert.equal(match.awaitingHandoff, undefined); assert.equal(store.actions.presentationMessage().acting_for_player_index, 0);
+    assert.equal(match.awaitingHandoff, false); assert.equal(store.actions.presentationMessage().acting_for_player_index, 0);
   } finally { restore(); }
 });
 test('local computer batches deliver every accepted intermediate view before publishing the final board', async () => {
@@ -266,15 +267,42 @@ test('invalid local counts and human positions cannot create a saved match',asyn
     }
   }finally{restore();}
 });
-test('history cannot reveal the next player board before the device handoff is confirmed', async () => {
-  browserStorage(); const restore = mockedFetch();
+for (const publicState of [false, undefined, 'true']) test(`private or unknown state (${publicState}) preserves handoff and history protection after restart`, async () => {
+  browserStorage();
+  const fixture = { ...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json', import.meta.url), 'utf8')), id: 'private-handoff', all_state_public: publicState };
+  const restore = mockedFetch(url => url.pathname.startsWith('/games/private-handoff') ? fixture : undefined);
   try {
     const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test');
-    await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0 });
+    await store.actions.startPractice(fixture.id, { humans: 2, computers: 0 });
     await store.actions.submitMove({ cell: 0 }); assert.equal(store.getSnapshot().selectedMatch!.awaitingHandoff, true);
-    await assert.rejects(store.actions.replay(1), /next player.*ready/i);
-    assert.equal(store.getSnapshot().replayIndex, null);
-    await store.actions.revealLocal(); await store.actions.replay(1); assert.equal(store.getSnapshot().replayIndex, 1);
+    assert.equal(store.actions.presentationMessage().acting_for_player_index, null);
+    await assert.rejects(store.actions.submitMove({ cell: 1 }), /next player is ready/);
+    const restarted = new PortalStore(testRuntime()); await restarted.bootstrap('https://local.test');
+    assert.equal(restarted.getSnapshot().selectedMatch!.awaitingHandoff, true);
+    await assert.rejects(restarted.actions.replay(1), /next player.*ready/i);
+    assert.equal(restarted.getSnapshot().replayIndex, null);
+    await restarted.actions.revealLocal(); await restarted.actions.replay(1); assert.equal(restarted.getSnapshot().replayIndex, 1);
+    await restarted.actions.replay(null); await restarted.actions.submitMove({ cell: 1 });
+    assert.equal(restarted.getSnapshot().selectedMatch!.awaitingHandoff, true);
+  } finally { restore(); }
+});
+for (const gameId of ['bundled-tictactoe', 'downloaded-public']) test(`${gameId} public matches with a saved pending handoff immediately allow play and history after restart`, async () => {
+  browserStorage();
+  const fixture = { ...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json', import.meta.url), 'utf8')), id: gameId, all_state_public: true };
+  const restore = mockedFetch(url => url.pathname.startsWith('/games/downloaded-public') ? fixture : undefined);
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test');
+    await store.actions.startPractice(gameId, { humans: 2, computers: 0 });
+    await store.actions.submitMove({ cell: 0 }); const id = store.getSnapshot().selectedMatch!.id;
+    const repository = new AccountRepository('https://local.test');
+    await repository.mutate('visitor', data => { data.local[id].awaitingHandoff = true; });
+    const restarted = new PortalStore(testRuntime()); await restarted.bootstrap('https://local.test');
+    assert.equal(restarted.getSnapshot().selectedMatch!.awaitingHandoff, false);
+    assert.equal(restarted.actions.presentationMessage().acting_for_player_index, 1);
+    await restarted.actions.replay(1); await restarted.actions.replay(null);
+    await restarted.actions.submitMove({ cell: 1 });
+    assert.equal(restarted.getSnapshot().selectedMatch!.move_count, 2);
+    assert.equal(restarted.getSnapshot().selectedMatch!.awaitingHandoff, false);
   } finally { restore(); }
 });
 test('local-only launch loads accounts and resumes local play while making zero network calls', async () => {

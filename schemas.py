@@ -471,6 +471,7 @@ class GameSummaryOut(BaseModel):
     allowed_player_counts: list[int]
     allows_leave_mid_match: bool
     allows_join_mid_match: bool
+    all_state_public: bool = False
     game_schemas: GameSchemas | None = Field(
         default=None, exclude_if=lambda value: value is None
     )
@@ -492,6 +493,7 @@ class GameSummaryOut(BaseModel):
             allowed_player_counts=list(game.rules.allowed_player_counts),
             allows_leave_mid_match=game.rules.allows_leave_mid_match,
             allows_join_mid_match=game.rules.allows_join_mid_match,
+            all_state_public=game.all_state_public,
             game_schemas=game.game_schemas,
             created_at=game.created_at,
             updated_at=game.updated_at,

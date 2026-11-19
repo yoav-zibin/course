@@ -38,8 +38,8 @@ data,_=module.fixture_snapshot();print(json.dumps(data))
     assert.equal(store.getSnapshot().selectedMatch!.move_count,7);
     const restarted=new PortalStore(rules);await restarted.bootstrap('https://buildplay.fun',true);
     assert.equal(restarted.getSnapshot().selectedMatch!.move_count,7);
-    assert.equal(restarted.getSnapshot().selectedMatch!.awaitingHandoff,true);
-    await restarted.actions.revealLocal();
+    assert.equal(restarted.getSnapshot().selectedMatch!.awaitingHandoff,false);
+    assert.equal(restarted.actions.presentationMessage().acting_for_player_index,1);
     await restarted.actions.loadHistory();await restarted.actions.replay(4);
     assert.equal(restarted.actions.presentationMessage().state.board.filter((v:number)=>v>=0).length,4);
     assert.equal(network,0);

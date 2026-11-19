@@ -1,4 +1,5 @@
 {
+  "all_state_public": false,
   "name": "Guess Who? (Declarative)",
   "description": "Ask yes-or-no questions about the other player’s secret character, then guess their identity. A correct guess wins; an incorrect guess loses.",
   "allowed_player_counts": [

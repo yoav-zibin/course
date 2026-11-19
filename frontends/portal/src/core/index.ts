@@ -65,7 +65,12 @@ export class PortalStore {
     catch (error) { guard(); this.patch({ error: error instanceof Error ? error.message : String(error) }); throw error; }
     finally { if (loading) { try { guard(); this.patch({ loading: false }); } catch { /* The new account owns its loading state. */ } } }
   }
-  private decorate(match: Match | null): Match | null { return match ? { ...match, pending: this.data.queues[match.id]?.length || 0, conflict: this.data.conflicts[match.id] || null } : null; }
+  private awaitingLocalHandoff(match: LocalMatch | undefined, data = this.data): boolean {
+    if (!match?.awaitingHandoff) return false;
+    const game = match.game_id === bundled.id && match.game_version === bundled.version ? bundled : data.responses[`/games/${match.game_id}/versions/${match.game_version}`];
+    return game?.all_state_public !== true;
+  }
+  private decorate(match: Match | null): Match | null { return match ? { ...match, ...(this.data.local[match.id]?.awaitingHandoff ? { awaitingHandoff: this.awaitingLocalHandoff(this.data.local[match.id]) } : {}), pending: this.data.queues[match.id]?.length || 0, conflict: this.data.conflicts[match.id] || null } : null; }
   private publishData(data: AccountData) {
     this.mergeVolatile(data);this.data = data; const selected = this.state.selectedMatch;
     const next = selected ? data.local[selected.id] || data.responses[`/matches/${selected.id}`] || selected : null;
@@ -424,16 +429,16 @@ export class PortalStore {
   }
   async practiceMove(move: any) {
     const selected = this.state.selectedMatch as LocalMatch; if (!selected || !this.data.local[selected.id]) throw new Error('Choose a local match first');
-    if (this.state.replayIndex !== null || selected.awaitingHandoff) throw new Error('Return to the live board and confirm the next player is ready');
+    if (this.state.replayIndex !== null || this.awaitingLocalHandoff(this.data.local[selected.id])) throw new Error('Return to the live board and confirm the next player is ready');
     const guard = this.capture(); const owner = this.identity();
     await this.repository.lock(owner, async () => {
       const data = await this.repository.read(owner); const original = data.local[selected.id];
-      if (!original || original.move_count !== selected.move_count || original.status !== 'ongoing' || original.awaitingHandoff) throw new Error('Local match changed. Refresh before moving.');
+      if (!original || original.move_count !== selected.move_count || original.status !== 'ongoing' || this.awaitingLocalHandoff(original, data)) throw new Error('Local match changed. Refresh before moving.');
       const next: LocalMatch = JSON.parse(JSON.stringify(original)); const game = data.responses[`/games/${next.game_id}/versions/${next.game_version}`]; if (!game?.server_code) throw new Error('Download this game once before playing offline');
       const actor = next.localMode === 'pass' ? next.turn_of_player_indices?.find(i => next.players[i].kind === 'human') : localHumanSeat(next);
       if (actor === undefined || !next.turn_of_player_indices?.includes(actor)) throw new Error('It is not your turn');
       await this.practiceResult(game, next, await this.callGame(game, 'applyMove', [next.logicState, next.players[actor].id, move], next), true, actor); await this.practiceComputers(game, next); guard();
-      if (next.localMode === 'pass' && next.status === 'ongoing' && next.turn_of_player_indices?.[0] !== actor) next.awaitingHandoff = true;
+      next.awaitingHandoff = game.all_state_public !== true && next.localMode === 'pass' && next.status === 'ongoing' && next.turn_of_player_indices?.[0] !== actor;
       data.local[next.id] = next; await this.repository.write(owner, data); guard();
       // Publish the accepted views with the final board so the renderer can
       // present computer actions that were committed in this single batch.
@@ -456,7 +461,7 @@ export class PortalStore {
   }
   async replay(index: number | null) {
     const replayToken = ++this.replaySelection; const match = this.state.selectedMatch; if (!match) return; if (index === null) { this.patch({ replayIndex: null }); return; }
-    if (this.data.local[match.id]?.awaitingHandoff) throw new Error(copyText('Confirm the next player is ready before viewing history.'));
+    if (this.awaitingLocalHandoff(this.data.local[match.id])) throw new Error(copyText('Confirm the next player is ready before viewing history.'));
     const guard = this.capture(); const token = this.selection; let wanted = Math.max(0, Math.min(match.move_count, index));
     let history = this.state.history;
     if (this.paginated && !this.data.local[match.id]) {
@@ -495,7 +500,7 @@ export class PortalStore {
     // Local pass-and-play snapshots contain the next human's private view.
     // During replay its viewer must follow that frame, not the live match turn.
     const local = this.data.local[match.id]; const seat = local ? local.localMode === 'pass' ? view.turn_of_player_indices?.find(i => match.players[i].kind === 'human') ?? localHumanSeat(match) : localHumanSeat(match) : match.players.find(p => p.user_id === this.state.account?.id && p.active !== false)?.player_index ?? null;
-    const allowed = replay === null && !match.pending && !match.conflict && !local?.awaitingHandoff && view.status === 'ongoing' && seat !== null && view.turn_of_player_indices?.includes(seat);
+    const allowed = replay === null && !match.pending && !match.conflict && !this.awaitingLocalHandoff(local) && view.status === 'ongoing' && seat !== null && view.turn_of_player_indices?.includes(seat);
     const texts = this.state.game ? gameTexts(this.state.game) : null;
     return { type: 'state_changed', state: view.state ?? null, view: view.state ?? null, players: match.players.map(p => ({ player_index: p.player_index, player_id: p.id, kind: p.kind, name: p.name || (p.user_id ? this.state.profiles[p.user_id]?.display_name || (p.user_id === this.state.account?.id ? this.state.account.display_name : `Player ${p.player_index + 1}`) : `Computer ${p.player_index + 1}`), picture_url: p.user_id ? this.state.profiles[p.user_id]?.picture_url || '' : '' })), turn_of_player_indices: view.turn_of_player_indices, turn_of_player_index: view.turn_of_player_indices?.[0] ?? null, my_player_index: seat, acting_for_player_index: allowed ? seat : null, status: view.status, end_reason: view.end_reason, move_count: view.move_count, last_move_player_index: replay === null ? match.last_move_player_index ?? null : replayActor, token_pot: view.token_pot || 0, replay: replay === null ? null : { index: replay, total: match.move_count }, presentation_history: this.presentationHistory().slice(-12), locale: getLocale(), direction: getDirection(), strings: texts?.strings || this.state.game?.declarative_ui?.strings || {} };
   }

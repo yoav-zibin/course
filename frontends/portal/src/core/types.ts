@@ -2,7 +2,7 @@ export type JSONValue = null | boolean | number | string | JSONValue[] | { [key:
 // Backend records evolve independently; named fields below are the shared client contract.
 export interface Account { id: string; password: string; display_name: string; picture_url?: string; locale?: string; linked?: any[]; referral_code?: string | null; [key: string]: any }
 export interface Player { player_index: number; kind: 'human' | 'computer'; user_id: string | null; id: string; active?: boolean; name?: string }
-export interface Game { id: string; version: number; name: string; description: string; allowed_player_counts: number[]; renderer_type?: string; declarative_ui?: any; server_code?: string; game_schemas?: any; [key: string]: any }
+export interface Game { id: string; version: number; name: string; description: string; allowed_player_counts: number[]; all_state_public?: boolean; renderer_type?: string; declarative_ui?: any; server_code?: string; game_schemas?: any; [key: string]: any }
 export interface Match { id: string; game_id: string; game_version: number; owner_user_id: string; status: string; state?: any; players: Player[]; turn_of_player_indices: number[] | null; move_count: number; created_at: string; [key: string]: any }
 export interface LocalMatch extends Match { localMode: 'pass' | 'computer'; logicState: any; practiceSeed: number; moves: any[]; initialState: any; initialTurn: number[] | null; awaitingHandoff?: boolean }
 export interface PracticeOptions { humans?: number; computers?: number; names?: string[]; humanSeat?: number }

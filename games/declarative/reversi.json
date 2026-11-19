@@ -1,4 +1,5 @@
 {
+  "all_state_public": true,
   "name": "Reversi (Declarative)",
   "description": "Place a disc to bracket and flip opposing discs. Turns pass automatically when no move exists. When neither player can move, most discs wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-reversi-replace-before-publishing",

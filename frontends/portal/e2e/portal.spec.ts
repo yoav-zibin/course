@@ -70,7 +70,8 @@ test('short screens keep the full native board width and can scroll to its last 
     expect(await cell.evaluate(node=>{const rect=node.getBoundingClientRect();return node.contains(document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2));})).toBe(true);
     await expect(page.getByRole('button',{name:'Reset board view'})).toHaveText('100%');
     await page.screenshot({path:info.outputPath(`last-rank-${viewport.width}.png`)});
-    await cell.click();await expect(page.getByRole('button',{name:'I’m ready'})).toBeVisible();
+    await cell.click();await expect(cell).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
   }
 });
 
@@ -87,7 +88,8 @@ test('empty fitted board space permits native touch scrolling and retains real p
   for(let step=1;step<=8;step++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:5,y:start+(end-start)*step/8,id:1}]});await page.waitForTimeout(16);}
   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   await expect.poll(()=>port.evaluate(node=>node.scrollTop)).toBeGreaterThan(before+20);
-  const cell=page.getByRole('button',{name:'Cell 9',exact:true});await cell.tap();await expect(page.getByRole('button',{name:'I’m ready'})).toBeVisible();
+  const cell=page.getByRole('button',{name:'Cell 9',exact:true});await cell.tap();await expect(cell).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeAttached();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
 });
 
 test('a newly created match stays selected after reloading a game detail link',async({page,request})=>{
@@ -111,7 +113,7 @@ test('browser Back from a local match restores its game detail screen and play c
   await expect(page.getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
 });
 
-test('full localized instructions remain available at handoff, game end and read-only replay',async({page,request})=>{
+test('full localized instructions remain available between public turns, at game end and read-only replay',async({page,request})=>{
   const created=await game(request,uniqueName('Instruction game'));await page.goto(`/portal#game=${created.id}`);
   await page.getByRole('button',{name:'Log in',exact:true}).click();await page.getByRole('button').filter({hasText:'العربية'}).last().click();
   await expect(page.locator('html')).toHaveAttribute('lang','ar');await page.getByRole('button',{name:sharedCopy['Close dialog'].ar,exact:true}).click();
@@ -124,11 +126,11 @@ test('full localized instructions remain available at handoff, game end and read
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   for(const [index,cell] of [1,4,2,5,3].entries()){
     if(index){
-      await expect(page.getByTestId('game-stage')).toHaveCount(0);
+      await expect(page.getByTestId('game-stage')).toBeVisible();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
       await page.getByRole('button',{name:'How to play',exact:true}).click();await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
-      await page.getByRole('button',{name:'Close dialog',exact:true}).click();await page.getByRole('button',{name:'I’m ready'}).click();
+      await page.getByRole('button',{name:'Close dialog',exact:true}).click();
     }
-    await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();
+    const target=page.getByRole('button',{name:`Cell ${cell}`,exact:true});await target.click();await expect(target).toHaveCount(0);
   }
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
   const svg=await page.getByTestId('game-stage').locator('svg').first().elementHandle();
@@ -255,8 +257,9 @@ test('a full legacy browser cache is evicted automatically while durable saves a
   await page.evaluate(async()=>{if('serviceWorker'in navigator)await navigator.serviceWorker.ready;});await context.setOffline(true);
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
-  await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();
-  await page.reload();await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
+  await page.reload();await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toHaveCount(0);
   await expect(page.getByText(/Could not save downloaded data|Saved data needs attention/)).toHaveCount(0);
 });
 
@@ -277,7 +280,7 @@ test('guest identity survives reload, shared navigation stays responsive, and bu
   expect(errors).toEqual([]);
 });
 
-test('bundled local game is playable offline, hides handoffs, persists, and replays',async({page,context})=>{
+test('bundled public-state game is playable offline without handoffs, persists, and replays',async({page,context})=>{
   await page.goto('/portal');await page.getByRole('button',{name:'On this device',exact:true}).click();
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
@@ -286,12 +289,13 @@ test('bundled local game is playable offline, hides handoffs, persists, and repl
   // Install/cache the universal shell before taking the device offline.
   await page.evaluate(async()=>{if('serviceWorker'in navigator)await navigator.serviceWorker.ready;});
   await context.setOffline(true);
-  await page.getByRole('button',{name:'Cell 1',exact:true}).click();await expect(page.getByRole('button',{name:'I’m ready'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Play history',exact:true})).toBeDisabled();
-  await expect(page.getByRole('button',{name:'← Previous',exact:true})).toBeDisabled();
-  await page.reload();await expect(page.getByRole('button',{name:'I’m ready'})).toBeVisible();
-  for(const cell of [4,2,5,3]){await page.getByRole('button',{name:'I’m ready'}).click();await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();}
+  await page.getByRole('button',{name:'Cell 1',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Play history',exact:true})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'← Previous',exact:true})).toBeEnabled();
+  await page.reload();await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
+  for(const cell of [4,2,5,3]){await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();await expect(page.getByRole('button',{name:'Cell '+cell,exact:true})).toHaveCount(0);}
   await expect(page.getByText('Finished',{exact:true}).first()).toBeVisible();
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
   await page.getByRole('button',{name:'← Previous',exact:true}).click();await expect(page.getByText('Replay · move 4 of 5')).toBeVisible();
@@ -304,9 +308,8 @@ test('bundled local game is playable offline, hides handoffs, persists, and repl
 
 test('a genuinely finished local draw stays translated offline in detail and match list',async({page,context})=>{
   await page.goto('/portal');await page.getByRole('button',{name:'On this device',exact:true}).click();await page.getByRole('button',{name:'Pass and play',exact:true}).click();
-  for(const [index,cell] of [1,2,3,5,4,6,8,7,9].entries()){
-    if(index)await page.getByRole('button',{name:'I’m ready'}).click();
-    await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();
+  for(const cell of [1,2,3,5,4,6,8,7,9]){
+    const target=page.getByRole('button',{name:`Cell ${cell}`,exact:true});await target.click();await expect(target).toHaveCount(0);
   }
   await expect(page.getByTestId('match-outcome')).toHaveText('Draw');
   // Spanish has never been downloaded in this fresh browser context.

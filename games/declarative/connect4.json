@@ -1,4 +1,5 @@
 {
+  "all_state_public": true,
   "name": "Connect Four (Declarative)",
   "description": "Choose a column to drop a disc. Connect four horizontally, vertically or diagonally. A full board is a draw.",
   "game_addition_request_id_and_secret": "example-only-declarative-connect4-replace-before-publishing",

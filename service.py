@@ -1771,6 +1771,7 @@ class GamePlatform:
         name: str,
         description: str,
         rules: GameRules,
+        all_state_public: bool = False,
         code: str,
         server_code: str | None = None,
         game_schemas: dict[str, JsonValue] | None = None,
@@ -1798,6 +1799,7 @@ class GamePlatform:
                 name=name,
                 description=description,
                 rules=rules,
+                all_state_public=all_state_public,
                 code=code,
                 server_code=server_code,
                 import_package=import_package,
@@ -1814,6 +1816,7 @@ class GamePlatform:
         name: str,
         description: str,
         rules: GameRules,
+        all_state_public: bool = False,
         code: str,
         server_code: str | None = None,
         game_schemas: dict[str, JsonValue] | None = None,
@@ -1871,6 +1874,7 @@ class GamePlatform:
                     allowed_player_counts=rules.allowed_player_counts,
                     allows_leave_mid_match=rules.allows_leave_mid_match,
                     allows_join_mid_match=rules.allows_join_mid_match,
+                    all_state_public=all_state_public,
                     code=code,
                     server_code=server_code,
                     game_schemas=game_schemas,
@@ -1885,6 +1889,7 @@ class GamePlatform:
                     name=name,
                     description=description,
                     rules=rules,
+                    all_state_public=all_state_public,
                     code=code,
                     server_code=server_code,
                     game_schemas=game_schemas,
@@ -2401,6 +2406,7 @@ class GamePlatform:
         allowed_player_counts: tuple[int, ...] | None = None,
         allows_leave_mid_match: bool | None = None,
         allows_join_mid_match: bool | None = None,
+        all_state_public: bool | None = None,
         code: str | None = None,
         server_code: str | None | object = UNSET,
         game_schemas: dict[str, JsonValue] | None | object = UNSET,
@@ -2434,6 +2440,9 @@ class GamePlatform:
                 description=description
                 if description is not None
                 else game.description,
+                all_state_public=all_state_public
+                if all_state_public is not None
+                else game.all_state_public,
                 rules=GameRules(
                     allowed_player_counts=allowed_player_counts
                     if allowed_player_counts is not None

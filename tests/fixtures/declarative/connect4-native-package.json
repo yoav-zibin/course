@@ -5,6 +5,7 @@
     "version": 3
   },
   "game": {
+    "all_state_public": true,
     "id": "e299b14e-480d-44f3-8132-74282a46cebc",
     "version": 3,
     "name": "Connect Four",

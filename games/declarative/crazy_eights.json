@@ -1,4 +1,5 @@
 {
+  "all_state_public": false,
   "name": "Crazy Eights (Declarative)",
   "description": "Play a card matching the discard pile by rank or suit, or play an eight and choose a new suit. If no card is played, draw. Empty your hand to win.",
   "allowed_player_counts": [
