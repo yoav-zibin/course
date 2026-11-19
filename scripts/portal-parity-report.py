@@ -72,7 +72,7 @@ def build_report(fixture_path, evidence, output):
     passed = not missing and all(result["passed"] for result in results)
     summary = {"sourceSha":fixture["sourceSha"],"createdAt":datetime.now(timezone.utc).isoformat(),
                "viewport":fixture["viewport"],"comparisonFields":MATCH_FIELDS,"checks":results,
-               "missing":missing,"passed":passed,"scope":"Signed-out pages and local single-human versus computer games; synthetic data only."}
+               "missing":missing,"passed":passed,"scope":"Chromium, Android emulator and iOS Simulator. Signed-out pages and local single-human versus computer games; synthetic data only."}
     findings_path=evidence / "findings.json"
     findings=json.loads(findings_path.read_text()) if findings_path.is_file() else {"findings":[],"visualReviewComplete":False}
     summary["visualReview"]=findings
@@ -103,7 +103,7 @@ def build_report(fixture_path, evidence, output):
 body{font-family:system-ui,sans-serif;background:#10141f;color:#edf1fa;margin:0;padding:24px;line-height:1.5}main{max-width:1500px;margin:auto}h1{margin-bottom:8px}a{color:#7dd5ff}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}figure{margin:0;min-width:0}figcaption{font-weight:700;padding:8px 0}img{width:100%;height:auto;border:1px solid #4a5468;border-radius:8px;display:block}section{margin-top:36px;border-top:1px solid #40495d;padding-top:12px}.badge{color:#c3f24b}.missing{color:#ff9e9e}.scope{max-width:1000px;color:#bdc8d8}code{overflow-wrap:anywhere}@media(max-width:700px){body{padding:12px}.grid{gap:6px}figcaption{font-size:12px}}
 </style><main><h1>BuildPlay: web · Android · iOS</h1>'''
     document += f'<p>Application source <code>{html.escape(fixture["sourceSha"])}</code> · 402 × 874 logical viewport.</p>'
-    document += '<p class="scope">Actual app screenshots and saved state after physical UI actions. The three games start from the same legally generated position, game version, seed and clock. Platform fonts and system bars can differ. Click a screenshot for its original resolution.</p>'
+    document += '<p class="scope">Actual screenshots from Chromium, the native Android app in an emulator, and the native app in iOS Simulator. UI taps and clicks drive gameplay. The three games start from the same legally generated position, game version, seed and clock. Platform fonts and system bars can differ. Click a screenshot for its original resolution.</p>'
     document += f'<p><strong>{"All saved-position comparisons passed" if passed else "Comparison has missing evidence or differences"}</strong> · <a href="comparison.json">Detailed state checks</a></p>'
     if findings.get("findings"):
         document+='<h2>Visual findings</h2><ul>'+''.join(f'<li><strong>{html.escape(item["title"])}</strong>: {html.escape(item["description"])}</li>' for item in findings["findings"])+'</ul>'

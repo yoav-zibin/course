@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import selectors
 import subprocess
 import sys
 import time
@@ -199,6 +200,96 @@ def selector(text):
     return {"text": "^" + re.escape(text) + "$"}
 
 
+def expand_compact_hierarchy(value):
+    schema = value.get("ui_schema", {})
+    abbreviations = schema.get("abbreviations", {})
+    if schema.get("platform") != "ios" or not isinstance(value.get("elements"), list):
+        raise ValueError("Expected the pinned Maestro iOS compact accessibility schema")
+    def expand(node):
+        return {"attributes": {abbreviations.get(key, key): item for key, item in node.items() if key != "c"},
+                "children": [expand(child) for child in node.get("c", [])]}
+    return {"attributes": {}, "children": [expand(node) for node in value["elements"]]}
+
+
+class MaestroMcp:
+    """One supported Maestro session; no per-test random-port cold starts."""
+    def __init__(self, executable, output):
+        self.output = output
+        self.sequence = 0
+        self.pending = bytearray()
+        self.stderr = (output / "maestro-mcp-stderr.log").open("wb")
+        self.process = subprocess.Popen([str(executable), "mcp", "--no-viewer", "--working-dir", str(output)],
+                                        cwd=output, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=self.stderr, start_new_session=True, bufsize=0)
+        os.set_blocking(self.process.stdout.fileno(), False)
+        try:
+            self.request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                         "clientInfo": {"name": "buildplay-runtime-parity", "version": "1"}}, 90)
+            self.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        except Exception:
+            self.close()
+            raise
+
+    def send(self, value):
+        self.process.stdin.write((json.dumps(value) + "\n").encode())
+        self.process.stdin.flush()
+
+    def request(self, method, params, timeout):
+        self.sequence += 1
+        request_id = self.sequence
+        request = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
+        started = time.monotonic()
+        self.send(request)
+        with (self.output / "maestro-mcp-protocol.jsonl").open("a") as trace, selectors.DefaultSelector() as watcher:
+            trace.write(json.dumps({"direction": "request", "message": request}) + "\n"); trace.flush()
+            watcher.register(self.process.stdout, selectors.EVENT_READ)
+            while True:
+                while b"\n" in self.pending:
+                    line, _, rest = self.pending.partition(b"\n")
+                    self.pending = bytearray(rest)
+                    try:
+                        response = json.loads(line)
+                    except ValueError:
+                        continue
+                    trace.write(json.dumps({"direction": "response", "message": response}) + "\n"); trace.flush()
+                    if response.get("id") == request_id:
+                        if "error" in response:
+                            raise RuntimeError(f"Maestro MCP protocol error: {response['error']}")
+                        return response["result"]
+                remaining = timeout - (time.monotonic() - started)
+                if remaining <= 0:
+                    raise TimeoutError(f"Maestro MCP {method} exceeded {timeout}s; protocol/bootstrap logs preserved")
+                if not watcher.select(min(1, remaining)):
+                    if self.process.poll() is not None:
+                        raise RuntimeError("Maestro MCP exited; bootstrap stderr preserved")
+                    continue
+                raw = os.read(self.process.stdout.fileno(), 65536)
+                if not raw:
+                    raise RuntimeError("Maestro MCP closed stdout; bootstrap stderr preserved")
+                self.pending.extend(raw)
+                if len(self.pending) > 8_000_000:
+                    raise RuntimeError("Maestro MCP response exceeds the bounded audit capture")
+
+    def tool(self, name, arguments, timeout):
+        result = self.request("tools/call", {"name": name, "arguments": arguments}, timeout)
+        content = "\n".join(block.get("text", "") for block in result.get("content", []) if block.get("type") == "text")
+        if result.get("isError"):
+            raise RuntimeError(f"Maestro {name}: {content}")
+        return json.loads(content)
+
+    def close(self):
+        try:
+            self.process.stdin.close()
+        except OSError:
+            pass
+        try:
+            self.process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            helper("run-ios-smoke-phase").stop_process_group(self.process)
+        self.process.stdout.close()
+        self.stderr.close()
+
+
 def preserve_driver_logs(output, started, *, home=None, device=None, max_bytes=512_000):
     """Keep only fresh tool/crash logs, including otherwise hidden Maestro files."""
     home = Path.home() if home is None else Path(home)
@@ -247,6 +338,7 @@ class Audit:
         self.device = None
         self.container = None
         self.first = True
+        self.mcp = None
         self.started = time.time()
         self.report = {"sourceSha": SOURCE, "fixtureSha256": FIXTURE_SHA256, "platform": "ios",
                        "viewport": self.fixture["viewport"], "stages": [], "actions": [], "passed": False}
@@ -264,22 +356,52 @@ class Audit:
         self.run(name, [sys.executable, "-c", wrapper, target, *command], timeout)
         return parse_json_output(target.read_text())
 
+    def mcp_tool(self, phase, tool, arguments, timeout):
+        started = time.monotonic()
+        record = {"phase": phase, "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  "deadline_seconds": timeout, "transport": "persistent Maestro MCP/XCTest", "exit_code": 1}
+        try:
+            result = self.mcp.tool(tool, arguments, timeout)
+            record["exit_code"] = 0
+            return result
+        except TimeoutError:
+            record["timed_out"] = True
+            raise
+        finally:
+            record["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            record["elapsed_seconds"] = round(time.monotonic() - started, 3)
+            with (self.output / "phases.jsonl").open("a") as sink:
+                sink.write(json.dumps(record) + "\n")
+
     def flow(self, name, commands):
         path = self.output / "flows" / (name + ".yaml")
         path.parent.mkdir(exist_ok=True)
         path.write_text(flow_text([{"launchApp": {"stopApp": False}}, *commands]))
-        # Flattening keeps startup logs outside hidden .maestro directories,
-        # which upload-artifact omits. Keep the first installed driver warm for
-        # later hierarchy/touch commands instead of killing it after pages.
-        command = [self.maestro, "--device", self.device, "test", "--no-ansi", "--no-reinstall-driver",
-                   "--debug-output", self.output / "maestro-debug" / name, "--flatten-debug-output",
-                   "--format", "JUNIT", "--output", self.output / (name + "-junit.xml")]
-        command.append(path)
-        self.run(name, command, 600 if self.first else 120)
+        names = [c["takeScreenshot"] for c in commands if "takeScreenshot" in c]
+        if any(not re.fullmatch(r"[a-z0-9-]+", item) for item in names):
+            raise ValueError("Audit screenshot names must be plain relative basenames")
+        if self.mcp is None:
+            self.mcp = MaestroMcp(self.maestro, self.output)
+        started = time.monotonic()
+        print(f"{name}: real Maestro/XCTest flow starting", flush=True)
+        result = self.mcp_tool(name, "run", {"device_id": self.device, "files": [str(path)]}, 600 if self.first else 120)
+        (self.output / (name + "-maestro-result.json")).write_text(json.dumps(result, indent=2) + "\n")
+        if result.get("success") is not True:
+            raise RuntimeError(f"{name}: Maestro flow did not succeed")
+        # MCP's Orchestra has no CLI bundle allocator: relative takeScreenshot
+        # names are written directly in the process's workflow-owned cwd.
+        for screenshot in names:
+            if not (self.output / (screenshot + ".png")).read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
+                raise ValueError("Expected the actual native PNG from Maestro")
+        print(f"{name}: real Maestro/XCTest flow passed in {time.monotonic() - started:.1f}s", flush=True)
         self.first = False
 
     def hierarchy(self, name):
-        return self.capture(name + "-hierarchy", [self.maestro, "--device", self.device, "hierarchy", "--no-reinstall-driver"], 90)
+        compact = self.mcp_tool(name + "-hierarchy", "inspect_screen", {"device_id": self.device}, 90)
+        (self.output / (name + "-compact-hierarchy.json")).write_text(json.dumps(compact, indent=2) + "\n")
+        tree = expand_compact_hierarchy(compact)
+        (self.output / (name + "-hierarchy.json")).write_text(json.dumps(tree, indent=2) + "\n")
+        return tree
 
     def save_report(self):
         (self.output / "manifest.json").write_text(json.dumps(self.report, indent=2) + "\n")
@@ -332,16 +454,16 @@ class Audit:
 
     def pages(self):
         self.flow("pages", [
-            {"assertVisible": selector("Let’s play.")}, {"takeScreenshot": str(self.output / "page-catalog")},
+            {"assertVisible": selector("Let’s play.")}, {"takeScreenshot": "page-catalog"},
             {"tapOn": selector("Matches")}, {"assertVisible": selector("Open a match or invite link")},
-            {"takeScreenshot": str(self.output / "page-matches")},
+            {"takeScreenshot": "page-matches"},
             {"tapOn": selector("On this device")}, {"assertVisible": selector("Practice with a computer")},
-            {"takeScreenshot": str(self.output / "page-local")},
+            {"takeScreenshot": "page-local"},
             {"scrollUntilVisible": {"element": selector("Preferences"), "direction": "DOWN", "timeout": 30000}},
             {"tapOn": selector("Preferences")}, {"assertVisible": selector("Navigation layout")},
-            {"takeScreenshot": str(self.output / "page-preferences")},
+            {"takeScreenshot": "page-preferences"},
             {"tapOn": selector("Log in")}, {"assertVisible": selector("Continue as guest")},
-            {"takeScreenshot": str(self.output / "page-account")}, {"tapOn": selector("Close dialog")},
+            {"takeScreenshot": "page-account"}, {"tapOn": selector("Close dialog")},
         ])
         for page in ["catalog", "matches", "local", "preferences", "account"]:
             self.report["stages"].append({"name": "page-" + page, "screenshot": "page-" + page + ".png"})
@@ -373,7 +495,7 @@ class Audit:
             ])
             final = game["steps"][-1]
             self.board_stage(game, game["slug"] + "-restart", final["expectedMatch"], final["scene"])
-            self.flow(game["slug"] + "-zoom", [{"tapOn": selector("Zoom in")}, {"takeScreenshot": str(self.output / (game["slug"] + "-zoom125"))}, {"tapOn": selector("Reset board view")}, {"tapOn": selector("Exit focus mode")}])
+            self.flow(game["slug"] + "-zoom", [{"tapOn": selector("Zoom in")}, {"takeScreenshot": game["slug"] + "-zoom125"}, {"tapOn": selector("Reset board view")}, {"tapOn": selector("Exit focus mode")}])
 
     def extra_practice(self):
         before = set(read_data(self.container)["local"])
@@ -463,6 +585,8 @@ class Audit:
             raise
         finally:
             self.save_report()
+            if self.mcp:
+                self.mcp.close()
             if self.device:
                 self.run("final-processes", ["xcrun", "simctl", "spawn", self.device, "launchctl", "list"], 60, False)
                 self.run("shutdown", ["xcrun", "simctl", "shutdown", self.device], 60, False)

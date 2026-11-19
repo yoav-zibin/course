@@ -59,6 +59,44 @@ def test_driver_log_collection_retains_hidden_startup_tail_without_other_files(t
     assert not list(directory.glob(".*"))
 
 
+def test_mcp_keeps_one_session_and_plain_screenshot_names_without_game_injection(tmp_path, monkeypatch):
+    sessions = []
+    class FakeMcp:
+        def __init__(self, executable, output):
+            self.output, self.calls = output, []
+            sessions.append(self)
+        def tool(self, name, arguments, timeout):
+            self.calls.append((name, arguments, timeout))
+            commands = json.loads(Path(arguments["files"][0]).read_text().split("---\n", 1)[1])
+            for command in commands:
+                if "takeScreenshot" in command:
+                    (self.output / (command["takeScreenshot"] + ".png")).write_bytes(b"\x89PNG\r\n\x1a\nactual native capture")
+            return {"success": True}
+    monkeypatch.setattr(audit, "MaestroMcp", FakeMcp)
+    runner = audit.Audit(tmp_path, "maestro")
+    runner.device = UDID
+    runner.flow("first", [{"takeScreenshot": "page-catalog"}])
+    runner.flow("second", [{"tapOn": audit.selector("Cell 1")}])
+    assert len(sessions) == 1
+    assert [call[2] for call in sessions[0].calls] == [600, 120]
+    assert (tmp_path / "page-catalog.png").is_file()
+    assert not any(word in (tmp_path / "flows/second.yaml").read_text() for word in ["clearState", "clearKeychain", "eval"])
+    with pytest.raises(ValueError, match="relative basenames"):
+        runner.flow("escape", [{"takeScreenshot": "../page-catalog"}])
+
+
+def test_compact_mcp_hierarchy_preserves_real_native_labels_bounds_and_ids():
+    compact = {"ui_schema": {"platform": "ios", "abbreviations": {"b": "bounds", "a11y": "accessibilityText", "rid": "resource-id"}},
+               "elements": [{"rid": "game-stage", "b": "[0,100][402,700]", "c": [{"a11y": "Cell 1: Move", "b": "[10,110][54,154]"}]}]}
+    tree = audit.expand_compact_hierarchy(compact)
+    child = tree["children"][0]["children"][0]
+    assert audit.node_label(child) == "Cell 1: Move"
+    assert audit.bounds(child) == {"x": 10, "y": 110, "width": 44, "height": 44}
+    assert tree["children"][0]["attributes"]["resource-id"] == "game-stage"
+    with pytest.raises(ValueError, match="compact accessibility schema"):
+        audit.expand_compact_hierarchy({"ui_schema": {"platform": "android"}, "elements": []})
+
+
 @pytest.mark.parametrize("change", ["source", "fork", "workflow", "artifact", "expired", "digest", "build"])
 def test_untrusted_or_unsuccessful_artifact_rejected(change):
     run, artifact, jobs = provenance()
