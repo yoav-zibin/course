@@ -156,6 +156,8 @@ body{font-family:system-ui,sans-serif;background:#10141f;color:#edf1fa;margin:0;
 </style><main><h1>BuildPlay: web · Android · iOS</h1>'''
     document += f'<p>Application source <code>{html.escape(fixture["sourceSha"])}</code> · 402 × 874 logical viewport.</p>'
     document += '<p class="scope">Actual screenshots from Chromium, the native Android app in an emulator, and the native app in iOS Simulator. UI taps and clicks drive gameplay. The three games start from the same legally generated position, game version, seed and clock. Platform fonts and system bars can differ. Click a screenshot for its original resolution.</p>'
+    if findings.get("executionNote"):
+        document += '<p class="scope">'+html.escape(findings["executionNote"])+'</p>'
     document += f'<p><strong>{"All saved-position comparisons passed" if state_passed else "Saved-position comparisons are incomplete or different"}</strong> · <a href="comparison.json">Detailed state checks</a></p>'
     document += '<p><strong>Visual review: '+ ('Complete' if summary["visualReviewComplete"] else 'Pending final three-platform review') + '.</strong> Saved-state equality does not establish visual equivalence.</p>'
     if missing or metadata_errors:

@@ -37,7 +37,7 @@ async function main(){
       if(request.method()!=='GET'||url.origin!==base){summary.network.push({method:request.method(),url:request.url(),action:'blocked'});return route.abort('blockedbyclient');}
       const endpoint=url.pathname+url.search;
       if(url.pathname==='/storage/capabilities')return route.fulfill({json:{pagination:false}});
-      if(url.pathname==='/i18n/locales')return route.fulfill({json:{locales:[['en','English'],['es','Español'],['fr','Français'],['de','Deutsch'],['pt','Português'],['zh','中文（简体）'],['hi','हिन्दी'],['ar','العربية']].map(([code,name])=>({code,name,direction:code==='ar'?'rtl':'ltr'}))}});
+      if(url.pathname==='/i18n/locales')return route.fulfill({json:{locales:[['en','English'],['es','Español'],['fr','Français'],['de','Deutsch'],['pt','Português'],['zh','中文'],['hi','हिन्दी'],['ar','العربية']].map(([code,name])=>({code,name,direction:code==='ar'?'rtl':'ltr'}))}});
       if(url.pathname==='/i18n/bundle/en')return route.fulfill({json:{catalog:{messages:{},direction:'ltr'},games:{}}});
       if(Object.hasOwn(fixture.accountData.responses,endpoint))return route.fulfill({json:fixture.accountData.responses[endpoint]});
       if(!['/portal','/health','/portal-worker.js','/'].includes(url.pathname)&&!url.pathname.startsWith('/static/')){
@@ -114,6 +114,8 @@ async function main(){
     await page.getByRole('button',{name:'Log in',exact:true}).first().click();
     const dialog=page.getByRole('dialog'),close=dialog.getByRole('button',{name:'Close dialog',exact:true}),english=dialog.getByRole('button',{name:'Language: English',exact:true});
     await expect(dialog.getByRole('button',{name:/^Language: /})).toHaveCount(8);
+    await expect(dialog.getByRole('button',{name:'Language: 中文',exact:true})).toBeVisible();
+    record.localeLabels=await dialog.getByRole('button',{name:/^Language: /}).allTextContents();
     await expect(close).toBeVisible();record.accountBeforeScroll=await scrollState(page);await scrollUp(page);
     await expect(close).toBeInViewport({ratio:1});await expect(english).toBeInViewport({ratio:1});
     record.accountAfterScroll=await scrollState(page);await capture(page,'page-account');
