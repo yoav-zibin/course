@@ -107,7 +107,9 @@ def test_board_scroll_uses_real_far_edge_swipe_until_target_is_in_safe_viewport(
     runner.mcp_tool = lambda *args: calls.append(args) or {"success": True}
     runner.edge_scroll("board", "Play history", "DOWN")
     assert len(calls) == 1
-    assert json.loads(calls[0][2]["yaml"]) == [{"swipe": {"start": "99%,80%", "end": "99%,25%", "duration": 500}}]
+    header, commands = calls[0][2]["yaml"].split("---\n", 1)
+    assert header.strip() == "appId: " + audit.BUNDLE
+    assert json.loads(commands) == [{"swipe": {"start": "99%,80%", "end": "99%,25%", "duration": 500}}]
     assert calls[0][1] == "run" and calls[0][2]["device_id"] == UDID
     assert runner.report["scrollActions"][0]["driver"] == "Maestro/XCTest physical swipe"
 

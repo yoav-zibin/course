@@ -421,7 +421,7 @@ class Audit:
                 break
             start, end = ("99%,25%", "99%,80%") if direction == "UP" else ("99%,80%", "99%,25%")
             command = {"swipe": {"start": start, "end": end, "duration": 500}}
-            self.mcp_tool(f"{name}-edge-swipe{attempt}", "run", {"device_id": self.device, "yaml": json.dumps([command])}, remaining)
+            self.mcp_tool(f"{name}-edge-swipe{attempt}", "run", {"device_id": self.device, "yaml": flow_text([command])}, remaining)
             self.report.setdefault("scrollActions", []).append({"stage": name, "driver": "Maestro/XCTest physical swipe", **command})
         raise RuntimeError(f"{name}: {label} did not enter the visible viewport after bounded physical edge scrolling")
 
