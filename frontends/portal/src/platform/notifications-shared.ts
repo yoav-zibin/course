@@ -60,7 +60,7 @@ export function notificationData(value: unknown, baseUrl: string, accountId: str
 }
 
 export function createNotificationController(options: NotificationOptions, driver: NotificationDriver): NotificationClient {
-  let active = true, wanted = false, lastEndpoint: string | null = null;
+  let active = true, revoked = false, wanted = false, lastEndpoint: string | null = null;
   let configured: boolean | undefined;
   const emit = (kind: 'onForeground' | 'onOpen', value: unknown) => {
     if (!active) return;
@@ -99,8 +99,10 @@ export function createNotificationController(options: NotificationOptions, drive
     await options.request('POST', registration.path, registration.body);
     lastEndpoint = registration.endpoint;
     if (!active) {
-      await removeEndpoint(lastEndpoint);
-      return {...await driver.permission(), subscribed: false};
+      // A UI reload/disposal must not undo persistent device enrollment. Only an
+      // explicit account change/logout revokes a registration completed in flight.
+      if (revoked) await removeEndpoint(lastEndpoint);
+      return {...await driver.permission(), subscribed: !revoked};
     }
     wanted = true;
     return {...await driver.permission(), subscribed: true};
@@ -134,7 +136,7 @@ export function createNotificationController(options: NotificationOptions, drive
     },
     deactivate: () => {
       // Stop registration immediately, including a token request currently in flight.
-      active = false; wanted = false;
+      active = false; revoked = true; wanted = false;
       return serial(async () => {await removeEndpoint(lastEndpoint || await driver.endpoint()); lastEndpoint = null;});
     },
     dispose: () => {active = false; wanted = false; stopListening?.();},

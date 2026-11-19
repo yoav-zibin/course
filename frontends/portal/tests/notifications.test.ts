@@ -120,6 +120,31 @@ test('token rotation drops the old endpoint and retains the new endpoint for dis
   client.dispose();
 });
 
+test('disposing a same-account UI session retains its persistent device subscription', async () => {
+  const f = fixture(), client = createNotificationController(f.options, f.driver);
+  await client.reconcile();
+  client.dispose();
+  assert.equal(f.calls.some(call => call.includes('DELETE')), false);
+  assert.equal(f.calls.includes('unsubscribe'), false);
+  assert.equal((await client.reconcile()).subscribed, false);
+  assert.equal(f.calls.filter(call => call.includes('POST')).length, 1);
+});
+
+test('disposing a same-account UI during registration does not delete the accepted endpoint', async () => {
+  const f = fixture(), entered = deferred(), release = deferred();
+  f.options.request = async (method, path) => {
+    f.calls.push(`${method} ${path}`);
+    if (path === '/push/config') return {native_enabled: true};
+    if (method === 'POST') {entered.resolve(); await release.promise;}
+    return [];
+  };
+  const client = createNotificationController(f.options, f.driver), registration = client.enable();
+  await entered.promise; client.dispose(); release.resolve();
+  assert.equal((await registration).subscribed, true);
+  assert.equal(f.calls.filter(call => call.startsWith('POST')).length, 1);
+  assert.equal(f.calls.some(call => call.startsWith('DELETE')), false);
+});
+
 test('notification routing accepts account-owned match/invite links and rejects foreign or privileged routes', () => {
   for (const url of ['/portal#match=one', '/static/portal.html#rematch=original', '/i/invite_token']) {
     assert.equal(notificationData({user_id: 'alice', url}, 'https://buildplay.fun', 'alice')?.url, `https://buildplay.fun${url}`);

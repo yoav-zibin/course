@@ -51,8 +51,10 @@ export function useNotificationDelivery(p: Portal, onOpen: (url: string) => Prom
     return () => {
       active = false; resume.remove();
       if (current.current === manager) current.current = null;
-      // A reused browser/device endpoint must stop following the previous account.
-      void manager.deactivate().catch(() => {}).finally(() => manager.dispose());
+      // Device enrollment outlives the screen/JS instance. Only moving away from
+      // this account or server revokes it; disposal/password refresh keeps it.
+      if (latest.current.account?.id !== account.id || latest.current.baseUrl !== base) void manager.deactivate().catch(() => {});
+      manager.dispose();
     };
   }, [disabled, p.ready, p.baseUrl, p.account?.id, p.account?.password]);
   useEffect(() => {
