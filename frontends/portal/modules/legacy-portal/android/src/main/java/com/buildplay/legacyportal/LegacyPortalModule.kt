@@ -1,7 +1,11 @@
 package com.buildplay.legacyportal
 
 import android.content.Context
+import android.graphics.Rect
+import android.os.Build
 import android.util.Base64
+import com.facebook.react.uimanager.UIManagerHelper
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.security.KeyStore
@@ -28,6 +32,27 @@ class LegacyPortalModule : Module() {
     AsyncFunction("setPersistentItem") { key: String, value: String -> storage().set(key, value) }
     AsyncFunction("removePersistentItem") { key: String -> storage().remove(key) }
     AsyncFunction("getPersistentKeys") { storage().keys() }
+
+    AsyncFunction("protectBugControlGesture") { viewTag: Int ->
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@AsyncFunction false
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      val view = try {
+        UIManagerHelper.getUIManagerForReactTag(context, viewTag)?.resolveView(viewTag)
+      } catch (_: Exception) {
+        // A modal can disappear before its layout callback reaches this queue.
+        null
+      } ?: return@AsyncFunction false
+      // This API is deliberately restricted to the small floating control,
+      // never an Activity or Modal window's entire navigation edge.
+      val maximum = (64 * view.resources.displayMetrics.density).toInt()
+      if (view.width <= 0 || view.height <= 0 || view.width > maximum || view.height > maximum) {
+        return@AsyncFunction false
+      }
+      // Refresh after layout even when a drag changed position but not size.
+      view.systemGestureExclusionRects = emptyList()
+      view.systemGestureExclusionRects = listOf(Rect(0, 0, view.width, view.height))
+      true
+    }.runOnQueue(Queues.MAIN)
 
     AsyncFunction("readLegacyPortal") { baseUrl: String ->
       val context = appContext.reactContext

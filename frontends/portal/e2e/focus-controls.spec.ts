@@ -1,0 +1,32 @@
+import {test,expect} from '@playwright/test';
+
+test('match focus entry leaves account controls reachable and keeps a visible exit in focus mode',async({page,baseURL},info)=>{
+  if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Focus control checks require a disposable loopback server.');
+  await page.goto('/portal');
+  await page.getByRole('button',{name:'On this device',exact:true}).click();
+  await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
+  const matchUrl=page.url();
+  const account=page.getByRole('button',{name:'Log in',exact:true});
+  const enter=page.getByRole('button',{name:'Focus mode',exact:true});
+  await enter.scrollIntoViewIfNeeded();
+  await expect(account).toBeVisible();await expect(enter).toBeVisible();
+  const accountBox=(await account.boundingBox())!,focusBox=(await enter.boundingBox())!;
+  expect(accountBox.x+accountBox.width<=focusBox.x||focusBox.x+focusBox.width<=accountBox.x||accountBox.y+accountBox.height<=focusBox.y||focusBox.y+focusBox.height<=accountBox.y).toBe(true);
+  await expect.poll(()=>account.evaluate(node=>{const box=node.getBoundingClientRect();return node.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));})).toBe(true);
+  await account.click();await expect(page.getByRole('button',{name:/Language:.*English/})).toBeVisible();
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Close dialog',exact:true})).toHaveCount(0);
+  await enter.click();
+  await expect(page.getByRole('link',{name:'BuildPlay home',exact:true})).toHaveCount(0);
+  await expect(enter).toHaveCount(0);
+  const exit=page.getByRole('button',{name:'Exit focus mode',exact:true});
+  await expect(exit).toBeVisible();
+  await expect.poll(()=>exit.evaluate(node=>{const box=node.getBoundingClientRect();return node.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));})).toBe(true);
+  await expect(page.getByRole('button',{name:'Report a bug or request a feature',exact:true})).toBeVisible();
+  await page.screenshot({path:info.outputPath('focus-controls.png')});
+  await exit.click();
+  await expect(page.getByRole('link',{name:'BuildPlay home',exact:true})).toBeVisible();
+  await expect(account).toBeVisible();await expect(enter).toBeVisible();
+  expect(page.url()).toBe(matchUrl);
+});

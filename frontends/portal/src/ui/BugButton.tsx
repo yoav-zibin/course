@@ -1,14 +1,21 @@
 import React,{useEffect,useMemo,useRef} from 'react';
-import {PanResponder,Pressable,StyleSheet,View,useWindowDimensions} from 'react-native';
+import {findNodeHandle,PanResponder,Platform,Pressable,StyleSheet,View,useWindowDimensions} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BugGlyph} from './BugGlyph';
 import {bugButtonLabel,openBugReport} from './bugControl';
 import {BUG_HEIGHT,BUG_WIDTH,bugBounds,isBugDrag,normalizedBugPoint,resolveBugPoint,setBugPosition,useBugPosition} from './bugPosition';
-import {recordDiagnosticEvent} from '../core/diagnostics';
+import {recordDiagnosticEvent,recordDiagnosticLog} from '../core/diagnostics';
+import {protectBugControlGesture} from '../platform/legacy';
 export function BugButton(){
   const insets=useSafeAreaInsets(),{width,height}=useWindowDimensions(),saved=useBugPosition();
   const bounds=bugBounds(width,height,insets),point=resolveBugPoint(saved,bounds);
   const current=useRef({bounds,point});current.current={bounds,point};
+  const nativeView=useRef<React.ComponentRef<typeof View>>(null);
+  const protectGesture=()=>{
+    if(Platform.OS!=='android')return;
+    const tag=findNodeHandle(nativeView.current);
+    if(typeof tag==='number')void protectBugControlGesture(tag).catch(error=>recordDiagnosticLog('warn','bug_gesture_exclusion',error));
+  };
   const start=useRef(point),dragged=useRef(false),releaseTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   const responder=useMemo(()=>PanResponder.create({
     onStartShouldSetPanResponder:()=>false,
@@ -26,7 +33,7 @@ export function BugButton(){
     onShouldBlockNativeResponder:()=>true,
   }),[]);
   useEffect(()=>()=>clearTimeout(releaseTimer.current),[]);
-  return <View {...responder.panHandlers} style={[styles.position,{left:point.x,top:point.y}]}>
+  return <View ref={nativeView} collapsable={false} onLayout={protectGesture} {...responder.panHandlers} style={[styles.position,{left:point.x,top:point.y}]}>
     <Pressable accessibilityRole="button" accessibilityLabel={bugButtonLabel()} onPressIn={()=>{dragged.current=false;}}
       onPress={()=>{if(!dragged.current)openBugReport();}} style={styles.bug} testID="bug-report-button"><BugGlyph/></Pressable>
   </View>;
