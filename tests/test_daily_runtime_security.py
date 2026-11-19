@@ -97,6 +97,21 @@ def test_spades_cannot_restart_a_live_staked_match_or_erase_its_score():
         permissive.call("applyMove", state, opening["turn"][0], {"newGame": True}, ctx=ctx, seed=53)
 
 
+def test_spades_ai_settings_cannot_replace_a_card_play_in_a_staked_match():
+    body, logic, ctx = runtime("spades")
+    ctx["pot"] = 40
+    opening = logic.call("newMatch", ctx=ctx, seed=57)
+    player = opening["turn"][0]
+    for mode in ("smart", "random"):
+        with pytest.raises(InvalidMoveError):
+            logic.call("applyMove", opening["state"], player, {"aiMode": mode}, ctx=ctx, seed=58)
+    # Preserve the existing preference control for free practice.
+    free = {**ctx, "pot": 0}
+    result = logic.call("applyMove", opening["state"], player, {"aiMode": "random"}, ctx=free, seed=58)
+    assert result["state"]["aiMode"] == "random"
+    assert result["state"]["hands"] == opening["state"]["hands"]
+
+
 @pytest.mark.parametrize("kind", ["crazy_eights", "go_fish", "hearts", "spades"])
 def test_opponent_card_values_and_deck_order_do_not_influence_a_players_view(kind):
     _, logic, ctx = runtime(kind)

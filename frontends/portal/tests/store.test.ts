@@ -43,6 +43,40 @@ function testRuntime() {
   };
 }
 
+for(const signedIn of [false,true])test(`bootstrap releases its initial loading state for ${signedIn?'a saved account':'a visitor'}`,async()=>{
+  const saved=browserStorage(),restore=mockedFetch();
+  if(signedIn){saved['game-platform.accounts.v1']=JSON.stringify([{id:'alice',password:'synthetic-secret',display_name:'Alice'}]);saved['game-platform.current-account.v1']='alice';}
+  try{
+    const store=new PortalStore(testRuntime());await store.actions.bootstrap('https://local.test');
+    assert.equal(store.getSnapshot().ready,true);
+    assert.equal(store.getSnapshot().account?.id??null,signedIn?'alice':null);
+    assert.equal(store.getSnapshot().loading,false);
+  }finally{restore();}
+});
+
+test('an older account operation cannot clear the current account loading state',async()=>{
+  const saved=browserStorage();
+  saved['game-platform.accounts.v1']=JSON.stringify(['alice','bob'].map(id=>({id,password:id,display_name:id})));
+  saved['game-platform.current-account.v1']='alice';
+  let releaseOld!:()=>void,releaseNew!:()=>void,oldStarted!:()=>void,newStarted!:()=>void;
+  const oldGate=new Promise<void>(resolve=>{releaseOld=resolve;}),newGate=new Promise<void>(resolve=>{releaseNew=resolve;});
+  const oldBegin=new Promise<void>(resolve=>{oldStarted=resolve;}),newBegin=new Promise<void>(resolve=>{newStarted=resolve;});
+  const fixture=JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8'));
+  const restore=mockedFetch(async url=>{
+    if(url.pathname==='/games/older'){oldStarted();await oldGate;return {...fixture,id:'older'};}
+    if(url.pathname==='/games/newer'){newStarted();await newGate;return {...fixture,id:'newer'};}
+  });
+  try{
+    const store=new PortalStore(testRuntime());await store.actions.bootstrap('https://local.test');
+    const old=assert.rejects(store.actions.selectGame('older'),/Account changed/);await oldBegin;
+    await store.actions.switchAccount('bob');
+    const current=store.actions.selectGame('newer');await newBegin;assert.equal(store.getSnapshot().loading,true);
+    releaseOld();await old;assert.equal(store.getSnapshot().loading,true);
+    releaseNew();await current;assert.equal(store.getSnapshot().loading,false);
+    assert.equal(store.getSnapshot().selectedGameId,'newer');
+  }finally{releaseOld();releaseNew();restore();}
+});
+
 test('RAM-only downloads cannot regress a match and optional quota failures do not become storage banners',async()=>{
   const saved=browserStorage(),restore=mockedFetch();
   try{

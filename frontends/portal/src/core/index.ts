@@ -51,7 +51,10 @@ export class PortalStore {
   private identity() { return this.state.account?.id || 'visitor'; }
   private capture() { const epoch = this.generation, account = this.identity(), base = this.state.baseUrl; return () => { if (epoch !== this.generation || account !== this.identity() || base !== this.state.baseUrl) throw new Error('Account changed; refresh to continue.'); }; }
   private async perform<T>(run: () => Promise<T>, loading = true): Promise<T> {
-    const guard=this.capture();
+    // Bootstrap adopts its origin and initial account within this operation.
+    // Explicit account transitions advance generation and own the new UI state.
+    const epoch=this.generation;
+    const guard=()=>{if(epoch!==this.generation)throw new Error('Account changed; refresh to continue.');};
     if (loading) this.patch({ loading: true }); this.patch({ error: null });
     try { return await run(); }
     catch (error) { guard(); this.patch({ error: error instanceof Error ? error.message : String(error) }); throw error; }
