@@ -11,7 +11,20 @@ from game_platform.agent_import import GameImport
 from game_platform.models import Game, GameRules
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = [json.loads(path.read_text()) for path in sorted((ROOT / "games/declarative").glob("*.json")) if not path.name.endswith(".schema.json")]
+
+
+def published_game_catalog():
+    entries = []
+    for path in sorted((ROOT / "games/declarative").glob("*.json")):
+        if path.name.endswith(".schema.json"):
+            continue
+        entry = json.loads(path.read_text())
+        if isinstance(entry, dict) and "name" in entry and "allowed_player_counts" in entry:
+            entries.append(entry)
+    return entries
+
+
+CATALOG = published_game_catalog()
 NOW = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
 
 
