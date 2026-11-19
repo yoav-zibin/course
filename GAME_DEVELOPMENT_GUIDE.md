@@ -31,9 +31,14 @@ payload. Name, textual rules, images and other metadata edits need only the
 relevant artifact/translation checks. See [partial updates](docs/agent-game-import.md#updating-a-game)
 for the authentication, merge and validation contracts.
 
-[Eleven complete examples](games/declarative) and
+[Twenty-one complete examples](games/declarative), including ten conversions
+of existing HTML games, and
 [the standalone import example](examples/agent-game.json) show the payload.
 `tools/publish_declarative_games.py` runs the recorded publication flow.
+Regenerate the converted packages with
+`node tools/build_html_declarative_conversions.mjs`; this writes local examples
+only. The [declarative game guide](docs/declarative-games.md) has the exact
+portal publication command and game names.
 
 Legacy HTML games remain in the database for [future migration](docs/html-game-retirement.md).
 Their source and original artifacts are available from the legacy read API.

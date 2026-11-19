@@ -23,7 +23,7 @@ from pathlib import Path
 from game_platform.agent_import import GameImport
 from game_platform.declarative_ui import DeclarativeLogic
 from game_platform.game_contract import ContractLogic
-from game_platform.game_traces import RESOLUTIONS, canonical_json
+from game_platform.game_traces import RESOLUTIONS, canonical_json, step4_required_pairs
 from game_platform.tools.declarative_demo import DEMO_KINDS
 
 PACKAGES = Path(__file__).resolve().parents[1] / "games" / "declarative"
@@ -123,17 +123,18 @@ def scene_event(ui, message, frame, move, *, budget=4000, depth=8):
     raise ValueError(f"no offered UI action emits {move!r}")
 
 
-def play_trace(body, *, seed, mode, human_seat=None):
+def play_trace(body, *, seed, mode, human_seat=None, num_players=None):
     """Finish a match through offered JSON UI events and authoritative rules."""
+    count = num_players if num_players is not None else min(body.allowed_player_counts)
     players = [{"id": f"authoring-seat-{i}", "kind": "human" if mode != "against_computers" or i == human_seat else "computer",
                 "display_name": f"Seat {i + 1}", "picture_url": "", "max_loss": 0}
-               for i in range(2)]
+               for i in range(count)]
     ctx = {"players": players, "pot": 0, "move_count": 0}
     logic = ContractLogic(body.server_code, body.unit_tests, game_schemas=body.game_schemas())
     ui = DeclarativeLogic(body.declarative_ui)
     result = logic.call("newMatch", ctx=ctx, seed=seed)
     states, moves, observations = [result["state"]], [], []
-    local = [None, None]
+    local = [None] * count
     for index in range(1000):
         if result["turn"] is None:
             return {"players": players, "pot": 0, "match_seed": seed,
@@ -151,6 +152,20 @@ def play_trace(body, *, seed, mode, human_seat=None):
         moves.append({"player_index": seat, "move": move})
         states.append(result["state"])
     raise ValueError("match did not end within 1000 moves")
+
+
+def publication_configurations(body):
+    """Cover each declared roster and every human seat required for computer play."""
+    counts = sorted(body.allowed_player_counts)
+    configurations = (
+        [("pass_and_play", count, None) for count in counts]
+        + [("against_computers", count, seat)
+           for count, seat in step4_required_pairs(body)]
+        + [("multiplayer", count, None) for count in counts]
+    )
+    while len(configurations) < len(RESOLUTIONS):
+        configurations.append(("multiplayer", counts[0], None))
+    return configurations
 
 
 def save_private(path, data):
@@ -229,8 +244,6 @@ def publish(base, state_path, kinds):
     if state["base_url"] != base:
         raise ValueError("use a different private state file for each target server")
     evidence = []
-    configurations = [("pass_and_play", None), ("multiplayer", None),
-                      ("against_computers", 0), ("against_computers", 1), ("multiplayer", None)]
     for kind in kinds:
         entry = state["games"].setdefault(kind, {"secret": secrets.token_urlsafe(32)})
         package = json.loads((PACKAGES / f"{kind}.json").read_text())
@@ -260,11 +273,13 @@ def publish(base, state_path, kinds):
                 raise RuntimeError(f"{kind}: server checks failed: {checked}")
             entry["steps"]["server_check"] = True
             save_private(state_path, state)
-        for i, (mode, seat) in enumerate(configurations):
-            if str(i) in entry["steps"]:
+        for i, (mode, count, seat) in enumerate(publication_configurations(body)):
+            step_key = f"{i}:{mode}:{count}:{seat if seat is not None else 'all'}"
+            if step_key in entry["steps"]:
                 continue
-            trace, observations = play_trace(body, seed=903 + i, mode=mode, human_seat=seat)
-            config = {"num_players": 2, "resolution": RESOLUTIONS[i]["label"],
+            trace, observations = play_trace(body, seed=903 + i, mode=mode, human_seat=seat,
+                                             num_players=count)
+            config = {"num_players": len(trace["players"]), "resolution": RESOLUTIONS[i % len(RESOLUTIONS)]["label"],
                       "orientation": "vertical" if i % 2 == 0 else "horizontal",
                       "human_player_index": seat}
             session = f"release-{kind}-{secrets.token_hex(8)}"
@@ -275,7 +290,7 @@ def publish(base, state_path, kinds):
             if mode == "against_computers":
                 observation = next(row for row in observations if row["player_index"] == seat)
                 request(base, "/game-test/moves", {**record, **observation})
-            entry["steps"][str(i)] = True
+            entry["steps"][step_key] = True
             entry["sessions"].append({"mode": mode, "config": config, "moves_verified": len(trace["moves"])})
             save_private(state_path, state)
         status = request(base, "/game-test/status?" + urllib.parse.urlencode({"secret": entry["secret"]}))

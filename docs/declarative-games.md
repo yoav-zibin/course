@@ -44,6 +44,13 @@ server validation. Sending a forged scene, local state, dice or illegal move
 cannot replace server state. Offline practice runs locally; multiplayer and
 online computer matches remain server authoritative.
 
+Ten existing HTML games also have declarative editions: Battleship, Checkers,
+Chess, Four-player Chess, Quoridor, Crazy Eights, Go Fish, Hearts, Spades and
+Guess Who. These packages retain their existing server rules and present only
+the legal actions and viewer-filtered state through the shared scene renderer.
+After publication, each is searchable in the portal by its name with the
+“(Declarative)” suffix.
+
 The Backgammon package keeps the regular audited game's rules as its base,
 with reviewed wrappers for retained rolls and unambiguous moves that use several
 dice with one checker. Its strict move schema describes roll, pass and moves
@@ -598,7 +605,7 @@ differs. Local practice may additionally run the existing server-side Game API
 in a separate QuickJS rules context; it must retain its deterministic random,
 clock and view-filtering semantics.
 
-## Ten complete examples
+## Twenty-one complete examples
 
 [`games/declarative`](../games/declarative) contains complete import requests:
 
@@ -614,6 +621,16 @@ clock and view-filtering semantics.
 | `domineering.json` | Composite two-cell placement with different orientations. |
 | `memory.json` | Concentration (the sheet's name): card faces and viewer-filtered hidden values. |
 | `pig.json` | Dice display, roll/hold controls and score labels. |
+| `battleship.json` | Hidden fleets, setup and legal shot targets. |
+| `checkers.json` | Mandatory captures, king movement, and multi-jump turns. |
+| `chess.json` | Legal moves, promotion, and resignation. |
+| `four_player_chess.json` | A cross-shaped board, four seat colors, and legal moves. |
+| `quoridor.json` | Switching between pawn movement and legal wall placement. |
+| `crazy_eights.json` | Playable hand cards, drawing, and choosing a suit for an eight. |
+| `go_fish.json` | Hidden hands, rank requests, drawing, and completed books. |
+| `hearts.json` | Legal card choices, trick display, and score totals. |
+| `spades.json` | Card play, follow-suit choices, and collecting completed tricks. |
+| `guess_who.json` | Private character, yes/no question choices, and identity guesses. |
 
 Their rules document the particular variant, size and any finite-play limits;
 they are examples rather than a claim to implement every published edition.
@@ -636,10 +653,11 @@ With the checkout importable as `game_platform` and dependencies installed:
 ```sh
 python -m game_platform.tools.build_declarative_examples
 python -m game_platform.tools.build_declarative_backgammon
+node tools/build_html_declarative_conversions.mjs
 python -m game_platform.tools.declarative_demo --port 8134
 ```
 
-Open `http://127.0.0.1:8134/portal` to play all eleven games in an isolated,
+Open `http://127.0.0.1:8134/portal` to play all twenty-one games in an isolated,
 ephemeral local platform. This runner uses no production data. Its fixtures
 support local development and do not substitute for the publication gate.
 The scene playground can load the same examples from
@@ -656,14 +674,15 @@ then creates through `POST /games/declarative` or updates the saved game ID
 through `PATCH /games/{id}`. It does not bypass the five-step
 gate or create player accounts/matches. Its private state file must be outside
 the checkout; keep it to update the same records instead of creating duplicates.
-Protocol playthroughs complement browser tests; they do not verify pixel layout
-or touch gestures. Run `e2e/declarative*.spec.ts` as well.
+Protocol playthroughs do not verify pixel layout or touch gestures. Review the
+live portal after publication for visual and touch behavior.
 
 ```sh
 python -m game_platform.tools.publish_declarative_games \
-  --base-url https://your-platform.example \
-  --state-file /private/declarative-publication.json \
-  --report /private/declarative-publication-report.json
+  --base-url https://buildplay.fun \
+  --state-file ~/.local/state/buildplay/html-conversion-publication.json \
+  --report ~/.local/state/buildplay/html-conversion-report.json \
+  --kinds battleship checkers chess four_player_chess quoridor crazy_eights go_fish hearts spades guess_who
 ```
 
 See [the validation record](declarative-validation.md) for the portal playthrough

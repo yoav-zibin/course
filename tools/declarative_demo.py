@@ -1,7 +1,7 @@
-"""Serve the ordinary portal with eleven games in a disposable local store.
+"""Serve the ordinary portal with twenty-one games in a disposable local store.
 
 Every game is added through the normal HTTP submission endpoint, including all
-validation. This takes about two minutes. No existing data file, production
+validation. This takes a few minutes. No existing data file, production
 configuration, cloud database or external translator is opened.
 """
 from __future__ import annotations
@@ -19,7 +19,9 @@ from game_platform.api import create_app
 from game_platform.service import GamePlatform
 from game_platform.store import InMemoryStore
 
-KINDS = ('tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domineering','memory','pig')
+KINDS = ('tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domineering','memory','pig',
+         'battleship','checkers','chess',
+         'four_player_chess','quoridor','crazy_eights','go_fish','hearts','spades','guess_who')
 DEMO_KINDS = (*KINDS, 'backgammon')
 
 

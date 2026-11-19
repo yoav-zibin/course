@@ -1,0 +1,879 @@
+{
+  "name": "Spades (Declarative)",
+  "description": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+  "allowed_player_counts": [
+    4
+  ],
+  "allows_leave_mid_match": false,
+  "allows_join_mid_match": false,
+  "server_code": "const game={newMatch:function(ctx){var d=[],ss=['S','H','D','C'],i,r,k;for(k=0;k<4;k++)for(r=2;r<=14;r++)d.push(r+ss[k]);for(i=d.length-1;i>0;i--){var j=Math.floor(ctx.random()*(i+1));var t=d[i];d[i]=d[j];d[j]=t}var h=[[],[],[],[]];for(i=0;i<52;i++)h[i%4].push(d[i]);h=h.map(function(x){return sortH(x)});var dl=Math.floor(ctx.random()*4);var lead=(dl+1)%4;return{state:{hands:h,trick:[],tricksWon:[0,0,0,0],lastWin:null,leader:lead,current:lead,pendingWin:null,aiMode:'smart',over:false,dealer:dl},turn:[ctx.players[lead].id]}},applyMove:function(state,playerId,move,ctx){if(state.over)throw new InvalidMove('game over');var seat=idx(ctx,playerId);if(seat<0)throw new InvalidMove('unknown player');if(!move||typeof move!=='object')throw new InvalidMove('bad move');if(move.newGame){return freshTurn(ctx,move.aiMode||state.aiMode)}if(move.aiMode){if(move.aiMode!=='random'&&move.aiMode!=='smart')throw new InvalidMove('bad ai mode');state.aiMode=move.aiMode;return{state:state,turn:turnIds(state,ctx)}}if(state.pendingWin!=null){if(seat!==state.pendingWin)throw new InvalidMove('not your collect');if(!move.collect)throw new InvalidMove('must collect');if(state.trick.length!==4)throw new InvalidMove('nothing to collect');state.tricksWon[state.pendingWin]++;state.lastWin=state.pendingWin;state.trick=[];state.leader=state.pendingWin;state.pendingWin=null;state.current=state.leader;if(state.hands.every(function(x){return x.length===0})){state.over=true;return{state:state,turn:null,payouts:payouts(state,ctx)}}return{state:state,turn:[ctx.players[state.current].id]}}if(seat!==state.current)throw new InvalidMove('not your turn');if(state.trick.length>=4)throw new InvalidMove('trick full');var card=move.card;if(typeof card!=='string')throw new InvalidMove('pick a card');var hi=state.hands[seat].indexOf(card);if(hi<0)throw new InvalidMove('not your card');state.hands[seat].splice(hi,1);state.trick.push({seat:seat,card:card});if(state.trick.length===4){var w=winnerOf(state.trick);state.pendingWin=w;state.current=w;return{state:state,turn:[ctx.players[w].id]}}var nx=(seat+1)%4,g=0;while(state.hands[nx].length===0&&g++<8)nx=(nx+1)%4;state.current=nx;return{state:state,turn:[ctx.players[nx].id]}},computerMove:function(state,playerId,ctx){var seat=idx(ctx,playerId);if(state.pendingWin!=null)return{collect:true};var hand=state.hands[seat];if(!hand||!hand.length)return{collect:true};if(state.aiMode==='random'){return{card:hand[Math.floor(ctx.random()*hand.length)]}}return{card:smartPick(state,seat,ctx)}},randomMove:function(state,playerId,ctx){var seat=idx(ctx,playerId);if(state.pendingWin!=null)return{collect:true};var hand=state.hands[seat];return{card:hand[Math.floor(ctx.random()*hand.length)]}},viewFor:function(state,playerId,ctx){var seat=playerId==null?-1:idx(ctx,playerId);var counts=state.hands.map(function(x){return x.length});var hand=seat>=0?state.hands[seat].slice():null;return{hands:null,hand:hand,counts:counts,trick:state.trick.map(function(p){return{seat:p.seat,card:p.card}}),tricksWon:state.tricksWon.slice(),lastWin:state.lastWin,leader:state.leader,current:state.current,pendingWin:state.pendingWin,aiMode:state.aiMode,over:state.over,dealer:state.dealer,me:seat}}};function idx(ctx,pid){for(var i=0;i<ctx.players.length;i++)if(ctx.players[i].id===pid)return i;return -1}function turnIds(state,ctx){if(state.over)return null;return[ctx.players[state.pendingWin!=null?state.pendingWin:state.current].id]}function freshTurn(ctx,aiMode){var d=[],ss=['S','H','D','C'],i,r,k;for(k=0;k<4;k++)for(r=2;r<=14;r++)d.push(r+ss[k]);for(i=d.length-1;i>0;i--){var j=Math.floor(ctx.random()*(i+1));var t=d[i];d[i]=d[j];d[j]=t}var h=[[],[],[],[]];for(i=0;i<52;i++)h[i%4].push(d[i]);h=h.map(function(x){return sortH(x)});var dl=Math.floor(ctx.random()*4);var lead=(dl+1)%4;var s={hands:h,trick:[],tricksWon:[0,0,0,0],lastWin:null,leader:lead,current:lead,pendingWin:null,aiMode:aiMode==='random'?'random':'smart',over:false,dealer:dl};return{state:s,turn:[ctx.players[lead].id]}}function rk(c){return parseInt(c.slice(0,-1))}function st(c){return c.slice(-1)}function sortH(h){var o={S:0,H:1,D:2,C:3};return h.slice().sort(function(a,b){return(o[st(a)]-o[st(b)])||(rk(a)-rk(b))})}function winnerOf(trick){var led=st(trick[0].card);var sp=trick.filter(function(p){return st(p.card)==='S'});var cand=sp.length?sp:trick.filter(function(p){return st(p.card)===led});cand=cand.slice().sort(function(a,b){return rk(b.card)-rk(a.card)});return cand[0].seat}function smartPick(state,seat,ctx){var hand=state.hands[seat];if(hand.length===1)return hand[0];function lowest(a){a=a.slice().sort(function(x,y){return rk(x)-rk(y)});return a[0]}if(!state.trick.length){var ns=hand.filter(function(c){return st(c)!=='S'});var pool=ns.length?ns:hand;pool=pool.slice().sort(function(a,b){return rk(a)-rk(b)});if(ctx.random()<0.15)return pool[Math.floor(ctx.random()*pool.length)];return pool[0]}var wins=hand.filter(function(c){return winnerOf(state.trick.concat([{seat:seat,card:c}]))===seat});if(wins.length){wins.sort(function(a,b){return rk(a)-rk(b)});return wins[0]}return lowest(hand)}function payouts(state,ctx){var pot=ctx.pot||0;var p={};var humans=ctx.players.filter(function(p){return p.kind!=='computer'});if(!humans.length)return p;if(pot<=0){humans.forEach(function(p){payouts_add(p,p,0)});function payouts_add(){ }humans.forEach(function(pl){p[pl.id]=0});return p}var m=Math.max.apply(null,state.tricksWon);var winSeats=state.tricksWon.map(function(t,i){return t===m?i:-1}).filter(function(i){return i>=0});var humanWinners=winSeats.filter(function(s){return ctx.players[s]&&ctx.players[s].kind!=='computer'});var share=humanWinners.length?humanWinners.map(function(s){return ctx.players[s].id}):humans.map(function(pl){return pl.id});var base=Math.floor(pot/share.length),rem=pot-base*share.length;share.forEach(function(id,i){p[id]=base+(i<rem?1:0)});humans.forEach(function(pl){if(!(pl.id in p))p[pl.id]=0});return p}",
+  "rules": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+  "ui_instructions": "Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.",
+  "tutorial": {
+    "text": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>Spades (Declarative)</h1><p>Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.</p><p>Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.</p></main>"
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1600 900\"><rect width=\"1600\" height=\"900\" fill=\"#17324f\"/><circle cx=\"800\" cy=\"450\" r=\"230\" fill=\"#dbeafe\"/><circle cx=\"800\" cy=\"450\" r=\"150\" fill=\"#56c9b4\"/><path d=\"M520 450h560M800 170v560\" stroke=\"#ffffff\" stroke-width=\"28\" opacity=\".75\"/></svg>"
+    },
+    {
+      "caption": "Initial board",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+    },
+    {
+      "caption": "Playable choices",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#56c9b4\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#ffbf66\" stroke-width=\"26\"/></svg>"
+    },
+    {
+      "caption": "Game in progress",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#ffbf66\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#17324f\" stroke-width=\"26\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "required": [
+        "hands",
+        "trick",
+        "tricksWon",
+        "lastWin",
+        "leader",
+        "current",
+        "pendingWin",
+        "aiMode",
+        "over",
+        "dealer"
+      ],
+      "properties": {
+        "hands": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+            },
+            "maxItems": 13,
+            "uniqueItems": true
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "trick": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "seat",
+              "card"
+            ],
+            "properties": {
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "card": {
+                "type": "string",
+                "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "maxItems": 4
+        },
+        "tricksWon": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 13
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "lastWin": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          ]
+        },
+        "leader": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "current": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "pendingWin": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          ]
+        },
+        "aiMode": {
+          "enum": [
+            "random",
+            "smart"
+          ]
+        },
+        "over": {
+          "type": "boolean"
+        },
+        "dealer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "move_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "card"
+          ],
+          "properties": {
+            "card": {
+              "type": "string",
+              "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "collect"
+          ],
+          "properties": {
+            "collect": {
+              "const": true
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "aiMode"
+          ],
+          "properties": {
+            "aiMode": {
+              "enum": [
+                "random",
+                "smart"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "newGame"
+          ],
+          "properties": {
+            "newGame": {
+              "const": true
+            },
+            "aiMode": {
+              "enum": [
+                "random",
+                "smart"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "view_schema": {
+      "type": "object",
+      "required": [
+        "hands",
+        "hand",
+        "counts",
+        "trick",
+        "tricksWon",
+        "lastWin",
+        "leader",
+        "current",
+        "pendingWin",
+        "aiMode",
+        "over",
+        "dealer",
+        "me"
+      ],
+      "properties": {
+        "hands": {
+          "type": "null"
+        },
+        "hand": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+              },
+              "maxItems": 13,
+              "uniqueItems": true
+            }
+          ]
+        },
+        "counts": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 13
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "trick": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "seat",
+              "card"
+            ],
+            "properties": {
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "card": {
+                "type": "string",
+                "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "maxItems": 4
+        },
+        "tricksWon": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 13
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "lastWin": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          ]
+        },
+        "leader": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "current": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "pendingWin": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          ]
+        },
+        "aiMode": {
+          "enum": [
+            "random",
+            "smart"
+          ]
+        },
+        "over": {
+          "type": "boolean"
+        },
+        "dealer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "me": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 3
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "me": {
+                "const": -1
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "hand": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "hand": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+                },
+                "maxItems": 13,
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "cases": [
+      {
+        "name": "Opening move",
+        "description": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u3",
+              "kind": "human",
+              "display_name": "Casey",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u4",
+              "kind": "human",
+              "display_name": "Drew",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "hands": [
+            [
+              "3S",
+              "4S",
+              "6S",
+              "7S",
+              "14S",
+              "12H",
+              "4D",
+              "8D",
+              "9D",
+              "10D",
+              "2C",
+              "5C",
+              "11C"
+            ],
+            [
+              "5S",
+              "10S",
+              "2H",
+              "6H",
+              "9H",
+              "10H",
+              "13H",
+              "6D",
+              "11D",
+              "12D",
+              "4C",
+              "7C",
+              "9C"
+            ],
+            [
+              "2S",
+              "11S",
+              "3H",
+              "8H",
+              "11H",
+              "14H",
+              "3D",
+              "5D",
+              "7D",
+              "13D",
+              "6C",
+              "8C",
+              "10C"
+            ],
+            [
+              "8S",
+              "9S",
+              "12S",
+              "13S",
+              "4H",
+              "5H",
+              "7H",
+              "2D",
+              "14D",
+              "3C",
+              "12C",
+              "13C",
+              "14C"
+            ]
+          ],
+          "trick": [],
+          "tricksWon": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "lastWin": null,
+          "leader": 3,
+          "current": 3,
+          "pendingWin": null,
+          "aiMode": "smart",
+          "over": false,
+          "dealer": 2
+        },
+        "view_of_mover": {
+          "hands": null,
+          "hand": [
+            "8S",
+            "9S",
+            "12S",
+            "13S",
+            "4H",
+            "5H",
+            "7H",
+            "2D",
+            "14D",
+            "3C",
+            "12C",
+            "13C",
+            "14C"
+          ],
+          "counts": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "trick": [],
+          "tricksWon": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "lastWin": null,
+          "leader": 3,
+          "current": 3,
+          "pendingWin": null,
+          "aiMode": "smart",
+          "over": false,
+          "dealer": 2,
+          "me": 3
+        },
+        "view_of_other": {
+          "hands": null,
+          "hand": null,
+          "counts": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "trick": [],
+          "tricksWon": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "lastWin": null,
+          "leader": 3,
+          "current": 3,
+          "pendingWin": null,
+          "aiMode": "smart",
+          "over": false,
+          "dealer": 2,
+          "me": -1
+        },
+        "player_id": "u4",
+        "other_player_id": null,
+        "move": {
+          "card": "2D"
+        },
+        "expected_state": {
+          "hands": [
+            [
+              "3S",
+              "4S",
+              "6S",
+              "7S",
+              "14S",
+              "12H",
+              "4D",
+              "8D",
+              "9D",
+              "10D",
+              "2C",
+              "5C",
+              "11C"
+            ],
+            [
+              "5S",
+              "10S",
+              "2H",
+              "6H",
+              "9H",
+              "10H",
+              "13H",
+              "6D",
+              "11D",
+              "12D",
+              "4C",
+              "7C",
+              "9C"
+            ],
+            [
+              "2S",
+              "11S",
+              "3H",
+              "8H",
+              "11H",
+              "14H",
+              "3D",
+              "5D",
+              "7D",
+              "13D",
+              "6C",
+              "8C",
+              "10C"
+            ],
+            [
+              "8S",
+              "9S",
+              "12S",
+              "13S",
+              "4H",
+              "5H",
+              "7H",
+              "14D",
+              "3C",
+              "12C",
+              "13C",
+              "14C"
+            ]
+          ],
+          "trick": [
+            {
+              "seat": 3,
+              "card": "2D"
+            }
+          ],
+          "tricksWon": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "lastWin": null,
+          "leader": 3,
+          "current": 0,
+          "pendingWin": null,
+          "aiMode": "smart",
+          "over": false,
+          "dealer": 2
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "hands": null,
+          "hand": [
+            "8S",
+            "9S",
+            "12S",
+            "13S",
+            "4H",
+            "5H",
+            "7H",
+            "14D",
+            "3C",
+            "12C",
+            "13C",
+            "14C"
+          ],
+          "counts": [
+            13,
+            13,
+            13,
+            12
+          ],
+          "trick": [
+            {
+              "seat": 3,
+              "card": "2D"
+            }
+          ],
+          "tricksWon": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "lastWin": null,
+          "leader": 3,
+          "current": 0,
+          "pendingWin": null,
+          "aiMode": "smart",
+          "over": false,
+          "dealer": 2,
+          "me": 3
+        },
+        "expected_view_of_other": {
+          "hands": null,
+          "hand": null,
+          "counts": [
+            13,
+            13,
+            13,
+            12
+          ],
+          "trick": [
+            {
+              "seat": 3,
+              "card": "2D"
+            }
+          ],
+          "tricksWon": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "lastWin": null,
+          "leader": 3,
+          "current": 0,
+          "pendingWin": null,
+          "aiMode": "smart",
+          "over": false,
+          "dealer": 2,
+          "me": -1
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ]
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Picas (Declarative)",
+      "short_description": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_logic_rules": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_ui_rules": "Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.",
+      "tutorial_strings": {
+        "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick."
+      },
+      "client_strings": {
+        "title": "Picas (Declarative)"
+      }
+    },
+    "fr": {
+      "display_name": "Pique (Declarative)",
+      "short_description": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_logic_rules": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_ui_rules": "Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.",
+      "tutorial_strings": {
+        "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick."
+      },
+      "client_strings": {
+        "title": "Pique (Declarative)"
+      }
+    },
+    "de": {
+      "display_name": "Pik (Declarative)",
+      "short_description": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_logic_rules": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_ui_rules": "Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.",
+      "tutorial_strings": {
+        "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick."
+      },
+      "client_strings": {
+        "title": "Pik (Declarative)"
+      }
+    },
+    "pt": {
+      "display_name": "Espadas (Declarative)",
+      "short_description": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_logic_rules": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_ui_rules": "Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.",
+      "tutorial_strings": {
+        "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick."
+      },
+      "client_strings": {
+        "title": "Espadas (Declarative)"
+      }
+    },
+    "zh": {
+      "display_name": "黑桃 (Declarative)",
+      "short_description": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_logic_rules": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_ui_rules": "Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.",
+      "tutorial_strings": {
+        "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick."
+      },
+      "client_strings": {
+        "title": "黑桃 (Declarative)"
+      }
+    },
+    "hi": {
+      "display_name": "स्पेड्स (Declarative)",
+      "short_description": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_logic_rules": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_ui_rules": "Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.",
+      "tutorial_strings": {
+        "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick."
+      },
+      "client_strings": {
+        "title": "स्पेड्स (Declarative)"
+      }
+    },
+    "ar": {
+      "display_name": "سبيدز (Declarative)",
+      "short_description": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_logic_rules": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.",
+      "game_ui_rules": "Tap a card from your private hand. Follow-suit choices are offered; the trick winner collects the four played cards.",
+      "tutorial_strings": {
+        "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick.": "Play one card to each trick, following suit when possible. Spades are trump; the highest trump or led-suit card wins. Collect the completed trick."
+      },
+      "client_strings": {
+        "title": "سبيدز (Declarative)"
+      }
+    }
+  },
+  "game_addition_request_id_and_secret": "example-only-html-to-declarative-spades-replace-before-publishing",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 600,
+      "height": 680
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 680,
+        "color": "#145b4e",
+        "line_color": "#6ee7b7"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 60,
+        "height": 80,
+        "color": "#fffdf6",
+        "text_color": "#172033",
+        "border_color": "#667085"
+      },
+      "played": {
+        "shape": "card",
+        "width": 58,
+        "height": 78,
+        "color": "#fffdf6",
+        "text_color": "#172033",
+        "border_color": "#667085"
+      }
+    },
+    "strings": {
+      "title": "Spades (Declarative)"
+    },
+    "ui_code": "const KIND=\"spades\";\nconst SOURCE_STRINGS={\"title\":\"Spades (Declarative)\"};\n// Shared presentation for HTML games converted to the portable declarative UI.\n// Rules and private information remain in each game's existing server module.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active;\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\n    const offers = [];\n    let selectedMode = 'pawn';\n    const playerNames = (m.players || []).map((p, i) => p.name || `Player ${i + 1}`);\n    const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\n    const title = SOURCE_STRINGS.title || KIND;\n    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :\n      Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;\n    scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});\n    if (turnSeat !== null) {\n      scene.labels.push({id: 'status', text: active ? `Your turn · ${playerNames[turnSeat] || `Player ${turnSeat + 1}`}` :\n        (m.status === 'over' ? 'Game over' : `${playerNames[turnSeat] || `Player ${turnSeat + 1}`} to play`),\n        x: 22, y: 52, font_size: 17});\n    }\n    if (m.status === 'over' && Number.isInteger(s.winner)) {\n      scene.labels.push({id: 'winner', text: `Winner: ${playerNames[s.winner] || `Player ${s.winner + 1}`}`,\n        x: 22, y: 78, font_size: 16});\n    }\n    const intent = (move, label, surface, position, presentation) => {\n      if (!active) return null;\n      const id = `intent_${offers.length}`;\n      offers.push(move);\n      if (presentation === 'piece') {\n        scene.pieces.push({id, type: 'card', board: surface, position, text: label,\n          actions: ['tap']});\n      } else if (presentation === 'target') {\n        scene.targets.push({id, board: surface, position, label: label || '•'});\n      } else {\n        scene.controls.push({id, kind: 'button', label});\n      }\n      return id;\n    };\n    const staticPiece = (id, type, board, position, extra = {}) =>\n      scene.pieces.push(Object.assign({id, type, board, position, actions: []}, extra));\n    const label = (id, text, x, y, size = 14) =>\n      scene.labels.push({id, text: String(text), x, y, font_size: size});\n    const cardText = card => String(card || '').replace(/S$/, '♠').replace(/H$/, '♥')\n      .replace(/D$/, '♦').replace(/C$/, '♣');\n    const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});\n    const eventId = message.type === 'ui_event' ? String((message.event || {}).id || '') : '';\n    const intentMatch = /^intent_(\\d+)$/.exec(eventId);\n\n    if (KIND === 'battleship') {\n      const left = {x: 20, y: 120}, right = {x: 435, y: 120};\n      scene.labels.push({id: 'own-title', text: 'Your fleet', x: left.x, y: 84, font_size: 18});\n      scene.labels.push({id: 'target-title', text: 'Target waters', x: right.x, y: 84, font_size: 18});\n      const me = mySeat, opponent = 1 - me;\n      const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];\n      const ownCells = new Set();\n      for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);\n      for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {\n        const pos = {cell: String(r * 10 + c)};\n        const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;\n        const enemyAttack = s.attacks && s.attacks[opponent] ? s.attacks[opponent][r][c] : 0;\n        const ownMark = ownAttack === 2 ? '✹' : ownAttack === 1 ? '·' : ownCells.has(`${c},${r}`) ? '■' : '';\n        const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :\n          ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';\n        staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});\n        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';\n        if (active && s.phase === 'BATTLE' && enemyAttack === 0) {\n          intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');\n        } else {\n          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',\n            'target', pos, {text: targetMark});\n        }\n      }\n      if (active && s.phase === 'SETUP') {\n        const ships = [\n          {name: 'Carrier', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]},\n          {name: 'Battleship', cells: [[0, 2], [1, 2], [2, 2], [3, 2]]},\n          {name: 'Cruiser', cells: [[0, 4], [1, 4], [2, 4]]},\n          {name: 'Submarine', cells: [[0, 6], [1, 6], [2, 6]]},\n          {name: 'Destroyer', cells: [[0, 8], [1, 8]]}\n        ];\n        intent({type: 'place', ships}, 'Place fleet and start battle', null, null, 'control');\n        label('setup-help', 'Places a valid fleet with clear water between ships.', 22, 594, 14);\n      }\n    } else if (KIND === 'checkers') {\n      const board = s.board || [];\n      const moves = legal ? (s.moves || []) : [];\n      const moveTargets = new Set(moves.map(mv => `${mv.to.r},${mv.to.c}`));\n      board.forEach((row, r) => row.forEach((piece, c) => {\n        if (!piece) return;\n        const owner = piece.c === 0 ? 'p0' : 'p1';\n        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',\n          {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});\n      }));\n      moves.forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',\n        {cell: String(move.to.r * 8 + move.to.c)}, 'target'));\n      label('chain', s.chain ? 'Continue the capture with the highlighted checker.' :\n        (moves.some(mv => mv.cap) ? 'A capture is required.' : 'Move diagonally; kings move either direction.'), 22, 670);\n    } else if (KIND === 'chess' || KIND === 'four_player_chess') {\n      const size = KIND === 'chess' ? 8 : 14;\n      const boardId = 'main';\n      const board = KIND === 'chess' ? (s.bd || []) : s.board || {};\n      const symbols = {wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};\n      const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};\n      if (KIND === 'chess') {\n        const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};\n        board.forEach((piece, index) => {\n          if (!piece) return;\n          const r = Math.floor(index / 8), c = index % 8;\n          const name = pieceNames[Math.abs(piece)] || 'P';\n          const code = `${piece > 0 ? 'w' : 'b'}${name}`;\n          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,\n            {cell: String(index)}, {text: symbols[code] || name});\n        });\n      } else {\n        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {\n          if (KIND === 'four_player_chess' && !((r >= 3 && r <= 10) || (c >= 3 && c <= 10))) continue;\n          const pos = KIND === 'chess' ? {cell: String(r * size + c)} : {x: 21 + c * 42, y: 21 + r * 42};\n          const squareType = (r + c) % 2 ? 'square_dark' : 'square_light';\n          if (KIND === 'four_player_chess') staticPiece(`square_${r}_${c}`, squareType, boardId, pos);\n        }\n        for (const [square, piece] of Object.entries(board)) {\n          const [r, c] = square.split(',').map(Number);\n          if (!Number.isInteger(r) || !Number.isInteger(c)) continue;\n          const type = Number(piece.o) || 0;\n          staticPiece(`piece_${r}_${c}`, `seat_${type}`, boardId, {x: 21 + c * 42, y: 21 + r * 42},\n            {text: fourSymbols[piece.t] || piece.t});\n        }\n      }\n      const legalMoves = legal ? (s.legalMoves || []) : [];\n      for (const mv of legalMoves) {\n        const move = KIND === 'chess'\n          ? {fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc, ...(mv.promo ? {promo: mv.promo} : {})}\n          : {kind: 'move', fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc};\n        const position = KIND === 'chess' ? {cell: String(mv.tr * size + mv.tc)} :\n          {x: 21 + mv.tc * 42, y: 21 + mv.tr * 42};\n        if (KIND === 'chess' && mv.promo) {\n          const files = 'abcdefgh';\n          const promotionNames = {Q: 'queen', R: 'rook', B: 'bishop', N: 'knight'};\n          intent(move, `Promote at ${files[mv.tc]}${size - mv.tr} to ${promotionNames[mv.promo] || mv.promo}`,\n            null, null, 'control');\n        } else intent(move, '•', boardId, position, 'target');\n      }\n      if (KIND === 'four_player_chess' && active && !(s.legalMoves || []).length && s.winnerTeam === null) {\n        intent({kind: s.inCheck ? 'elim' : 'pass'}, s.inCheck ? 'Eliminate this army' : 'Pass (no legal move)',\n          null, null, 'control');\n      }\n      if (KIND === 'chess' && s.winner === null && active) {\n        intent({resign: true}, 'Resign', null, null, 'control');\n      }\n    } else if (KIND === 'quoridor') {\n      const cells = [];\n      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n        const x = 44 + c * 54, y = 112 + r * 54;\n        cells.push({r, c, x, y});\n        staticPiece(`square_${r}_${c}`, 'square', 'main', {x, y}, {text: ''});\n      }\n      (s.walls || []).forEach((w, i) => {\n        if (w.o === 'H') scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + w.c * 54, y: 112 + (w.r + 0.5) * 54},\n          {x: 44 + (w.c + 2) * 54, y: 112 + (w.r + 0.5) * 54}], color: '#fbbf24', width: 10});\n        else scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + w.r * 54},\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 2) * 54}], color: '#fbbf24', width: 10});\n      });\n      for (let seat = 0; seat < (s.pawns || []).length; seat++) {\n        const p = s.pawns[seat];\n        staticPiece(`pawn_${seat}`, seat === 0 ? 'p0' : 'p1', 'main',\n          {x: 44 + p.c * 54, y: 112 + p.r * 54}, {text: seat === 0 ? '1' : '2'});\n      }\n      const mode = eventId === 'mode_wall' ? 'wall' : eventId === 'mode_pawn' ? 'pawn' :\n        localState && localState.move_count === m.move_count && localState.mode === 'wall' ? 'wall' : 'pawn';\n      selectedMode = mode;\n      if (active) {\n        scene.controls.push({id: 'mode_pawn', kind: 'button', label: mode === 'pawn' ? '✓ Move pawn' : 'Move pawn'});\n        scene.controls.push({id: 'mode_wall', kind: 'button', label: mode === 'wall' ? '✓ Place wall' : 'Place wall'});\n        if (mode === 'pawn') (s.legalMoves || []).forEach(([r, c]) =>\n          intent({type: 'pawn', r, c}, '•', 'main', {x: 44 + c * 54, y: 112 + r * 54}, 'target'));\n        else (s.legalWalls || []).forEach(w => intent({type: 'wall', r: w.r, c: w.c, o: w.o},\n          w.o === 'H' ? '—' : '│', 'main', w.o === 'H'\n            ? {x: 44 + (w.c + 1) * 54, y: 112 + (w.r + 0.5) * 54}\n            : {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 1) * 54}, 'target'));\n      }\n      label('walls-left', `Walls remaining · ${s.wallsLeft ? s.wallsLeft.join(' / ') : ''}`, 22, 614);\n      if (message.type === 'ui_event' && active && (eventId === 'mode_pawn' || eventId === 'mode_wall')) {\n        selectedMode = eventId === 'mode_wall' ? 'wall' : 'pawn';\n        return {scene, local_state: {mode:selectedMode,move_count:m.move_count,\n          intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};\n      }\n    } else if (KIND === 'crazy_eights') {\n      label('table', `Top card ${cardText(cardFromNumber(s.top))} · suit ${SUITS[s.suit] || ''} · ${s.deckCount || 0} cards to draw`, 22, 94, 16);\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const playable = new Set(s.playable || []);\n      hand.forEach((card, i) => {\n        const r = card % 13 + 1, labelText = cardText(cardFromNumber(card));\n        if (playable.has(card)) {\n          if (r === 8) {\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n            for (let chosenSuit = 0; chosenSuit < 4; chosenSuit++)\n              intent({card, chosenSuit}, `Play ${labelText} as ${SUITS[chosenSuit]}`, null, null, 'control');\n          } else intent({card}, `Play ${labelText}`, 'table', cardPos(i), 'piece');\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n      });\n      if (active) intent('draw', `Draw a card (${s.deckCount || 0} left)`, null, null, 'control');\n    } else if (KIND === 'go_fish') {\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));\n      const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));\n      for (let seat = 0; seat < playerNames.length; seat++) if (active && seat !== mySeat) {\n        for (const rank of rankSet) intent({target: seat, rank}, `Ask ${playerNames[seat]} for ${rank}`, null, null, 'control');\n      }\n      if (active && hand.length === 0) {\n        if (s.deckCount > 0) intent({draw: true}, 'Draw cards', null, null, 'control');\n        else intent({pass: true}, 'Pass', null, null, 'control');\n      }\n      (s.books || []).forEach((books, seat) => label(`books_${seat}`, `${playerNames[seat] || `Player ${seat + 1}`} · books ${(books || []).join(', ') || '—'}`,\n        24, 460 + seat * 25, 14));\n    } else if (KIND === 'hearts' || KIND === 'spades') {\n      const isHearts = KIND === 'hearts';\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const current = isHearts ? s.cur : s.current;\n      const trick = s.trick || [];\n      const legalCards = isHearts ? new Set(s.legal || []) : (() => {\n        if (s.pendingWin !== null && s.pendingWin !== undefined) return new Set();\n        if (!trick.length) return new Set(hand);\n        const led = String(trick[0].card || '').slice(-1);\n        const follow = hand.filter(card => String(card).slice(-1) === led);\n        return new Set(follow.length ? follow : hand);\n      })();\n      hand.forEach((card, i) => {\n        const moves = legalCards.has(card) ? [{card}] : [];\n        if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)});\n      });\n      trick.forEach((play, i) => staticPiece(`trick_${i}`, 'played', 'table',\n        {x: 300 + (play.player ?? play.seat) * 72, y: 400}, {text: cardText(play.card)}));\n      if (KIND === 'spades' && s.pendingWin !== null && s.pendingWin !== undefined && active)\n        intent({collect: true}, 'Collect trick', null, null, 'control');\n      const scores = isHearts ? s.taken : s.tricksWon;\n      if (Array.isArray(scores)) scores.forEach((score, seat) =>\n        label(`score_${seat}`, `${playerNames[seat] || `Player ${seat + 1}`} · ${score}`, 22 + seat * 170, 92, 14));\n    } else if (KIND === 'guess_who') {\n      const names = CHARACTER_NAMES;\n      const secret = Number.isInteger(s.mySecret) ? `Your character: ${names[s.mySecret]}` : 'Your character is private';\n      label('your-secret', secret, 22, 88, 18);\n      for (let i = 0; i < names.length; i++) {\n        const row = Math.floor(i / 6), col = i % 6;\n        const x = 30 + col * 94, y = 156 + row * 92;\n        staticPiece(`person_${i}`, `person_${i % CHARACTER_COLORS.length}`, 'main',\n          {cell: String(i)}, {text: names[i]});\n        if (active) intent({kind: 'guess', idx: i}, names[i], 'main', {cell: String(i)}, 'target');\n      }\n      const asked = new Set((s.hist || []).filter(item => item.by === mySeat && Number.isInteger(item.q)).map(item => item.q));\n      if (active) QUESTIONS.forEach((question, q) => {\n        if (!asked.has(q)) intent({kind: 'ask', q}, `Ask: ${question}`, null, null, 'control');\n      });\n      (s.hist || []).slice(-8).forEach((item, i) => {\n        const who = playerNames[item.by] || `Player ${item.by + 1}`;\n        const text = Number.isInteger(item.q) ? `${who}: ${QUESTIONS[item.q]} · ${item.ans ? 'Yes' : 'No'}` :\n          `${who}: guessed ${names[item.guess] || '—'} · ${item.correct ? 'correct' : 'incorrect'}`;\n        label(`history_${i}`, text, 22, 520 + i * 18, 13);\n      });\n    }\n\n    const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;\n    if (message.type === 'ui_event' && active && emitted !== undefined) {\n      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))};\n      if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n      return {scene, local_state: nextLocal, make_move: emitted};\n    }\n    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))};\n    if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n    return {scene, local_state: nextLocal};\n  }\n};\n\nconst SUITS = ['♠', '♥', '♦', '♣'];\nconst RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];\nfunction cardFromNumber(value) {\n  const suit = Math.floor(Number(value) / 13), rank = Number(value) % 13 + 1;\n  return `${RANKS[(rank + 12) % 13]}${SUITS[suit] || ''}`;\n}\nconst QUESTIONS = ['Are they wearing glasses?', 'Are they wearing a hat?', 'Do they have facial hair?',\n  'Are their ears showing?', 'Do they have blonde hair?', 'Do they have brown hair?',\n  'Do they have black hair?', 'Do they have red hair?', 'Do they have gray hair?',\n  'Do they have long hair?', 'Do they have short hair?', 'Do they have blue eyes?',\n  'Do they have brown eyes?', 'Do they have green eyes?'];\nconst CHARACTER_NAMES = ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena',\n  'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'];\nconst CHARACTER_COLORS = ['#60a5fa', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#2dd4bf'];\n"
+  }
+}

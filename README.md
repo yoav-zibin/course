@@ -20,7 +20,7 @@ An in-memory REST backend for a multiplayer turn-based games platform, built wit
 [authoring guide](docs/declarative-games.md),
 [JSON schema](schemas/declarative-ui.schema.json),
 [spreadsheet coverage review](docs/declarative-game-coverage.md), and
-[eleven complete games, including Backgammon](games/declarative). Submit a `declarative_ui` package
+[twenty-one complete games, including ten declarative HTML conversions](games/declarative). Submit a `declarative_ui` package
 instead of game HTML; pure QuickJS presentation turns state messages into JSON
 boards, pieces, images and controls, then requests moves through the existing
 API. The shared React Native scene renderer runs on web, Android and iOS.

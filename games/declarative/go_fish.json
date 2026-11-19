@@ -1,0 +1,609 @@
+{
+  "name": "Go Fish (Declarative)",
+  "description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+  "allowed_player_counts": [
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "allows_leave_mid_match": false,
+  "allows_join_mid_match": false,
+  "server_code": "const game={newMatch(ctx){const R=['A','2','3','4','5','6','7','8','9','10','J','Q','K'],S=['\\u2660','\\u2665','\\u2666','\\u2663'];let deck=[];R.forEach(r=>S.forEach(s=>deck.push(r+s)));for(let i=deck.length-1;i>0;i--){const j=Math.floor(ctx.random()*(i+1));const t=deck[i];deck[i]=deck[j];deck[j]=t;}\nconst n=ctx.players.length,per=n<=3?7:5,hands=[],books=[];for(let i=0;i<n;i++){hands.push([]);books.push([]);}\nfor(let k=0;k<per;k++)for(let i=0;i<n;i++)hands[i].push(deck.pop());\nfor(let i=0;i<n;i++)game._books(hands,books,i);\nconst state={deck,hands,books,log:['Game dealt! '+per+' cards each.'],last:null,winners:null};\nreturn{state,turn:[ctx.players[0].id]};},\n_rank(c){return c.slice(0,-1);},\n_books(hands,books,i){const nb=[];let ch=true;while(ch){ch=false;const cnt={};hands[i].forEach(c=>{const r=c.slice(0,-1);cnt[r]=(cnt[r]||0)+1;});for(const r in cnt){if(cnt[r]===4){hands[i]=hands[i].filter(c=>c.slice(0,-1)!==r);books[i].push(r);nb.push(r);ch=true;break;}}}return nb;},\n_refill(st,n2){n2=n2||5;for(let i=0;i<st.hands.length;i++){if(st.hands[i].length===0&&st.deck.length>0){const k=Math.min(n2,st.deck.length);for(let j=0;j<k;j++)st.hands[i].push(st.deck.pop());}}},\n_totalBooks(st){return st.books.reduce((a,b)=>a+b.length,0);},\n_isOver(st){if(game._totalBooks(st)>=13)return true;if(st.deck.length===0&&st.hands.every(h=>h.length===0))return true;return false;},\n_winners(st){let m=Math.max.apply(null,st.books.map(b=>b.length));return st.books.map((b,i)=>b.length===m?i:-1).filter(i=>i>=0);},\n_next(st,from){const n=st.hands.length;for(let k=1;k<=n;k++){const j=(from+k)%n;if(st.hands[j].length>0)return j;}if(st.deck.length>0)return(from+1)%n;return from;},\n_payouts(st,ctx){const p={};const humans=ctx.players.filter(p=>p.kind!=='computer');humans.forEach(h=>p[h.id]=0);const pot=ctx.pot||0;if(pot<=0)return p;if(humans.length===0)return p;const w=st.winners||game._winners(st);const hw=w.map(i=>ctx.players[i]).filter(pp=>pp&&pp.kind!=='computer');const rec=hw.length>0?hw.map(h=>h.id):humans.map(h=>h.id);const base=Math.floor(pot/rec.length);let rem=pot-base*rec.length;rec.forEach(id=>{p[id]=base;});for(let k=0;k<rec.length&&rem>0;k++){p[rec[k]]++;rem--;}return p;},\napplyMove(state,playerId,move,ctx){const idx=ctx.players.findIndex(p=>p.id===playerId);if(idx<0)throw new InvalidMove('unknown player');move=move||{};\nconst st={deck:state.deck.slice(),hands:state.hands.map(h=>h.slice()),books:state.books.map(b=>b.slice()),log:state.log.slice(),last:state.last,winners:state.winners};\nconst idOf=i=>ctx.players[i]?ctx.players[i].id:null;\nif(st.hands[idx].length===0){\n if(st.deck.length>0){\n  if(move.draw){const k=Math.min(5,st.deck.length);for(let j=0;j<k;j++)st.hands[idx].push(st.deck.pop());const nb=game._books(st.hands,st.books,idx);st.last={kind:'draw',from:idx,to:null,rank:'',got:0,fished:false,drew:null,extra:false,newB:nb,msg:'refill'};st.log.push(ctx.players[idx].display_name+' refilled +'+k);game._refill(st);return{state:st,turn:[playerId]};}\n  throw new InvalidMove('empty hand: refill first');\n }else{\n  if(move.pass){st.last={kind:'pass',from:idx,to:null,rank:'',got:0,fished:false,drew:null,extra:false,newB:[],msg:'pass'};st.log.push(ctx.players[idx].display_name+' passes');if(game._isOver(st)){st.winners=game._winners(st);return{state:st,turn:null,payouts:game._payouts(st,ctx)};}const nx=game._next(st,idx);return{state:st,turn:[idOf(nx)]};}\n  throw new InvalidMove('you have no cards: pass');\n }}\nconst t=move.target,r=move.rank;\nif(t==null||r==null)throw new InvalidMove('pick a rank and opponent');\nif(!Number.isInteger(t)||t<0||t>=st.hands.length)throw new InvalidMove('bad opponent');\nif(t===idx)throw new InvalidMove('cannot ask yourself');\nif(['A','2','3','4','5','6','7','8','9','10','J','Q','K'].indexOf(r)<0)throw new InvalidMove('bad rank');\nif(!st.hands[idx].some(c=>c.slice(0,-1)===r))throw new InvalidMove('you hold no '+r+'s');\nconst give=st.hands[t].filter(c=>c.slice(0,-1)===r);\nlet extra=false,drew=null,gotN=0,msg='';let newB=[];\nif(give.length>0){st.hands[t]=st.hands[t].filter(c=>c.slice(0,-1)!==r);st.hands[idx]=st.hands[idx].concat(give);gotN=give.length;newB=game._books(st.hands,st.books,idx);msg='got '+gotN+' '+r;extra=true;}\nelse{if(st.deck.length>0){drew=st.deck.pop();st.hands[idx]=st.hands[idx].concat([drew]);const nb=game._books(st.hands,st.books,idx);newB=nb;if(drew.slice(0,-1)===r){msg='fished the '+r;extra=true;}else{msg='go fish';extra=false;}}else{msg='go fish (empty)';extra=false;}}\nconst entry={kind:'ask',from:idx,to:t,rank:r,got:gotN,fished:give.length===0,drew,extra,newB,msg};\nst.last=entry;\nconst an=ctx.players[idx]?ctx.players[idx].display_name:'?';const tn2=ctx.players[t]?ctx.players[t].display_name:'?';\nif(gotN>0)st.log.push(an+' got '+gotN+' '+r+' from '+tn2);else st.log.push(an+' asked '+tn2+' for '+r+'s — Go Fish!');\nif(newB.length)st.log.push('\\uD83D\\uDCCA Book(s): '+newB.join(','));\nwhile(st.log.length>30)st.log.shift();\ngame._refill(st);\nif(game._isOver(st)){st.winners=game._winners(st);return{state:st,turn:null,payouts:game._payouts(st,ctx)};}\nlet nx;\nif(extra){nx=idx;if(st.hands[nx].length===0){if(st.deck.length===0)nx=game._next(st,idx);}}\nelse nx=game._next(st,idx);\nif(st.deck.length===0){let g=0;while(st.hands[nx].length===0&&g<10){nx=(nx+1)%st.hands.length;g++;}if(st.hands[nx].length===0&&game._isOver(st)){st.winners=game._winners(st);return{state:st,turn:null,payouts:game._payouts(st,ctx)};}}\nreturn{state:st,turn:[idOf(nx)]};},\ncomputerMove(state,playerId,ctx){return game.randomMove(state,playerId,ctx);},\nrandomMove(state,playerId,ctx){const idx=ctx.players.findIndex(p=>p.id===playerId);const h=state.hands[idx]||[];\nif(h.length===0){if(state.deck.length>0)return{draw:true};return{pass:true};}\nconst set=[];h.forEach(c=>{const r=c.slice(0,-1);if(set.indexOf(r)<0)set.push(r);});\nconst rank=set[Math.floor(ctx.random()*set.length)];\nlet cands=[];for(let i=0;i<state.hands.length;i++){if(i!==idx&&state.hands[i].length>0)cands.push(i);}\nif(cands.length===0)for(let i=0;i<state.hands.length;i++)if(i!==idx)cands.push(i);\nconst tgt=cands[Math.floor(ctx.random()*cands.length)];\nreturn{target:tgt,rank};},\nviewFor(state,playerId,ctx){if(!state||!state.deck)return null;const idx=playerId==null?-1:ctx.players.findIndex(p=>p.id===playerId);\nreturn{deckCount:state.deck.length,counts:state.hands.map(h=>h.length),books:state.books.map(b=>b.slice()),hand:idx>=0?state.hands[idx].slice():null,log:state.log.slice(),last:state.last?Object.assign({},state.last,{drew:idx>=0&&idx===state.last.from?state.last.drew:null}):null,winners:state.winners};}};",
+  "rules": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+  "ui_instructions": "Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.",
+  "tutorial": {
+    "text": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>Go Fish (Declarative)</h1><p>Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.</p><p>Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.</p></main>"
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1600 900\"><rect width=\"1600\" height=\"900\" fill=\"#17324f\"/><circle cx=\"800\" cy=\"450\" r=\"230\" fill=\"#dbeafe\"/><circle cx=\"800\" cy=\"450\" r=\"150\" fill=\"#56c9b4\"/><path d=\"M520 450h560M800 170v560\" stroke=\"#ffffff\" stroke-width=\"28\" opacity=\".75\"/></svg>"
+    },
+    {
+      "caption": "Initial board",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+    },
+    {
+      "caption": "Playable choices",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#56c9b4\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#ffbf66\" stroke-width=\"26\"/></svg>"
+    },
+    {
+      "caption": "Game in progress",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#ffbf66\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#17324f\" stroke-width=\"26\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "books": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "deck": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "hands": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "last": {
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "log": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "winners": {
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "move_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "rank": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "target": {
+          "type": [
+            "null",
+            "number"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "view_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "books": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "counts": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "deckCount": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "hand": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "last": {
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "log": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "winners": {
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "cases": [
+      {
+        "name": "Opening move",
+        "description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "kind": "human",
+              "display_name": "Alice",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "kind": "human",
+              "display_name": "Bob",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "deck": [
+            "K♠",
+            "7♠",
+            "Q♣",
+            "4♣",
+            "2♠",
+            "9♣",
+            "A♠",
+            "K♥",
+            "9♠",
+            "3♠",
+            "10♥",
+            "3♦",
+            "9♥",
+            "Q♠",
+            "8♥",
+            "K♦",
+            "A♦",
+            "6♥",
+            "8♣",
+            "10♦",
+            "A♥",
+            "10♠",
+            "4♦",
+            "2♣",
+            "J♦",
+            "J♥",
+            "6♦",
+            "3♣",
+            "10♣",
+            "5♥",
+            "Q♥",
+            "5♦",
+            "4♠",
+            "4♥",
+            "3♥",
+            "2♦",
+            "2♥",
+            "Q♦"
+          ],
+          "hands": [
+            [
+              "7♦",
+              "8♦",
+              "J♠",
+              "A♣",
+              "K♣",
+              "6♠",
+              "5♠"
+            ],
+            [
+              "7♣",
+              "8♠",
+              "7♥",
+              "6♣",
+              "5♣",
+              "9♦",
+              "J♣"
+            ]
+          ],
+          "books": [
+            [],
+            []
+          ],
+          "log": [
+            "Game dealt! 7 cards each."
+          ],
+          "last": null,
+          "winners": null
+        },
+        "view_of_mover": {
+          "deckCount": 38,
+          "counts": [
+            7,
+            7
+          ],
+          "books": [
+            [],
+            []
+          ],
+          "hand": [
+            "7♦",
+            "8♦",
+            "J♠",
+            "A♣",
+            "K♣",
+            "6♠",
+            "5♠"
+          ],
+          "log": [
+            "Game dealt! 7 cards each."
+          ],
+          "last": null,
+          "winners": null
+        },
+        "view_of_other": {
+          "deckCount": 38,
+          "counts": [
+            7,
+            7
+          ],
+          "books": [
+            [],
+            []
+          ],
+          "hand": null,
+          "log": [
+            "Game dealt! 7 cards each."
+          ],
+          "last": null,
+          "winners": null
+        },
+        "player_id": "u1",
+        "other_player_id": null,
+        "move": {
+          "target": 1,
+          "rank": "K"
+        },
+        "expected_state": {
+          "deck": [
+            "K♠",
+            "7♠",
+            "Q♣",
+            "4♣",
+            "2♠",
+            "9♣",
+            "A♠",
+            "K♥",
+            "9♠",
+            "3♠",
+            "10♥",
+            "3♦",
+            "9♥",
+            "Q♠",
+            "8♥",
+            "K♦",
+            "A♦",
+            "6♥",
+            "8♣",
+            "10♦",
+            "A♥",
+            "10♠",
+            "4♦",
+            "2♣",
+            "J♦",
+            "J♥",
+            "6♦",
+            "3♣",
+            "10♣",
+            "5♥",
+            "Q♥",
+            "5♦",
+            "4♠",
+            "4♥",
+            "3♥",
+            "2♦",
+            "2♥"
+          ],
+          "hands": [
+            [
+              "7♦",
+              "8♦",
+              "J♠",
+              "A♣",
+              "K♣",
+              "6♠",
+              "5♠",
+              "Q♦"
+            ],
+            [
+              "7♣",
+              "8♠",
+              "7♥",
+              "6♣",
+              "5♣",
+              "9♦",
+              "J♣"
+            ]
+          ],
+          "books": [
+            [],
+            []
+          ],
+          "log": [
+            "Game dealt! 7 cards each.",
+            "Alice asked Bob for Ks — Go Fish!"
+          ],
+          "last": {
+            "kind": "ask",
+            "from": 0,
+            "to": 1,
+            "rank": "K",
+            "got": 0,
+            "fished": true,
+            "drew": "Q♦",
+            "extra": false,
+            "newB": [],
+            "msg": "go fish"
+          },
+          "winners": null
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "deckCount": 37,
+          "counts": [
+            8,
+            7
+          ],
+          "books": [
+            [],
+            []
+          ],
+          "hand": [
+            "7♦",
+            "8♦",
+            "J♠",
+            "A♣",
+            "K♣",
+            "6♠",
+            "5♠",
+            "Q♦"
+          ],
+          "log": [
+            "Game dealt! 7 cards each.",
+            "Alice asked Bob for Ks — Go Fish!"
+          ],
+          "last": {
+            "kind": "ask",
+            "from": 0,
+            "to": 1,
+            "rank": "K",
+            "got": 0,
+            "fished": true,
+            "drew": "Q♦",
+            "extra": false,
+            "newB": [],
+            "msg": "go fish"
+          },
+          "winners": null
+        },
+        "expected_view_of_other": {
+          "deckCount": 37,
+          "counts": [
+            8,
+            7
+          ],
+          "books": [
+            [],
+            []
+          ],
+          "hand": null,
+          "log": [
+            "Game dealt! 7 cards each.",
+            "Alice asked Bob for Ks — Go Fish!"
+          ],
+          "last": {
+            "kind": "ask",
+            "from": 0,
+            "to": 1,
+            "rank": "K",
+            "got": 0,
+            "fished": true,
+            "drew": null,
+            "extra": false,
+            "newB": [],
+            "msg": "go fish"
+          },
+          "winners": null
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\"><rect width=\"800\" height=\"600\" rx=\"24\" fill=\"#2770a8\"/><circle cx=\"400\" cy=\"300\" r=\"150\" fill=\"#ffffff\" opacity=\".86\"/><path d=\"M280 300h240M400 180v240\" stroke=\"#56c9b4\" stroke-width=\"26\"/></svg>"
+          }
+        ]
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Ve a pescar (Declarative)",
+      "short_description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_logic_rules": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_ui_rules": "Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.",
+      "tutorial_strings": {
+        "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins."
+      },
+      "client_strings": {
+        "title": "Ve a pescar (Declarative)"
+      }
+    },
+    "fr": {
+      "display_name": "Va pêcher (Declarative)",
+      "short_description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_logic_rules": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_ui_rules": "Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.",
+      "tutorial_strings": {
+        "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins."
+      },
+      "client_strings": {
+        "title": "Va pêcher (Declarative)"
+      }
+    },
+    "de": {
+      "display_name": "Go Fish (Declarative)",
+      "short_description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_logic_rules": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_ui_rules": "Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.",
+      "tutorial_strings": {
+        "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins."
+      },
+      "client_strings": {
+        "title": "Go Fish (Declarative)"
+      }
+    },
+    "pt": {
+      "display_name": "Pesca (Declarative)",
+      "short_description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_logic_rules": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_ui_rules": "Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.",
+      "tutorial_strings": {
+        "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins."
+      },
+      "client_strings": {
+        "title": "Pesca (Declarative)"
+      }
+    },
+    "zh": {
+      "display_name": "钓鱼 (Declarative)",
+      "short_description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_logic_rules": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_ui_rules": "Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.",
+      "tutorial_strings": {
+        "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins."
+      },
+      "client_strings": {
+        "title": "钓鱼 (Declarative)"
+      }
+    },
+    "hi": {
+      "display_name": "गो फिश (Declarative)",
+      "short_description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_logic_rules": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_ui_rules": "Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.",
+      "tutorial_strings": {
+        "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins."
+      },
+      "client_strings": {
+        "title": "गो फिश (Declarative)"
+      }
+    },
+    "ar": {
+      "display_name": "اذهب للصيد (Declarative)",
+      "short_description": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_logic_rules": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.",
+      "game_ui_rules": "Choose a rank and opponent from the offered Ask buttons. Your hand and completed books are shown, while other hands stay hidden.",
+      "tutorial_strings": {
+        "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins.": "Ask another player for a rank that you hold. Collected sets of four become books. If they have none, draw from the deck; the most books wins."
+      },
+      "client_strings": {
+        "title": "اذهب للصيد (Declarative)"
+      }
+    }
+  },
+  "game_addition_request_id_and_secret": "example-only-html-to-declarative-go_fish-replace-before-publishing",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 600,
+      "height": 680
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 600,
+        "height": 680,
+        "color": "#145b4e",
+        "line_color": "#6ee7b7"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 60,
+        "height": 80,
+        "color": "#fffdf6",
+        "text_color": "#172033",
+        "border_color": "#667085"
+      },
+      "played": {
+        "shape": "card",
+        "width": 58,
+        "height": 78,
+        "color": "#fffdf6",
+        "text_color": "#172033",
+        "border_color": "#667085"
+      }
+    },
+    "strings": {
+      "title": "Go Fish (Declarative)"
+    },
+    "ui_code": "const KIND=\"go_fish\";\nconst SOURCE_STRINGS={\"title\":\"Go Fish (Declarative)\"};\n// Shared presentation for HTML games converted to the portable declarative UI.\n// Rules and private information remain in each game's existing server module.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active;\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\n    const offers = [];\n    let selectedMode = 'pawn';\n    const playerNames = (m.players || []).map((p, i) => p.name || `Player ${i + 1}`);\n    const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\n    const title = SOURCE_STRINGS.title || KIND;\n    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :\n      Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;\n    scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});\n    if (turnSeat !== null) {\n      scene.labels.push({id: 'status', text: active ? `Your turn · ${playerNames[turnSeat] || `Player ${turnSeat + 1}`}` :\n        (m.status === 'over' ? 'Game over' : `${playerNames[turnSeat] || `Player ${turnSeat + 1}`} to play`),\n        x: 22, y: 52, font_size: 17});\n    }\n    if (m.status === 'over' && Number.isInteger(s.winner)) {\n      scene.labels.push({id: 'winner', text: `Winner: ${playerNames[s.winner] || `Player ${s.winner + 1}`}`,\n        x: 22, y: 78, font_size: 16});\n    }\n    const intent = (move, label, surface, position, presentation) => {\n      if (!active) return null;\n      const id = `intent_${offers.length}`;\n      offers.push(move);\n      if (presentation === 'piece') {\n        scene.pieces.push({id, type: 'card', board: surface, position, text: label,\n          actions: ['tap']});\n      } else if (presentation === 'target') {\n        scene.targets.push({id, board: surface, position, label: label || '•'});\n      } else {\n        scene.controls.push({id, kind: 'button', label});\n      }\n      return id;\n    };\n    const staticPiece = (id, type, board, position, extra = {}) =>\n      scene.pieces.push(Object.assign({id, type, board, position, actions: []}, extra));\n    const label = (id, text, x, y, size = 14) =>\n      scene.labels.push({id, text: String(text), x, y, font_size: size});\n    const cardText = card => String(card || '').replace(/S$/, '♠').replace(/H$/, '♥')\n      .replace(/D$/, '♦').replace(/C$/, '♣');\n    const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});\n    const eventId = message.type === 'ui_event' ? String((message.event || {}).id || '') : '';\n    const intentMatch = /^intent_(\\d+)$/.exec(eventId);\n\n    if (KIND === 'battleship') {\n      const left = {x: 20, y: 120}, right = {x: 435, y: 120};\n      scene.labels.push({id: 'own-title', text: 'Your fleet', x: left.x, y: 84, font_size: 18});\n      scene.labels.push({id: 'target-title', text: 'Target waters', x: right.x, y: 84, font_size: 18});\n      const me = mySeat, opponent = 1 - me;\n      const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];\n      const ownCells = new Set();\n      for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);\n      for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {\n        const pos = {cell: String(r * 10 + c)};\n        const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;\n        const enemyAttack = s.attacks && s.attacks[opponent] ? s.attacks[opponent][r][c] : 0;\n        const ownMark = ownAttack === 2 ? '✹' : ownAttack === 1 ? '·' : ownCells.has(`${c},${r}`) ? '■' : '';\n        const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :\n          ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';\n        staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});\n        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';\n        if (active && s.phase === 'BATTLE' && enemyAttack === 0) {\n          intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');\n        } else {\n          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',\n            'target', pos, {text: targetMark});\n        }\n      }\n      if (active && s.phase === 'SETUP') {\n        const ships = [\n          {name: 'Carrier', cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]]},\n          {name: 'Battleship', cells: [[0, 2], [1, 2], [2, 2], [3, 2]]},\n          {name: 'Cruiser', cells: [[0, 4], [1, 4], [2, 4]]},\n          {name: 'Submarine', cells: [[0, 6], [1, 6], [2, 6]]},\n          {name: 'Destroyer', cells: [[0, 8], [1, 8]]}\n        ];\n        intent({type: 'place', ships}, 'Place fleet and start battle', null, null, 'control');\n        label('setup-help', 'Places a valid fleet with clear water between ships.', 22, 594, 14);\n      }\n    } else if (KIND === 'checkers') {\n      const board = s.board || [];\n      const moves = legal ? (s.moves || []) : [];\n      const moveTargets = new Set(moves.map(mv => `${mv.to.r},${mv.to.c}`));\n      board.forEach((row, r) => row.forEach((piece, c) => {\n        if (!piece) return;\n        const owner = piece.c === 0 ? 'p0' : 'p1';\n        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',\n          {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});\n      }));\n      moves.forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',\n        {cell: String(move.to.r * 8 + move.to.c)}, 'target'));\n      label('chain', s.chain ? 'Continue the capture with the highlighted checker.' :\n        (moves.some(mv => mv.cap) ? 'A capture is required.' : 'Move diagonally; kings move either direction.'), 22, 670);\n    } else if (KIND === 'chess' || KIND === 'four_player_chess') {\n      const size = KIND === 'chess' ? 8 : 14;\n      const boardId = 'main';\n      const board = KIND === 'chess' ? (s.bd || []) : s.board || {};\n      const symbols = {wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};\n      const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};\n      if (KIND === 'chess') {\n        const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};\n        board.forEach((piece, index) => {\n          if (!piece) return;\n          const r = Math.floor(index / 8), c = index % 8;\n          const name = pieceNames[Math.abs(piece)] || 'P';\n          const code = `${piece > 0 ? 'w' : 'b'}${name}`;\n          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,\n            {cell: String(index)}, {text: symbols[code] || name});\n        });\n      } else {\n        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {\n          if (KIND === 'four_player_chess' && !((r >= 3 && r <= 10) || (c >= 3 && c <= 10))) continue;\n          const pos = KIND === 'chess' ? {cell: String(r * size + c)} : {x: 21 + c * 42, y: 21 + r * 42};\n          const squareType = (r + c) % 2 ? 'square_dark' : 'square_light';\n          if (KIND === 'four_player_chess') staticPiece(`square_${r}_${c}`, squareType, boardId, pos);\n        }\n        for (const [square, piece] of Object.entries(board)) {\n          const [r, c] = square.split(',').map(Number);\n          if (!Number.isInteger(r) || !Number.isInteger(c)) continue;\n          const type = Number(piece.o) || 0;\n          staticPiece(`piece_${r}_${c}`, `seat_${type}`, boardId, {x: 21 + c * 42, y: 21 + r * 42},\n            {text: fourSymbols[piece.t] || piece.t});\n        }\n      }\n      const legalMoves = legal ? (s.legalMoves || []) : [];\n      for (const mv of legalMoves) {\n        const move = KIND === 'chess'\n          ? {fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc, ...(mv.promo ? {promo: mv.promo} : {})}\n          : {kind: 'move', fr: mv.fr, fc: mv.fc, tr: mv.tr, tc: mv.tc};\n        const position = KIND === 'chess' ? {cell: String(mv.tr * size + mv.tc)} :\n          {x: 21 + mv.tc * 42, y: 21 + mv.tr * 42};\n        if (KIND === 'chess' && mv.promo) {\n          const files = 'abcdefgh';\n          const promotionNames = {Q: 'queen', R: 'rook', B: 'bishop', N: 'knight'};\n          intent(move, `Promote at ${files[mv.tc]}${size - mv.tr} to ${promotionNames[mv.promo] || mv.promo}`,\n            null, null, 'control');\n        } else intent(move, '•', boardId, position, 'target');\n      }\n      if (KIND === 'four_player_chess' && active && !(s.legalMoves || []).length && s.winnerTeam === null) {\n        intent({kind: s.inCheck ? 'elim' : 'pass'}, s.inCheck ? 'Eliminate this army' : 'Pass (no legal move)',\n          null, null, 'control');\n      }\n      if (KIND === 'chess' && s.winner === null && active) {\n        intent({resign: true}, 'Resign', null, null, 'control');\n      }\n    } else if (KIND === 'quoridor') {\n      const cells = [];\n      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {\n        const x = 44 + c * 54, y = 112 + r * 54;\n        cells.push({r, c, x, y});\n        staticPiece(`square_${r}_${c}`, 'square', 'main', {x, y}, {text: ''});\n      }\n      (s.walls || []).forEach((w, i) => {\n        if (w.o === 'H') scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + w.c * 54, y: 112 + (w.r + 0.5) * 54},\n          {x: 44 + (w.c + 2) * 54, y: 112 + (w.r + 0.5) * 54}], color: '#fbbf24', width: 10});\n        else scene.paths.push({id: `wall_${i}`, points: [\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + w.r * 54},\n          {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 2) * 54}], color: '#fbbf24', width: 10});\n      });\n      for (let seat = 0; seat < (s.pawns || []).length; seat++) {\n        const p = s.pawns[seat];\n        staticPiece(`pawn_${seat}`, seat === 0 ? 'p0' : 'p1', 'main',\n          {x: 44 + p.c * 54, y: 112 + p.r * 54}, {text: seat === 0 ? '1' : '2'});\n      }\n      const mode = eventId === 'mode_wall' ? 'wall' : eventId === 'mode_pawn' ? 'pawn' :\n        localState && localState.move_count === m.move_count && localState.mode === 'wall' ? 'wall' : 'pawn';\n      selectedMode = mode;\n      if (active) {\n        scene.controls.push({id: 'mode_pawn', kind: 'button', label: mode === 'pawn' ? '✓ Move pawn' : 'Move pawn'});\n        scene.controls.push({id: 'mode_wall', kind: 'button', label: mode === 'wall' ? '✓ Place wall' : 'Place wall'});\n        if (mode === 'pawn') (s.legalMoves || []).forEach(([r, c]) =>\n          intent({type: 'pawn', r, c}, '•', 'main', {x: 44 + c * 54, y: 112 + r * 54}, 'target'));\n        else (s.legalWalls || []).forEach(w => intent({type: 'wall', r: w.r, c: w.c, o: w.o},\n          w.o === 'H' ? '—' : '│', 'main', w.o === 'H'\n            ? {x: 44 + (w.c + 1) * 54, y: 112 + (w.r + 0.5) * 54}\n            : {x: 44 + (w.c + 0.5) * 54, y: 112 + (w.r + 1) * 54}, 'target'));\n      }\n      label('walls-left', `Walls remaining · ${s.wallsLeft ? s.wallsLeft.join(' / ') : ''}`, 22, 614);\n      if (message.type === 'ui_event' && active && (eventId === 'mode_pawn' || eventId === 'mode_wall')) {\n        selectedMode = eventId === 'mode_wall' ? 'wall' : 'pawn';\n        return {scene, local_state: {mode:selectedMode,move_count:m.move_count,\n          intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};\n      }\n    } else if (KIND === 'crazy_eights') {\n      label('table', `Top card ${cardText(cardFromNumber(s.top))} · suit ${SUITS[s.suit] || ''} · ${s.deckCount || 0} cards to draw`, 22, 94, 16);\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const playable = new Set(s.playable || []);\n      hand.forEach((card, i) => {\n        const r = card % 13 + 1, labelText = cardText(cardFromNumber(card));\n        if (playable.has(card)) {\n          if (r === 8) {\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n            for (let chosenSuit = 0; chosenSuit < 4; chosenSuit++)\n              intent({card, chosenSuit}, `Play ${labelText} as ${SUITS[chosenSuit]}`, null, null, 'control');\n          } else intent({card}, `Play ${labelText}`, 'table', cardPos(i), 'piece');\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: labelText});\n      });\n      if (active) intent('draw', `Draw a card (${s.deckCount || 0} left)`, null, null, 'control');\n    } else if (KIND === 'go_fish') {\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));\n      const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));\n      for (let seat = 0; seat < playerNames.length; seat++) if (active && seat !== mySeat) {\n        for (const rank of rankSet) intent({target: seat, rank}, `Ask ${playerNames[seat]} for ${rank}`, null, null, 'control');\n      }\n      if (active && hand.length === 0) {\n        if (s.deckCount > 0) intent({draw: true}, 'Draw cards', null, null, 'control');\n        else intent({pass: true}, 'Pass', null, null, 'control');\n      }\n      (s.books || []).forEach((books, seat) => label(`books_${seat}`, `${playerNames[seat] || `Player ${seat + 1}`} · books ${(books || []).join(', ') || '—'}`,\n        24, 460 + seat * 25, 14));\n    } else if (KIND === 'hearts' || KIND === 'spades') {\n      const isHearts = KIND === 'hearts';\n      const hand = Array.isArray(s.hand) ? s.hand : [];\n      const current = isHearts ? s.cur : s.current;\n      const trick = s.trick || [];\n      const legalCards = isHearts ? new Set(s.legal || []) : (() => {\n        if (s.pendingWin !== null && s.pendingWin !== undefined) return new Set();\n        if (!trick.length) return new Set(hand);\n        const led = String(trick[0].card || '').slice(-1);\n        const follow = hand.filter(card => String(card).slice(-1) === led);\n        return new Set(follow.length ? follow : hand);\n      })();\n      hand.forEach((card, i) => {\n        const moves = legalCards.has(card) ? [{card}] : [];\n        if (moves.length) intent(moves[0], cardText(card), 'table', cardPos(i), 'piece');\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)});\n      });\n      trick.forEach((play, i) => staticPiece(`trick_${i}`, 'played', 'table',\n        {x: 300 + (play.player ?? play.seat) * 72, y: 400}, {text: cardText(play.card)}));\n      if (KIND === 'spades' && s.pendingWin !== null && s.pendingWin !== undefined && active)\n        intent({collect: true}, 'Collect trick', null, null, 'control');\n      const scores = isHearts ? s.taken : s.tricksWon;\n      if (Array.isArray(scores)) scores.forEach((score, seat) =>\n        label(`score_${seat}`, `${playerNames[seat] || `Player ${seat + 1}`} · ${score}`, 22 + seat * 170, 92, 14));\n    } else if (KIND === 'guess_who') {\n      const names = CHARACTER_NAMES;\n      const secret = Number.isInteger(s.mySecret) ? `Your character: ${names[s.mySecret]}` : 'Your character is private';\n      label('your-secret', secret, 22, 88, 18);\n      for (let i = 0; i < names.length; i++) {\n        const row = Math.floor(i / 6), col = i % 6;\n        const x = 30 + col * 94, y = 156 + row * 92;\n        staticPiece(`person_${i}`, `person_${i % CHARACTER_COLORS.length}`, 'main',\n          {cell: String(i)}, {text: names[i]});\n        if (active) intent({kind: 'guess', idx: i}, names[i], 'main', {cell: String(i)}, 'target');\n      }\n      const asked = new Set((s.hist || []).filter(item => item.by === mySeat && Number.isInteger(item.q)).map(item => item.q));\n      if (active) QUESTIONS.forEach((question, q) => {\n        if (!asked.has(q)) intent({kind: 'ask', q}, `Ask: ${question}`, null, null, 'control');\n      });\n      (s.hist || []).slice(-8).forEach((item, i) => {\n        const who = playerNames[item.by] || `Player ${item.by + 1}`;\n        const text = Number.isInteger(item.q) ? `${who}: ${QUESTIONS[item.q]} · ${item.ans ? 'Yes' : 'No'}` :\n          `${who}: guessed ${names[item.guess] || '—'} · ${item.correct ? 'correct' : 'incorrect'}`;\n        label(`history_${i}`, text, 22, 520 + i * 18, 13);\n      });\n    }\n\n    const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;\n    if (message.type === 'ui_event' && active && emitted !== undefined) {\n      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))};\n      if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n      return {scene, local_state: nextLocal, make_move: emitted};\n    }\n    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))};\n    if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});\n    return {scene, local_state: nextLocal};\n  }\n};\n\nconst SUITS = ['♠', '♥', '♦', '♣'];\nconst RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];\nfunction cardFromNumber(value) {\n  const suit = Math.floor(Number(value) / 13), rank = Number(value) % 13 + 1;\n  return `${RANKS[(rank + 12) % 13]}${SUITS[suit] || ''}`;\n}\nconst QUESTIONS = ['Are they wearing glasses?', 'Are they wearing a hat?', 'Do they have facial hair?',\n  'Are their ears showing?', 'Do they have blonde hair?', 'Do they have brown hair?',\n  'Do they have black hair?', 'Do they have red hair?', 'Do they have gray hair?',\n  'Do they have long hair?', 'Do they have short hair?', 'Do they have blue eyes?',\n  'Do they have brown eyes?', 'Do they have green eyes?'];\nconst CHARACTER_NAMES = ['Ava', 'Ben', 'Cleo', 'Dan', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivan', 'Jade', 'Kai', 'Lena',\n  'Max', 'Nora', 'Omar', 'Pia', 'Quinn', 'Rosa', 'Sam', 'Tara', 'Umar', 'Vera', 'Will', 'Yuki'];\nconst CHARACTER_COLORS = ['#60a5fa', '#f472b6', '#a78bfa', '#4ade80', '#fb923c', '#2dd4bf'];\n"
+  }
+}

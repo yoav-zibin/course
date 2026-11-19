@@ -25,7 +25,12 @@ MAX_MESSAGE_BYTES = 900_000
 MAX_RESULT_BYTES = 256_000
 TIME_LIMIT_SECONDS = 0.05
 MEMORY_LIMIT_BYTES = 16 * 1024 * 1024
-EXAMPLE_IDS = ("tictactoe", "connect4", "reversi", "nim", "mancala", "gomoku", "hex", "domineering", "memory", "pig", "backgammon")
+EXAMPLE_IDS = (
+    "tictactoe", "connect4", "reversi", "nim", "mancala", "gomoku", "hex",
+    "domineering", "memory", "pig", "backgammon", "battleship", "checkers",
+    "chess", "four_player_chess", "quoridor", "crazy_eights", "go_fish",
+    "hearts", "spades", "guess_who",
+)
 EXAMPLE_DIRECTORY = Path(__file__).with_name("games") / "declarative"
 _SPEC_VALIDATOR = Draft202012Validator(SCHEMA, registry=Registry())
 _RESPONSE_VALIDATOR = Draft202012Validator(

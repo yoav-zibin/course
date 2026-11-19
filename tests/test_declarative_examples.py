@@ -1,4 +1,4 @@
-"""Play all ten rules engines through their JSON-only presentation reducers."""
+"""Play declarative rules engines through their JSON-only presentation reducers."""
 import json
 from pathlib import Path
 
@@ -9,6 +9,7 @@ from game_platform.declarative_ui import DeclarativeLogic
 from game_platform.game_contract import verify_examples
 from game_platform.game_logic import GameLogic, InvalidMoveError
 from game_platform.tools.declarative_demo import KINDS
+from game_platform.tools.publish_declarative_games import scene_event
 
 EXAMPLES = Path(__file__).resolve().parents[1] / 'games' / 'declarative'
 
@@ -29,12 +30,13 @@ def message(logic, result, ctx, viewer):
 
 
 @pytest.mark.parametrize('kind', KINDS)
-def test_ten_games_play_to_completion_via_quickjs_ui_events(kind):
+def test_games_play_to_completion_via_quickjs_ui_events(kind):
     body=load(kind)
     logic=GameLogic(body.server_code,game_schemas=body.game_schemas())
     ui=DeclarativeLogic(body.declarative_ui)
-    ctx={'players':[{'id':'a','kind':'human','display_name':'Alice','picture_url':'','max_loss':5,'active':True},
-                    {'id':'b','kind':'human','display_name':'Bob','picture_url':'','max_loss':5,'active':True}],
+    count=min(body.allowed_player_counts)
+    ctx={'players':[{'id':chr(97+i),'kind':'human','display_name':f'Player {i+1}','picture_url':'','max_loss':5,'active':True}
+                    for i in range(count)],
          'pot':10,'move_count':0}
     result=logic.call('newMatch',ctx=ctx,seed=7)
     for step in range(1000):
@@ -51,10 +53,8 @@ def test_ten_games_play_to_completion_via_quickjs_ui_events(kind):
             assert all(value==-1 or i in m['view']['matched'] or i in m['view']['selected']
                        for i,value in enumerate(m['view']['board']))
         move=logic.call('computerMove',result['state'],viewer,ctx=ctx,seed=step+11)
-        target='_'.join(str(x)for pair in move.items()for x in pair)
-        event={'type':'ui_event','event':{'type':'tap','id':target},'state_changed':m}
-        emitted=ui.reduce(event,frame.get('local_state'))
-        assert emitted.get('make_move')==move, (kind,target,emitted)
+        emitted=scene_event(ui,m,frame,move)
+        assert emitted.get('make_move')==move, (kind,move,emitted)
         result=logic.call('applyMove',result['state'],viewer,emitted['make_move'],ctx=ctx,seed=step+11)
         if result['turn'] is None:
             assert sum(result['payouts'].values())==10
