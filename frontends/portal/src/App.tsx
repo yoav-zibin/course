@@ -1,7 +1,7 @@
 import {copyText} from './platform/i18n';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, AppState, BackHandler, Linking, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions} from 'react-native';
-import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaProvider, SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {StatusBar} from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {usePortal} from './core';
@@ -22,6 +22,7 @@ import {readLocalUiTest} from './platform/legacy';
 
 function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const {width} = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const localOnly=useRef(readLocalUiTest()).current;
   const [screen, setScreen] = useState<Screen>('games');
   const [account, setAccount] = useState(false), [focus,setFocus]=useState(false);
@@ -146,7 +147,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
         </ScrollView>
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />
-      {gameVisible&&<View style={{position:'absolute',right:8,top:2,zIndex:100}}><Button secondary compact onPress={()=>{setFocus(value=>!value);recordDiagnosticEvent('focus_mode',{enabled:!focus});}}>{focus?copyText('Exit focus mode'):copyText('Focus mode')}</Button></View>}
+      {gameVisible&&<View style={{position:'absolute',right:8,top:insets.top+2,zIndex:100}}><Button secondary compact onPress={()=>{setFocus(value=>!value);recordDiagnosticEvent('focus_mode',{enabled:!focus});}}>{focus?copyText('Exit focus mode'):copyText('Focus mode')}</Button></View>}
     </SafeAreaView>
   </Context.Provider>;
 }
