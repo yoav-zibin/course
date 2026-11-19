@@ -9,6 +9,7 @@ import { redactedNativeArchive } from '../src/core/native-migration';
 import { setLocale, localizeGame, gameTexts, getDirection, t } from '../src/platform/i18n';
 import { ApiError } from '../src/core/api';
 import { matchOutcome } from '../src/core/results';
+import { presentationSteps } from '../src/game/interactions';
 
 function browserStorage() {
   const values: Record<string,string> = {};
@@ -142,6 +143,7 @@ test('real bundled rules support durable pass-and-play, handoff, win, restart an
     await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0, names: ['Alex', 'Sam'] });
     const id = store.getSnapshot().selectedMatch!.id;
     await store.actions.submitMove({ cell: 0 }); assert.equal(store.getSnapshot().selectedMatch!.awaitingHandoff, true);
+    assert.deepEqual(store.actions.presentationMessage().presentation_history, []);
     assert.equal(store.actions.presentationMessage().acting_for_player_index, null);
     await assert.rejects(store.actions.submitMove({ cell: 1 }), /next player is ready/);
     const restarted = new PortalStore(testRuntime()); await restarted.bootstrap('https://local.test');
@@ -160,6 +162,42 @@ test('real bundled computer turns advance using the same shared offline engine',
     assert.equal(match.move_count, 2); assert.deepEqual(match.turn_of_player_indices, [0]); assert.equal(match.state.board.filter((v: number) => v !== -1).length, 2);
     assert.equal(match.awaitingHandoff, undefined); assert.equal(store.actions.presentationMessage().acting_for_player_index, 0);
   } finally { restore(); }
+});
+test('local computer batches deliver every accepted intermediate view before publishing the final board', async () => {
+  for (const [players, actions] of [[2, 4], [4, 4], [2, 200]]) {
+    browserStorage();
+    const fixture = {id:'local-batch',version:1,name:'Local batch',description:'',allowed_player_counts:[players],renderer_type:'declarative',
+      declarative_ui:{format:'buildplay-ui',version:1,viewport:{width:400,height:300},boards:[],piece_types:{},ui_code:'const gameUI={reduce(){return {scene:{}};}};'},
+      server_code:`const game={
+        newMatch(ctx){return {state:{n:0,seat:0,left:0},turn:[ctx.players[0].id]};},
+        applyMove(s,id,m,ctx){
+          if(id!==ctx.players[s.seat].id||m.go!==true)throw new InvalidMove('Wrong player');
+          s.n++;s.left--;
+          if(s.seat===0||s.left===0){s.seat=(s.seat+1)%ctx.players.length;s.left=${actions};}
+          return {state:s,turn:[ctx.players[s.seat].id]};
+        },
+        viewFor(s,id){return {...s,private_for:id};},computerMove(){return {go:true};}
+      };`};
+    const restore=mockedFetch(url=>url.pathname.startsWith('/games/local-batch')?fixture:undefined);
+    try {
+      const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+      await store.actions.startPractice(fixture.id,{humans:1,computers:players-1});
+      const previous=store.actions.presentationMessage(),published:any[]=[];
+      const unsubscribe=store.subscribe(()=>{const message=store.actions.presentationMessage();if(message?.move_count>0)published.push(message);});
+      await store.actions.submitMove({go:true});unsubscribe();
+      const next=store.actions.presentationMessage(),total=1+(players-1)*actions;
+      assert.equal(next.move_count,total);assert.equal(next.view.private_for,'local-player-0');
+      assert.ok(published.length);
+      for(const message of published){
+        const steps=presentationSteps(previous,message);
+        assert.deepEqual(steps.map(step=>step.move_count),Array.from({length:total-1},(_,i)=>i+1));
+        assert.ok(steps.every(step=>step.acting_for_player_index===null&&(step.view as any).private_for==='local-player-0'));
+        assert.deepEqual(steps.map(step=>step.last_move_player_index),Array.from({length:total-1},(_,i)=>i===0?0:1+Math.floor((i-1)/actions)));
+      }
+      const saved=await new AccountRepository('https://local.test').read('visitor');
+      assert.equal(saved.local[store.getSnapshot().selectedMatch!.id].moves!.length,total);
+    } finally {restore();}
+  }
 });
 test('computer practice keeps the chosen human view, identity and turn through restart and history', async () => {
   const fixture = { id: 'practice-seats', version: 1, name: 'Practice seats', description: '', allowed_player_counts: [2,3,4], renderer_type: 'declarative',

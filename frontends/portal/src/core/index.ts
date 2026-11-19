@@ -22,6 +22,7 @@ const listPaths: Record<ListKind, string> = { games: '/games', myMatches: '/matc
 const unique = <T extends { id?: string; token?: string }>(values: T[]): T[] => [...new Map(values.map(v => [v.id || v.token, v])).values()];
 const savedList = <T>(value: unknown): T[] => Array.isArray(value) ? value : [];
 const localHumanSeat = (match: Match) => match.players.find(player => player.kind === 'human' && player.active !== false)?.player_index ?? 0;
+const LOCAL_COMPUTER_MOVE_LIMIT = 200;
 
 export class PortalStore {
   constructor(private rulesExecutor: (game: { server_code: string; game_schemas?: unknown }, name: string, args: unknown[], ctx: unknown, seed: number | string, now: number) => Promise<any> = async (...args) => (await import('../game/runtime')).executeGame(...args), private loginBrowser: (baseUrl: string) => Promise<any> = browserLogin, private writeCurrentAccount: (id: string, base?: string) => Promise<void> = (id, base) => storage.setItem(currentAccountKey(base), id)) {}
@@ -347,7 +348,7 @@ export class PortalStore {
   private async practiceComputers(game: Game, match: LocalMatch) {
     for (let count = 0; match.status === 'ongoing'; count++) {
       const computer = match.turn_of_player_indices?.map(i => match.players[i]).find(p => p.kind === 'computer'); if (!computer) return;
-      if (count >= 200) throw new Error('Local game exceeded the computer move limit. The last saved board is unchanged.');
+      if (count >= LOCAL_COMPUTER_MOVE_LIMIT) throw new Error('Local game exceeded the computer move limit. The last saved board is unchanged.');
       const move = await this.callGame(game, 'computerMove', [match.logicState, computer.id], match);
       await this.practiceResult(game, match, await this.callGame(game, 'applyMove', [match.logicState, computer.id, move], match), true, computer.player_index);
     }
@@ -379,7 +380,13 @@ export class PortalStore {
       if (actor === undefined || !next.turn_of_player_indices?.includes(actor)) throw new Error('It is not your turn');
       await this.practiceResult(game, next, await this.callGame(game, 'applyMove', [next.logicState, next.players[actor].id, move], next), true, actor); await this.practiceComputers(game, next); guard();
       if (next.localMode === 'pass' && next.status === 'ongoing' && next.turn_of_player_indices?.[0] !== actor) next.awaitingHandoff = true;
-      data.local[next.id] = next; await this.repository.write(owner, data); guard(); this.publishData(data);
+      data.local[next.id] = next; await this.repository.write(owner, data); guard();
+      // Publish the accepted views with the final board so the renderer can
+      // present computer actions that were committed in this single batch.
+      if (next.localMode === 'computer') this.observations.set(next.id, (next.moves || []).slice(-(LOCAL_COMPUTER_MOVE_LIMIT + 1)).map(move => ({
+        view: move.new_state, move_count: move.move_number, last_move_player_index: move.player_index,
+      })));
+      this.publishData(data);
     });
   }
   async revealLocal() { const id = this.state.selectedMatch?.id; if (!id) return; await this.repository.mutate(this.identity(), data => { if (data.local[id]) data.local[id].awaitingHandoff = false; }); await this.reloadData(); }

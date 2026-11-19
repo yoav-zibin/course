@@ -106,7 +106,8 @@ export function presentationSteps(previous: StateMessage | null, next: StateMess
   const observations = next.presentation_history as {view: unknown; move_count: number; last_move_player_index?: number | null}[];
   const ordered = observations.filter(item => item && Number.isSafeInteger(item.move_count)
     && item.move_count > previous.move_count! && item.move_count < next.move_count!)
-    .sort((a,b)=>a.move_count-b.move_count).slice(-12);
+    // A local turn can contain the human action plus up to 200 computer moves.
+    .sort((a,b)=>a.move_count-b.move_count).slice(-200);
   if (ordered.length !== next.move_count!-previous.move_count!-1 || ordered.some((item,index)=>item.move_count!==previous.move_count!+index+1))return [];
   return ordered.map(item=>({...next,view:item.view as StateMessage['view'],state:item.view as StateMessage['state'],
     move_count:item.move_count,last_move_player_index:item.last_move_player_index,acting_for_player_index:null,status:'ongoing',

@@ -21,6 +21,26 @@ async function mount(page:Page,request:APIRequestContext,pkg=spec(),initial=stat
 async function send(page:Page,message:Record<string,unknown>){await page.evaluate(value=>window.postMessage(value,'*'),message);}
 async function moves(page:Page){return page.evaluate(()=>(window as any).__moves);}
 
+test('a coalesced computer batch paints its intermediate accepted boards in order',async({page,request})=>{
+  const pkg={...spec(`const gameUI={reduce(message){const m=message.type==='ui_event'?message.state_changed:message;return {scene:{pieces:[{id:'token',type:'token',board:'board',position:{cell:String(m.view.n%12)},aria_label:'Batch token',actions:[]}],labels:[{id:'step',x:8,y:285,text:'Accepted step '+m.view.n}]}}}};`),motion:{move_ms:120}};
+  await mount(page,request,pkg,state({move_count:0,view:{n:0},last_move_player_index:null}));
+  await expect(page.getByText('Accepted step 0',{exact:true})).toBeVisible();
+  await page.evaluate(()=>{
+    (window as any).__acceptedSteps=[];
+    const observer=new MutationObserver(()=>{
+      const label=[...document.querySelectorAll('svg text')].find(node=>node.textContent?.startsWith('Accepted step '));
+      const value=Number(label?.textContent?.slice('Accepted step '.length));
+      const seen=(window as any).__acceptedSteps;
+      if(Number.isInteger(value)&&value!==seen.at(-1))seen.push(value);
+    });observer.observe(document.body,{subtree:true,childList:true,characterData:true});
+  });
+  await send(page,state({move_count:13,view:{n:13},last_move_player_index:1,presentation_history:Array.from({length:13},(_,i)=>({view:{n:i+1},move_count:i+1,last_move_player_index:i===0?0:1}))}));
+  await expect(page.getByText('Accepted step 13',{exact:true})).toBeVisible();
+  const painted=await page.evaluate(()=>(window as any).__acceptedSteps as number[]);
+  expect(painted.filter(n=>n>=2)).toEqual(Array.from({length:12},(_,i)=>i+2));
+  expect(await moves(page)).toEqual([]);
+});
+
 test('an occupied legal destination keeps the selected source for taps while other pieces remain draggable',async({page,request,isMobile})=>{
   const pkg=spec(`const gameUI={reduce(message){const m=message.type==='ui_event'?message.state_changed:message;return {scene:{pieces:[
     {id:'reserve',type:'token',board:'board',position:{cell:'0'},aria_label:'Reserve tile',actions:['move'],move_targets:['occupied']},
