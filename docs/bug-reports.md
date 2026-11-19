@@ -28,7 +28,8 @@ The recorder starts at Portal entry and keeps bounded recent history in memory:
 | UI and application events | 70 |
 | Page and game/match navigation | 30 |
 
-The report includes capture time, app/platform version, viewport, network
+The report includes capture time, app/platform version, native build number,
+loaded web script identifiers (to identify stale cached clients), viewport, network
 state, current game/version and match, recent pages, device/browser context and
 the reporting account identity when available. Console messages, unhandled
 errors and the shared visible error component enter the recorder. API evidence

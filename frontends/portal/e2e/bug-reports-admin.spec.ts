@@ -1,4 +1,6 @@
 import {test,expect} from '@playwright/test';
+import es from '../../../locales/es.json';
+import fr from '../../../locales/fr.json';
 
 test('private bug report review displays evidence safely and records an escalation',async({page,context,request,baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Requires a disposable loopback server.');
@@ -28,4 +30,32 @@ test('private bug report review displays evidence safely and records an escalati
   await expect(escalated).toBeVisible();
   await escalated.getByText('Screenshot, diagnostics and resolution',{exact:true}).click();
   await expect(escalated.getByRole('textbox',{name:'Resolution or escalation reason',exact:true})).toHaveValue('Needs owner decision before changing game behavior.');
+});
+
+test('admin report copy and revised privacy text translate while resolution drafts survive language changes',async({page,context,request,baseURL})=>{
+  if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Requires a disposable loopback server.');
+  const description=`Localization report ${Date.now()} ${Math.random()}`;
+  expect((await request.post('/bug-reports',{data:{text:description,diagnostics:{}}})).status()).toBe(201);
+  await context.setHTTPCredentials({username:'translation-test',password:'e2e-test-master'});
+  await page.addInitScript(()=>{if(!localStorage.getItem('game-platform.locale.v1'))localStorage.setItem('game-platform.locale.v1',JSON.stringify('es'));});
+  await page.goto('/admin#bug-reports');
+  await expect(page.getByRole('tab',{name:es['ui.admin.tab_bug_reports'],exact:true})).toBeVisible();
+  await expect(page.getByRole('tab',{name:es['ui.admin.tab_legacy_feedback'],exact:true})).toBeVisible();
+  await page.goto('/bug-reports');
+  const review=page,report=review.locator('article').filter({hasText:description});
+  await report.getByText(es['ui.bug_reports.evidence'],{exact:true}).click();
+  const notes=report.getByRole('textbox',{name:es['ui.bug_reports.resolution'],exact:true});
+  await notes.fill('Keep this unfinished resolution across language changes.');
+  await review.locator('#language-picker').selectOption('fr');
+  await expect(report.getByText(fr['ui.bug_reports.evidence'],{exact:true})).toBeVisible();
+  await expect(report.getByRole('textbox',{name:fr['ui.bug_reports.resolution'],exact:true})).toHaveValue('Keep this unfinished resolution across language changes.');
+  await expect(report.getByRole('button',{name:fr['ui.bug_reports.handle'],exact:true})).toBeVisible();
+  await expect(report.getByPlaceholder(fr['ui.bug_reports.commit_placeholder'],{exact:true})).toBeVisible();
+  await page.evaluate(()=>localStorage.setItem('game-platform.locale.v1',JSON.stringify('fr')));
+  await page.goto('/static/privacy.html');
+  await expect(page.locator('[data-i18n="ui.privacy.bug_reports"]')).toHaveText(fr['ui.privacy.bug_reports']);
+  await expect(page.locator('[data-i18n="ui.privacy.use"]')).toHaveText(fr['ui.privacy.use']);
+  await expect(page.locator('[data-i18n="ui.privacy.retention"]')).toHaveText(fr['ui.privacy.retention']);
+  await expect(page.locator('.topbar')).toHaveCount(0);
+  await expect(page.locator('#language-picker')).toHaveCount(0);
 });

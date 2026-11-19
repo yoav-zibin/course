@@ -6,7 +6,7 @@ import {Button,Copy,Field,Notice} from './components';
 import {BugReportDialog} from './BugReportDialog';
 import {configureBugControl} from './bugControl';
 import {captureBugScreenshot} from '../platform/screenshot';
-import {diagnosticSnapshot,recordDiagnosticEvent,recordDiagnosticLog} from '../core/diagnostics';
+import {diagnosticPath,diagnosticSnapshot,recordDiagnosticEvent,recordDiagnosticLog} from '../core/diagnostics';
 import type {PortalState} from '../core/types';
 
 type Portal=PortalState&{actions:{request:(method:string,path:string,body?:unknown)=>Promise<any>}};
@@ -24,10 +24,12 @@ export function BugReporter({p,screen}: {p:Portal;screen:string}) {
       let image:string|null=null,failure='';
       try{let timer:ReturnType<typeof setTimeout>;try{image=await Promise.race([captureBugScreenshot(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('Screenshot capture timed out. You can still send the report.')),8000);})]);}finally{clearTimeout(timer!);}}catch(e){failure=e instanceof Error?e.message:String(e);recordDiagnosticLog('error','screenshot_capture',e);}
       captured.current=diagnosticSnapshot({platform:Platform.OS,platformVersion:Platform.Version,appVersion:Constants.expoConfig?.version,expoSdk:Constants.expoConfig?.sdkVersion,
+        nativeBuild:Platform.OS==='ios'?Constants.platform?.ios?.buildNumber:Platform.OS==='android'?Constants.platform?.android?.versionCode:undefined,
         user:context.p.account?{id:context.p.account.id,displayName:context.p.account.display_name}:null,locale:context.p.locale,screen:context.screen,
         gameId:context.p.game?.id||context.p.selectedGameId,gameVersion:context.p.game?.version,matchId:context.p.selectedMatch?.id,matchStatus:context.p.selectedMatch?.status,moveCount:context.p.selectedMatch?.move_count,
         network:context.p.network,pending:context.p.pending,viewport:dimensions,screenshotError:failure||undefined,
-        ...(Platform.OS==='web'?{userAgent:navigator.userAgent,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,online:navigator.onLine}:{}),
+        ...(Platform.OS==='web'?{userAgent:navigator.userAgent,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,online:navigator.onLine,
+          webAssets:Array.from(document.scripts).filter(script=>script.src&&new URL(script.src).origin===location.origin).map(script=>diagnosticPath(script.src)).slice(0,20)}:{}),
       });
       setScreenshot(image);setCaptureError(failure);setError('');setSent('');opened.current=true;setVisible(true);busy.current=false;
     })();

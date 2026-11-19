@@ -10,7 +10,7 @@ import datetime as dt
 import hashlib
 import threading
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from game_platform.models import (
@@ -249,7 +249,7 @@ class Snapshot:
     # Private reproductions and completed reviews, absent from older files.
     game_server_bugs: tuple[dict[str, Any], ...] = ()
     bug_reports: tuple[dict[str, Any], ...] = ()
-    bug_report_limits: dict[str, dict[str, Any]] | None = None
+    bug_report_limits: dict[str, dict[str, Any]] | None = field(default_factory=dict)
     # Optional so existing data files load without a migration. Failed
     # random-walk test seeds per game, replayed as regression seeds.
     game_test_seeds: tuple[GameTestSeeds, ...] = ()

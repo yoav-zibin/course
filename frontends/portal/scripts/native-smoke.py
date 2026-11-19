@@ -106,12 +106,14 @@ class NativeSmoke:
     def labels(node: ET.Element) -> list[str]:
         return [normalized(node.get(key, "")) for key in ("content-desc", "text") if node.get(key)]
 
-    def find(self, tree: ET.Element, label: str, *, contains: bool = False, clickable: bool = False, editable: bool = False) -> ET.Element | None:
+    def find(self, tree: ET.Element, label: str, *, contains: bool = False, clickable: bool = False, editable: bool = False, focused: bool = False) -> ET.Element | None:
         wanted = normalized(label)
         parents = {child: parent for parent in tree.iter() for child in parent}
         candidates: list[tuple[int, int, ET.Element]] = []
         for node in tree.iter("node"):
             if editable and node.get("class") != "android.widget.EditText":
+                continue
+            if focused and node.get("focused") != "true":
                 continue
             values = self.labels(node)
             if not any(wanted in value if contains else wanted == value for value in values):
@@ -144,13 +146,13 @@ class NativeSmoke:
         x, low, high = self.width - 5, int(self.height * .82), int(self.height * .32)
         self.command("shell", "input", "swipe", str(x), str(low if upwards else high), str(x), str(high if upwards else low), "350")
 
-    def wait(self, label: str | tuple[str, ...], *, contains: bool = False, timeout: int = 35, scroll: bool = False, clickable: bool = False, editable: bool = False, dialog: bool = False) -> ET.Element:
+    def wait(self, label: str | tuple[str, ...], *, contains: bool = False, timeout: int = 35, scroll: bool = False, clickable: bool = False, editable: bool = False, focused: bool = False, dialog: bool = False) -> ET.Element:
         deadline, attempts, last_error = time.monotonic() + timeout, 0, ""
         while time.monotonic() < deadline:
             try:
                 tree = self.dump()
                 for option in (label,) if isinstance(label, str) else label:
-                    target = self.find(tree, option, contains=contains, clickable=clickable, editable=editable)
+                    target = self.find(tree, option, contains=contains, clickable=clickable, editable=editable, focused=focused)
                     if target is not None:
                         return target
                 attempts += 1
@@ -232,8 +234,11 @@ class NativeSmoke:
         self.capture("bug-02-report-preview")
         field = self.wait(self.BUG_FIELD, editable=True, scroll=True, dialog=True)
         self.tap_node(field)
+        self.wait(self.BUG_FIELD, editable=True, focused=True)
         self.command("shell", "input", "text", "Local%ssmoke%sdraft")
-        self.wait("Local smoke draft", editable=True, scroll=True, dialog=True)
+        # Exact text and retained focus catch overlay remounts on each letter.
+        # Never scroll with the keyboard open: a swipe can type IME gestures.
+        self.wait("Local smoke draft", editable=True, focused=True)
         self.events.append({"assertion": "native-bug-report-from-account-has-screenshot-and-editable-draft"})
         self.capture("bug-03-editable-draft")
 

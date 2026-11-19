@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BuildPlay · Bug reports</title>
+  <title data-i18n="ui.page.bug_reports_admin">BuildPlay · Bug reports</title>
   <link rel="stylesheet" href="/static/common.css?v=22">
   <script>if(new URLSearchParams(location.search).has('frame'))document.documentElement.classList.add('framed');</script>
   <style>
@@ -23,19 +23,20 @@
   </style>
 </head>
 <body>
-  <header class="topbar"><h1>BuildPlay · Bug reports</h1></header>
+  <header class="topbar"><h1 data-i18n="ui.page.bug_reports_admin">BuildPlay · Bug reports</h1></header>
   <main>
     <div class="toolbar">
-      <button id="refresh" type="button">Refresh</button>
-      <label>Status <select id="status"><option value="open">Open</option><option value="handling">Handling</option><option value="escalated">Needs your decision</option><option value="handled">Handled</option><option value="all">All</option></select></label>
+      <button id="refresh" type="button" data-i18n="ui.action.refresh">Refresh</button>
+      <label><span data-i18n="ui.admin.status">Status</span> <select id="status"><option value="open" data-i18n="ui.admin.open">Open</option><option value="handling" data-i18n="ui.bug_reports.status_handling">Handling</option><option value="escalated" data-i18n="ui.bug_reports.status_escalated">Needs your decision</option><option value="handled" data-i18n="ui.bug_reports.status_handled">Handled</option><option value="all" data-i18n="ui.admin.all">All</option></select></label>
       <span id="freshness" class="muted" role="status"></span>
     </div>
-    <p>Reports include the screenshot and recent app diagnostics. Uncertain requests wait for your decision; reopen an escalated report after deciding how to proceed.</p>
+    <p data-i18n="ui.bug_reports.explainer">Reports include the screenshot and recent app diagnostics. Uncertain requests wait for your decision; reopen an escalated report after deciding how to proceed.</p>
     <p id="error" role="alert"></p>
     <div id="reports"></div>
-    <button id="more" type="button" hidden>Load more</button>
+    <button id="more" type="button" data-i18n="ui.bug_reports.more" hidden>Load more</button>
   </main>
   <script src="/static/common.js?v=39"></script>
-  <script src="/static/bug-reports.js?v=1"></script>
+  <script src="/static/i18n.js?v=9"></script>
+  <script src="/static/bug-reports.js?v=2"></script>
 </body>
 </html>

@@ -95,6 +95,17 @@ def test_report_field_lookup_requires_an_editable_input_even_when_its_label_is_v
     assert value.find(tree, value.BUG_FIELD, editable=True) is None
 
 
+def test_native_draft_must_keep_keyboard_focus_after_controlled_updates():
+    value = driver()
+    tree = ET.fromstring('''<hierarchy>
+      <node content-desc="Bug or feature request" text="Local smoke draft"
+        class="android.widget.EditText" bounds="[80,960][900,1150]" focused="false"/>
+    </hierarchy>''')
+    assert value.find(tree, "Local smoke draft", editable=True, focused=True) is None
+    next(tree.iter("node")).set("focused", "true")
+    assert value.find(tree, "Local smoke draft", editable=True, focused=True) is not None
+
+
 def test_bug_control_is_above_logo_and_must_stay_in_top_left_corner():
     value = driver()
     bug = ET.Element("node", {"bounds": "[15,70][123,166]"})
@@ -130,6 +141,8 @@ def test_native_report_draft_restores_account_after_keyboard_and_never_sends():
     assert "Send report" not in taps and all("Send report" not in command for command in commands)
     assert (value.BUG_SCREENSHOT, {"scroll": True, "dialog": True}) in controls
     assert (value.BUG_FIELD, {"editable": True, "scroll": True, "dialog": True}) in controls
+    assert (value.BUG_FIELD, {"editable": True, "focused": True}) in controls
+    assert ("Local smoke draft", {"editable": True, "focused": True}) in controls
     assert ("shell", "input", "text", "Local%ssmoke%sdraft") in commands
     assert commands.count(("shell", "input", "keyevent", "4")) == 2 and keyboard_dismissed
     assert "account-restored-after-report" in stages
