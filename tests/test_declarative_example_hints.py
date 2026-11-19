@@ -37,6 +37,8 @@ def test_examples_declare_only_real_piece_actions(kind):
         elif kind=='domineering'and piece['id']=='domino':
             assert piece['actions']==['move']
             assert set(piece['move_targets'])=={target['id']for target in scene['targets']}
+        elif kind in ('crazy_eights','hearts','spades') and piece['id'].startswith('intent_'):
+            assert piece['actions']==['tap']
         else:
             assert piece['actions']==[]
 
