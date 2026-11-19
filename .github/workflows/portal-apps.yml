@@ -86,7 +86,7 @@ jobs:
             bash scripts/smoke-android.sh "$GITHUB_WORKSPACE/BuildPlay.apk" "$GITHUB_WORKSPACE/android-test-results"
             adb shell svc wifi disable
             adb shell svc data disable
-            python3 scripts/native-smoke.py com.dapillah.gameportal.debug "$GITHUB_WORKSPACE/android-test-results"
+            python3 scripts/native-smoke.py fun.buildplay.debug "$GITHUB_WORKSPACE/android-test-results"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
