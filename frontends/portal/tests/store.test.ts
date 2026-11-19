@@ -159,6 +159,29 @@ test('computer practice keeps the chosen human view, identity and turn through r
     } finally {restore();}
   }
 });
+test('pass-and-play replay attributes each saved private view to its historical human seat after restart',async()=>{
+  const fixture={id:'private-replay',version:1,name:'Private replay fixture',description:'',allowed_player_counts:[2,3,4],renderer_type:'declarative',
+    declarative_ui:{format:'buildplay-ui',version:1,viewport:{width:400,height:300},boards:[{id:'board',kind:'zone',x:0,y:0,width:400,height:300}],piece_types:{},ui_code:'const gameUI={reduce(){return {scene:{}};}};'},server_code:`const game={
+    newMatch(ctx){return {state:{step:0},turn:[ctx.players[0].id]};},
+    applyMove(s,id,m,ctx){if(id!==ctx.players[s.step].id||m.go!==true)throw new InvalidMove('Wrong player');s.step++;return {state:s,turn:s.step===ctx.players.length?null:[ctx.players[s.step].id]};},
+    viewFor(s,id,ctx){const seat=ctx.players.findIndex(p=>p.id===id);return {...s,private_for:id,hand_counts:ctx.players.map((p,i)=>i+1),your_hand:Array.from({length:seat+1},()=>seat)};}
+  };`};
+  for(const count of [2,3,4]){
+    browserStorage();const restore=mockedFetch(url=>url.pathname.startsWith('/games/private-replay')?fixture:undefined);
+    try{
+      const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');await store.actions.startPractice(fixture.id,{humans:count,computers:0});
+      const id=store.getSnapshot().selectedMatch!.id;
+      for(let seat=0;seat<count;seat++){if(seat)await store.actions.revealLocal();await store.actions.submitMove({go:true});}
+      const restarted=new PortalStore(testRuntime());await restarted.bootstrap('https://local.test');assert.equal(restarted.getSnapshot().selectedMatch!.id,id);
+      for(let frame=0;frame<=count;frame++){
+        await restarted.actions.replay(frame);const m=restarted.actions.presentationMessage(),expected=frame<count?frame:0;
+        assert.equal(m.my_player_index,expected,`frame ${frame} of ${count}`);assert.equal(m.view.private_for,`local-player-${expected}`);
+        assert.equal(m.view.your_hand.length,m.view.hand_counts[m.my_player_index]);assert.equal(m.acting_for_player_index,null);
+      }
+      await restarted.actions.replay(null);assert.equal(restarted.actions.presentationMessage().my_player_index,0);assert.equal(restarted.getSnapshot().selectedMatch!.move_count,count);
+    }finally{restore();}
+  }
+});
 test('invalid local counts and human positions cannot create a saved match',async()=>{
   browserStorage();const restore=mockedFetch();
   try{

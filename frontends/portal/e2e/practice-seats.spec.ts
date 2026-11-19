@@ -9,7 +9,7 @@ const fixture={id:'practice-seat-fixture',version:1,name:'Practice seat fixture'
     viewFor(s,id,ctx){return {...s,private_for:id};},computerMove(){return {go:true};}
   };`,
   declarative_ui:{format:'buildplay-ui',version:1,viewport:{width:400,height:300},boards:[{id:'board',kind:'zone',x:0,y:0,width:400,height:300}],piece_types:{token:{shape:'circle',width:64,height:64}},
-    ui_code:`const gameUI={reduce(message){const m=message.type==='ui_event'?message.state_changed:message;const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null;return {scene:{labels:[{id:'viewer',x:20,y:30,text:'Your seat '+(m.my_player_index+1),font_size:20}],controls:active?[{id:'advance',kind:'button',label:'Advance'}]:[]},...(message.type==='ui_event'&&active?{make_move:{go:true}}:{})};}};`}};
+    ui_code:`const gameUI={reduce(message){const m=message.type==='ui_event'?message.state_changed:message;const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null;return {scene:{labels:[{id:'viewer',x:20,y:30,text:'Your seat '+(m.my_player_index+1),font_size:20},{id:'private',x:20,y:65,text:'Hand belongs to '+m.state.private_for,font_size:16}],controls:active?[{id:'advance',kind:'button',label:'Advance'}]:[]},...(message.type==='ui_event'&&active?{make_move:{go:true}}:{})};}};`}};
 
 async function savedMatch(page:Page,id:string){
   return page.evaluate(matchId=>{
@@ -17,6 +17,30 @@ async function savedMatch(page:Page,id:string){
     return key?JSON.parse(localStorage.getItem(key)!).local[matchId]:null;
   },id);
 }
+
+test('pass-and-play replay keeps each private hand attributed to its frame viewer after reload',async({page},info)=>{
+  await page.route(url=>/^\/games\/practice-seat-fixture(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:fixture}));
+  await page.goto('/portal#game=practice-seat-fixture');await page.getByRole('button',{name:'Players: 4',exact:true}).click();
+  await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
+  const id=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
+  for(let seat=0;seat<4;seat++){
+    if(seat)await page.getByRole('button',{name:'I’m ready',exact:true}).click();
+    await expect(page.getByText(`Your seat ${seat+1}`,{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Advance',exact:true}).click();
+  }
+  await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');await page.reload();
+  for(let frame=3;frame>=0;frame--){
+    await page.getByRole('button',{name:'← Previous',exact:true}).click();
+    await expect(page.getByText(`Replay · move ${frame} of 4`,{exact:true})).toBeVisible();
+    await expect(page.getByText(`Your seat ${frame+1}`,{exact:true})).toBeVisible();
+    await expect(page.getByText(`Hand belongs to local-player-${frame}`,{exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Advance',exact:true})).toHaveCount(0);
+  }
+  expect((await savedMatch(page,id)).move_count).toBe(4);
+  await page.getByRole('button',{name:'Live board',exact:true}).click();
+  await expect(page.getByText('Your seat 1',{exact:true})).toBeVisible();await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');
+  await page.screenshot({path:info.outputPath('pass-replay-private-view.png'),fullPage:true});
+});
 
 for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer practice retains human seat ${humanSeat+1} of ${count} through play, reload, history and rematch`,async({page},info)=>{
   await page.route(url=>/^\/games\/practice-seat-fixture(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:fixture}));
