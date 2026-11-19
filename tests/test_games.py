@@ -25,6 +25,7 @@ def test_create_and_get_a_game(api: Api) -> None:
         "allowed_player_counts": [2, 3, 6],
         "allows_leave_mid_match": True,
         "allows_join_mid_match": False,
+        "all_state_public": False,
         "code": "<div id='table'></div>",
         "client_code": "<div id='table'></div>",
         "server_code": ECHO_SERVER_CODE,
@@ -53,11 +54,12 @@ def test_optional_game_fields_have_defaults(api: Api) -> None:
     )
     assert {
         key: game[key]
-        for key in ("description", "allows_leave_mid_match", "allows_join_mid_match")
+        for key in ("description", "allows_leave_mid_match", "allows_join_mid_match", "all_state_public")
     } == {
         "description": "",
         "allows_leave_mid_match": False,
         "allows_join_mid_match": False,
+        "all_state_public": False,
     }
 
 

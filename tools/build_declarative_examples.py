@@ -148,9 +148,10 @@ def package(kind):
         if 'payouts' in result:case['expected_payouts']=result['payouts']
         cases.append(case)
     source=strings(kind)
-    return {'name':TITLES[kind][0]+' (Declarative)','description':RULES[kind][0],
+    return {'all_state_public':kind!='memory',
+            'name':TITLES[kind][0]+' (Declarative)','description':RULES[kind][0],
             'game_addition_request_id_and_secret':'example-only-declarative-'+kind+'-replace-before-publishing',
-            'allowed_player_counts':[2],'all_state_public':kind!='memory',
+            'allowed_player_counts':[2],
             'server_code':code,'declarative_ui':specification(kind),
             'rules':RULES[kind][0],'ui_instructions':UI_RULES[0],
             'tutorial':{'text':RULES[kind][0],'html':'<meta name="viewport" content="width=device-width,initial-scale=1"><p>'+html.escape(RULES[kind][0])+'</p>'},

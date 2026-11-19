@@ -62,10 +62,12 @@ def build(operations: Iterable[Mapping[str, Any]]) -> Snapshot:
     passwords = _Queue("password")
     # Referral codes count up from 10001 so the generated file never changes.
     codes = (str(n) for n in itertools.count(10_001))
+    notification_ids = (f"notification{n}" for n in itertools.count(1))
     platform = GamePlatform(
         store=store,
         clock=_Clock(),
         new_id=ids,
+        new_notification_id=lambda: next(notification_ids),
         new_seed=lambda: 0x5EED,
         new_password=passwords,
         new_referral_code=lambda: next(codes),
@@ -108,6 +110,7 @@ def _apply(
         )
         platform.create_game(
             name=body.name, description=body.description,
+            all_state_public=body.all_state_public,
             rules=body.game_rules(), code=body.client_code,
             server_code=body.server_code, game_schemas=body.game_schemas(),
             import_package={"declarative_ui": body.declarative_ui,

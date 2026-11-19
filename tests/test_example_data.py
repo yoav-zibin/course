@@ -75,6 +75,10 @@ def test_the_example_data_covers_many_match_states() -> None:
         ("ttt-ready", "waiting_for_players", None, None, "user8 cpu"),
     ]
     assert all(game.is_declarative for game in snapshot.game_versions)
+    assert all(game.all_state_public for game in snapshot.game_versions)
+    notifications = [entry for user in snapshot.users for entry in user.notifications]
+    assert notifications
+    assert len({entry.id for entry in notifications}) == len(notifications)
 
 
 

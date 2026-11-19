@@ -403,8 +403,8 @@ def package_with_fixtures():
     # hit/bar/off coverage and one combined gesture in the public submission;
     # retain every compound regression in a separately generated test fixture.
     cases = cases[:-3]
-    payload = {'name': TITLES[0] + ' (Declarative)', 'description': RULES[0], 'allowed_player_counts': [2],
-            'all_state_public': True,
+    payload = {'all_state_public': True,
+            'name': TITLES[0] + ' (Declarative)', 'description': RULES[0], 'allowed_player_counts': [2],
             'server_code': code, 'declarative_ui': specification(),
             'game_addition_request_id_and_secret': 'example-only-declarative-backgammon-replace-before-publishing',
             'rules': RULES[0], 'ui_instructions': UI_RULES[0],

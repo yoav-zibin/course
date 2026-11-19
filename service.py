@@ -446,6 +446,7 @@ class GamePlatform:
         store: Store | None = None,
         clock: Callable[[], dt.datetime] = _utc_now,
         new_id: Callable[[], str] = _new_id,
+        new_notification_id: Callable[[], str] = _new_id,
         new_password: Callable[[], str] = _new_password,
         new_verification_code: Callable[[], str] = _new_verification_code,
         new_invite_token: Callable[[], str] = _new_invite_token,
@@ -504,6 +505,9 @@ class GamePlatform:
         self._bundle_jobs: dict[str, threading.Event] = {}
         self._bundle_jobs_lock = threading.Lock()
         self._new_id = new_id
+        # Inbox entries must not consume IDs reserved for users, games or
+        # matches by deterministic imports and fixtures.
+        self._new_notification_id = new_notification_id
         self._new_password = new_password
         self._new_verification_code = new_verification_code
         self._new_invite_token = new_invite_token
@@ -4567,7 +4571,7 @@ class GamePlatform:
                 continue
             locale = i18n.normalize_locale(user.locale) or i18n.DEFAULT_LOCALE
             entry = UserNotification(
-                id=self._new_id(), event=key.removeprefix("notify."),
+                id=self._new_notification_id(), event=key.removeprefix("notify."),
                 title=game_name,
                 body=i18n.translate(key, locale, game=game_name, name=actor_name),
                 url=target_url, created_at=self._clock(),
