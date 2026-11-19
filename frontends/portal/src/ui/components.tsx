@@ -65,6 +65,9 @@ export function DialogContent({title,children,onClose,wide,avoidKeyboard}: {titl
 export function Dialog({visible,title,children,onClose,wide,reporting}: {visible:boolean;title:string;children:ReactNode;onClose:()=>void;wide?:boolean;reporting?:boolean}) {
   const id=useRef(Symbol('dialog')).current,captureView=useRef<React.ComponentRef<typeof View>>(null),report=useNativeBugReport();
   useEffect(()=>{if(Platform.OS!=='web'&&visible&&!reporting)return registerNativeDialog(id,captureView);},[visible,reporting,id]);
+  // Web fade-out keeps focusable controls mounted after close, including when
+  // another dialog opens immediately. Remove the closed web modal at once.
+  if(Platform.OS==='web'&&!visible)return null;
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={()=>{if(report)report.onClose();else onClose();}} accessibilityViewIsModal>
     <View ref={captureView} collapsable={false} style={{flex:1}}>
     <View style={{flex:1}} accessibilityElementsHidden={Boolean(report&&!reporting)} importantForAccessibility={report&&!reporting?'no-hide-descendants':'auto'}><DialogContent title={title} onClose={onClose} wide={wide} avoidKeyboard={reporting}>{children}</DialogContent></View>

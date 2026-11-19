@@ -168,6 +168,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const side = width >= 1000 && layout === 'left';
   const tabs = <Row style={side ? {flexDirection:'column',alignItems:'stretch'} : {gap:6}}>{links.map(link => <Button key={link.key} label={link.label} secondary compact selected={screen === link.key} onPress={() => navigate(link.key)}>{link.icon}  {link.label}{link.key==='matches' && p.myMatches.length ? ` · ${p.myMatches.length}` : ''}</Button>)}</Row>;
   const gameVisible = p.selectedMatch !== null;
+  const toggleFocus=()=>{setFocus(value=>!value);recordDiagnosticEvent('focus_mode',{enabled:!focus});};
   return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>setAccount(true),navigate,openGame,openMatch}}>
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
@@ -177,6 +178,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
         <View style={{flex:1}} />
         {p.account && <Copy small style={{color:colors.accent}}>{(p.profile?.token_balance ?? p.account.token_balance ?? 0).toLocaleString()} ✦</Copy>}
         {p.account&&<Button secondary compact label={copyText('Notifications')} onPress={()=>{setInbox(true);void p.actions.refreshNotifications().catch(()=>{});}}>{copyText('Notifications')}{p.unreadNotifications?` · ${p.unreadNotifications}`:''}</Button>}
+        {gameVisible&&<Button secondary compact onPress={toggleFocus}>{copyText('Focus mode')}</Button>}
         <Button secondary compact disabled={!p.ready} onPress={()=>setAccount(true)} label={p.account ? copyText("Account menu") : copyText("Log in")}>{p.account?.display_name || t('ui.auth.log_in','Log in')}</Button>
       </View>}
       {!focus&&width < 800 && <ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
@@ -203,7 +205,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
       <PrivacyDialog visible={privacy} onClose={()=>setPrivacy(false)} />
       <NotificationInbox visible={inbox} onClose={()=>setInbox(false)} onOpen={openNotification}/>
       <NotificationPrompt/>
-      {gameVisible&&<View style={{position:'absolute',right:8,top:insets.top+2,zIndex:100}}><Button secondary compact onPress={()=>{setFocus(value=>!value);recordDiagnosticEvent('focus_mode',{enabled:!focus});}}>{focus?copyText('Exit focus mode'):copyText('Focus mode')}</Button></View>}
+      {gameVisible&&focus&&<View style={{position:'absolute',right:8,top:insets.top+2,zIndex:100}}><Button secondary compact onPress={toggleFocus}>{copyText('Exit focus mode')}</Button></View>}
     </SafeAreaView>
   </Context.Provider>;
 }
