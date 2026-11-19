@@ -406,7 +406,10 @@ const Asset = memo(function Asset({spec,id,x,y,width,height}:{spec:GameSpec;id?:
     }catch{return null;}
   },[uri]);
   if(!uri)return null;
-  if(uri.startsWith('data:image/svg+xml;base64,'))return xml?<SvgXml xml={xml} x={x} y={y} width={width} height={height}/>:null;
+  // Native nested SVG viewports draw at (0, 0), ignoring the root's x/y props.
+  // Translate a parent group so centered piece artwork shares its hit geometry
+  // on iOS, Android and web, including negative half-width/height offsets.
+  if(uri.startsWith('data:image/svg+xml;base64,'))return xml?<G transform={`translate(${x} ${y})`}><SvgXml xml={xml} x={0} y={0} width={width} height={height}/></G>:null;
   return <SvgImage href={{uri}} x={x} y={y} width={width} height={height} preserveAspectRatio="xMidYMid meet"/>;
 });
 

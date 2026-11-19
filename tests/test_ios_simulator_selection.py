@@ -195,8 +195,8 @@ def test_missing_phase_metadata_uses_a_short_window_not_all_early_boot_logs():
     assert window["end"] == "2026-11-18 23:14:05+0000"
 
 
-@pytest.mark.parametrize("failure_phase", [None, "boot", "launch"])
-def test_shell_smoke_orchestration_keeps_local_only_gate_and_captures_failures(tmp_path, failure_phase):
+@pytest.mark.parametrize(("failure_phase", "fixture_enabled"), [(None,False), ("boot",False), ("launch",False), (None,True), ("fixture",True)])
+def test_shell_smoke_orchestration_keeps_local_only_gate_and_captures_failures(tmp_path, failure_phase, fixture_enabled):
     """Exercise shell/selector/phase interop without requiring Apple tools on Linux."""
     bin_path = tmp_path / "bin"
     bin_path.mkdir()
@@ -232,14 +232,30 @@ elif args[:2]==['simctl','spawn'] and 'launchctl' in args:
     print('123 0 edu.columbia.gameportal.starter')
 """)
     mock.chmod(0o755)
+    # The real fixture's data/safety contract has its own tests. This shim
+    # verifies CI shell ordering and failure gating without Apple tools.
+    python = bin_path / "python3"
+    python.write_text(f"""#!{sys.executable} -S
+import json,os,sys
+from pathlib import Path
+args=sys.argv[1:]
+if args and args[0].endswith('/seed-ios-connect4-fixture.py'):
+    with open({str(calls)!r},'a') as log:
+        log.write(json.dumps({{'args':['fixture',*args[1:]],'local_only':False}})+'\\n')
+    if {failure_phase!r}=='fixture':sys.exit(11)
+    Path(args[-1]).write_text('{{"public_fixture":true}}')
+else:
+    os.execv({sys.executable!r},[{sys.executable!r},*args])
+""")
+    python.chmod(0o755)
     for command, body in {"sleep": "exit 0", "ps": "printf '101 CoreSimulatorService\\n'"}.items():
         executable = bin_path / command
         executable.write_text(f"#!/usr/bin/env bash\n{body}\n")
         executable.chmod(0o755)
-    env = {**os.environ, "PATH": f"{bin_path}{os.pathsep}{os.environ['PATH']}"}
+    env = {**os.environ, "PATH": f"{bin_path}{os.pathsep}{os.environ['PATH']}", "GITHUB_ACTIONS": "true" if fixture_enabled else "false", "RUNNER_OS": "macOS" if fixture_enabled else "Linux"}
     results = tmp_path / "results"
     completed = subprocess.run(["bash", str(SCRIPTS / "smoke-ios-simulator.sh"), str(app), str(results)], env=env, capture_output=True, text=True, timeout=30)
-    assert completed.returncode == (7 if failure_phase == "boot" else 1 if failure_phase == "launch" else 0), completed.stdout + completed.stderr
+    assert completed.returncode == (7 if failure_phase == "boot" else 11 if failure_phase == "fixture" else 1 if failure_phase == "launch" else 0), completed.stdout + completed.stderr
     selected = json.loads((results / "selected-simulator.json").read_text())
     assert selected["udid"] == "new"
     phases = [json.loads(line) for line in (results / "phases.jsonl").read_text().splitlines()]
@@ -258,12 +274,21 @@ elif args[:2]==['simctl','spawn'] and 'launchctl' in args:
         assert all(name in logs[-1] for name in ["BuildPlay", "SpringBoard", "runningboardd", "amfid", "installd"])
         if failure_phase == "boot":
             assert not any(call["args"][:2] == ["simctl", "install"] for call in recorded)
+        elif failure_phase == "fixture":
+            assert not any(call["args"][:2] == ["simctl", "launch"] for call in recorded)
         else:
             assert sum(call["args"][:2] == ["simctl", "launch"] for call in recorded) == 1
     else:
         launch = next(call for call in recorded if call["args"][:2] == ["simctl", "launch"])
         assert launch["local_only"] is True
         assert (results / "screenshots" / "portal-launch.png").exists()
-        assert {phase["phase"]: phase["deadline_seconds"] for phase in phases} == {
-            "list-devices": 60, "boot": 600, "install": 300, "launch": 360, "screenshot": 45, "processes": 30,
-        }
+        expected = {"list-devices":60,"boot":600,"install":300,"launch":360,"screenshot":120,"processes":90}
+        if fixture_enabled:
+            expected['fixture']=60
+            seed = next(index for index,call in enumerate(recorded) if call['args'][0]=='fixture')
+            install = next(index for index,call in enumerate(recorded) if call['args'][:2]==['simctl','install'])
+            started = next(index for index,call in enumerate(recorded) if call['args'][:2]==['simctl','launch'])
+            assert install < seed < started
+            assert recorded[seed]['args'][1]=='--local-only'
+            assert (results/'connect4-fixture.json').exists()
+        assert {phase["phase"]: phase["deadline_seconds"] for phase in phases} == expected

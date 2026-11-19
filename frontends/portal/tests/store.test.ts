@@ -42,6 +42,64 @@ function testRuntime() {
   };
 }
 
+test('RAM-only downloads cannot regress a match and optional quota failures do not become storage banners',async()=>{
+  const saved=browserStorage(),restore=mockedFetch();
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    const original=(saved as any).setItem;
+    (saved as any).setItem=(key:string,value:string)=>{if(key.startsWith('buildplay.shared.v1.'))throw new DOMException('quota exceeded','QuotaExceededError');original(key,value);};
+    const fresh=await (store as any).cache('/matches/observed',{id:'observed',move_count:5,state:'newest'});
+    assert.equal(fresh.move_count,5);assert.equal(store.getSnapshot().storageError,null);
+    await (store as any).cache('/users/unrelated',{id:'unrelated'});
+    assert.equal((store as any).data.responses['/matches/observed'].move_count,5);
+    const stale=await (store as any).cache('/matches/observed',{id:'observed',move_count:4,state:'stale'});
+    assert.equal(stale.move_count,5);assert.equal((store as any).data.responses['/matches/observed'].state,'newest');assert.equal(store.getSnapshot().storageError,null);
+    (saved as any).setItem=original;
+    await new AccountRepository('https://local.test').mutate('visitor',data=>{data.responses['/matches/observed']={id:'observed',move_count:4,state:'durable queue base'};data.queues.observed=[{requestId:'another-tab-key',body:{move:{cell:2},expected_move_count:4},baseState:'durable queue base',baseTurn:[0]}];});
+    const queued=await (store as any).cache('/matches/observed',{id:'observed',move_count:6,state:'must not replace queued base'});assert.equal(queued.state,'durable queue base');
+    await (store as any).reloadData();assert.equal((store as any).data.responses['/matches/observed'].state,'durable queue base');
+  }finally{restore();}
+});
+
+test('a quota failure updating a pinned pending download only skips optional cache metadata',async()=>{
+  const saved=browserStorage(),restore=mockedFetch();
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');const repo=new AccountRepository('https://local.test');
+    await repo.mutate('visitor',data=>{data.responses['/matches/pending']={id:'pending',game_id:'g',game_version:7,move_count:0,state:'exact base'};data.responses['/games/g/versions/7']={id:'g',version:7,server_code:'exact rules'};data.queues.pending=[{requestId:'exact-request',body:{move:{cell:2},expected_move_count:0},baseState:'exact base',baseTurn:[0]}];});
+    await (store as any).reloadData();const original=saved[repo.key('visitor')],set=(saved as any).setItem;
+    (saved as any).setItem=(key:string,value:string)=>{if(key===repo.key('visitor'))throw new DOMException('quota exceeded','QuotaExceededError');set(key,value);};
+    const result=await (store as any).cache('/matches/pending',{id:'pending',move_count:2,state:'must not replace queued base'});
+    assert.equal(result.state,'exact base');assert.equal(saved[repo.key('visitor')],original);assert.equal(store.getSnapshot().storageError,null);
+  }finally{restore();}
+});
+
+test('an exact RAM-only package is committed atomically with a durable pending action',async()=>{
+  const saved=browserStorage();saved['game-platform.accounts.v1']=JSON.stringify([{id:'alice',password:'alice-secret',display_name:'Alice'}]);saved['game-platform.current-account.v1']='alice';
+  const game={...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8')),id:'quota-package',version:7};
+  const match={id:'m',game_id:game.id,game_version:7,owner_user_id:'alice',players:[{id:'alice',user_id:'alice',kind:'human',player_index:0}],status:'ongoing',state:{exact:true},turn_of_player_indices:[0],move_count:0,created_at:'2026-01-01T00:00:00Z'};
+  const path=`/games/${game.id}/versions/7`,repo=new AccountRepository('https://local.test'),set=(saved as any).setItem;
+  (saved as any).setItem=(key:string,value:string)=>{if(key===repo.key('alice')){const data=JSON.parse(value);if(data.responses[path]&&!data.queues.m?.length)throw new DOMException('quota exceeded','QuotaExceededError');}set(key,value);};
+  const restore=mockedFetch((url,init)=>{if(url.pathname==='/matches/m/moves'&&init.method==='POST')throw new TypeError('offline');if(url.pathname==='/matches/m')return match;if(url.pathname===path)return game;});
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');await store.actions.selectMatch('m');assert.equal((await repo.read('alice')).responses[path],undefined);assert.equal(store.getSnapshot().storageError,null);
+    await store.actions.submitMove({cell:2});const durable=await repo.read('alice');assert.deepEqual(durable.responses[path],game);assert.equal(durable.queues.m.length,1);assert.deepEqual(durable.queues.m[0].baseState,{exact:true});assert.ok(durable.queues.m[0].requestId);
+  }finally{restore();}
+});
+
+test('offline cached reads update recency and a recovered cache write publishes its trimmed response set',async()=>{
+  const saved=browserStorage();let offline=false;const restore=mockedFetch(()=>{if(offline)throw new TypeError('offline');});
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    await (store as any).cache('/read-again','a'.repeat(100000));await (store as any).cache('/cold','b'.repeat(100000));
+    const repo=new AccountRepository('https://local.test'),before=(await repo.read('visitor')).responseRecency!['/read-again'];
+    offline=true;assert.equal((await (store as any).read('/read-again')).length,100000);assert.ok((await repo.read('visitor')).responseRecency!['/read-again']>before);
+    const original=(saved as any).setItem,limit=Object.values(saved).reduce((n,value)=>n+value.length,0)+100;
+    (saved as any).setItem=(key:string,value:string)=>{if(key.startsWith('buildplay.shared.v1.')&&Object.entries(saved).filter(([item])=>item!==key).reduce((n,[,text])=>n+text.length,0)+value.length>limit)throw new DOMException('quota exceeded','QuotaExceededError');original(key,value);};
+    await (store as any).cache('/new','c'.repeat(80000));
+    assert.equal((store as any).data.responses['/cold'],undefined);assert.ok((store as any).data.responses['/read-again']);assert.equal(store.getSnapshot().storageError,null);
+  }finally{restore();}
+});
+
 test('real bundled rules support durable pass-and-play, handoff, win, restart and replay', async () => {
   browserStorage(); const restore = mockedFetch();
   try {
@@ -189,6 +247,8 @@ test('slow poll cache cannot roll back a confirmed newer state or replace queued
   const result = await repository.cache('alice', '/matches/m', { id: 'm', move_count: 2, state: 'stale' }); assert.equal(result.state, 'confirmed');
   await repository.mutate('alice', data => { data.queues.m = [{ requestId: 'stable', body: { move: {}, expected_move_count: 3 }, baseState: 'confirmed', baseTurn: [0] }]; });
   await repository.cache('alice', '/matches/m', { id: 'm', move_count: 4, state: 'remote while queued' }); assert.equal((await repository.read('alice')).responses['/matches/m'].state, 'confirmed');
+  await repository.mutate('alice',data=>{delete data.queues.m;data.conflicts.m={message:'Archived intent needs review'};});
+  await repository.cache('alice','/matches/m',{id:'m',move_count:5,state:'remote while conflicted'});assert.equal((await repository.read('alice')).responses['/matches/m'].state,'confirmed');
 });
 test('opening a game URL synchronously detaches the restored match before its package download', async () => {
   browserStorage(); let finish!: (value: any) => void; const download = new Promise(resolve => { finish = resolve; });

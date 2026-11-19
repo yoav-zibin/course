@@ -44,6 +44,39 @@ test('scene labels keep their declared left edge in an Arabic document',async({p
   expect(box.x).toBeGreaterThanOrEqual(23);expect(box.x).toBeLessThanOrEqual(25);
 });
 
+test('Connect Four SVG discs stay centered in their rack holes with native nested-SVG positioning',async({page,request},info)=>{
+  const {game}=JSON.parse(readFileSync(path.resolve(__dirname,'../../../tests/fixtures/declarative/connect4-native-package.json'),'utf8'));
+  const board=Array(42).fill(-1),disc_ids=Array(42).fill(-1);
+  for(const [index,[cell,seat]] of [[35,0],[37,1],[38,0],[39,1],[40,0],[41,1],[32,0],[25,1]].entries()){
+    board[cell]=seat;disc_ids[cell]=index;
+  }
+  const view={board,disc_ids,turn:0,turns:8,over:false,winner:-1,legal:Array.from({length:7},(_,column)=>({column}))};
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await mount(page,request,game.declarative_ui,state({view,state:view,move_count:8,turn_of_player_indices:[0],strings:game.declarative_ui.strings}));
+  const rack=page.locator('svg svg').filter({has:page.locator('circle[cx="37"][cy="284"][r="23"]')}).first();
+  const first=page.getByLabel('Player 1 disc, row 6, column 1',{exact:true}).locator('circle').first();
+  await expect(first).toBeVisible();
+  const assertCenters=async()=>{
+    for(const [cell,seat] of [[35,0],[37,1],[38,0],[39,1],[40,0],[41,1],[32,0],[25,1]]){
+      const row=Math.floor(cell/7),column=cell%7;
+      const piece=page.getByLabel(`Player ${seat+1} disc, row ${row+1}, column ${column+1}`,{exact:true}).locator('circle').first();
+      const hole=rack.locator(`circle[cx="${37+50*column}"][cy="${34+50*row}"][r="23"]`).first();
+      const a=(await piece.boundingBox())!,b=(await hole.boundingBox())!;
+      expect(Math.abs(a.x+a.width/2-b.x-b.width/2)).toBeLessThan(.5);
+      expect(Math.abs(a.y+a.height/2-b.y-b.height/2)).toBeLessThan(.5);
+    }
+  };
+  await assertCenters();
+  // RNSVGGroup's native nested viewports draw at (0,0), without the XML
+  // root's x/y placement. Model that backend here: the old negative offsets
+  // shift every disc half its size, while explicit parent transforms stay put.
+  await page.locator('svg svg').evaluateAll(nodes=>nodes.forEach(node=>{node.removeAttribute('x');node.removeAttribute('y');}));
+  await assertCenters();
+  await page.getByRole('button',{name:'Zoom in',exact:true}).click();
+  await assertCenters();
+  await page.screenshot({path:info.outputPath('connect4-native-svg-centers.png'),fullPage:true});
+});
+
 test('fitted native scenes retain instructions inside the complete declared viewport',async({page,request})=>{
   const pkg={...spec(`const gameUI={reduce(){return {scene:{labels:[{id:'instruction',x:20,y:440,text:'Keep this complete instruction visible',font_size:18}]}}}};`),viewport:{width:400,height:500},boards:[{id:'board',kind:'zone',x:20,y:20,width:180,height:180}]};
   await mount(page,request,pkg);const label=page.getByText('Keep this complete instruction visible',{exact:true});await expect(label).toBeVisible();

@@ -209,6 +209,13 @@ reuses the successful build. Build logs are in `BuildPlay-ios-build-results`;
 phase logs, timing summaries and failure diagnostics are in
 `BuildPlay-ios-test-results`. Successful startup remains required for TestFlight.
 
+On a fresh GitHub simulator, the launch check seeds a local Connect Four match
+from the public version-pinned SVG package in
+`tests/fixtures/declarative/connect4-native-package.json`. Its screenshot covers
+disc alignment against the rack holes. The seed helper refuses existing app
+data and runs only for an explicit local-only CI launch; it creates no account
+and makes no backend requests.
+
 ## Existing Apple signing setup
 
 The optional TestFlight job remains gated by repository variables

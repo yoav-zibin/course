@@ -1,4 +1,5 @@
 import * as storage from './storage';
+import {touchTranslationCache} from './recoverable-cache';
 import sharedCopy from './ui-copy.json';
 let locale = 'en';
 let messages: Record<string, string> = {};
@@ -53,8 +54,8 @@ function translateTutorial(source:unknown,table:unknown):unknown {
   // One literal pass: translated output must never become another source key.
   return source.replace(new RegExp(pattern,'g'),key=>values[key] as string);
 }
-async function cacheGet(key: string) { try { const text = await storage.getItem(key); return text ? JSON.parse(text) : null; } catch { return null; } }
-async function cacheSet(key: string, value: any) { try { await storage.setItem(key, JSON.stringify(value)); } catch { /* translations are recoverable */ } }
+async function cacheGet(key: string) { try { const text = await storage.getItem(key); if (!text) return null; const value = JSON.parse(text); await touchTranslationCache(storage,key); return value; } catch { return null; } }
+async function cacheSet(key: string, value: any) { try { await storage.setItem(key, JSON.stringify(value)); await touchTranslationCache(storage,key); } catch { /* translations are recoverable */ } }
 function adopt(value: any) { bundle = value; messages = value.catalog?.messages ?? value.messages ?? {}; direction = value.direction ?? value.catalog?.direction ?? 'ltr'; listeners.forEach(fn => fn()); }
 export async function configureI18n(base: string, preferred?: string, localOnly = false): Promise<void> {
   baseUrl = base; offlineOnly = localOnly;

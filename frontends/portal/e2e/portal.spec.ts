@@ -213,6 +213,53 @@ test('navigation stays directly accessible without a hamburger, including saved 
   }
 });
 
+test('a full legacy browser cache is evicted automatically while durable saves and new offline play survive',async({page,request,context})=>{
+  const created=await game(request,uniqueName('Quota recovery game'));
+  await page.addInitScript(()=>{
+    const write=Storage.prototype.setItem;
+    const pending={requestId:'preserved-legacy-request',body:{move:{cell:2},expected_move_count:4},baseState:{original:true},baseTurn:[1]};
+    if(!sessionStorage.getItem('quota-test-seeded')){
+      const legacy={responses:{'/old-unused-download':'x'.repeat(350000),'/matches/pending':{id:'pending',game_id:'preserved',game_version:7},'/games/preserved/versions/7':{server_code:'exact saved rules'}},cacheAccess:{'/old-unused-download':1},queues:{pending:[pending]},conflicts:{},local:{},archives:[{source:'original recovery'}],archivedMatches:[],selectedId:null,unknownRecovery:{keep:true}};
+      write.call(localStorage,'game-platform.portal.v1.visitor',JSON.stringify(legacy));
+      write.call(localStorage,'game-platform.i18n-bundle.v1:unused',JSON.stringify({data:'y'.repeat(100000)}));
+      write.call(localStorage,'game-platform.i18n-recency.v1',JSON.stringify({clock:Date.now(),entries:[{key:'game-platform.i18n-bundle.v1:unused',at:Date.now()}]}));
+      write.call(localStorage,'game-platform.accounts.v1','[]');
+      write.call(localStorage,'game-platform.current-account.v1','visitor');
+      write.call(localStorage,'buildplay.shared.v1.other-account','protected other account bytes');
+      sessionStorage.setItem('quota-test-seeded','1');
+    }
+    const size=()=>Object.keys(localStorage).reduce((n,key)=>n+new TextEncoder().encode(key+localStorage.getItem(key)).length,0);
+    const limit=Number(sessionStorage.getItem('quota-test-limit'))||size()+1024;sessionStorage.setItem('quota-test-limit',String(limit));
+    Storage.prototype.setItem=function(key:string,value:string){
+      const replaced=new TextEncoder().encode(key+(this.getItem(key)||'')).length;
+      if(this===localStorage&&size()-replaced+new TextEncoder().encode(key+value).length>limit)throw new DOMException('The quota has been exceeded.','QuotaExceededError');
+      write.call(this,key,value);
+    };
+  });
+  await page.goto(`/portal#game=${created.id}`);
+  await expect(page.getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
+  await expect(page.getByText(/Could not save downloaded data|Saved data needs attention/)).toHaveCount(0);
+  const preserved=await page.evaluate(()=>{
+    const legacy=JSON.parse(localStorage.getItem('game-platform.portal.v1.visitor')!);
+    const current=Object.keys(localStorage).find(key=>key.startsWith('buildplay.shared.v1.')&&key.endsWith('.visitor'))!;
+    return {legacy,saved:JSON.parse(localStorage.getItem(current)!),credentials:localStorage.getItem('game-platform.accounts.v1'),selection:localStorage.getItem('game-platform.current-account.v1'),other:localStorage.getItem('buildplay.shared.v1.other-account')};
+  });
+  expect(preserved.legacy.responses['/old-unused-download']).toBeUndefined();
+  expect(preserved.saved.responses['/old-unused-download']).toBeUndefined();
+  expect(preserved.legacy.queues.pending[0].requestId).toBe('preserved-legacy-request');
+  expect(preserved.saved.queues).toEqual(preserved.legacy.queues);
+  expect(preserved.saved.archives).toEqual([{source:'original recovery'}]);
+  expect(preserved.legacy.unknownRecovery).toEqual({keep:true});
+  expect(preserved.saved.responses['/games/preserved/versions/7'].server_code).toBe('exact saved rules');
+  expect(preserved.credentials).toBe('[]');expect(preserved.selection).toBe('visitor');expect(preserved.other).toBe('protected other account bytes');
+  await page.evaluate(async()=>{if('serviceWorker'in navigator)await navigator.serviceWorker.ready;});await context.setOffline(true);
+  await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  await page.getByRole('button',{name:'Cell 1',exact:true}).click();
+  await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();
+  await page.reload();await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();
+  await expect(page.getByText(/Could not save downloaded data|Saved data needs attention/)).toHaveCount(0);
+});
+
 test('guest identity survives reload, shared navigation stays responsive, and feedback works',async({page})=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).first().click();

@@ -1,7 +1,11 @@
 import * as storage from '../platform/storage';
-import type { AccountData, Match } from './types';
+import type { AccountData } from './types';
 import { redactedArchive } from './redaction';
-export interface StorageAdapter { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; keys(): Promise<string[]>; exclusive<T>(name: string, run: () => Promise<T>): Promise<T> }
+import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
+export {utf8Size} from '../platform/recoverable-cache';
+import {originEvictions} from '../platform/origin-cache';
+import {protectedResponsePaths} from './cache-policy';
+export interface StorageAdapter { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem?(key: string): Promise<void>; keys(): Promise<string[]>; exclusive<T>(name: string, run: () => Promise<T>): Promise<T> }
 export const emptyAccountData = (): AccountData => ({ version: 1, responses: {}, queues: {}, conflicts: {}, local: {}, archives: [], archivedMatches: [], selectedId: null });
 export function equal(a: any, b: any): boolean {
   if (a === b) return true;
@@ -9,6 +13,15 @@ export function equal(a: any, b: any): boolean {
   const keys = Object.keys(a); return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) && equal(a[key], b[key]));
 }
 export function requestId(): string { return globalThis.crypto?.randomUUID?.() ?? `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`; }
+const RECOVERABLE_BUDGET = 1_000_000, QUOTA_RETRIES = 8;
+function validRecency(value: unknown): number { return Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : 0; }
+function touchResponse(data: AccountData, path: string): void {
+  const entries = data.responseRecency && typeof data.responseRecency === 'object' && !Array.isArray(data.responseRecency) ? data.responseRecency : {};
+  data.responseRecency = Object.fromEntries(Object.keys(data.responses).map(key => [key,validRecency(entries[key])]));
+  let clock = Math.max(Date.now(), validRecency(data.cacheClock) + 1, ...Object.values(data.responseRecency).map(at => at + 1));
+  if (!Number.isSafeInteger(clock)) { const sorted = Object.keys(data.responseRecency).sort((a,b) => data.responseRecency![a]-data.responseRecency![b]); sorted.forEach((key,index) => {data.responseRecency![key]=index;}); clock=Math.max(Date.now(),sorted.length); }
+  data.cacheClock = clock; data.responseRecency[path] = clock;
+}
 export function migrateLegacy(raw: any): AccountData {
   const data = emptyAccountData();
   for (const key of ['responses', 'queues', 'conflicts', 'local'] as const) if (raw?.[key] && typeof raw[key] === 'object' && !Array.isArray(raw[key])) (data[key] as any) = raw[key];
@@ -26,7 +39,9 @@ export function migrateLegacy(raw: any): AccountData {
   data.imported = true; return data;
 }
 export class AccountRepository {
+  private activeGames = new Map<string,{id: string; version?: number}>();
   constructor(public backend = '', public adapter: StorageAdapter = storage) {}
+  protectGame(id: string, gameId: string | null, version?: number) { if (gameId) this.activeGames.set(id,{id:gameId,version}); else this.activeGames.delete(id); }
   key(id: string) { const scope = !this.backend || this.backend === 'https://buildplay.fun' ? '' : `${encodeURIComponent(this.backend)}.`; return `buildplay.shared.v1.${scope}${id}`; }
   lock<T>(id: string, run: () => Promise<T>): Promise<T> { return this.adapter.exclusive(this.key(id), run); }
   async read(id: string): Promise<AccountData> {
@@ -51,19 +66,54 @@ export class AccountRepository {
   }
   async write(id: string, data: AccountData): Promise<void> {
     // One atomic replacement commits queue+snapshot together on every platform.
-    await this.adapter.setItem(this.key(id), JSON.stringify(data));
+    this.trim(data,id);
+    let candidates: {key: string; at: number; bytes?: number; evict: () => Promise<void>}[] | null = null;
+    for (let attempt=0;;attempt++) {
+      try {await this.adapter.setItem(this.key(id), JSON.stringify(data));return;}
+      catch (error) {
+        if (!isQuotaError(error) || attempt >= QUOTA_RETRIES) throw error;
+        if (!candidates) {
+          const pinned = protectedResponsePaths(data,this.activeGames.get(id));
+          candidates = Object.keys(data.responses).filter(path => !pinned.has(path)).map(path => ({key:path,at:validRecency(data.responseRecency?.[path]),bytes:utf8Size(JSON.stringify(data.responses[path])),evict:async()=>{delete data.responses[path];if(data.responseRecency)delete data.responseRecency[path];}}));
+          candidates.push(...await originEvictions(this.adapter,this.key(id)));
+          candidates.sort((a,b) => a.at-b.at || a.key.localeCompare(b.key));
+        }
+        if (!candidates.length) throw error;
+        const batch = [];let freed=0;
+        const target=32768*2**attempt;
+        // Retry before removing the newest remaining cache entry. Small old
+        // metadata must not consume every retry before reaching a large cache.
+        while(candidates.length&&(batch.length===0||(freed<target&&candidates.length>1))){const candidate=candidates.shift()!;batch.push(candidate);freed+=candidate.bytes||1;}
+        for (const candidate of batch) await candidate.evict();
+      }
+    }
   }
   async mutate<T>(id: string, update: (data: AccountData) => T | Promise<T>): Promise<T> {
     return this.lock(id, async () => { const data = await this.read(id); const result = await update(data); await this.write(id, data); return result; });
   }
   async cache(id: string, path: string, value: any): Promise<any> {
-    return this.mutate(id, data => {
+    return (await this.cacheData(id,path,value)).value;
+  }
+  async cacheData(id: string, path: string, value: any): Promise<{value: any; data: AccountData}> {
+    return this.lock(id, async () => {
+      const data = await this.read(id);
       const matchId = /^\/matches\/([^/]+)$/.exec(path)?.[1]; const previous = data.responses[path];
       // A slow poll cannot roll an accepted move backwards, and an ordinary GET
       // cannot replace the base beneath an unresolved durable action.
-      if (matchId && previous && (data.queues[matchId]?.length || previous.move_count > value?.move_count)) return previous;
-      data.responses[path] = value; this.trim(data); return value;
+      if (matchId && previous && (data.queues[matchId]?.length || data.conflicts[matchId] || previous.move_count > value?.move_count)) value=previous;
+      data.responses[path] = value; touchResponse(data,path);
+      try {await this.write(id,data);} catch (error) {
+        // A replaceable download may be served from memory. Durable mutation
+        // callers still receive write failures and never lose their old save.
+        if (!isQuotaError(error)) throw error;
+        const persisted = await this.read(id); return {value,data:persisted};
+      }
+      return {value,data};
     });
+  }
+  async touch(id: string, path: string): Promise<void> {
+    try {await this.lock(id,async()=>{const data=await this.read(id);if(!Object.hasOwn(data.responses,path))return;touchResponse(data,path);await this.write(id,data);});}
+    catch { /* Recency is optional even when the cached value remains readable. */ }
   }
   async preserveMergedAccounts(targetId: string, sourceIds: string[]): Promise<void> {
     const sources: { id: string; data: AccountData }[] = [];
@@ -94,15 +144,14 @@ export class AccountRepository {
       }
     });
   }
-  trim(data: AccountData) {
-    const pinnedMatches = new Set([...Object.keys(data.queues), ...Object.keys(data.conflicts), ...(data.selectedId ? [data.selectedId] : [])]);
-    const pinnedGames = new Set<string>();
-    for (const match of [...Object.values(data.local), ...[...pinnedMatches].map(id => data.responses[`/matches/${id}`]).filter(Boolean)] as Match[]) pinnedGames.add(`/games/${match.game_id}/versions/${match.game_version}`);
-    let bytes = JSON.stringify(data.responses).length;
-    for (const path of Object.keys(data.responses)) {
-      if (bytes <= 1_000_000) break;
-      if (pinnedGames.has(path) || [...pinnedMatches].some(id => path === `/matches/${id}`)) continue;
-      bytes -= JSON.stringify(data.responses[path]).length; delete data.responses[path];
+  trim(data: AccountData, id?: string) {
+    const pinned = protectedResponsePaths(data,id ? this.activeGames.get(id) : undefined);
+    let bytes = utf8Size(JSON.stringify(data.responses));
+    const paths = Object.keys(data.responses).filter(path => !pinned.has(path)).sort((a,b) => validRecency(data.responseRecency?.[a])-validRecency(data.responseRecency?.[b]) || a.localeCompare(b));
+    for (const path of paths) {
+      if (bytes <= RECOVERABLE_BUDGET) break;
+      bytes -= utf8Size(JSON.stringify(data.responses[path])) + utf8Size(JSON.stringify(path)) + 2;
+      delete data.responses[path]; if (data.responseRecency) delete data.responseRecency[path];
     }
   }
 }

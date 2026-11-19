@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { PortalApi, ApiError } from './api';
 import { AccountRepository, emptyAccountData, equal, requestId } from './repository';
+import {protectedResponsePaths} from './cache-policy';
+import {utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
 import { importNativeLegacy, finishNativeImport } from './native-migration';
 import * as storage from '../platform/storage';
@@ -38,6 +40,8 @@ export class PortalStore {
   private retryAfter = 0;
   private api = new PortalApi('', getLocale);
   private repository = new AccountRepository();
+  private cacheErrorPath: string | null = null;
+  private volatileResponses = new Map<string,Map<string,any>>();
   getSnapshot = () => this.state;
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
   private patch(update: Partial<PortalState>) { if (Object.hasOwn(update, 'selectedMatch')) update.selected = update.selectedMatch; if (Object.hasOwn(update, 'game')) update.selectedGame = update.game; this.state = { ...this.state, ...update }; this.listeners.forEach(fn => fn()); }
@@ -47,18 +51,52 @@ export class PortalStore {
   private async perform<T>(run: () => Promise<T>, loading = true): Promise<T> { if (loading) this.patch({ loading: true }); this.patch({ error: null }); try { return await run(); } catch (error) { this.patch({ error: error instanceof Error ? error.message : String(error) }); throw error; } finally { if (loading) this.patch({ loading: false }); } }
   private decorate(match: Match | null): Match | null { return match ? { ...match, pending: this.data.queues[match.id]?.length || 0, conflict: this.data.conflicts[match.id] || null } : null; }
   private publishData(data: AccountData) {
-    this.data = data; const selected = this.state.selectedMatch;
+    this.mergeVolatile(data);this.data = data; const selected = this.state.selectedMatch;
     const next = selected ? data.local[selected.id] || data.responses[`/matches/${selected.id}`] || selected : null;
     this.patch({ localMatches: Object.values(data.local), conflicts: data.conflicts, archived: [...data.archivedMatches, ...data.archives], pending: Object.values(data.queues).reduce((n, q) => n + q.length, 0), selectedMatch: this.decorate(next), myMatches: this.state.myMatches.map(m => this.decorate(data.responses[`/matches/${m.id}`] || m)!) });
   }
+  private mergeVolatile(data: AccountData) {
+    const pending=this.volatileResponses.get(this.identity());if(!pending)return;
+    for(const [path,value]of pending){const matchId=/^\/matches\/([^/]+)$/.exec(path)?.[1],saved=data.responses[path];if(matchId&&(data.queues[matchId]?.length||data.conflicts[matchId]))continue;if(equal(saved,value)||matchId&&saved?.move_count>value?.move_count)pending.delete(path);else data.responses[path]=value;}
+  }
+  private rememberVolatile(path:string,value:any,persisted:any) {
+    const id=this.identity();let pending=this.volatileResponses.get(id);if(!pending){pending=new Map();this.volatileResponses.set(id,pending);}
+    pending.delete(path);if(!equal(value,persisted))pending.set(path,value);
+    const pinned=protectedResponsePaths(this.data,this.state.selectedGameId?{id:this.state.selectedGameId,version:this.state.game?.version}:undefined);
+    let bytes=[...pending.values()].reduce((n,item)=>n+utf8Size(JSON.stringify(item)),0);
+    for(const [key,item]of pending){if(pending.size<=64&&bytes<=1000000)break;if(key===path||pinned.has(key))continue;pending.delete(key);delete this.data.responses[key];bytes-=utf8Size(JSON.stringify(item));}
+  }
   private async reloadData() { const id = this.identity(); const guard = this.capture(); try { const data = await this.repository.read(id); guard(); this.publishData(data); } catch (error) { guard(); this.patch({ storageError: `Saved data is unavailable: ${(error as Error).message}. Existing saves were kept.` }); } }
-  private async cache(path: string, value: any) { const id = this.identity(); const guard = this.capture(); try { value = await this.repository.cache(id, path, value); } catch (error) { guard(); const previous = this.data.responses[path]; if (/^\/matches\/[^/]+$/.test(path) && previous?.move_count > value?.move_count) value = previous; this.patch({ storageError: `Could not save downloaded data: ${(error as Error).message}` }); } guard(); this.data.responses[path] = value; return value; }
+  private async cache(path: string, value: any) {
+    const id=this.identity(), guard=this.capture(), matchId=/^\/matches\/([^/]+)$/.exec(path)?.[1], matchPath=!!matchId;
+    const preserve=(previous:any,next:any)=>matchPath&&previous&&(this.data.queues[matchId!]?.length||this.data.conflicts[matchId!]||previous.move_count>next?.move_count)?previous:next;
+    const previous=this.data.responses[path];
+    value=preserve(previous,value);
+    this.repository.protectGame(id,this.state.selectedGameId,this.state.game?.version);
+    try {
+      const saved=await this.repository.cacheData(id,path,value);guard();value=saved.value;
+      // A later request can finish while storage is awaiting its lock. Keep a
+      // newer RAM-only observation even when the older download persisted.
+      const durableBranch=matchId&&(saved.data.queues[matchId]?.length||saved.data.conflicts[matchId]);
+      if(!durableBranch)value=preserve(this.data.responses[path],value);
+      const persisted=saved.data.responses[path];this.mergeVolatile(saved.data);
+      this.data.responses=saved.data.responses;this.data.responseRecency=saved.data.responseRecency;this.data.cacheClock=saved.data.cacheClock;
+      this.rememberVolatile(path,value,persisted);
+      if(this.cacheErrorPath===path&&equal(persisted,value)&&this.state.storageError?.startsWith('Could not save downloaded data:')){this.cacheErrorPath=null;this.patch({storageError:null});}
+    } catch(error) {guard();value=preserve(this.data.responses[path],value);this.rememberVolatile(path,value,this.data.responses[path]);this.cacheErrorPath=path;this.patch({storageError:`Could not save downloaded data: ${(error as Error).message}`});}
+    guard();this.data.responses[path]=value;return value;
+  }
+  private async cached(path: string): Promise<any> {const value=this.data.responses[path],guard=this.capture();await this.repository.touch(this.identity(),path);guard();return this.data.responses[path]??value;}
+  private exactPackage(id:string,version:number):Game|undefined {
+    const game=this.data.responses[`/games/${id}/versions/${version}`]||this.data.responses[`/games/${encodeURIComponent(id)}/versions/${version}`]||(bundled.id===id&&bundled.version===version?bundled:undefined);
+    return game?.id===id&&game.version===version?game:undefined;
+  }
   async request(method: string, path: string, body?: any): Promise<any> { if (this.localOnly) throw new Error('This test launch runs entirely on this device.'); const guard = this.capture(); const result = await this.api.request(method, path, body, this.state.account); guard(); return result; }
   private async read(path: string, allowCached = true): Promise<any> {
     const guard = this.capture();
-    if (this.localOnly) { if (allowCached && Object.hasOwn(this.data.responses, path)) return this.data.responses[path]; throw new TypeError('This device launch is offline.'); }
+    if (this.localOnly) { if (allowCached && Object.hasOwn(this.data.responses, path)) return this.cached(path); throw new TypeError('This device launch is offline.'); }
     try { if (!isOnline() || Date.now() < this.retryAfter) throw new TypeError('Offline'); const result = await this.api.request('GET', path, undefined, this.state.account); guard(); this.retryAfter = 0; this.patch({ network: true }); const matchId = /^\/matches\/([^/]+)$/.exec(path)?.[1]; if (matchId && this.data.conflicts[matchId]?.message.startsWith('The outcome of this unsaved action')) delete this.data.conflicts[matchId]; const saved = await this.cache(path, result); guard(); return saved; }
-    catch (error) { guard(); if (error instanceof ApiError && error.status < 500) throw error; if (Date.now() >= this.retryAfter) this.retryAfter = Date.now() + 10000; this.patch({ network: false }); if (allowCached && Object.hasOwn(this.data.responses, path)) return this.data.responses[path]; throw error; }
+    catch (error) { guard(); if (error instanceof ApiError && error.status < 500) throw error; if (Date.now() >= this.retryAfter) this.retryAfter = Date.now() + 10000; this.patch({ network: false }); if (allowCached && Object.hasOwn(this.data.responses, path)) return this.cached(path); throw error; }
   }
   private async list(kind: ListKind, more = false): Promise<void> {
     const guard = this.capture(); const search = this.state.query; const query = new URLSearchParams(); query.set('limit', '50');
@@ -145,7 +183,7 @@ export class PortalStore {
     if (id === bundled.id) return localizeGame(bundled as Game);
     const path = version === undefined ? `/games/${encodeURIComponent(id)}` : `/games/${encodeURIComponent(id)}/versions/${version}`;
     const cached = version !== undefined && this.data.responses[path];
-    const game = cached || await this.read(path); if (!game?.declarative_ui) throw new Error('This game uses an earlier renderer. Its saved data is preserved in the archive.');
+    const game = cached ? await this.cached(path) : await this.read(path); if (!game?.declarative_ui) throw new Error('This game uses an earlier renderer. Its saved data is preserved in the archive.');
     if (!cached) await this.cache(`/games/${game.id}/versions/${game.version}`, game);
     let presentation = game.declarative_ui;
     if (game.id === '5f5293c3-2a3a-4eec-b631-9debf59be0ca') { try { presentation = await (await import('../game/presentation')).presentationForGame(game); } catch { /* preserve pinned original on unavailable digest */ } }
@@ -154,6 +192,7 @@ export class PortalStore {
   }
   async selectGame(id: string) {
     const token = ++this.selection; const guard = this.capture(); const owner = this.identity();
+    this.repository.protectGame(owner,id);
     // Clear the previous match before any await. A restored match must never be
     // displayed with the unrelated package requested by an incoming game URL.
     this.patch({ selectedMatch: null, selectedGameId: id, game: null, history: null, replayIndex: null });
@@ -165,13 +204,14 @@ export class PortalStore {
     const match = this.data.local[id] || await this.read(`/matches/${encodeURIComponent(id)}`); guard(); if (token !== this.selection) return;
     const packageMatches = this.state.game?.id === match.game_id && this.state.game.version === match.game_version;
     this.patch({ selectedMatch: this.decorate(match), game: packageMatches ? this.state.game : null, selectedGameId: match.game_id, replayIndex: null, history: null });
-    await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) data.selectedId = id; });
+    await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) {data.selectedId = id; if(!data.local[id])data.responses[`/matches/${id}`]=match;} });
+    this.repository.protectGame(this.identity(),match.game_id,match.game_version);
     const game = await this.pinnedGame(match.game_id, match.game_version); guard(); if (token === this.selection) this.patch({ game, selectedGameId: game.id });
     await this.loadProfiles().catch(() => {});
     if (token === this.selection) await this.recoverPresentation(match).catch(() => {});
   }
   clearMatch() { ++this.selection; this.patch({ selectedMatch: null, history: null, replayIndex: null }); void this.repository.mutate(this.identity(), data => { data.selectedId = null; }).catch(() => {}); }
-  clearGame() { this.clearMatch(); this.patch({ selectedGameId: null, game: null }); }
+  clearGame() { this.clearMatch(); this.repository.protectGame(this.identity(),null);this.patch({ selectedGameId: null, game: null }); }
   private async saveLogin(response: any, removeIds: string[] = []) {
     const guard = this.capture();
     const id = response.user_id || response.id; if (!id || !response.password) throw new Error('Invalid account response');
@@ -267,7 +307,8 @@ export class PortalStore {
     const seat = match.players.find(p => p.user_id === account.id && p.active !== false);
     if (!seat || match.status !== 'ongoing' || !match.turn_of_player_indices?.includes(seat.player_index)) throw new Error('It is not your turn');
     const guard = this.capture(); const entry = { requestId: requestId(), body: { move, expected_move_count: match.move_count }, baseState: match.state, baseTurn: match.turn_of_player_indices, savedAt: new Date().toISOString() };
-    try { await this.repository.mutate(account.id, data => { if (data.queues[match.id]?.length || data.conflicts[match.id]) throw new Error('Wait for the pending action to sync or resolve its conflict'); const saved = data.responses[`/matches/${match.id}`]; if (saved && saved.move_count !== match.move_count) throw new Error('The match changed in another window; refresh before moving'); data.responses[`/matches/${match.id}`] = match; data.queues[match.id] = [entry]; }); }
+    const packagePath=`/games/${match.game_id}/versions/${match.game_version}`,gamePackage=this.exactPackage(match.game_id,match.game_version);
+    try { await this.repository.mutate(account.id, data => { if (data.queues[match.id]?.length || data.conflicts[match.id]) throw new Error('Wait for the pending action to sync or resolve its conflict'); const saved = data.responses[`/matches/${match.id}`]; if (saved && saved.move_count !== match.move_count) throw new Error('The match changed in another window; refresh before moving');if(!data.responses[packagePath]){if(!gamePackage)throw new Error('Exact downloaded game rules are unavailable for an offline queue.');data.responses[packagePath]=gamePackage;} data.responses[`/matches/${match.id}`] = match; data.queues[match.id] = [entry]; }); }
     catch (error) {
       guard();
       if (!isOnline() || this.data.queues[match.id]?.length || this.data.conflicts[match.id] || !/quota|storage|disk|denied|unavailable/i.test(`${(error as Error).name} ${(error as Error).message}`) || /pending action|another window/.test((error as Error).message)) throw error;
@@ -307,7 +348,8 @@ export class PortalStore {
     const id = `local-${requestId()}`; const owner = this.identity();
     const match = { id, game_id: game.id, game_version: game.version, owner_user_id: owner, players: Array.from({ length: total }, (_, i) => ({ player_index: i, id: `local-player-${i}`, kind: i < humans ? 'human' : 'computer', user_id: i === 0 ? owner : null, active: true, name: options.names?.[i] || (i === 0 ? this.state.account?.display_name || 'Player 1' : i < humans ? `Player ${i + 1}` : `Computer ${i + 1}`) })), status: 'ongoing', state: null, logicState: null, turn_of_player_indices: [0], move_count: 0, created_at: new Date().toISOString(), localMode: humans > 1 ? 'pass' : 'computer', practiceSeed: Math.floor(Math.random() * 4294967296), moves: [], initialState: null, initialTurn: [0], token_pot: 0, bet_per_player: 0 } as LocalMatch;
     await this.practiceResult(game, match, await this.callGame(game, 'newMatch', [], match), false); match.initialState = match.state; match.initialTurn = match.turn_of_player_indices; await this.practiceComputers(game, match); guard();
-    await this.repository.mutate(owner, data => { data.local[id] = match; data.responses[`/games/${game.id}/versions/${game.version}`] = game; data.selectedId = id; }); guard(); await this.reloadData(); ++this.selection; this.patch({ selectedMatch: match, game, selectedGameId: game.id, history: null, replayIndex: null });
+    const gamePackage=this.exactPackage(game.id,game.version);if(!gamePackage)throw new Error('Exact downloaded game rules are unavailable for offline play.');
+    await this.repository.mutate(owner, data => { data.local[id] = match; data.responses[`/games/${game.id}/versions/${game.version}`] = gamePackage; data.selectedId = id; }); guard(); await this.reloadData(); ++this.selection; this.patch({ selectedMatch: match, game, selectedGameId: game.id, history: null, replayIndex: null });
     if (!this.localOnly && this.state.account && isOnline()) void this.request('POST', `/users/me/recent-games/${encodeURIComponent(game.id)}`).then(recentGames => this.patch({ recentGames })).catch(() => {}); return match;
   }
   async practiceMove(move: any) {

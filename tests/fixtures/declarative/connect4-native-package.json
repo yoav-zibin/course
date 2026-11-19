@@ -1,0 +1,372 @@
+{
+  "source": {
+    "url": "https://buildplay.fun/games/e299b14e-480d-44f3-8132-74282a46cebc/versions/3",
+    "game_id": "e299b14e-480d-44f3-8132-74282a46cebc",
+    "version": 3
+  },
+  "game": {
+    "id": "e299b14e-480d-44f3-8132-74282a46cebc",
+    "version": 3,
+    "name": "Connect Four",
+    "description": "Choose a column to drop a disc. Connect four horizontally, vertically or diagonally. A full board is a draw.",
+    "allowed_player_counts": [
+      2
+    ],
+    "supports_local_practice": true,
+    "renderer_type": "declarative",
+    "game_schemas": {
+      "state": {
+        "additionalProperties": false,
+        "properties": {
+          "board": {
+            "items": {
+              "maximum": 1,
+              "minimum": -1,
+              "type": "integer"
+            },
+            "maxItems": 42,
+            "minItems": 42,
+            "type": "array"
+          },
+          "disc_ids": {
+            "items": {
+              "maximum": 41,
+              "minimum": -1,
+              "type": "integer"
+            },
+            "maxItems": 42,
+            "minItems": 42,
+            "type": "array"
+          },
+          "matched": {
+            "items": {
+              "maximum": 15,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 16,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "over": {
+            "type": "boolean"
+          },
+          "roll": {
+            "maximum": 6,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scores": {
+            "items": {
+              "maximum": 2000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "selected": {
+            "items": {
+              "maximum": 15,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "total": {
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "turn": {
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "turns": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "winner": {
+            "enum": [
+              -1,
+              0,
+              1
+            ]
+          }
+        },
+        "required": [
+          "board",
+          "turn",
+          "scores",
+          "selected",
+          "matched",
+          "roll",
+          "total",
+          "winner",
+          "turns",
+          "over",
+          "disc_ids"
+        ],
+        "type": "object"
+      },
+      "move": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "maximum": 6,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "column"
+        ],
+        "type": "object"
+      },
+      "view": {
+        "additionalProperties": false,
+        "properties": {
+          "board": {
+            "items": {
+              "maximum": 1,
+              "minimum": -1,
+              "type": "integer"
+            },
+            "maxItems": 42,
+            "minItems": 42,
+            "type": "array"
+          },
+          "disc_ids": {
+            "items": {
+              "maximum": 41,
+              "minimum": -1,
+              "type": "integer"
+            },
+            "maxItems": 42,
+            "minItems": 42,
+            "type": "array"
+          },
+          "legal": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "column": {
+                  "maximum": 6,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "column"
+              ],
+              "type": "object"
+            },
+            "maxItems": 81,
+            "type": "array"
+          },
+          "matched": {
+            "items": {
+              "maximum": 15,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 16,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "over": {
+            "type": "boolean"
+          },
+          "roll": {
+            "maximum": 6,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scores": {
+            "items": {
+              "maximum": 2000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "selected": {
+            "items": {
+              "maximum": 15,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "total": {
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "turn": {
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "turns": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "winner": {
+            "enum": [
+              -1,
+              0,
+              1
+            ]
+          }
+        },
+        "required": [
+          "board",
+          "turn",
+          "scores",
+          "selected",
+          "matched",
+          "roll",
+          "total",
+          "winner",
+          "turns",
+          "over",
+          "legal",
+          "disc_ids"
+        ],
+        "type": "object"
+      }
+    },
+    "server_code": "const KIND=\"connect4\";\n// Shared rules for the ten declarative examples. The generated package prefixes\n// this file with a constant KIND. No rendering, network or device APIs are used.\nfunction fresh() {\n  const sizes = {tictactoe:9, connect4:42, reversi:64, gomoku:81, hex:49, domineering:36, memory:16};\n  const s = {board:Array(sizes[KIND] || 0).fill(-1), turn:0, scores:[0,0],\n    disc_ids:Array(42).fill(-1), selected:[], matched:[], roll:0, total:0, winner:-1, turns:0, over:false};\n  if (KIND === 'reversi') {s.board[27]=1;s.board[28]=0;s.board[35]=0;s.board[36]=1;}\n  if (KIND === 'nim') s.board = [15];\n  if (KIND === 'mancala') s.board = [4,4,4,4,4,4,0,4,4,4,4,4,4,0];\n  return s;\n}\nfunction flips(s, cell, seat) {\n  if (s.board[cell] !== -1) return [];\n  const out=[], r=Math.floor(cell/8), c=cell%8;\n  for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++) {\n    if (!dr && !dc) continue;\n    let rr=r+dr,cc=c+dc,path=[];\n    while (rr>=0&&rr<8&&cc>=0&&cc<8&&s.board[rr*8+cc]===1-seat) {\n      path.push(rr*8+cc);rr+=dr;cc+=dc;\n    }\n    if (path.length&&rr>=0&&rr<8&&cc>=0&&cc<8&&s.board[rr*8+cc]===seat) out.push(...path);\n  }\n  return out;\n}\nfunction legal(s) {\n  if (s.over) return [];\n  if (KIND === 'pig') return [{action:'roll'},...(s.total ? [{action:'hold'}] : [])];\n  if (KIND === 'nim') return [1,2,3].filter(n=>n<=s.board[0]).map(take=>({take}));\n  if (KIND === 'mancala') return s.board.flatMap((n,pit)=>n&&pit>=(s.turn?7:0)&&pit<(s.turn?13:6)?[{pit}]:[]);\n  if (KIND === 'connect4') return Array.from({length:7},(_,column)=>({column})).filter(m=>s.board[m.column]===-1);\n  if (KIND === 'reversi') return s.board.flatMap((_,cell)=>flips(s,cell,s.turn).length?[{cell}]:[]);\n  if (KIND === 'domineering') return s.board.flatMap((v,cell)=>v===-1&&\n    (s.turn ? cell%6<5&&s.board[cell+1]===-1 : cell<30&&s.board[cell+6]===-1)?[{cell}]:[]);\n  if (KIND === 'memory') return s.board.flatMap((_,cell)=>!s.matched.includes(cell)&&\n    !(s.selected.length===1&&s.selected.includes(cell))?[{cell}]:[]);\n  return s.board.flatMap((v,cell)=>v===-1?[{cell}]:[]);\n}\nfunction lineWon(s, cell, n, need) {\n  const r=Math.floor(cell/n),c=cell%n,seat=s.turn;\n  return [[0,1],[1,0],[1,1],[1,-1]].some(([dr,dc])=>{\n    let count=1;\n    for (const sign of [-1,1]) {\n      let rr=r+dr*sign,cc=c+dc*sign;\n      while(rr>=0&&rr<Math.ceil(s.board.length/n)&&cc>=0&&cc<n&&s.board[rr*n+cc]===seat) {\n        count++;rr+=dr*sign;cc+=dc*sign;\n      }\n    }\n    return count>=need;\n  });\n}\nfunction hexWon(s) {\n  const n=7,seen=new Set(),todo=[];\n  for(let i=0;i<n;i++){const cell=s.turn?i*n:i;if(s.board[cell]===s.turn){seen.add(cell);todo.push(cell);}}\n  while(todo.length) {\n    const cell=todo.pop(),r=Math.floor(cell/n),c=cell%n;\n    if(s.turn?c===n-1:r===n-1)return true;\n    for(const [dr,dc] of [[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0]]) {\n      const rr=r+dr,cc=c+dc,k=rr*n+cc;\n      if(rr>=0&&rr<n&&cc>=0&&cc<n&&s.board[k]===s.turn&&!seen.has(k)){seen.add(k);todo.push(k);}\n    }\n  }\n  return false;\n}\nfunction finish(s,winner){s.over=true;s.winner=winner;}\nfunction majority(s,a,b){finish(s,a===b?-1:a>b?0:1);}\nfunction payout(s,ctx) {\n  const humans=ctx.players.filter(p=>p.kind==='human'&&p.active!==false),winner=ctx.players[s.winner];\n  const recipients=winner&&winner.kind==='human'&&winner.active!==false?[winner]:humans;\n  const out={};if(!recipients.length)return out;\n  recipients.forEach((p,i)=>out[p.id]=Math.floor(ctx.pot/recipients.length)+(i<ctx.pot%recipients.length?1:0));\n  return out;\n}\nfunction apply(s,move,ctx) {\n  const seat=s.turn;s.turns++;\n  if(KIND==='nim') {s.board[0]-=move.take;if(!s.board[0])finish(s,seat);}\n  else if(KIND==='pig') {\n    if(move.action==='roll') {s.roll=1+Math.floor(ctx.random()*6);if(s.roll===1){s.total=0;s.turn=1-seat;}else s.total+=s.roll;}\n    else{s.scores[seat]+=s.total;s.total=0;s.turn=1-seat;if(s.scores[seat]>=30)finish(s,seat);}\n    // A finite match even when both random opponents keep rolling.\n    if(!s.over&&s.turns>=300)majority(s,s.scores[0],s.scores[1]);\n    return;\n  } else if(KIND==='memory') {\n    if(s.selected.length===2)s.selected=[];\n    s.selected.push(move.cell);\n    if(s.selected.length===2) {\n      if(s.board[s.selected[0]]===s.board[s.selected[1]]){s.matched.push(...s.selected);s.scores[seat]++;s.selected=[];}\n      else s.turn=1-seat;\n      if(s.matched.length===16)majority(s,s.scores[0],s.scores[1]);\n    }\n    return;\n  } else if(KIND==='mancala') {\n    let i=move.pit,stones=s.board[i];s.board[i]=0;\n    while(stones){i=(i+1)%14;if(i===(seat?6:13))continue;s.board[i]++;stones--;}\n    const store=seat?13:6,own=i>=(seat?7:0)&&i<(seat?13:6);\n    if(own&&s.board[i]===1&&s.board[12-i]){s.board[store]+=1+s.board[12-i];s.board[i]=s.board[12-i]=0;}\n    if(s.board.slice(0,6).every(n=>!n)||s.board.slice(7,13).every(n=>!n)||s.turns>=300) {\n      for(let j=0;j<6;j++){s.board[6]+=s.board[j];s.board[j]=0;s.board[13]+=s.board[j+7];s.board[j+7]=0;}\n      majority(s,s.board[6],s.board[13]);\n    } else s.turn=i===store?seat:1-seat;\n    return;\n  } else if(KIND==='reversi') {\n    for(const cell of flips(s,move.cell,seat))s.board[cell]=seat;\n    s.board[move.cell]=seat;s.turn=1-seat;\n    if(!legal(s).length){s.turn=seat;if(!legal(s).length)majority(s,s.board.filter(v=>v===0).length,s.board.filter(v=>v===1).length);}\n    return;\n  } else if(KIND==='domineering') {\n    s.board[move.cell]=seat;s.board[move.cell+(seat?1:6)]=seat;\n    s.turn=1-seat;if(!legal(s).length)finish(s,seat);return;\n  } else {\n    let cell=move.cell;\n    if(KIND==='connect4'){cell=move.column;while(cell+7<42&&s.board[cell+7]===-1)cell+=7;}\n    s.board[cell]=seat;if(KIND==='connect4')s.disc_ids[cell]=s.turns-1;\n    const won=KIND==='hex'?hexWon(s):lineWon(s,cell,KIND==='tictactoe'?3:KIND==='connect4'?7:9,KIND==='tictactoe'?3:KIND==='connect4'?4:5);\n    if(won)finish(s,seat);else if(s.board.every(v=>v!==-1))finish(s,-1);\n  }\n  s.turn=1-seat;\n}\nconst game={\n  newMatch(ctx){const s=fresh();if(KIND==='memory'){s.board=Array.from({length:16},(_,i)=>i%8);for(let i=15;i>0;i--){const j=Math.floor(ctx.random()*(i+1));[s.board[i],s.board[j]]=[s.board[j],s.board[i]];}}return {state:s,turn:[ctx.players[0].id]};},\n  applyMove(state,id,move,ctx){\n    if(state.over||ctx.players[state.turn].id!==id||!move||typeof move!=='object'||Array.isArray(move))throw new InvalidMove('Illegal move');\n    const options=legal(state),keys=Object.keys(move);\n    if(!options.some(m=>Object.keys(m).length===keys.length&&keys.every(k=>Object.prototype.hasOwnProperty.call(m,k)&&m[k]===move[k])))throw new InvalidMove('Illegal move');\n    const s=JSON.parse(JSON.stringify(state));apply(s,move,ctx);\n    return s.over?{state:s,turn:null,payouts:payout(s,ctx)}:{state:s,turn:[ctx.players[s.turn].id]};\n  },\n  viewFor(state,id,ctx){\n    const s=JSON.parse(JSON.stringify(state));\n    if(KIND==='memory')s.board=s.board.map((v,i)=>s.matched.includes(i)||s.selected.includes(i)?v:-1);\n    // Only the active viewer receives interactive affordances. Spectators see\n    // the same public board, with no legal targets or private card values.\n    s.legal=id===ctx.players[state.turn].id&&!state.over?legal(state):[];return s;\n  },\n  randomMove(s,id,ctx){const options=legal(s);return options[Math.floor(ctx.random()*options.length)];},\n  computerMove(s,id,ctx){\n    const options=legal(s);\n    if(KIND==='pig')return {action:s.total>=10?'hold':'roll'};\n    return options[Math.floor(ctx.random()*options.length)];\n  }\n};\n",
+    "declarative_ui": {
+      "assets": {
+        "column0": {
+          "media_type": "image/svg+xml",
+          "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0MCI+PHBhdGggZD0iTTQgMkg0NEwyNCAzNloiIGZpbGw9IiNmZmRjNDUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+"
+        },
+        "column1": {
+          "media_type": "image/svg+xml",
+          "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0MCI+PHBhdGggZD0iTTQgMkg0NEwyNCAzNloiIGZpbGw9IiNmMDQ4NWIiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+"
+        },
+        "disc0": {
+          "media_type": "image/svg+xml",
+          "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMjMiIGZpbGw9IiNmZmRjNDUiIHN0cm9rZT0iIzhmNjUxMSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTExIDE3UTI0IDUgMzcgMTciIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41IiBzdHJva2Utd2lkdGg9IjMiLz48L3N2Zz4="
+        },
+        "disc1": {
+          "media_type": "image/svg+xml",
+          "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMjMiIGZpbGw9IiNmMDQ4NWIiIHN0cm9rZT0iIzhlMTYzMCIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTExIDE3UTI0IDUgMzcgMTciIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41IiBzdHJva2Utd2lkdGg9IjMiLz48L3N2Zz4="
+        },
+        "rack": {
+          "media_type": "image/svg+xml",
+          "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzNzQgMzI4Ij48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9InJhY2siIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzI3NzVlZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzEwNDRiMSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIzNjgiIGhlaWdodD0iMzA2IiByeD0iMTIiIGZpbGw9InVybCgjcmFjaykiIHN0cm9rZT0iIzA3MWU1MCIgc3Ryb2tlLXdpZHRoPSI1Ii8+PHBhdGggZD0iTTEyIDMwOUwyIDMyNUg2NEw3NiAzMDlNMjk4IDMwOUwzMTAgMzI1SDM3MkwzNjIgMzA5IiBmaWxsPSIjMTc1OGNjIiBzdHJva2U9IiMwNjFjNDkiIHN0cm9rZS13aWR0aD0iMyIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9Ijg3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9Ijg3IiBjeT0iMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMzciIGN5PSIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTg3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyODciIGN5PSIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzM3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzNyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzNyIgY3k9Ijg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9Ijg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMzciIGN5PSI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjIzNyIgY3k9Ijg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyODciIGN5PSI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIxMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMTM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjEzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIxMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjEzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMTM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIxMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjEzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMTM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIxMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjEzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMTM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIxMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjEzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIxODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMTg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjE4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIxODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjE4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMTg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIxODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjE4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMTg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIxODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjE4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMTg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIxODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjE4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIyMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIyMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIyMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMjM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIyMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIyMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIyODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMjg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIyODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMjg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIyODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMjg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIyODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMjg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIyODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTE3IDhIMzU3IiBzdHJva2U9IiM5NmM5ZmYiIHN0cm9rZS13aWR0aD0iMyIvPjwvc3ZnPg=="
+        }
+      },
+      "boards": [
+        {
+          "background_asset": "rack",
+          "color": "#102c49",
+          "height": 328,
+          "id": "rack",
+          "kind": "zone",
+          "line_color": "#102c49",
+          "width": 374,
+          "x": 12,
+          "y": 90
+        },
+        {
+          "alternate_color": "#00000000",
+          "color": "#00000000",
+          "columns": 7,
+          "height": 328,
+          "id": "main",
+          "kind": "grid",
+          "line_color": "#00000000",
+          "rows": 1,
+          "width": 350,
+          "x": 24,
+          "y": 90
+        },
+        {
+          "color": "#102039",
+          "height": 70,
+          "id": "reserve",
+          "kind": "zone",
+          "line_color": "#365274",
+          "width": 374,
+          "x": 12,
+          "y": 12
+        }
+      ],
+      "format": "buildplay-ui",
+      "motion": {
+        "animate_own": true,
+        "easing": "ease-out",
+        "move_ms": 1440
+      },
+      "piece_types": {
+        "arrow0": {
+          "asset": "column0",
+          "height": 40,
+          "shape": "image",
+          "width": 44
+        },
+        "arrow1": {
+          "asset": "column1",
+          "height": 40,
+          "shape": "image",
+          "width": 44
+        },
+        "p0": {
+          "action_outline": "ellipse",
+          "asset": "disc0",
+          "font_size": 22,
+          "height": 44,
+          "shape": "image",
+          "text_color": "#102039",
+          "width": 44
+        },
+        "p1": {
+          "action_outline": "ellipse",
+          "asset": "disc1",
+          "font_size": 22,
+          "height": 44,
+          "shape": "image",
+          "text_color": "#102039",
+          "width": 44
+        }
+      },
+      "strings": {
+        "disc_at": "Player {n} disc, row {r}, column {c}",
+        "draw": "Draw: no four in a row",
+        "drop_column": "Drop player {n} disc in column {c}",
+        "early": "Match ended early",
+        "goal": "Connect four in a row. Drag the disc to a column, or tap a column.",
+        "history": "History: read only",
+        "reserve": "Player {n} reserve disc",
+        "server_invalid": "Illegal move",
+        "title": "Connect Four",
+        "turn": "Turn: {n}",
+        "waiting": "Waiting: {n}",
+        "wins": "Player {n} wins"
+      },
+      "ui_code": "// Original native presentation inspired by the reference's physical rack and column interaction.\nconst SOURCE_STRINGS={\"server_invalid\":\"Illegal move\",\"title\":\"Connect Four\",\"turn\":\"Turn: {n}\",\"waiting\":\"Waiting: {n}\",\"wins\":\"Player {n} wins\",\"draw\":\"Draw: no four in a row\",\"early\":\"Match ended early\",\"history\":\"History: read only\",\"goal\":\"Connect four in a row. Drag the disc to a column, or tap a column.\",\"reserve\":\"Player {n} reserve disc\",\"disc_at\":\"Player {n} disc, row {r}, column {c}\",\"drop_column\":\"Drop player {n} disc in column {c}\"};\nconst gameUI={reduce(message,localState){\n const m=message.type==='ui_event'?message.state_changed:message,s=m.view||m.state;\n const dict=Object.assign({},SOURCE_STRINGS,m.strings||{}),t=(k,a={})=>dict[k].replace(/\\{(\\w+)\\}/g,(_,x)=>String(a[x]??''));\n const active=m.status==='ongoing'&&!s.over&&!m.replay&&Number.isInteger(m.my_player_index)&&m.my_player_index===m.acting_for_player_index&&(m.turn_of_player_indices||[]).includes(m.my_player_index);\n const legal=active?(s.legal||[]):[],pieces=[],targets=[],labels=[],paths=[],labelX=m.direction==='rtl'?370:88;\n let status=m.status==='over'&&!s.over?t('early'):s.over?s.winner===-1?t('draw'):t('wins',{n:s.winner+1}):m.replay?t('history'):t(active?'turn':'waiting',{n:s.turn+1});\n // Keep source identity and instructional content available without shortening player names.\n labels.push({id:'title',text:t('title'),x:labelX,y:20,font_size:20,color:'#ffffff'});\n // Status wraps across two lines in all source dictionaries; independent aria names carry full descriptions.\n const clusters=text=>{const a=[];for(const ch of Array.from(text)){const prior=a[a.length-1]||'';if(a.length&&(/\\p{Mark}/u.test(ch)||ch==='\\u200d'||prior.endsWith('\\u200d')||prior.endsWith('\\u094d')))a[a.length-1]+=ch;else a.push(ch);}return a;};\n let chars=clusters(status),line=0;while(chars.length){labels.push({id:'status_'+line,text:chars.splice(0,22).join(''),x:labelX,y:45+line*20,font_size:16,color:'#ffffff'});line++;}\n labels.push({id:'goal',text:t('goal'),x:12,y:425,font_size:18,color:'#ffffff'});\n s.board.forEach((seat,cell)=>{if(seat!==-1)pieces.push({id:'disc_'+s.disc_ids[cell],type:'p'+seat,board:'main',position:{x:25+50*(cell%7),y:34+50*Math.floor(cell/7)},text:String(seat+1),aria_label:t('disc_at',{n:seat+1,r:Math.floor(cell/7)+1,c:cell%7+1}),actions:[]});});\n if(!s.over&&m.status==='ongoing')pieces.push({id:'disc_'+s.turns,type:'p'+s.turn,board:'reserve',position:{x:37,y:38},text:String(s.turn+1),aria_label:t('reserve',{n:s.turn+1}),actions:legal.length?['move']:[],...(legal.length?{move_targets:legal.map(x=>'column_'+x.column)}:{})});\n for(const option of legal){const aria=t('drop_column',{n:s.turn+1,c:option.column+1});targets.push({id:'column_'+option.column,board:'main',position:{x:25+50*option.column,y:144},color:s.turn===0?'#ffdc4508':'#f0485b08',aria_label:aria,hit_area:{x:-25,y:-164,width:50,height:328}});pieces.push({id:'hint_'+option.column,type:'arrow'+s.turn,board:'main',position:{x:25+50*option.column,y:6},aria_label:aria,actions:[]});}\n // Highlight every winning disc; lines are derived only from the public terminal board.\n if(s.over&&s.winner>=0)for(let cell=0;cell<42;cell++)for(const[dr,dc]of[[0,1],[1,0],[1,1],[1,-1]]){const r=Math.floor(cell/7),c=cell%7,rr=r+3*dr,cc=c+3*dc;if(rr<6&&cc>=0&&cc<7&&[0,1,2,3].every(i=>s.board[(r+i*dr)*7+c+i*dc]===s.winner))paths.push({id:'win_'+cell+'_'+dr+'_'+(dc+1),points:[{x:12+37+50*c,y:90+34+50*r},{x:12+37+50*cc,y:90+34+50*rr}],width:5,color:'#ffffff'});}\n const out={scene:{pieces,targets,labels,paths,controls:[]},local_state:{}};\n if(message.type==='ui_event'&&active){const e=message.event;let id=null;if(e.type==='tap'&&e.id.startsWith('column_'))id=e.id;if(e.type==='drop'&&e.piece_id==='disc_'+s.turns&&e.id===e.piece_id)id=e.target_id;const option=legal.find(x=>'column_'+x.column===id);if(option){out.make_move={column:option.column};const reserve=pieces.find(x=>x.id==='disc_'+s.turns);if(reserve){reserve.board='main';reserve.position={x:25+50*option.column,y:6};}}}\n return out;\n}};\n",
+      "version": 1,
+      "viewport": {
+        "height": 432,
+        "width": 400
+      }
+    }
+  }
+}

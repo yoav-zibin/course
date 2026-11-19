@@ -72,13 +72,19 @@ PY
 # -b boots when needed and waits through migration; no ignored boot errors.
 run_phase boot 600 "$results_path/boot.log" xcrun simctl bootstatus "$simulator_id" -b
 run_phase install 300 "$results_path/install.log" xcrun simctl install "$simulator_id" "$app_path"
+if [[ ${GITHUB_ACTIONS:-false} == true ]]; then
+  # A fresh CI sandbox renders the exact public SVG-disc package so the native
+  # screenshot covers artwork alignment, with no account or server activity.
+  run_phase fixture 60 "$results_path/fixture.log" python3 "$scripts_path/seed-ios-connect4-fixture.py" \
+    --local-only "$simulator_id" "$bundle_id" "$results_path/connect4-fixture.json"
+fi
 # Apple documents 3–5 minute launch stalls while GateKeeper scans dyld caches:
 # https://developer.apple.com/documentation/xcode-release-notes/xcode-16_2-release-notes
 SIMCTL_CHILD_BUILDPLAY_LOCAL_UI_TEST=1 run_phase launch 360 "$results_path/launch.log" \
   xcrun simctl launch --terminate-running-process "$simulator_id" "$bundle_id"
 sleep 8
-run_phase screenshot 45 "$results_path/screenshot.log" xcrun simctl io "$simulator_id" screenshot "$results_path/screenshots/portal-launch.png"
-run_phase processes 30 "$results_path/processes.log" xcrun simctl spawn "$simulator_id" launchctl list
+run_phase screenshot 120 "$results_path/screenshot.log" xcrun simctl io "$simulator_id" screenshot "$results_path/screenshots/portal-launch.png"
+run_phase processes 90 "$results_path/processes.log" xcrun simctl spawn "$simulator_id" launchctl list
 python3 - "$results_path/processes.log" "$bundle_id" <<'PY'
 import sys
 with open(sys.argv[1]) as source:

@@ -6,6 +6,11 @@ export async function keys(): Promise<string[]> { return globalThis.localStorage
 let serial: Promise<unknown> = Promise.resolve();
 export function exclusive<T>(name: string, run: () => Promise<T>): Promise<T> {
   const locks = (globalThis.navigator as any)?.locks;
-  if (locks) return locks.request(`buildplay-${name}`, run);
+  if (locks) {
+    // Older Portal tabs use this origin-wide lock for their split cache and
+    // migration backups. Retain the account lock too, so existing shared-app
+    // tabs cannot overwrite a quota recovery with an older account snapshot.
+    return locks.request('playroom-portal', () => locks.request(`buildplay-${name}`, run));
+  }
   const result = serial.then(run, run); serial = result.catch(() => {}); return result;
 }

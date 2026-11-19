@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 
-CORE_PHASES = {"list-devices", "boot", "install", "launch", "screenshot", "processes"}
+CORE_PHASES = {"list-devices", "boot", "install", "fixture", "launch", "screenshot", "processes"}
 
 
 def diagnostic_window(phases, now=None):

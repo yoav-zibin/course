@@ -10,7 +10,7 @@ on:
         options: [macos-26-intel]
   push:
     branches: [main]
-    paths: ['frontends/portal/**', '.github/workflows/portal-apps.yml']
+    paths: ['frontends/portal/**', '.github/workflows/portal-apps.yml', 'tests/fixtures/declarative/connect4-native-package.json']
 
 jobs:
   shared-client:
