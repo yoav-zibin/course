@@ -3634,5 +3634,68 @@
     "zh": "你的私人电脑对局和传递设备对局会先保存在本地，再同步到云端。下载游戏一次后，即可继续离线游玩。",
     "hi": "कंप्यूटर और डिवाइस पास करके खेले जाने वाले आपके निजी मैच पहले स्थानीय रूप से सहेजे जाते हैं, फिर क्लाउड से सिंक होते हैं। गेम एक बार डाउनलोड करें, फिर ऑफ़लाइन खेलते रहें।",
     "ar": "تُحفظ مبارياتك الخاصة ضد الكمبيوتر وبتمرير الجهاز محليًا أولًا ثم تُزامَن مع السحابة. نزّل اللعبة مرة واحدة ثم واصل اللعب دون اتصال."
+  },
+  "Choose an unsynced single-player save first.": {
+    "es": "Primero elige una partida individual guardada que aún no se haya sincronizado.",
+    "fr": "Choisissez d’abord une sauvegarde de partie individuelle non synchronisée.",
+    "de": "Wähle zuerst einen noch nicht synchronisierten Einzelspieler-Spielstand.",
+    "pt": "Primeiro, escolha uma partida individual salva que ainda não foi sincronizada.",
+    "zh": "请先选择一个尚未同步的单人游戏存档。",
+    "hi": "पहले ऐसा एकल-खिलाड़ी सहेजा हुआ मैच चुनें जिसका सिंक पूरा नहीं हुआ है।",
+    "ar": "اختر أولاً نسخة محفوظة غير متزامنة لمباراة فردية."
+  },
+  "This saved copy changed. Review it again before removing it.": {
+    "es": "Esta copia guardada ha cambiado. Revísala de nuevo antes de quitarla.",
+    "fr": "Cette copie sauvegardée a changé. Vérifiez-la à nouveau avant de la retirer.",
+    "de": "Diese gespeicherte Kopie hat sich geändert. Prüfe sie erneut, bevor du sie entfernst.",
+    "pt": "Esta cópia salva foi alterada. Revise-a novamente antes de removê-la.",
+    "zh": "此存档副本已更改。请重新查看后再移除。",
+    "hi": "यह सहेजी गई प्रति बदल गई है। हटाने से पहले इसे फिर से जाँचें।",
+    "ar": "تغيّرت هذه النسخة المحفوظة. راجعها مجدداً قبل إزالتها."
+  },
+  "Remove saved copy…": {
+    "es": "Quitar copia guardada…",
+    "fr": "Retirer la copie sauvegardée…",
+    "de": "Gespeicherte Kopie entfernen…",
+    "pt": "Remover cópia salva…",
+    "zh": "移除存档副本…",
+    "hi": "सहेजी गई प्रति हटाएँ…",
+    "ar": "إزالة النسخة المحفوظة…"
+  },
+  "Remove this saved copy?": {
+    "es": "¿Quitar esta copia guardada?",
+    "fr": "Retirer cette copie sauvegardée ?",
+    "de": "Diese gespeicherte Kopie entfernen?",
+    "pt": "Remover esta cópia salva?",
+    "zh": "移除此存档副本？",
+    "hi": "यह सहेजी गई प्रति हटाएँ?",
+    "ar": "هل تريد إزالة هذه النسخة المحفوظة؟"
+  },
+  "This stops syncing this copy and removes it from this device's match list. A recovery copy is kept in Preserved previous app data. Any cloud match stays unchanged.": {
+    "es": "Esto detiene la sincronización de esta copia y la quita de la lista de partidas de este dispositivo. Se conserva una copia de recuperación en Datos conservados de la aplicación anterior. Las partidas en la nube no cambian.",
+    "fr": "Cette action arrête la synchronisation de cette copie et la retire de la liste des parties de cet appareil. Une copie de récupération est conservée dans Données conservées de l’ancienne application. Les parties dans le cloud restent inchangées.",
+    "de": "Die Synchronisierung dieser Kopie wird beendet und sie wird aus der Spielliste dieses Geräts entfernt. Eine Wiederherstellungskopie bleibt unter „Erhaltene Daten der früheren App“ gespeichert. Spiele in der Cloud bleiben unverändert.",
+    "pt": "Isso interrompe a sincronização desta cópia e a remove da lista de partidas deste dispositivo. Uma cópia de recuperação fica em Dados preservados do aplicativo anterior. As partidas na nuvem permanecem inalteradas.",
+    "zh": "这会停止同步此副本，并将其从此设备的对局列表中移除。恢复副本会保存在“保留的旧版应用数据”中。云端对局保持不变。",
+    "hi": "इससे इस प्रति का सिंक रुक जाएगा और यह इस डिवाइस की मैच सूची से हट जाएगी। पुनर्प्राप्ति के लिए एक प्रति “पिछले ऐप का सुरक्षित रखा डेटा” में रखी जाएगी। क्लाउड पर मौजूद मैच में कोई बदलाव नहीं होगा।",
+    "ar": "سيؤدي هذا إلى إيقاف مزامنة هذه النسخة وإزالتها من قائمة المباريات على هذا الجهاز. تُحفظ نسخة للاستعادة في «بيانات التطبيق السابق المحفوظة». تبقى أي مباراة في السحابة دون تغيير."
+  },
+  "Remove saved copy": {
+    "es": "Quitar copia guardada",
+    "fr": "Retirer la copie sauvegardée",
+    "de": "Gespeicherte Kopie entfernen",
+    "pt": "Remover cópia salva",
+    "zh": "移除存档副本",
+    "hi": "सहेजी गई प्रति हटाएँ",
+    "ar": "إزالة النسخة المحفوظة"
+  },
+  "Saved games and pending branches are kept here for recovery. Copy them before clearing app data. Retired HTML moves cannot be submitted to current online matches.": {
+    "es": "Las partidas guardadas y las ramas pendientes se conservan aquí para su recuperación. Cópialas antes de borrar los datos de la aplicación. Los movimientos del antiguo sistema HTML no se pueden enviar a las partidas en línea actuales.",
+    "fr": "Les parties sauvegardées et les branches en attente sont conservées ici pour récupération. Copiez-les avant d’effacer les données de l’application. Les coups de l’ancien système HTML ne peuvent pas être envoyés aux parties en ligne actuelles.",
+    "de": "Gespeicherte Spiele und ausstehende Spielstände bleiben hier zur Wiederherstellung erhalten. Kopiere sie, bevor du die App-Daten löschst. Züge aus dem früheren HTML-System können nicht an aktuelle Online-Spiele gesendet werden.",
+    "pt": "As partidas salvas e as ramificações pendentes ficam aqui para recuperação. Copie-as antes de limpar os dados do aplicativo. Jogadas do antigo sistema HTML não podem ser enviadas às partidas online atuais.",
+    "zh": "已保存的游戏和待处理分支会保存在此处以便恢复。清除应用数据前请先复制。旧版 HTML 系统的操作无法提交到当前在线对局。",
+    "hi": "सहेजे गए गेम और लंबित शाखाएँ पुनर्प्राप्ति के लिए यहाँ रखी जाती हैं। ऐप का डेटा मिटाने से पहले इन्हें कॉपी कर लें। पुराने HTML सिस्टम की चालें वर्तमान ऑनलाइन मैचों में नहीं भेजी जा सकतीं।",
+    "ar": "تُحفظ الألعاب المحفوظة والفروع المعلّقة هنا للاستعادة. انسخها قبل مسح بيانات التطبيق. لا يمكن إرسال حركات نظام HTML القديم إلى المباريات الحالية عبر الإنترنت."
   }
 }

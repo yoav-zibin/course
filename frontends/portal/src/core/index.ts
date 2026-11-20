@@ -8,8 +8,9 @@ import {isValidDownloadedGame, presentationHistoryPath} from './offline-match-da
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
 import {RetryableSyncCompatibilityError} from './sync-compatibility';
-import {hydrateSinglePlayer, localRevision, needsCloudSave, singlePlayerKind} from './single-player';
+import {hiddenMatchIds, hydrateSinglePlayer, localRevision, needsCloudSave, REMOVED_SAVED_MATCH, savedMatchBranch, singlePlayerKind} from './single-player';
 import {handsTurnToOpponent, pendingNotifications} from './notifications';
+import {redactedArchive} from './redaction';
 import { importNativeLegacy, finishNativeImport } from './native-migration';
 import * as storage from '../platform/storage';
 import { loadAccounts, saveAccounts, loadCurrentAccount, currentAccountKey } from '../platform/credentials';
@@ -189,7 +190,7 @@ export class PortalStore {
     else if (preserveTail) items = unique([...items, ...(this.state[kind] as any[]).slice(50)]);
     if (kind === 'myMatches') items = items.map((m: Match) => this.decorate(m));
     if (kind === 'games' || kind === 'savedGames') items = items.map(localizeGame);
-    if (kind === 'myMatches') { const archived = new Set(this.data.archivedMatches.map(item => item.id)); items = items.filter((m: Match) => !archived.has(m.id)); }
+    if (kind === 'myMatches') { const archived = hiddenMatchIds(this.data); items = items.filter((m: Match) => !archived.has(m.id)); }
     this.patch({ [kind]: items, cursors: { ...this.state.cursors, [kind]: preserveTail ? this.state.cursors[kind] : result.next_cursor || null } });
     // Stable aliases restore useful lists when the next launch is offline.
     await this.cache(listPaths[kind], kind === 'myMatches' ? this.matchSummaries(items) : items);
@@ -236,7 +237,7 @@ export class PortalStore {
     return matches.map(({state: _state, pending: _pending, conflict: _conflict, ...summary}) => summary);
   }
   private async saveMatchIndex(matches: Match[], complete = false) {
-    const hidden = new Set(this.data.archivedMatches.map(item => item.id));
+    const hidden = hiddenMatchIds(this.data);
     const combined = new Map((complete ? [] : this.state.myMatches).map(match => [match.id,match]));
     // A match disappearing from a server page must not hide a pending action.
     for (const id of new Set([...Object.keys(this.data.queues),...Object.keys(this.data.creations || {}),...Object.keys(this.data.conflicts)])) {
@@ -272,7 +273,7 @@ export class PortalStore {
     const statuses = this.paginated ? ['ongoing','waiting_for_players','over'] : ['all'];
     const download = async (match: Match) => {
       guard(); if (!isOnline()) throw new TypeError('Offline');
-      if (this.data.archivedMatches.some(item => item.id === match.id)) return;
+      if (hiddenMatchIds(this.data).has(match.id)) return;
       let snapshot: Match;
       try {
         snapshot = Object.hasOwn(match,'state') ? await this.cache(`/matches/${encodeURIComponent(match.id)}`,match) : await this.read(`/matches/${encodeURIComponent(match.id)}`);
@@ -842,6 +843,33 @@ export class PortalStore {
     if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {});
   }
   async revealLocal() { const id = this.state.selectedMatch?.id; if (!id) return; await this.repository.mutate(this.identity(), data => { if (data.local[id]) {data.local[id].awaitingHandoff = false;data.local[id].local_revision = localRevision(data.local[id])+1;data.local[id].cloud_pending=true;} }); await this.reloadData(); if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {}); }
+  async removeSavedMatch(id: string, expected: Match) {
+    const guard=this.capture(),owner=this.identity(),token=this.selection;
+    await this.repository.mutate(owner,data=>{
+      guard();
+      const match=data.local[id];
+      if (!match || !singlePlayerKind(match) || !needsCloudSave(match) && !data.conflicts[id] && !data.queues[id]?.length)
+        throw new Error(copyText('Choose an unsynced single-player save first.'));
+      const current={...match,pending:data.queues[id]?.length || 0,conflict:data.conflicts[id] || null};
+      if (expected.id !== id || !equal(savedMatchBranch(current),savedMatchBranch(expected)))
+        throw new Error(copyText('This saved copy changed. Review it again before removing it.'));
+      // Keep the full pending branch and its retry intent before retiring it.
+      // archives is durable: archivedMatches is a quota-sheddable cache.
+      data.archives.push(JSON.parse(redactedArchive({kind:REMOVED_SAVED_MATCH,id,match,moves:data.queues[id] || [],
+        conflict:data.conflicts[id],creation:data.creations?.[id],savedAt:new Date().toISOString()})));
+      delete data.local[id];delete data.queues[id];delete data.conflicts[id];
+      if(data.creations)delete data.creations[id];
+      for(const path of [`/matches/${id}`,`/matches/${encodeURIComponent(id)}`])delete data.responses[path];
+      if(Array.isArray(data.responses['/matches']))data.responses['/matches']=data.responses['/matches'].filter((item:Match)=>item.id!==id);
+      if(data.selectedId===id)data.selectedId=null;
+    });
+    guard();
+    const removedSelected=token===this.selection && this.state.selectedMatch?.id===id;
+    if(removedSelected)this.clearMatch();
+    await this.reloadData();guard();
+    this.patch({myMatches:this.state.myMatches.filter(match=>match.id!==id)});
+    return removedSelected && this.selection===token+1 && this.state.selectedMatch===null;
+  }
   async deleteSinglePlayer(id: string) {
     const guard=this.capture(),match=this.data.local[id];
     if(!match) {
@@ -933,7 +961,7 @@ export class PortalStore {
     createMatch: (options: any) => this.perform(() => this.createMatch(options)),
     matchAction: (action: 'join' | 'start' | 'leave' | 'rematch' | 'maybeLeave' | 'playerLeft', body?: any) => this.perform(() => this.matchAction(action, body)), removePlayer: (id: string) => this.perform(() => this.removePlayer(id)),
     leaveMatch: (id?: string) => this.perform(() => this.leaveMatch(id)), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),
-    startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.deleteSinglePlayer(id)),
+    startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.deleteSinglePlayer(id)), removeSavedMatch: (id: string, expected: Match) => this.perform(() => this.removeSavedMatch(id,expected)),
     loadHistory: () => this.perform(() => this.loadHistory()), replay: (index: number | null) => this.perform(() => this.replay(index), false), presentationMessage: () => this.presentationMessage(), presentationHistory: () => this.presentationHistory(),
     saveGame: (id: string, saved: boolean) => this.perform(async () => { await this.request(saved ? 'PUT' : 'DELETE', `${this.paginated ? '/v2' : ''}/users/me/saved-games/${encodeURIComponent(id)}`); await this.list('savedGames'); }),
     openInvite: (token: string) => this.perform(() => this.openInvite(token)),

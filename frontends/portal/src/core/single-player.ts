@@ -1,5 +1,24 @@
 import type {AccountData, LocalMatch, Match, MatchKind} from './types';
 
+export const REMOVED_SAVED_MATCH = 'removed-single-player-save';
+
+/** Recovery archives are durable; unlike ordinary hidden-match caches they
+ * must survive quota trimming and keep a discarded device branch retired. */
+export function hiddenMatchIds(data: AccountData): Set<string> {
+  return new Set([...data.archivedMatches, ...data.archives.filter(entry => entry?.kind === REMOVED_SAVED_MATCH)]
+    .map(entry => entry?.id).filter((id): id is string => typeof id === 'string'));
+}
+
+export function savedMatchBranch(match: Match): unknown {
+  // An upload can start after the dialog opens without changing the player's
+  // branch. Compare game/revision data, not cloud_inflight transport metadata.
+  const fields = ['id','game_id','game_version','owner_user_id','localMode','players','state','logicState','practiceSeed',
+    'moves','initialState','initialTurn','turn_of_player_indices','move_count','status','cloud_revision','synced_local_revision'];
+  return {...Object.fromEntries(fields.map(key => [key,match[key]])),
+    match_kind: singlePlayerKind(match), local_revision: localRevision(match as LocalMatch),
+    pending:match.pending || 0, conflict:match.conflict || null};
+}
+
 export function singlePlayerKind(match: Match): Exclude<MatchKind, 'multiplayer'> | null {
   if (match.match_kind === 'computer' || match.match_kind === 'pass_and_play') return match.match_kind;
   if (match.match_kind === 'multiplayer') return null;
@@ -39,6 +58,7 @@ export function singlePlayerSnapshot(match: LocalMatch, owner: string): LocalMat
 /** An authoritative private snapshot is usable on every signed-in device, but
  * must never replace this device's unsent branch during an ordinary download. */
 export function hydrateSinglePlayer(data: AccountData, cloud: Match): LocalMatch | null {
+  if (data.archives.some(entry => entry?.kind === REMOVED_SAVED_MATCH && entry.id === cloud.id)) return null;
   const snapshot = cloud.single_player_state;
   if (!singlePlayerKind(cloud) || !snapshot || snapshot.id !== cloud.id || !Array.isArray(snapshot.players)
     || !Number.isSafeInteger(cloud.cloud_revision) || cloud.cloud_revision! < 1) return null;

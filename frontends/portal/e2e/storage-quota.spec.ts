@@ -21,15 +21,12 @@ test('full storage still opens remote matches and game details without changing 
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
-  const original=await sharedSaves(page);
-  expect(Object.values(original).some(value=>Object.values(JSON.parse(value!).local).some((saved:any)=>saved.move_count===1))).toBe(true);
-  const prefetchedPackage=Object.values(original).some(value=>{
-    const game=JSON.parse(value!).responses?.[`/games/${gameId}/versions/${match.game_version}`];
-    return game?.id===gameId&&game.version===match.game_version&&!!game.server_code&&!!game.declarative_ui;
-  });
   // Bootstrap and a real local move have finished. Only the shared game store
   // is now full; account credentials and unrelated browser storage still work.
-  await page.evaluate(()=>{
+  // Capture the baseline and install the fault in one synchronous browser task
+  // so a cloud acknowledgement cannot write between these two operations.
+  const original=await page.evaluate(()=>{
+    const original=Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('buildplay.shared.v1.')).map(key=>[key,localStorage.getItem(key)]));
     const write=Storage.prototype.setItem;
     (window as any).__quotaDeniedWrites=0;
     Storage.prototype.setItem=function(key:string,value:string){
@@ -39,6 +36,12 @@ test('full storage still opens remote matches and game details without changing 
       }
       write.call(this,key,value);
     };
+    return original;
+  });
+  expect(Object.values(original).some(value=>Object.values(JSON.parse(value!).local).some((saved:any)=>saved.move_count===1))).toBe(true);
+  const prefetchedPackage=Object.values(original).some(value=>{
+    const game=JSON.parse(value!).responses?.[`/games/${gameId}/versions/${match.game_version}`];
+    return game?.id===gameId&&game.version===match.game_version&&!!game.server_code&&!!game.declarative_ui;
   });
   const downloads:{path:string;status:number}[]=[];
   page.on('response',response=>{const path=new URL(response.url()).pathname;if(path===`/matches/${match.id}`||path===`/games/${gameId}`||path===`/games/${gameId}/versions/${match.game_version}`)downloads.push({path,status:response.status()});});

@@ -11,6 +11,7 @@ import {reportClientIssue} from '../core/reporting';
 import {MatchOutcome} from './MatchOutcome';
 import {GameInstructions} from './GameInstructions';
 import {isSinglePlayerMatch, matchKind} from './match-kind';
+import {RemoveSavedMatch} from './RemoveSavedMatch';
 
 export function MatchStage() {
   const {p,run,navigate,notify,openMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
@@ -66,6 +67,7 @@ export function MatchStage() {
     </Card>;})}</Row>
     {conflict&&<Notice error>{conflict.message}</Notice>}
     {conflict&&<Button danger onPress={()=>setConfirm('resolve')}>{copyText("Use server version…")}</Button>}
+    {singlePlayer&&<RemoveSavedMatch match={match} onRemoved={()=>navigate('matches')}/>}
     {!singlePlayer&&pending>0&&<Notice>{copyText("Your move is saved and waiting for server confirmation. The board stays paused so another action cannot conflict with it.")}</Notice>}
     {!singlePlayer&&<Card style={{padding:16}}><Row><Copy style={{fontWeight:'700'}}>{match.bet_per_player?copyText("{v0} tokens per person",{v0:match.bet_per_player}):copyText("Free match")}</Copy><View style={{flex:1}}/><Copy muted>{match.token_pot||0} {copyText("tokens in the pot")}</Copy></Row>{over&&match.token_payouts&&seat&&<Copy style={{color:colors.accent}}>{copyText("Your payout:")} {match.token_payouts[String(seat.player_index)]||0} {copyText("tokens")}</Copy>}
       <Row>{availableSeat&&!seat&&p.account&&<Button disabled={Boolean(match.cloud_pending)||!p.network} onPress={()=>run(()=>p.actions.matchAction('join'))}>{t('ui.match.join','Join match')}</Button>}

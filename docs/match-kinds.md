@@ -46,6 +46,14 @@ unsynced single-player history and conflict branches must not be evicted to make
 room for those recoverable caches. Clearing app or browser data before sync can
 lose pending work; acknowledged cloud saves can be downloaded again.
 
+An owner can explicitly remove a pending or conflicted single-player copy after
+confirming the action. Keep its complete saved branch and pending intents in the
+protected recovery archive, stop retrying that copy and hide it from this
+device's match lists. The cloud copy and other matches stay unchanged. This is
+an owner-requested recovery action, not automatic cache eviction; the recovery
+record must not be shed under storage pressure. It remains available through
+the preserved-data export.
+
 ## API fields
 
 `POST /matches` creates multiplayer lobbies. Its `match_kind` is `multiplayer`;
