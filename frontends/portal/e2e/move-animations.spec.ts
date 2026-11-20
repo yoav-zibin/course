@@ -35,7 +35,7 @@ async function point(page:Page,name:string):Promise<number[]>{
   });
 }
 async function settled(page:Page,name:string,at:number[]){
-  await expect.poll(async()=>{const p=await point(page,name);return Math.hypot(p[0]-at[0],p[1]-at[1]);}).toBeLessThan(.01);
+  await expect.poll(()=>point(page,name),{timeout:10000}).toEqual(at);
 }
 type Frame={t:number;positions:Record<string,number[]>};
 async function watch(page:Page,names:string[],selectors:Record<string,{label:string;index?:number}>={}){

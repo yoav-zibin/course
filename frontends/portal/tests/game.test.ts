@@ -101,6 +101,9 @@ test('native QuickJS executes portable rules with fresh bounded JSON-only contex
     const result=run(presentationSource(code,message({view:{emoji:'🎲 שלום'}}),null));assert.equal(result.failed,false);
     const parsed=JSON.parse(result.text);assert.equal(parsed.local_state.counter,1);assert.deepEqual(parsed.local_state.secret,{emoji:'🎲 שלום'});
     assert.deepEqual(parsed.local_state.io,['undefined','undefined','undefined']);
+    const paths='const gameUI={reduce(){return {scene:{pieces:[]}}},getLastMoveAnimations(view,scene){return view.paths}}';
+    const declared=[{piece_id:'disc',path:[{board:'board',position:{x:50,y:0}},{board:'board',position:{cell:'0'}}]}];
+    assert.deepEqual(JSON.parse(run(presentationSource(paths,message({view:{paths:declared}}),null)).text).last_move_animations,declared);
     assert.equal(JSON.parse(run(presentationSource(code,message(),null)).text).local_state.counter,1);
     assert.equal(run(presentationSource('const gameUI={reduce(){while(true){}}}',message(),null)).failed,true);
     assert.equal(run(presentationSource('const gameUI={reduce(){return {scene:{},local_state:Math.random()}}}',message(),null)).failed,true);
