@@ -166,6 +166,33 @@ def test_legacy_computer_match_private_and_owner_gets_portable_state(api: Api):
     assert api.request("GET", f"/invites/{match.invite_code}").status_code == 404
 
 
+def test_owner_can_start_a_migrated_waiting_computer_match_privately(api: Api):
+    from game_platform.tests.helpers import legacy_computer_match
+
+    owner, stranger = api.new_user("Owner"), api.new_user("Stranger")
+    identity = api.new_match(owner=owner, game_id=api.new_game(owner=owner))
+    store = api.platform._store
+    legacy = legacy_computer_match(api.platform, store.get_match(identity), 1)
+    if legacy.invite_code is not None:
+        store.delete_invite(legacy.invite_code)
+    store.put_match(replace(legacy, match_kind="computer", cloud_revision=1, invite_code=None))
+    waiting = api.ok("GET", f"/matches/{identity}", as_user=owner)
+    assert waiting["status"] == "waiting_for_players"
+    assert waiting["match_kind"] == "computer" and waiting["cloud_revision"] == 1
+    assert waiting["single_player_state"] is None
+
+    started = api.ok("POST", f"/matches/{identity}/start", as_user=owner)
+    assert started["status"] == "ongoing" and started["cloud_revision"] >= 2
+    assert started["match_kind"] == "computer" and started["invite_code"] is None
+    assert started["single_player_state"]["id"] == identity
+    assert started["single_player_state"]["owner_user_id"] == owner
+    assert started["single_player_state"]["logicState"] == store.get_match(identity).state
+    assert api.request("GET", f"/matches/{identity}", as_user=stranger).status_code == 404
+    assert api.request("POST", f"/matches/{identity}/join", as_user=stranger).status_code == 403
+    for caller in (owner, stranger):
+        assert api.request("POST", f"/matches/{identity}/invites", as_user=caller, json={}).status_code == 403
+
+
 def test_bundled_game_save_uses_trusted_retained_package(api: Api):
     owner = api.new_user("Owner")
     value = snapshot(owner, "bundled-tictactoe")
