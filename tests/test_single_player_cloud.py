@@ -59,6 +59,29 @@ def test_private_offline_turns_save_and_restore_only_for_owner(api: Api, kind):
     assert api.platform._store.get_user(other).notifications == ()
 
 
+@pytest.mark.parametrize("kind", ["computer", "pass_and_play"])
+def test_private_session_upload_records_only_owner_recent_game_and_retry_does_not_reorder(api: Api, kind):
+    owner, other = api.new_user("Owner"), api.new_user("Other")
+    previous, game, later = [api.new_game(owner=owner) for _ in range(3)]
+    for user in (owner, other):
+        api.ok("POST", f"/users/me/recent-games/{previous}", as_user=user)
+    store = api.platform._store
+    other_before = store.get_user(other)
+    # The whole session happened offline before its first acknowledged upload.
+    value = snapshot(owner, game, kind=kind, turns=12)
+    first = sync(api, owner, value)
+    assert first.status_code == 200
+    assert store.get_user(owner).recent_game_ids == (game, previous)
+    assert store.get_user(other) == other_before
+    api.ok("POST", f"/users/me/recent-games/{later}", as_user=owner)
+    before_retry = store.get_user(owner)
+    assert sync(api, owner, value).json()["cloud_revision"] == first.json()["cloud_revision"]
+    assert store.get_user(owner) == before_retry
+    assert store.get_user(owner).recent_game_ids == (later, game, previous)
+    assert store.get_user(owner).notifications == ()
+    assert api.ok("GET", f"/games/{game}/popularity")["score"] == 0
+
+
 def test_lost_ack_retry_is_idempotent_and_other_device_branch_is_preserved(api: Api):
     owner = api.new_user("Owner")
     game = api.new_game(owner=owner)

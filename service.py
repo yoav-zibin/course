@@ -2747,6 +2747,7 @@ class GamePlatform:
                 hidden_for_user_ids=frozenset(), created_at=created, updated_at=self._clock(),
             )
             self._store.put_match(match)
+            self._record_recent_game_for_user(caller_id, game.id, occurred_at=match.updated_at)
             return match
 
     def _ensure_bundled_game(self) -> None:
