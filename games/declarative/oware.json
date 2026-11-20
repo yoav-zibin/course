@@ -6,7 +6,7 @@
  "allowed_player_counts": [
   2
  ],
- "server_code": "// Oware (Abapa) for two players. Twelve pits in a ring, indices 0-11:\n// seat 0 owns pits 0-5, seat 1 owns pits 6-11, four seeds per pit (48 total).\n// Captured seeds go to a store off the board (state.stores). Sowing is\n// counterclockwise: increasing pit index, wrapping from 11 to 0, starting at\n// the pit after the chosen one; a sowing that laps the board skips the\n// starting pit. A capture takes an opponent pit the last seed makes exactly\n// 2 or 3, and keeps going backwards while the same holds -- unless that\n// would capture every seed the opponent has left (grand slam), in which\n// case nothing is captured. If the opponent side is empty at the start of a\n// turn, only moves that sow into it are legal; a player who cannot feed an\n// empty opponent side ends the game. The game also ends as soon as a store\n// passes 24, or when at most 6 seeds remain on the board. In every ending\n// except the over-24 one the stores alone decide, and seeds still on the\n// board are awarded to nobody.\nfunction owCopy(s) { return JSON.parse(JSON.stringify(s)); }\nfunction owIsOpp(pit, seat) { return seat === 0 ? pit >= 6 : pit < 6; }\nfunction owSideEmpty(s, seat) {\n  var lo = seat === 0 ? 0 : 6;\n  for (var i = lo; i < lo + 6; i++) if (s.pits[i] > 0) return false;\n  return true;\n}\nfunction owBoardTotal(s) { var t = 0; for (var i = 0; i < 12; i++) t += s.pits[i]; return t; }\n// Simulate sowing from pit on a scratch copy; how many seeds land on the\n// opponent side? Used by the feeding rule and the computer player.\nfunction owSownIntoOpp(pits, seat, pit) {\n  var b = pits.slice(), seeds = b[pit], pos = pit, left = seeds, fed = 0;\n  b[pit] = 0;\n  while (left > 0) {\n    pos = (pos + 1) % 12;\n    if (pos === pit) continue;\n    b[pos]++; left--;\n    if (owIsOpp(pos, seat)) fed++;\n  }\n  return fed;\n}\n// Sow and capture on a state-like {pits, stores}; returns seeds captured.\nfunction owSow(s, seat, pit) {\n  var seeds = s.pits[pit], pos = pit, left = seeds, last = pit;\n  s.pits[pit] = 0;\n  while (left > 0) {\n    pos = (pos + 1) % 12;\n    if (pos === pit) continue;  // a lapping sowing skips the starting pit\n    s.pits[pos]++; left--; last = pos;\n  }\n  var captured = 0;\n  if (owIsOpp(last, seat) && (s.pits[last] === 2 || s.pits[last] === 3)) {\n    var chain = [], p = last;\n    while (owIsOpp(p, seat) && (s.pits[p] === 2 || s.pits[p] === 3)) {\n      chain.push(p); p = (p + 11) % 12;\n    }\n    var oppLeft = 0;\n    for (var i = 0; i < 12; i++) if (owIsOpp(i, seat) && chain.indexOf(i) < 0) oppLeft += s.pits[i];\n    if (oppLeft > 0) {  // grand-slam rule: capturing everything captures nothing\n      for (var j = 0; j < chain.length; j++) { captured += s.pits[chain[j]]; s.stores[seat] += s.pits[chain[j]]; s.pits[chain[j]] = 0; }\n    }\n  }\n  return captured;\n}\nfunction owLegalFor(s, seat) {\n  if (s.over) return [];\n  var oppEmpty = owSideEmpty(s, 1 - seat), out = [], lo = seat === 0 ? 0 : 6;\n  for (var pit = lo; pit < lo + 6; pit++) {\n    if (s.pits[pit] <= 0) continue;\n    if (oppEmpty && owSownIntoOpp(s.pits, seat, pit) === 0) continue;  // feeding rule\n    out.push({type: 'sow', pit: pit});\n  }\n  return out;\n}\nfunction owLegal(s) { return owLegalFor(s, s.turn); }\nfunction owFinish(s) {\n  s.over = true;\n  s.winner = s.stores[0] === s.stores[1] ? -1 : (s.stores[0] > s.stores[1] ? 0 : 1);\n}\nfunction owPayouts(s, ctx) {\n  var pot = ctx.pot || 0;\n  if (!pot) return {};\n  var humans = ctx.players.filter(function (p) { return p.kind === 'human' && p.active !== false; });\n  if (!humans.length) return {};\n  var recipients = humans;\n  if (s.winner >= 0) {\n    var w = ctx.players[s.winner];\n    if (w && w.kind === 'human' && w.active !== false) recipients = [w];\n  }\n  var out = {}, share = Math.floor(pot / recipients.length), rest = pot - share * recipients.length;\n  recipients.forEach(function (p, i) { out[p.id] = share + (i < rest ? 1 : 0); });\n  return out;\n}\nfunction owFresh() {\n  return {pits: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], stores: [0, 0], turn: 0, winner: -1, turns: 0, over: false};\n}\nconst game = {\n  newMatch(ctx) { return {state: owFresh(), turn: [ctx.players[0].id]}; },\n  applyMove(state, id, move, ctx) {\n    if (!state || state.over || !move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('Illegal move');\n    var seat = -1;\n    for (var i = 0; i < ctx.players.length; i++) if (ctx.players[i].id === id) seat = i;\n    if (seat !== state.turn) throw new InvalidMove('Illegal move');\n    var options = owLegal(state), keys = Object.keys(move);\n    var ok = options.some(function (m) {\n      return Object.keys(m).length === keys.length &&\n        keys.every(function (k) { return Object.prototype.hasOwnProperty.call(m, k) && m[k] === move[k]; });\n    });\n    if (!ok) throw new InvalidMove('Illegal move');\n    var s = owCopy(state);\n    s.turns++;\n    owSow(s, seat, move.pit);\n    // Endings, checked after every move: a store over 24 wins at once;\n    // at most 6 seeds left on the board ends the game; and if the player\n    // to move has no legal move -- above all because they cannot feed the\n    // mover's now-empty side -- the game ends too. Board seeds left over\n    // are awarded to nobody; the stores alone decide.\n    if (s.stores[0] > 24 || s.stores[1] > 24 || owBoardTotal(s) <= 6 || owLegalFor(s, 1 - seat).length === 0) {\n      owFinish(s);\n    } else {\n      s.turn = 1 - seat;\n    }\n    return s.over ? {state: s, turn: null, payouts: owPayouts(s, ctx)} : {state: s, turn: [ctx.players[s.turn].id]};\n  },\n  viewFor(state, id, ctx) {\n    var s = owCopy(state);\n    s.legal = (!state.over && ctx.players[state.turn] && ctx.players[state.turn].id === id) ? owLegal(state) : [];\n    return s;\n  },\n  randomMove(s, id, ctx) {\n    var options = owLegal(s);\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n  computerMove(s, id, ctx) {\n    // Prefer the biggest capture, then the move that sows the most seeds\n    // into the opponent side (which also feeds when feeding is required);\n    // ties go to the lowest pit, so the choice is deterministic.\n    var options = owLegal(s), best = null, bestScore = -1;\n    for (var i = 0; i < options.length; i++) {\n      var trial = {pits: s.pits.slice(), stores: s.stores.slice()};\n      var captured = owSow(trial, s.turn, options[i].pit);\n      var score = captured * 100 + owSownIntoOpp(s.pits, s.turn, options[i].pit);\n      if (score > bestScore) { bestScore = score; best = options[i]; }\n    }\n    return best;\n  }\n};\n",
+ "server_code": "// Oware (Abapa) for two players. Twelve pits in a ring, indices 0-11:\n// seat 0 owns pits 0-5, seat 1 owns pits 6-11, four seeds per pit (48 total).\n// Captured seeds go to a store off the board (state.stores). Sowing is\n// counterclockwise: increasing pit index, wrapping from 11 to 0, starting at\n// the pit after the chosen one; a sowing that laps the board skips the\n// starting pit. A capture takes an opponent pit the last seed makes exactly\n// 2 or 3, and keeps going backwards while the same holds -- unless that\n// would capture every seed the opponent has left (grand slam), in which\n// case nothing is captured. If the opponent side is empty at the start of a\n// turn, only moves that sow into it are legal; a player who cannot feed an\n// empty opponent side ends the game. The game also ends as soon as a store\n// passes 24, or when at most 6 seeds remain on the board. In every ending\n// except the over-24 one the stores alone decide, and seeds still on the\n// board are awarded to nobody.\nfunction owCopy(s) { return JSON.parse(JSON.stringify(s)); }\nfunction owIsOpp(pit, seat) { return seat === 0 ? pit >= 6 : pit < 6; }\nfunction owSideEmpty(s, seat) {\n  var lo = seat === 0 ? 0 : 6;\n  for (var i = lo; i < lo + 6; i++) if (s.pits[i] > 0) return false;\n  return true;\n}\nfunction owBoardTotal(s) { var t = 0; for (var i = 0; i < 12; i++) t += s.pits[i]; return t; }\n// Simulate sowing from pit on a scratch copy; how many seeds land on the\n// opponent side? Used by the feeding rule and the computer player.\nfunction owSownIntoOpp(pits, seat, pit) {\n  var b = pits.slice(), seeds = b[pit], pos = pit, left = seeds, fed = 0;\n  b[pit] = 0;\n  while (left > 0) {\n    pos = (pos + 1) % 12;\n    if (pos === pit) continue;\n    b[pos]++; left--;\n    if (owIsOpp(pos, seat)) fed++;\n  }\n  return fed;\n}\n// Sow and capture on a state-like {pits, stores}; returns seeds captured.\n// When rec is supplied it is filled with the ordered landing pit of every\n// seed sown (landings, in sowing order) and, when a capture actually\n// happens, the captured pits in capture order (chain order: the last pit\n// first, then backwards) with the seed count taken from each.\nfunction owSow(s, seat, pit, rec) {\n  var seeds = s.pits[pit], pos = pit, left = seeds, last = pit;\n  s.pits[pit] = 0;\n  if (rec) { rec.landings = []; rec.captures = []; rec.captured = 0; }\n  while (left > 0) {\n    pos = (pos + 1) % 12;\n    if (pos === pit) continue;  // a lapping sowing skips the starting pit\n    s.pits[pos]++; left--; last = pos;\n    if (rec) rec.landings.push(pos);\n  }\n  var captured = 0;\n  if (owIsOpp(last, seat) && (s.pits[last] === 2 || s.pits[last] === 3)) {\n    var chain = [], p = last;\n    while (owIsOpp(p, seat) && (s.pits[p] === 2 || s.pits[p] === 3)) {\n      chain.push(p); p = (p + 11) % 12;\n    }\n    var oppLeft = 0;\n    for (var i = 0; i < 12; i++) if (owIsOpp(i, seat) && chain.indexOf(i) < 0) oppLeft += s.pits[i];\n    if (oppLeft > 0) {  // grand-slam rule: capturing everything captures nothing\n      for (var j = 0; j < chain.length; j++) {\n        if (rec) rec.captures.push({pit: chain[j], seeds: s.pits[chain[j]]});\n        captured += s.pits[chain[j]]; s.stores[seat] += s.pits[chain[j]]; s.pits[chain[j]] = 0;\n      }\n      if (rec) rec.captured = captured;\n    }\n  }\n  return captured;\n}\nfunction owLegalFor(s, seat) {\n  if (s.over) return [];\n  var oppEmpty = owSideEmpty(s, 1 - seat), out = [], lo = seat === 0 ? 0 : 6;\n  for (var pit = lo; pit < lo + 6; pit++) {\n    if (s.pits[pit] <= 0) continue;\n    if (oppEmpty && owSownIntoOpp(s.pits, seat, pit) === 0) continue;  // feeding rule\n    out.push({type: 'sow', pit: pit});\n  }\n  return out;\n}\nfunction owLegal(s) { return owLegalFor(s, s.turn); }\nfunction owFinish(s) {\n  s.over = true;\n  s.winner = s.stores[0] === s.stores[1] ? -1 : (s.stores[0] > s.stores[1] ? 0 : 1);\n}\nfunction owPayouts(s, ctx) {\n  var pot = ctx.pot || 0;\n  if (!pot) return {};\n  var humans = ctx.players.filter(function (p) { return p.kind === 'human' && p.active !== false; });\n  if (!humans.length) return {};\n  var recipients = humans;\n  if (s.winner >= 0) {\n    var w = ctx.players[s.winner];\n    if (w && w.kind === 'human' && w.active !== false) recipients = [w];\n  }\n  var out = {}, share = Math.floor(pot / recipients.length), rest = pot - share * recipients.length;\n  recipients.forEach(function (p, i) { out[p.id] = share + (i < rest ? 1 : 0); });\n  return out;\n}\nfunction owFresh() {\n  return {pits: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], stores: [0, 0], turn: 0, winner: -1, turns: 0, over: false, last_move: null};\n}\nconst game = {\n  newMatch(ctx) { return {state: owFresh(), turn: [ctx.players[0].id]}; },\n  applyMove(state, id, move, ctx) {\n    if (!state || state.over || !move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('Illegal move');\n    var seat = -1;\n    for (var i = 0; i < ctx.players.length; i++) if (ctx.players[i].id === id) seat = i;\n    if (seat !== state.turn) throw new InvalidMove('Illegal move');\n    var options = owLegal(state), keys = Object.keys(move);\n    var ok = options.some(function (m) {\n      return Object.keys(m).length === keys.length &&\n        keys.every(function (k) { return Object.prototype.hasOwnProperty.call(m, k) && m[k] === move[k]; });\n    });\n    if (!ok) throw new InvalidMove('Illegal move');\n    var s = owCopy(state);\n    s.turns++;\n    var rec = {};\n    owSow(s, seat, move.pit, rec);\n    // There is no game-end sweep in these rules: seeds left on the board\n    // at the end are awarded to nobody, so this sow record stays the\n    // complete last move even when the move ends the game.\n    s.last_move = {kind: 'sow', seat: seat, from_pit: move.pit,\n      seeds: state.pits[move.pit], landings: rec.landings,\n      last_pit: rec.landings[rec.landings.length - 1],\n      captures: rec.captures, captured: rec.captured};\n    // Endings, checked after every move: a store over 24 wins at once;\n    // at most 6 seeds left on the board ends the game; and if the player\n    // to move has no legal move -- above all because they cannot feed the\n    // mover's now-empty side -- the game ends too. Board seeds left over\n    // are awarded to nobody; the stores alone decide.\n    if (s.stores[0] > 24 || s.stores[1] > 24 || owBoardTotal(s) <= 6 || owLegalFor(s, 1 - seat).length === 0) {\n      owFinish(s);\n    } else {\n      s.turn = 1 - seat;\n    }\n    return s.over ? {state: s, turn: null, payouts: owPayouts(s, ctx)} : {state: s, turn: [ctx.players[s.turn].id]};\n  },\n  viewFor(state, id, ctx) {\n    var s = owCopy(state);\n    if (s.last_move === undefined) s.last_move = null;\n    s.legal = (!state.over && ctx.players[state.turn] && ctx.players[state.turn].id === id) ? owLegal(state) : [];\n    return s;\n  },\n  randomMove(s, id, ctx) {\n    var options = owLegal(s);\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n  computerMove(s, id, ctx) {\n    // Prefer the biggest capture, then the move that sows the most seeds\n    // into the opponent side (which also feeds when feeding is required);\n    // ties go to the lowest pit, so the choice is deterministic.\n    var options = owLegal(s), best = null, bestScore = -1;\n    for (var i = 0; i < options.length; i++) {\n      var trial = {pits: s.pits.slice(), stores: s.stores.slice()};\n      var captured = owSow(trial, s.turn, options[i].pit);\n      var score = captured * 100 + owSownIntoOpp(s.pits, s.turn, options[i].pit);\n      if (score > bestScore) { bestScore = score; best = options[i]; }\n    }\n    return best;\n  }\n};\n",
  "declarative_ui": {
   "format": "buildplay-ui",
   "version": 1,
@@ -180,7 +180,7 @@
    "store": "Player {n} store",
    "server_invalid": "Illegal move"
   },
-  "ui_code": "const SOURCE_STRINGS={\"title\": \"Oware\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"sow\": \"Sow pit {n}\", \"score\": \"Captured {a} : {b}\", \"store\": \"Player {n} store\", \"server_invalid\": \"Illegal move\"};\n// Oware presentation: a graph board whose 12 cells are the pits in ring\n// order (seat 0 along the bottom left to right, seat 1 back along the top),\n// plus a tray board holding the two captured-seed stores. Only the acting\n// viewer receives targets; spectators and the waiting player receive none.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g, (_, k) => String(args[k] === undefined ? '' : args[k]));\n    const active = m.status === 'ongoing' && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active ? (s.legal || []) : [];\n    const pieces = [], targets = [], controls = [];\n    const labels = [\n      {id: 'title', text: t('title'), x: 24, y: 18, font_size: 26},\n      {id: 'turn', text: m.status === 'over' || s.over ? t('finished') : t('turn', {n: s.turn + 1}), x: 24, y: 54, font_size: 18},\n      {id: 'score', text: t('score', {a: s.stores[0], b: s.stores[1]}), x: 380, y: 54, font_size: 18},\n      {id: 'store_label_0', text: t('store', {n: 1}), x: 84, y: 344, font_size: 14},\n      {id: 'store_label_1', text: t('store', {n: 2}), x: 384, y: 344, font_size: 14}\n    ];\n    const keyOf = move => Object.keys(move).map(k => k + '_' + move[k]).join('_');\n    s.pits.forEach((n, pit) => pieces.push({\n      id: 'pit_' + pit, type: pit < 6 ? 'p0' : 'p1', board: 'main',\n      position: {cell: String(pit)}, text: String(n),\n      actions: []\n    }));\n    pieces.push({id: 'store_0', type: 'store', board: 'tray', position: {x: 60, y: 26}, text: String(s.stores[0]), actions: []});\n    pieces.push({id: 'store_1', type: 'store', board: 'tray', position: {x: 360, y: 26}, text: String(s.stores[1]), actions: []});\n    legal.forEach(move => targets.push({id: keyOf(move), board: 'main', position: {cell: String(move.pit)}, label: t('sow', {n: move.pit + 1})}));\n    const scene = {pieces, targets, controls, labels};\n    const out = {scene, local_state: {}};\n    if (message.type === 'ui_event' && active && message.event.type === 'tap') {\n      let id = message.event.id;\n      if (id && id.startsWith('pit_')) id = 'type_sow_pit_' + id.slice(4);\n      const move = legal.find(option => keyOf(option) === id);\n      if (move) out.make_move = move;\n    }\n    return out;\n  }\n};\n"
+  "ui_code": "const SOURCE_STRINGS={\"title\": \"Oware\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"sow\": \"Sow pit {n}\", \"score\": \"Captured {a} : {b}\", \"store\": \"Player {n} store\", \"server_invalid\": \"Illegal move\"};\n// Oware presentation: a graph board whose 12 cells are the pits in ring\n// order (seat 0 along the bottom left to right, seat 1 back along the top),\n// plus a tray board holding the two captured-seed stores. Only the acting\n// viewer receives targets; spectators and the waiting player receive none.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g, (_, k) => String(args[k] === undefined ? '' : args[k]));\n    const active = m.status === 'ongoing' && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active ? (s.legal || []) : [];\n    const pieces = [], targets = [], controls = [];\n    const labels = [\n      {id: 'title', text: t('title'), x: 24, y: 18, font_size: 26},\n      {id: 'turn', text: m.status === 'over' || s.over ? t('finished') : t('turn', {n: s.turn + 1}), x: 24, y: 54, font_size: 18},\n      {id: 'score', text: t('score', {a: s.stores[0], b: s.stores[1]}), x: 380, y: 54, font_size: 18},\n      {id: 'store_label_0', text: t('store', {n: 1}), x: 84, y: 344, font_size: 14},\n      {id: 'store_label_1', text: t('store', {n: 2}), x: 384, y: 344, font_size: 14}\n    ];\n    const keyOf = move => Object.keys(move).map(k => k + '_' + move[k]).join('_');\n    s.pits.forEach((n, pit) => pieces.push({\n      id: 'pit_' + pit, type: pit < 6 ? 'p0' : 'p1', board: 'main',\n      position: {cell: String(pit)}, text: String(n),\n      actions: []\n    }));\n    pieces.push({id: 'store_0', type: 'store', board: 'tray', position: {x: 60, y: 26}, text: String(s.stores[0]), actions: []});\n    pieces.push({id: 'store_1', type: 'store', board: 'tray', position: {x: 360, y: 26}, text: String(s.stores[1]), actions: []});\n    legal.forEach(move => targets.push({id: keyOf(move), board: 'main', position: {cell: String(move.pit)}, label: t('sow', {n: move.pit + 1})}));\n    const scene = {pieces, targets, controls, labels};\n    const out = {scene, local_state: {}};\n    if (message.type === 'ui_event' && active && message.event.type === 'tap') {\n      let id = message.event.id;\n      if (id && id.startsWith('pit_')) id = 'type_sow_pit_' + id.slice(4);\n      const move = legal.find(option => keyOf(option) === id);\n      if (move) out.make_move = move;\n    }\n    return out;\n  },\n  // Count-based rendering: each pit is a single piece (pit_<index>) whose\n  // text is the seed COUNT in that pit, and each store is a single piece\n  // whose text is its captured count. There are no individual seed pieces\n  // with stable IDs, so a sow has no piece that could travel pit to pit\n  // and captured seeds have no piece that could travel to a store.\n  // Explicitly return [] (no positional motion) rather than inventing a\n  // fake hand piece; the server's view.last_move record still carries the\n  // full ordered sow/capture detail for any future seed-piece rendering.\n  getLastMoveAnimations(view, scene) {\n    if (!Object.prototype.hasOwnProperty.call(view, 'last_move')) return null;\n    return [];\n  }\n};\n"
  },
  "rules": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
  "ui_instructions": "Tap one of your highlighted pits to sow its seeds counterclockwise around the ring. The two stores below the board show the captured counts, and the heading shows whose turn it is. Only the player to move sees targets; spectators and the waiting player see the board with no targets or controls.",
@@ -219,7 +219,8 @@
     "turn",
     "winner",
     "turns",
-    "over"
+    "over",
+    "last_move"
    ],
    "additionalProperties": false,
    "properties": {
@@ -263,6 +264,95 @@
     },
     "over": {
      "type": "boolean"
+    },
+    "last_move": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "required": [
+        "kind",
+        "seat",
+        "from_pit",
+        "seeds",
+        "landings",
+        "last_pit",
+        "captures",
+        "captured"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "sow"
+         ]
+        },
+        "seat": {
+         "enum": [
+          0,
+          1
+         ]
+        },
+        "from_pit": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 11
+        },
+        "seeds": {
+         "type": "integer",
+         "minimum": 1,
+         "maximum": 48
+        },
+        "landings": {
+         "type": "array",
+         "minItems": 1,
+         "maxItems": 48,
+         "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+         }
+        },
+        "last_pit": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 11
+        },
+        "captures": {
+         "type": "array",
+         "maxItems": 6,
+         "items": {
+          "type": "object",
+          "required": [
+           "pit",
+           "seeds"
+          ],
+          "additionalProperties": false,
+          "properties": {
+           "pit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 11
+           },
+           "seeds": {
+            "enum": [
+             2,
+             3
+            ]
+           }
+          }
+         }
+        },
+        "captured": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 18
+        }
+       }
+      }
+     ]
     }
    }
   },
@@ -275,7 +365,8 @@
     "winner",
     "turns",
     "over",
-    "legal"
+    "legal",
+    "last_move"
    ],
    "additionalProperties": false,
    "properties": {
@@ -343,6 +434,95 @@
        }
       }
      }
+    },
+    "last_move": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "required": [
+        "kind",
+        "seat",
+        "from_pit",
+        "seeds",
+        "landings",
+        "last_pit",
+        "captures",
+        "captured"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "sow"
+         ]
+        },
+        "seat": {
+         "enum": [
+          0,
+          1
+         ]
+        },
+        "from_pit": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 11
+        },
+        "seeds": {
+         "type": "integer",
+         "minimum": 1,
+         "maximum": 48
+        },
+        "landings": {
+         "type": "array",
+         "minItems": 1,
+         "maxItems": 48,
+         "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+         }
+        },
+        "last_pit": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 11
+        },
+        "captures": {
+         "type": "array",
+         "maxItems": 6,
+         "items": {
+          "type": "object",
+          "required": [
+           "pit",
+           "seeds"
+          ],
+          "additionalProperties": false,
+          "properties": {
+           "pit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 11
+           },
+           "seeds": {
+            "enum": [
+             2,
+             3
+            ]
+           }
+          }
+         }
+        },
+        "captured": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 18
+        }
+       }
+      }
+     ]
     }
    }
   },
@@ -416,7 +596,8 @@
      "turn": 0,
      "winner": -1,
      "turns": 0,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "pits": [
@@ -466,7 +647,8 @@
        "type": "sow",
        "pit": 5
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "pits": [
@@ -491,7 +673,8 @@
      "winner": -1,
      "turns": 0,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -521,7 +704,22 @@
      "turn": 1,
      "winner": -1,
      "turns": 1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 2,
+      "seeds": 4,
+      "landings": [
+       3,
+       4,
+       5,
+       6
+      ],
+      "last_pit": 6,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_turn": [
      "u2"
@@ -549,7 +747,22 @@
      "winner": -1,
      "turns": 1,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 2,
+      "seeds": 4,
+      "landings": [
+       3,
+       4,
+       5,
+       6
+      ],
+      "last_pit": 6,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_view_of_other": {
      "pits": [
@@ -599,7 +812,22 @@
        "type": "sow",
        "pit": 11
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 2,
+      "seeds": 4,
+      "landings": [
+       3,
+       4,
+       5,
+       6
+      ],
+      "last_pit": 6,
+      "captures": [],
+      "captured": 0
+     }
     },
     "images": [
      {
@@ -669,7 +897,8 @@
      "turn": 0,
      "winner": -1,
      "turns": 0,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "pits": [
@@ -719,7 +948,8 @@
        "type": "sow",
        "pit": 5
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "pits": [
@@ -744,7 +974,8 @@
      "winner": -1,
      "turns": 0,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -774,7 +1005,8 @@
      "turn": 0,
      "winner": -1,
      "turns": 0,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "expected_turn": [
      "u1"
@@ -831,7 +1063,8 @@
        "type": "sow",
        "pit": 5
       }
-     ]
+     ],
+     "last_move": null
     },
     "expected_view_of_other": {
      "pits": [
@@ -856,7 +1089,8 @@
      "winner": -1,
      "turns": 0,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "images": [
      {
@@ -926,7 +1160,8 @@
      "turn": 0,
      "winner": -1,
      "turns": 20,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "pits": [
@@ -960,7 +1195,8 @@
        "type": "sow",
        "pit": 5
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "pits": [
@@ -985,7 +1221,8 @@
      "winner": -1,
      "turns": 20,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1015,7 +1252,29 @@
      "turn": 1,
      "winner": -1,
      "turns": 21,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 2,
+      "landings": [
+       6,
+       7
+      ],
+      "last_pit": 7,
+      "captures": [
+       {
+        "pit": 7,
+        "seeds": 2
+       },
+       {
+        "pit": 6,
+        "seeds": 2
+       }
+      ],
+      "captured": 4
+     }
     },
     "expected_turn": [
      "u2"
@@ -1043,7 +1302,29 @@
      "winner": -1,
      "turns": 21,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 2,
+      "landings": [
+       6,
+       7
+      ],
+      "last_pit": 7,
+      "captures": [
+       {
+        "pit": 7,
+        "seeds": 2
+       },
+       {
+        "pit": 6,
+        "seeds": 2
+       }
+      ],
+      "captured": 4
+     }
     },
     "expected_view_of_other": {
      "pits": [
@@ -1085,7 +1366,29 @@
        "type": "sow",
        "pit": 11
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 2,
+      "landings": [
+       6,
+       7
+      ],
+      "last_pit": 7,
+      "captures": [
+       {
+        "pit": 7,
+        "seeds": 2
+       },
+       {
+        "pit": 6,
+        "seeds": 2
+       }
+      ],
+      "captured": 4
+     }
     },
     "images": [
      {
@@ -1155,7 +1458,8 @@
      "turn": 0,
      "winner": -1,
      "turns": 30,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "pits": [
@@ -1197,7 +1501,8 @@
        "type": "sow",
        "pit": 5
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "pits": [
@@ -1222,7 +1527,8 @@
      "winner": -1,
      "turns": 30,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1252,7 +1558,19 @@
      "turn": 1,
      "winner": -1,
      "turns": 31,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 1,
+      "landings": [
+       6
+      ],
+      "last_pit": 6,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_turn": [
      "u2"
@@ -1280,7 +1598,19 @@
      "winner": -1,
      "turns": 31,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 1,
+      "landings": [
+       6
+      ],
+      "last_pit": 6,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_view_of_other": {
      "pits": [
@@ -1310,7 +1640,19 @@
        "type": "sow",
        "pit": 6
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 1,
+      "landings": [
+       6
+      ],
+      "last_pit": 6,
+      "captures": [],
+      "captured": 0
+     }
     },
     "images": [
      {
@@ -1380,7 +1722,8 @@
      "turn": 0,
      "winner": -1,
      "turns": 16,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "pits": [
@@ -1410,7 +1753,8 @@
        "type": "sow",
        "pit": 2
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "pits": [
@@ -1435,7 +1779,8 @@
      "winner": -1,
      "turns": 16,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1465,7 +1810,31 @@
      "turn": 1,
      "winner": -1,
      "turns": 17,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 2,
+      "seeds": 13,
+      "landings": [
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       0,
+       1,
+       3,
+       4
+      ],
+      "last_pit": 4,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_turn": [
      "u2"
@@ -1493,7 +1862,31 @@
      "winner": -1,
      "turns": 17,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 2,
+      "seeds": 13,
+      "landings": [
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       0,
+       1,
+       3,
+       4
+      ],
+      "last_pit": 4,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_view_of_other": {
      "pits": [
@@ -1543,7 +1936,31 @@
        "type": "sow",
        "pit": 11
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 2,
+      "seeds": 13,
+      "landings": [
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9,
+       10,
+       11,
+       0,
+       1,
+       3,
+       4
+      ],
+      "last_pit": 4,
+      "captures": [],
+      "captured": 0
+     }
     },
     "images": [
      {
@@ -1613,7 +2030,8 @@
      "turn": 0,
      "winner": -1,
      "turns": 44,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "pits": [
@@ -1651,7 +2069,8 @@
        "type": "sow",
        "pit": 5
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "pits": [
@@ -1676,7 +2095,8 @@
      "winner": -1,
      "turns": 44,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1706,7 +2126,24 @@
      "turn": 0,
      "winner": 0,
      "turns": 45,
-     "over": true
+     "over": true,
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 1,
+      "landings": [
+       6
+      ],
+      "last_pit": 6,
+      "captures": [
+       {
+        "pit": 6,
+        "seeds": 2
+       }
+      ],
+      "captured": 2
+     }
     },
     "expected_turn": null,
     "expected_payouts": {
@@ -1735,7 +2172,24 @@
      "winner": 0,
      "turns": 45,
      "over": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 1,
+      "landings": [
+       6
+      ],
+      "last_pit": 6,
+      "captures": [
+       {
+        "pit": 6,
+        "seeds": 2
+       }
+      ],
+      "captured": 2
+     }
     },
     "expected_view_of_other": {
      "pits": [
@@ -1760,7 +2214,24 @@
      "winner": 0,
      "turns": 45,
      "over": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 1,
+      "landings": [
+       6
+      ],
+      "last_pit": 6,
+      "captures": [
+       {
+        "pit": 6,
+        "seeds": 2
+       }
+      ],
+      "captured": 2
+     }
     },
     "images": [
      {
@@ -1830,7 +2301,8 @@
      "turn": 0,
      "winner": -1,
      "turns": 50,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "pits": [
@@ -1860,7 +2332,8 @@
        "type": "sow",
        "pit": 5
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "pits": [
@@ -1885,7 +2358,8 @@
      "winner": -1,
      "turns": 50,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1915,7 +2389,20 @@
      "turn": 0,
      "winner": 1,
      "turns": 51,
-     "over": true
+     "over": true,
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 2,
+      "landings": [
+       6,
+       7
+      ],
+      "last_pit": 7,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_turn": null,
     "expected_payouts": {
@@ -1944,7 +2431,20 @@
      "winner": 1,
      "turns": 51,
      "over": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 2,
+      "landings": [
+       6,
+       7
+      ],
+      "last_pit": 7,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_view_of_other": {
      "pits": [
@@ -1969,7 +2469,20 @@
      "winner": 1,
      "turns": 51,
      "over": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 2,
+      "landings": [
+       6,
+       7
+      ],
+      "last_pit": 7,
+      "captures": [],
+      "captured": 0
+     }
     },
     "images": [
      {
@@ -2039,7 +2552,8 @@
      "turn": 0,
      "winner": -1,
      "turns": 38,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "pits": [
@@ -2069,7 +2583,8 @@
        "type": "sow",
        "pit": 5
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "pits": [
@@ -2094,7 +2609,8 @@
      "winner": -1,
      "turns": 38,
      "over": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -2124,7 +2640,21 @@
      "turn": 0,
      "winner": 0,
      "turns": 39,
-     "over": true
+     "over": true,
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 3,
+      "landings": [
+       6,
+       7,
+       8
+      ],
+      "last_pit": 8,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_turn": null,
     "expected_payouts": {
@@ -2153,7 +2683,21 @@
      "winner": 0,
      "turns": 39,
      "over": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 3,
+      "landings": [
+       6,
+       7,
+       8
+      ],
+      "last_pit": 8,
+      "captures": [],
+      "captured": 0
+     }
     },
     "expected_view_of_other": {
      "pits": [
@@ -2178,7 +2722,21 @@
      "winner": 0,
      "turns": 39,
      "over": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "sow",
+      "seat": 0,
+      "from_pit": 5,
+      "seeds": 3,
+      "landings": [
+       6,
+       7,
+       8
+      ],
+      "last_pit": 8,
+      "captures": [],
+      "captured": 0
+     }
     },
     "images": [
      {
