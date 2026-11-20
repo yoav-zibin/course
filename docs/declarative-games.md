@@ -75,6 +75,20 @@ development-card hands are hidden information — only hand counts are public �
 so the package declares `all_state_public: false`. Select it for publication
 with `--kinds catan`.
 
+Codenames is a four- to eight-player team word game: Red and Blue each have a
+spymaster and operatives racing to find their words on a 5-by-5 grid of 25
+words (the key is 9 Red, 8 Blue, 7 bystanders and 1 assassin). Spymasters give
+one-word clues — legality is checked for form only (one token, letters only,
+not a board word or its singular/plural variant), since the server cannot
+judge semantic relatedness — and the designated guesser rotates among a team's
+operatives after each guess and after a pass, so exactly one seat is in the
+turn set at all times. Guessing the assassin loses at once for the guessing
+team; the winning team's active humans split the pot, with any remainder to
+the earliest seat. The key card is spymaster-only information, filtered by
+`viewFor` — operative and spectator views never contain the key for
+unrevealed words — so the package declares `all_state_public: false`. Select
+it for publication with `--kinds codenames`.
+
 Oware is a two-player mancala game in the Abapa rules, distinct from the
 existing Kalah game: twelve pits in a ring, four seeds each, sown
 counterclockwise with the starting pit skipped on a lapping sow. A last seed
