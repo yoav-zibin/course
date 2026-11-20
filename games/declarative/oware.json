@@ -12,7 +12,8 @@
   "version": 1,
   "viewport": {
    "width": 600,
-   "height": 460
+   "height": 460,
+   "camera_enabled": false
   },
   "boards": [
    {
@@ -154,21 +155,24 @@
     "width": 66,
     "height": 66,
     "color": "#a7f070",
-    "text_color": "#102039"
+    "text_color": "#102039",
+    "action_outline": "ellipse"
    },
    "p1": {
     "shape": "circle",
     "width": 66,
     "height": 66,
     "color": "#ff9dca",
-    "text_color": "#102039"
+    "text_color": "#102039",
+    "action_outline": "ellipse"
    },
    "store": {
     "shape": "rect",
     "width": 180,
     "height": 48,
     "color": "#ad7a3d",
-    "text_color": "#ffffff"
+    "text_color": "#ffffff",
+    "action_outline": "none"
    }
   },
   "strings": {
@@ -180,7 +184,13 @@
    "store": "Player {n} store",
    "server_invalid": "Illegal move"
   },
-  "ui_code": "const SOURCE_STRINGS={\"title\": \"Oware\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"sow\": \"Sow pit {n}\", \"score\": \"Captured {a} : {b}\", \"store\": \"Player {n} store\", \"server_invalid\": \"Illegal move\"};\n// Oware presentation: a graph board whose 12 cells are the pits in ring\n// order (seat 0 along the bottom left to right, seat 1 back along the top),\n// plus a tray board holding the two captured-seed stores. Only the acting\n// viewer receives targets; spectators and the waiting player receive none.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g, (_, k) => String(args[k] === undefined ? '' : args[k]));\n    const active = m.status === 'ongoing' && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active ? (s.legal || []) : [];\n    const pieces = [], targets = [], controls = [];\n    const labels = [\n      {id: 'title', text: t('title'), x: 24, y: 18, font_size: 26},\n      {id: 'turn', text: m.status === 'over' || s.over ? t('finished') : t('turn', {n: s.turn + 1}), x: 24, y: 54, font_size: 18},\n      {id: 'score', text: t('score', {a: s.stores[0], b: s.stores[1]}), x: 380, y: 54, font_size: 18},\n      {id: 'store_label_0', text: t('store', {n: 1}), x: 84, y: 344, font_size: 14},\n      {id: 'store_label_1', text: t('store', {n: 2}), x: 384, y: 344, font_size: 14}\n    ];\n    const keyOf = move => Object.keys(move).map(k => k + '_' + move[k]).join('_');\n    s.pits.forEach((n, pit) => pieces.push({\n      id: 'pit_' + pit, type: pit < 6 ? 'p0' : 'p1', board: 'main',\n      position: {cell: String(pit)}, text: String(n),\n      actions: []\n    }));\n    pieces.push({id: 'store_0', type: 'store', board: 'tray', position: {x: 60, y: 26}, text: String(s.stores[0]), actions: []});\n    pieces.push({id: 'store_1', type: 'store', board: 'tray', position: {x: 360, y: 26}, text: String(s.stores[1]), actions: []});\n    legal.forEach(move => targets.push({id: keyOf(move), board: 'main', position: {cell: String(move.pit)}, label: t('sow', {n: move.pit + 1})}));\n    const scene = {pieces, targets, controls, labels};\n    const out = {scene, local_state: {}};\n    if (message.type === 'ui_event' && active && message.event.type === 'tap') {\n      let id = message.event.id;\n      if (id && id.startsWith('pit_')) id = 'type_sow_pit_' + id.slice(4);\n      const move = legal.find(option => keyOf(option) === id);\n      if (move) out.make_move = move;\n    }\n    return out;\n  },\n  // Count-based rendering: each pit is a single piece (pit_<index>) whose\n  // text is the seed COUNT in that pit, and each store is a single piece\n  // whose text is its captured count. There are no individual seed pieces\n  // with stable IDs, so a sow has no piece that could travel pit to pit\n  // and captured seeds have no piece that could travel to a store.\n  // Explicitly return [] (no positional motion) rather than inventing a\n  // fake hand piece; the server's view.last_move record still carries the\n  // full ordered sow/capture detail for any future seed-piece rendering.\n  getLastMoveAnimations(view, scene) {\n    if (!Object.prototype.hasOwnProperty.call(view, 'last_move')) return null;\n    return [];\n  }\n};\n"
+  "ui_code": "const SOURCE_STRINGS={\"title\": \"Oware\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"sow\": \"Sow pit {n}\", \"score\": \"Captured {a} : {b}\", \"store\": \"Player {n} store\", \"server_invalid\": \"Illegal move\"};\n// Oware presentation: a graph board whose 12 cells are the pits in ring\n// order (seat 0 along the bottom left to right, seat 1 back along the top),\n// plus a tray board holding the two captured-seed stores. Only the acting\n// viewer receives targets; spectators and the waiting player receive none.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g, (_, k) => String(args[k] === undefined ? '' : args[k]));\n    const active = m.status === 'ongoing' && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active ? (s.legal || []) : [];\n    const pieces = [], targets = [], controls = [];\n    const labels = [\n      {id: 'title', text: t('title'), x: 24, y: 18, font_size: 26},\n      {id: 'turn', text: m.status === 'over' || s.over ? t('finished') : t('turn', {n: s.turn + 1}), x: 24, y: 54, font_size: 18},\n      {id: 'score', text: t('score', {a: s.stores[0], b: s.stores[1]}), x: 380, y: 54, font_size: 18},\n      {id: 'store_label_0', text: t('store', {n: 1}), x: 84, y: 344, font_size: 14},\n      {id: 'store_label_1', text: t('store', {n: 2}), x: 384, y: 344, font_size: 14}\n    ];\n    const keyOf = move => Object.keys(move).map(k => k + '_' + move[k]).join('_');\n    s.pits.forEach((n, pit) => pieces.push({\n      id: 'pit_' + pit, type: pit < 6 ? 'p0' : 'p1', board: 'main',\n      position: {cell: String(pit)}, text: String(n),\n      actions: []\n    }));\n    pieces.push({id: 'store_0', type: 'store', board: 'tray', position: {x: 60, y: 26}, text: String(s.stores[0]), actions: []});\n    pieces.push({id: 'store_1', type: 'store', board: 'tray', position: {x: 360, y: 26}, text: String(s.stores[1]), actions: []});\n    legal.forEach(move => targets.push({id: keyOf(move), board: 'main', position: {cell: String(move.pit)}, label: t('sow', {n: move.pit + 1})}));\n    const scene = {pieces, targets, controls, labels};\n    const out = {scene, local_state: {}};\n    if (message.type === 'ui_event' && active && message.event.type === 'tap') {\n      let id = message.event.id;\n      if (id && id.startsWith('pit_')) id = 'type_sow_pit_' + id.slice(4);\n      const move = legal.find(option => keyOf(option) === id);\n      if (move) out.make_move = move;\n    }\n    return out;\n  },\n  // Count-based rendering: each pit is a single piece (pit_<index>) whose\n  // text is the seed COUNT in that pit, and each store is a single piece\n  // whose text is its captured count. There are no individual seed pieces\n  // with stable IDs, so a sow has no piece that could travel pit to pit\n  // and captured seeds have no piece that could travel to a store.\n  // Explicitly return [] (no positional motion) rather than inventing a\n  // fake hand piece; the server's view.last_move record still carries the\n  // full ordered sow/capture detail for any future seed-piece rendering.\n  getLastMoveAnimations(view, scene) {\n    if (!Object.prototype.hasOwnProperty.call(view, 'last_move')) return null;\n    return [];\n  }\n};\n",
+  "motion": {
+   "move_ms": 800,
+   "turn_pause_ms": 400,
+   "animate_own": true,
+   "easing": "ease-in-out-quad"
+  }
  },
  "rules": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
  "ui_instructions": "Tap one of your highlighted pits to sow its seeds counterclockwise around the ring. The two stores below the board show the captured counts, and the heading shows whose turn it is. Only the player to move sees targets; spectators and the waiting player see the board with no targets or controls.",
