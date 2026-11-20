@@ -1,0 +1,114 @@
+"""Installer owner pins survive ordinary reinstalls without crossing scopes."""
+
+import importlib.util
+from pathlib import Path
+import subprocess
+import sys
+import uuid
+
+import pytest
+
+
+ROOT = Path(__file__).parents[1]
+
+
+def module(name, path):
+    spec = importlib.util.spec_from_file_location(name, ROOT / path)
+    result = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(result)
+    return result
+
+
+install = module("player_bug_install", "ops/bug-reports/install.py")
+review = module("player_bug_install_review", "ops/bug-reports/review.py")
+OWNER = "a1010101-0101-4101-8101-010101010101"
+REPLACEMENT = "b2020202-0202-4202-8202-020202020202"
+CONFIG = {"repository": "yoav-zibin/course", "api_base": "https://buildplay.fun"}
+
+
+def configured(previous=None, explicit=None, **changes):
+    return install.with_owner_google_user_id(
+        {**CONFIG, **changes}, previous,
+        owner_google_user_id=explicit,
+        validate_owner_id=review.validate_owner_google_user_id,
+    )
+
+
+def test_new_install_can_pin_a_canonical_owner_without_mutating_inputs():
+    config = dict(CONFIG)
+    result = install.with_owner_google_user_id(
+        config, None, owner_google_user_id=OWNER,
+        validate_owner_id=review.validate_owner_google_user_id,
+    )
+    assert result == {**CONFIG, "owner_google_user_id": OWNER}
+    assert config == CONFIG
+
+
+def test_ordinary_reinstall_preserves_the_existing_pin():
+    previous = {**CONFIG, "owner_google_user_id": OWNER, "thread_id": "old-thread"}
+    assert configured(previous)["owner_google_user_id"] == OWNER
+    assert previous["owner_google_user_id"] == OWNER
+
+
+@pytest.mark.parametrize("origin", [
+    "https://buildplay.fun/", "https://BUILDPLAY.fun:443/",
+])
+def test_equivalent_https_origins_preserve_the_pin(origin):
+    previous = {**CONFIG, "api_base": origin, "owner_google_user_id": OWNER}
+    assert configured(previous)["owner_google_user_id"] == OWNER
+
+
+def test_explicit_pin_overrides_or_repairs_the_previous_value():
+    for previous_value in (OWNER, "invalid previous ID", [OWNER]):
+        previous = {**CONFIG, "owner_google_user_id": previous_value}
+        assert configured(previous, REPLACEMENT)["owner_google_user_id"] == REPLACEMENT
+
+
+@pytest.mark.parametrize("origin", [
+    "https://different.test", "https://buildplay.fun:8443",
+    "https://buildplay.fun:0", "http://buildplay.fun",
+])
+def test_changed_origin_drops_the_previous_pin(origin):
+    previous = {**CONFIG, "owner_google_user_id": OWNER}
+    assert "owner_google_user_id" not in configured(previous, api_base=origin)
+
+
+def test_changed_repository_drops_the_previous_pin():
+    previous = {**CONFIG, "owner_google_user_id": OWNER}
+    assert "owner_google_user_id" not in configured(previous, repository="another/repository")
+
+
+def test_an_unrelated_stale_pin_is_not_selected_or_validated():
+    previous = {**CONFIG, "api_base": "https://different.test", "owner_google_user_id": ["invalid"]}
+    assert "owner_google_user_id" not in configured(previous)
+
+
+@pytest.mark.parametrize("value", [
+    "", "not-a-uuid", OWNER.replace("-", ""), OWNER.upper(),
+    "{" + OWNER + "}", "urn:uuid:" + OWNER, " " + OWNER, OWNER + "\n",
+    1, True, [], {}, uuid.UUID(OWNER),
+])
+@pytest.mark.parametrize("source", ["explicit", "existing"])
+def test_invalid_selected_pins_fail_without_echoing_the_value(value, source):
+    with pytest.raises(ValueError) as error:
+        if source == "explicit":
+            configured(explicit=value)
+        else:
+            configured({**CONFIG, "owner_google_user_id": value})
+    assert str(error.value) == "Invalid owner Google user ID"
+
+
+@pytest.mark.parametrize("previous", [
+    None, CONFIG, {**CONFIG, "owner_google_user_id": None},
+])
+def test_unconfigured_installs_omit_the_owner_field(previous):
+    assert "owner_google_user_id" not in configured(previous)
+
+
+def test_help_exposes_the_optional_owner_argument_without_installing():
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "ops/bug-reports/install.py"), "--help"],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert "--owner-google-user-id" in result.stdout

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import urllib.parse
 import uuid
 
 ROOT = Path(__file__).resolve().parent
@@ -18,6 +19,36 @@ def unit_path(path):
     return json.dumps(str(path).replace("%", "%%").replace("$", "$$"))
 
 
+def api_origin(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urllib.parse.urlsplit(value.rstrip("/"))
+        if (parsed.scheme != "https" or not parsed.hostname or parsed.username or
+                parsed.password or parsed.path or parsed.query or parsed.fragment):
+            return None
+        return parsed.hostname.casefold(), parsed.port if parsed.port is not None else 443
+    except ValueError:
+        return None
+
+
+def with_owner_google_user_id(config, previous, *, owner_google_user_id=None,
+                              validate_owner_id):
+    """Keep an owner pin only within its repository/API origin, or replace it."""
+    candidate = owner_google_user_id
+    if candidate is None and isinstance(previous, dict):
+        origin = api_origin(config.get("api_base"))
+        if (previous.get("repository") == config.get("repository") and
+                origin is not None and origin == api_origin(previous.get("api_base"))):
+            candidate = previous.get("owner_google_user_id")
+    owner = validate_owner_id(candidate)
+    result = dict(config)
+    result.pop("owner_google_user_id", None)
+    if owner is not None:
+        result["owner_google_user_id"] = owner
+    return result
+
+
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
@@ -26,6 +57,8 @@ def main():
     parser.add_argument("--state-dir", type=Path,
                         default=Path.home() / ".local/share/buildplay-bug-reports")
     parser.add_argument("--api-base", default="https://buildplay.fun")
+    parser.add_argument("--owner-google-user-id",
+                        help="Canonical UUID of the verified Google owner account")
     args = parser.parse_args()
     uuid.UUID(args.thread_id)
     password_file = args.password_file.resolve(strict=True)
@@ -38,7 +71,12 @@ def main():
               "api_base": args.api_base, "password_file": str(password_file),
               "repository_path": str(REPOSITORY)}
     sys.path.insert(0, str(ROOT))
-    from review import BugAPI, save_json
+    from review import BugAPI, save_json, validate_owner_google_user_id
+    previous = json.loads((state / "config.json").read_text()) if (state / "config.json").exists() else None
+    config = with_owner_google_user_id(
+        config, previous, owner_google_user_id=args.owner_google_user_id,
+        validate_owner_id=validate_owner_google_user_id,
+    )
     BugAPI(config)
     save_json(state / "config.json", config)
     directory = Path.home() / ".config/systemd/user"

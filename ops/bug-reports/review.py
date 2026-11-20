@@ -47,7 +47,38 @@ def configuration(state_dir):
     uuid.UUID(config.get("thread_id", ""))
     if not Path(config["repository_path"]).is_dir():
         raise ValueError("The configured repository must exist")
+    validate_owner_google_user_id(config.get("owner_google_user_id"))
     return config
+
+
+def validate_owner_google_user_id(value):
+    if value is None:
+        return None
+    try:
+        if not isinstance(value, str) or str(uuid.UUID(value)) != value:
+            raise ValueError
+    except (ValueError, AttributeError):
+        raise ValueError("Invalid owner Google user ID") from None
+    return value
+
+
+def owner_suggestion_authorized(config, report):
+    """Match the private owner pin against authenticated, server-derived context."""
+    owner = validate_owner_google_user_id(config.get("owner_google_user_id"))
+    user = report.get("user")
+    if not owner or not isinstance(user, dict):
+        return False
+    providers = user.get("linked_account_kinds")
+    return (report.get("reporter_user_id") == owner and user.get("id") == owner
+            and user.get("is_guest") is False and isinstance(providers, list)
+            and "google" in providers)
+
+
+def with_review_policy(config, report):
+    # Always overwrite incoming flags. Submitted evidence cannot grant approval.
+    return {**report, "_review_policy": {
+        "owner_suggestion_authorized": owner_suggestion_authorized(config, report),
+    }}
 
 
 def report_id(value):
@@ -169,7 +200,8 @@ def watch_locked(state_dir, *, dry_run=False):
 
 def snapshot(state_dir):
     """Save full pending evidence privately; stdout contains only the path and count."""
-    api = BugAPI(configuration(state_dir))
+    config = configuration(state_dir)
+    api = BugAPI(config)
     directory = state_dir / "snapshots"
     directory.mkdir(mode=0o700, exist_ok=True)
     count = 0
@@ -177,7 +209,7 @@ def snapshot(state_dir):
         path = Path(handle.name)
         try:
             for identifier in sorted(api.pending_ids()):
-                body = api.get(identifier)
+                body = with_review_policy(config, api.get(identifier))
                 if body["status"] not in ("open", "handling"):
                     continue
                 handle.write(json.dumps(body, ensure_ascii=False) + "\n")
@@ -192,7 +224,8 @@ def snapshot(state_dir):
 
 def get_report(state_dir, identifier):
     """Retrieve even a resolved report privately, for lost-response confirmation."""
-    body = BugAPI(configuration(state_dir)).get(identifier)
+    config = configuration(state_dir)
+    body = with_review_policy(config, BugAPI(config).get(identifier))
     directory = state_dir / "snapshots"
     directory.mkdir(mode=0o700, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="w", dir=directory, suffix=".json", delete=False) as handle:
@@ -205,7 +238,8 @@ def get_report(state_dir, identifier):
         except BaseException:
             path.unlink(missing_ok=True)
             raise
-    return {"id": identifier, "status": body["status"], "private_report": str(path)}
+    return {"id": identifier, "status": body["status"], "private_report": str(path),
+            "owner_suggestion_authorized": body["_review_policy"]["owner_suggestion_authorized"]}
 
 
 def set_status(state_dir, identifier, *, status, notes_file, commit=None,
