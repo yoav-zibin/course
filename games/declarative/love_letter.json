@@ -8,7 +8,7 @@
   3,
   4
  ],
- "server_code": "\n\"use strict\";\n// Love Letter (2-4 players), standard rules, one combined play per turn.\n// Deck of 16: Guard(1)x5, Priest(2)x2, Baron(3)x2, Handmaid(4)x2,\n// Prince(5)x2, King(6)x1, Countess(7)x1, Princess(8)x1.\n// State keeps the deck as an explicit card array, so drawing is a\n// deterministic pop; only shuffling (newMatch and a new round) uses\n// ctx.random(). The player to move always holds 2 cards in state: the\n// draw at the start of their turn happens when the turn advances to\n// them (and in setup for the round starter).\nconst DECK_SPEC = [[1,5],[2,2],[3,2],[4,2],[5,2],[6,1],[7,1],[8,1]];\nfunction buildDeck(ctx) {\n  const d = [];\n  for (const pair of DECK_SPEC) for (let i = 0; i < pair[1]; i++) d.push(pair[0]);\n  for (let i = d.length - 1; i > 0; i--) {\n    const j = Math.floor(ctx.random() * (i + 1));\n    const t = d[i]; d[i] = d[j]; d[j] = t;\n  }\n  return d;\n}\nfunction tokensNeededFor(n) { return n === 2 ? 7 : n === 3 ? 5 : 4; }\nfunction copyState(s) { return JSON.parse(JSON.stringify(s)); }\nfunction clearSeenColumn(s, seat) { for (let i = 0; i < s.lastSeen.length; i++) s.lastSeen[i][seat] = 0; }\nfunction setupRound(s, ctx, starter) {\n  const n = ctx.players.length;\n  const deck = buildDeck(ctx);\n  s.removedDown = [deck.pop()];\n  s.removedUp = [];\n  if (n === 2) s.removedUp = [deck.pop(), deck.pop(), deck.pop()];\n  s.hands = []; s.discards = []; s.active = []; s.protected = []; s.lastSeen = [];\n  for (let i = 0; i < n; i++) {\n    s.hands.push([deck.pop()]); s.discards.push([]);\n    s.active.push(true); s.protected.push(false); s.lastSeen.push(Array(n).fill(0));\n  }\n  s.deck = deck; s.starter = starter; s.turn = starter;\n  s.hands[starter].push(s.deck.pop());\n}\nfunction eliminate(s, seat) {\n  s.active[seat] = false; s.protected[seat] = false;\n  for (const c of s.hands[seat]) s.discards[seat].push(c);\n  s.hands[seat] = [];\n  clearSeenColumn(s, seat);\n  for (let i = 0; i < s.lastSeen.length; i++) s.lastSeen[seat][i] = 0;\n}\nfunction legalMoves(s, ctx) {\n  if (s.over) return [];\n  const seat = s.turn, hand = s.hands[seat];\n  if (!hand || !hand.length) return [];\n  const ids = ctx.players.map(p => p.id);\n  const mustCountess = hand.indexOf(7) !== -1 && (hand.indexOf(6) !== -1 || hand.indexOf(5) !== -1);\n  const distinct = [];\n  for (const c of hand) if (distinct.indexOf(c) === -1) distinct.push(c);\n  const cards = mustCountess ? [7] : distinct;\n  const others = [];\n  for (let i = 0; i < s.hands.length; i++)\n    if (i !== seat && s.active[i] && !s.protected[i]) others.push(i);\n  const out = [];\n  for (const c of cards) {\n    if (c === 1) {\n      if (!others.length) out.push({type:'play', card:1, target:null, guess:null});\n      else for (const t of others) for (let g = 2; g <= 8; g++)\n        out.push({type:'play', card:1, target:ids[t], guess:g});\n    } else if (c === 2 || c === 3 || c === 6) {\n      if (!others.length) out.push({type:'play', card:c, target:null, guess:null});\n      else for (const t of others) out.push({type:'play', card:c, target:ids[t], guess:null});\n    } else if (c === 5) {\n      for (const t of others) out.push({type:'play', card:5, target:ids[t], guess:null});\n      out.push({type:'play', card:5, target:ids[seat], guess:null});\n      if (!others.length) out.push({type:'play', card:5, target:null, guess:null});\n    } else {\n      out.push({type:'play', card:c, target:null, guess:null});\n    }\n  }\n  return out;\n}\nfunction payoutFor(s, ctx) {\n  if (!ctx.pot) return {};\n  const humans = ctx.players.filter(p => p.kind === 'human' && p.active !== false);\n  const w = ctx.players[s.winner];\n  const recips = w && w.kind === 'human' && w.active !== false ? [w] : humans;\n  const out = {};\n  if (!recips.length) return out;\n  recips.forEach((p, i) => { out[p.id] = Math.floor(ctx.pot / recips.length) + (i < ctx.pot % recips.length ? 1 : 0); });\n  return out;\n}\nfunction endRound(s, ctx, winners) {\n  for (const w of winners) s.tokens[w]++;\n  let champ = -1;\n  for (let i = 0; i < s.tokens.length; i++)\n    if (s.tokens[i] >= s.tokensNeeded && (champ === -1 || s.tokens[i] > s.tokens[champ])) champ = i;\n  if (champ >= 0) {\n    s.over = true; s.winner = champ; s.lastRoundWinners = winners.slice();\n    return {state:s, turn:null, payouts:payoutFor(s, ctx)};\n  }\n  const starter = winners[0], round = s.round + 1;\n  setupRound(s, ctx, starter);\n  s.round = round; s.lastRoundWinners = winners.slice();\n  return {state:s, turn:[ctx.players[starter].id]};\n}\nconst game = {\n  newMatch(ctx) {\n    const n = ctx.players.length;\n    const s = {hands:[], deck:[], removedDown:[], removedUp:[], discards:[],\n      tokens:Array(n).fill(0), active:[], protected:[], turn:0, round:1,\n      starter:0, tokensNeeded:tokensNeededFor(n), winner:-1, over:false,\n      lastRoundWinners:[], lastSeen:[], turns:0};\n    setupRound(s, ctx, 0);\n    return {state:s, turn:[ctx.players[0].id]};\n  },\n  applyMove(state, id, move, ctx) {\n    if (state.over) throw new InvalidMove('Illegal move');\n    const seat = ctx.players.findIndex(p => p.id === id);\n    if (seat < 0 || seat !== state.turn) throw new InvalidMove('Illegal move');\n    if (!move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('Illegal move');\n    const opts = legalMoves(state, ctx);\n    const ok = Object.keys(move).length === 4 && opts.some(m =>\n      m.type === move.type && m.card === move.card && m.target === move.target && m.guess === move.guess);\n    if (!ok) throw new InvalidMove('Illegal move');\n    const s = copyState(state); s.turns++;\n    const A = seat, card = move.card;\n    const T = move.target === null ? -1 : ctx.players.findIndex(p => p.id === move.target);\n    s.hands[A].splice(s.hands[A].indexOf(card), 1);\n    s.discards[A].push(card);\n    clearSeenColumn(s, A);\n    if (card === 1 && T >= 0) {\n      if (s.hands[T].length && s.hands[T][0] === move.guess) eliminate(s, T);\n    } else if (card === 2 && T >= 0) {\n      if (s.hands[T].length) s.lastSeen[A][T] = s.hands[T][0];\n    } else if (card === 3 && T >= 0) {\n      const a = s.hands[A][0], b = s.hands[T][0];\n      if (a !== undefined && b !== undefined) {\n        s.lastSeen[A][T] = b; s.lastSeen[T][A] = a;\n        if (a < b) eliminate(s, A); else if (b < a) eliminate(s, T);\n      }\n    } else if (card === 4) {\n      s.protected[A] = true;\n    } else if (card === 5 && T >= 0) {\n      const discarded = s.hands[T].length ? s.hands[T][0] : null;\n      if (discarded !== null) {\n        s.discards[T].push(discarded); s.hands[T] = []; clearSeenColumn(s, T);\n        if (discarded === 8) eliminate(s, T);\n        else {\n          let nc = null;\n          if (s.deck.length) nc = s.deck.pop();\n          else if (s.removedDown.length) nc = s.removedDown.pop();\n          if (nc !== null) s.hands[T] = [nc];\n        }\n      }\n    } else if (card === 6 && T >= 0) {\n      const tmp = s.hands[A]; s.hands[A] = s.hands[T]; s.hands[T] = tmp;\n      clearSeenColumn(s, A); clearSeenColumn(s, T);\n    } else if (card === 8) {\n      eliminate(s, A);\n    }\n    const alive = [];\n    for (let i = 0; i < s.hands.length; i++) if (s.active[i]) alive.push(i);\n    if (alive.length === 1) return endRound(s, ctx, [alive[0]]);\n    if (s.deck.length === 0) {\n      const val = i => s.hands[i].length ? s.hands[i][0] : 0;\n      let best = -1;\n      for (const i of alive) best = Math.max(best, val(i));\n      let tied = alive.filter(i => val(i) === best);\n      if (tied.length > 1) {\n        const sum = i => s.discards[i].reduce((x, y) => x + y, 0);\n        let bs = -1;\n        for (const i of tied) bs = Math.max(bs, sum(i));\n        tied = tied.filter(i => sum(i) === bs);\n      }\n      return endRound(s, ctx, tied);\n    }\n    let nx = A;\n    do { nx = (nx + 1) % s.hands.length; } while (!s.active[nx]);\n    s.turn = nx; s.protected[nx] = false;\n    if (s.deck.length) s.hands[nx].push(s.deck.pop());\n    return {state:s, turn:[ctx.players[nx].id]};\n  },\n  viewFor(state, id, ctx) {\n    const seat = id === null || id === undefined ? -1 : ctx.players.findIndex(p => p.id === id);\n    const n = state.hands.length;\n    return {\n      myIndex: seat,\n      playerIds: ctx.players.map(p => p.id),\n      myHand: seat >= 0 ? state.hands[seat].slice() : [],\n      handCounts: state.hands.map(h => h.length),\n      deckCount: state.deck.length,\n      removedUp: state.removedUp.slice(),\n      removedDownCount: state.removedDown.length,\n      discards: state.discards.map(d => d.slice()),\n      tokens: state.tokens.slice(),\n      active: state.active.slice(),\n      protected: state.protected.slice(),\n      turn: state.turn, round: state.round, starter: state.starter,\n      tokensNeeded: state.tokensNeeded, winner: state.winner, over: state.over,\n      lastRoundWinners: state.lastRoundWinners.slice(),\n      seen: seat >= 0 ? state.lastSeen[seat].slice() : Array(n).fill(0),\n      legal: seat >= 0 && seat === state.turn && !state.over ? legalMoves(state, ctx) : []\n    };\n  },\n  randomMove(s, id, ctx) {\n    const opts = legalMoves(s, ctx);\n    return opts[Math.floor(ctx.random() * opts.length)];\n  },\n  computerMove(s, id, ctx) {\n    const seat = s.turn, opts = legalMoves(s, ctx);\n    const remaining = s.hands[seat].filter(c => true);\n    const otherCard = c => { const h = s.hands[seat].slice(); h.splice(h.indexOf(c), 1); return h[0]; };\n    let best = opts[0], bestScore = -Infinity;\n    for (const m of opts) {\n      const rest = otherCard(m.card);\n      let score = 0;\n      if (m.card === 8) score = -100;\n      else if (m.card === 1) {\n        const ts = m.target === null ? -1 : ctx.players.findIndex(p => p.id === m.target);\n        score = ts >= 0 && s.lastSeen[seat][ts] >= 2 && m.guess === s.lastSeen[seat][ts] ? 50 : 6;\n      }\n      else if (m.card === 2) score = 11;\n      else if (m.card === 3) score = rest >= 4 ? 20 + rest : 2;\n      else if (m.card === 4) score = 12;\n      else if (m.card === 5) {\n        const self = m.target === ctx.players[seat].id;\n        score = self ? (rest === 8 ? -90 : 4) : 9;\n      }\n      else if (m.card === 6) score = rest === 8 ? -80 : 10 - rest;\n      else if (m.card === 7) score = 7;\n      if (score > bestScore) { bestScore = score; best = m; }\n    }\n    return best;\n  }\n};\n",
+ "server_code": "\n\"use strict\";\n// Love Letter (2-4 players), standard rules, one combined play per turn.\n// Deck of 16: Guard(1)x5, Priest(2)x2, Baron(3)x2, Handmaid(4)x2,\n// Prince(5)x2, King(6)x1, Countess(7)x1, Princess(8)x1.\n// State keeps the deck as an explicit card array, so drawing is a\n// deterministic pop; only shuffling (newMatch and a new round) uses\n// ctx.random(). The player to move always holds 2 cards in state: the\n// draw at the start of their turn happens when the turn advances to\n// them (and in setup for the round starter).\nconst DECK_SPEC = [[1,5],[2,2],[3,2],[4,2],[5,2],[6,1],[7,1],[8,1]];\nfunction buildDeck(ctx) {\n  const d = [];\n  for (const pair of DECK_SPEC) for (let i = 0; i < pair[1]; i++) d.push(pair[0]);\n  for (let i = d.length - 1; i > 0; i--) {\n    const j = Math.floor(ctx.random() * (i + 1));\n    const t = d[i]; d[i] = d[j]; d[j] = t;\n  }\n  return d;\n}\nfunction tokensNeededFor(n) { return n === 2 ? 7 : n === 3 ? 5 : 4; }\nfunction copyState(s) { return JSON.parse(JSON.stringify(s)); }\nfunction clearSeenColumn(s, seat) { for (let i = 0; i < s.lastSeen.length; i++) s.lastSeen[i][seat] = 0; }\nfunction setupRound(s, ctx, starter) {\n  const n = ctx.players.length;\n  const deck = buildDeck(ctx);\n  s.removedDown = [deck.pop()];\n  s.removedUp = [];\n  if (n === 2) s.removedUp = [deck.pop(), deck.pop(), deck.pop()];\n  s.hands = []; s.discards = []; s.active = []; s.protected = []; s.lastSeen = [];\n  for (let i = 0; i < n; i++) {\n    s.hands.push([deck.pop()]); s.discards.push([]);\n    s.active.push(true); s.protected.push(false); s.lastSeen.push(Array(n).fill(0));\n  }\n  s.deck = deck; s.starter = starter; s.turn = starter;\n  s.hands[starter].push(s.deck.pop());\n}\nfunction eliminate(s, seat) {\n  s.active[seat] = false; s.protected[seat] = false;\n  for (const c of s.hands[seat]) s.discards[seat].push(c);\n  s.hands[seat] = [];\n  clearSeenColumn(s, seat);\n  for (let i = 0; i < s.lastSeen.length; i++) s.lastSeen[seat][i] = 0;\n}\nfunction legalMoves(s, ctx) {\n  if (s.over) return [];\n  const seat = s.turn, hand = s.hands[seat];\n  if (!hand || !hand.length) return [];\n  const ids = ctx.players.map(p => p.id);\n  const mustCountess = hand.indexOf(7) !== -1 && (hand.indexOf(6) !== -1 || hand.indexOf(5) !== -1);\n  const distinct = [];\n  for (const c of hand) if (distinct.indexOf(c) === -1) distinct.push(c);\n  const cards = mustCountess ? [7] : distinct;\n  const others = [];\n  for (let i = 0; i < s.hands.length; i++)\n    if (i !== seat && s.active[i] && !s.protected[i]) others.push(i);\n  const out = [];\n  for (const c of cards) {\n    if (c === 1) {\n      if (!others.length) out.push({type:'play', card:1, target:null, guess:null});\n      else for (const t of others) for (let g = 2; g <= 8; g++)\n        out.push({type:'play', card:1, target:ids[t], guess:g});\n    } else if (c === 2 || c === 3 || c === 6) {\n      if (!others.length) out.push({type:'play', card:c, target:null, guess:null});\n      else for (const t of others) out.push({type:'play', card:c, target:ids[t], guess:null});\n    } else if (c === 5) {\n      for (const t of others) out.push({type:'play', card:5, target:ids[t], guess:null});\n      out.push({type:'play', card:5, target:ids[seat], guess:null});\n      if (!others.length) out.push({type:'play', card:5, target:null, guess:null});\n    } else {\n      out.push({type:'play', card:c, target:null, guess:null});\n    }\n  }\n  return out;\n}\nfunction payoutFor(s, ctx) {\n  if (!ctx.pot) return {};\n  const humans = ctx.players.filter(p => p.kind === 'human' && p.active !== false);\n  const w = ctx.players[s.winner];\n  const recips = w && w.kind === 'human' && w.active !== false ? [w] : humans;\n  const out = {};\n  if (!recips.length) return out;\n  recips.forEach((p, i) => { out[p.id] = Math.floor(ctx.pot / recips.length) + (i < ctx.pot % recips.length ? 1 : 0); });\n  return out;\n}\nfunction endRound(s, ctx, winners) {\n  for (const w of winners) s.tokens[w]++;\n  let champ = -1;\n  for (let i = 0; i < s.tokens.length; i++)\n    if (s.tokens[i] >= s.tokensNeeded && (champ === -1 || s.tokens[i] > s.tokens[champ])) champ = i;\n  if (champ >= 0) {\n    s.over = true; s.winner = champ; s.lastRoundWinners = winners.slice();\n    return {state:s, turn:null, payouts:payoutFor(s, ctx)};\n  }\n  const starter = winners[0], round = s.round + 1;\n  setupRound(s, ctx, starter);\n  s.round = round; s.lastRoundWinners = winners.slice();\n  return {state:s, turn:[ctx.players[starter].id]};\n}\nconst game = {\n  newMatch(ctx) {\n    const n = ctx.players.length;\n    const s = {hands:[], deck:[], removedDown:[], removedUp:[], discards:[],\n      tokens:Array(n).fill(0), active:[], protected:[], turn:0, round:1,\n      starter:0, tokensNeeded:tokensNeededFor(n), winner:-1, over:false,\n      lastRoundWinners:[], lastSeen:[], turns:0, lastMove:null};\n    setupRound(s, ctx, 0);\n    return {state:s, turn:[ctx.players[0].id]};\n  },\n  applyMove(state, id, move, ctx) {\n    if (state.over) throw new InvalidMove('Illegal move');\n    const seat = ctx.players.findIndex(p => p.id === id);\n    if (seat < 0 || seat !== state.turn) throw new InvalidMove('Illegal move');\n    if (!move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('Illegal move');\n    const opts = legalMoves(state, ctx);\n    const ok = Object.keys(move).length === 4 && opts.some(m =>\n      m.type === move.type && m.card === move.card && m.target === move.target && m.guess === move.guess);\n    if (!ok) throw new InvalidMove('Illegal move');\n    const s = copyState(state); s.turns++;\n    const A = seat, card = move.card;\n    const T = move.target === null ? -1 : ctx.players.findIndex(p => p.id === move.target);\n    const fromIndex = s.hands[A].indexOf(card);\n    const prevDisc = s.discards.map(d => d.length);\n    s.hands[A].splice(fromIndex, 1);\n    s.discards[A].push(card);\n    clearSeenColumn(s, A);\n    if (card === 1 && T >= 0) {\n      if (s.hands[T].length && s.hands[T][0] === move.guess) eliminate(s, T);\n    } else if (card === 2 && T >= 0) {\n      if (s.hands[T].length) s.lastSeen[A][T] = s.hands[T][0];\n    } else if (card === 3 && T >= 0) {\n      const a = s.hands[A][0], b = s.hands[T][0];\n      if (a !== undefined && b !== undefined) {\n        s.lastSeen[A][T] = b; s.lastSeen[T][A] = a;\n        if (a < b) eliminate(s, A); else if (b < a) eliminate(s, T);\n      }\n    } else if (card === 4) {\n      s.protected[A] = true;\n    } else if (card === 5 && T >= 0) {\n      const discarded = s.hands[T].length ? s.hands[T][0] : null;\n      if (discarded !== null) {\n        s.discards[T].push(discarded); s.hands[T] = []; clearSeenColumn(s, T);\n        if (discarded === 8) eliminate(s, T);\n        else {\n          let nc = null;\n          if (s.deck.length) nc = s.deck.pop();\n          else if (s.removedDown.length) nc = s.removedDown.pop();\n          if (nc !== null) s.hands[T] = [nc];\n        }\n      }\n    } else if (card === 6 && T >= 0) {\n      const tmp = s.hands[A]; s.hands[A] = s.hands[T]; s.hands[T] = tmp;\n      clearSeenColumn(s, A); clearSeenColumn(s, T);\n    } else if (card === 8) {\n      eliminate(s, A);\n    }\n    const extras = [];\n    for (let i = 0; i < s.discards.length; i++) {\n      const start = prevDisc[i] + (i === A ? 1 : 0);\n      for (let k = start; k < s.discards[i].length; k++)\n        extras.push({seat:i, card:s.discards[i][k], index:k});\n    }\n    const alive = [];\n    for (let i = 0; i < s.hands.length; i++) if (s.active[i]) alive.push(i);\n    if (alive.length === 1) { const r = endRound(s, ctx, [alive[0]]); r.state.lastMove = {kind:'round'}; return r; }\n    if (s.deck.length === 0) {\n      const val = i => s.hands[i].length ? s.hands[i][0] : 0;\n      let best = -1;\n      for (const i of alive) best = Math.max(best, val(i));\n      let tied = alive.filter(i => val(i) === best);\n      if (tied.length > 1) {\n        const sum = i => s.discards[i].reduce((x, y) => x + y, 0);\n        let bs = -1;\n        for (const i of tied) bs = Math.max(bs, sum(i));\n        tied = tied.filter(i => sum(i) === bs);\n      }\n      const r = endRound(s, ctx, tied); r.state.lastMove = {kind:'round'}; return r;\n    }\n    let nx = A;\n    do { nx = (nx + 1) % s.hands.length; } while (!s.active[nx]);\n    s.turn = nx; s.protected[nx] = false;\n    let drawnIndex = -1;\n    if (s.deck.length) { s.hands[nx].push(s.deck.pop()); drawnIndex = s.hands[nx].length - 1; }\n    s.lastMove = {kind:'play', actor:A, card:card, fromIndex:fromIndex,\n      playedIndex:prevDisc[A], extras:extras,\n      drawer:drawnIndex >= 0 ? nx : null, drawnIndex:drawnIndex};\n    return {state:s, turn:[ctx.players[nx].id]};\n  },\n  viewFor(state, id, ctx) {\n    const seat = id === null || id === undefined ? -1 : ctx.players.findIndex(p => p.id === id);\n    const n = state.hands.length;\n    return {\n      myIndex: seat,\n      playerIds: ctx.players.map(p => p.id),\n      myHand: seat >= 0 ? state.hands[seat].slice() : [],\n      handCounts: state.hands.map(h => h.length),\n      deckCount: state.deck.length,\n      removedUp: state.removedUp.slice(),\n      removedDownCount: state.removedDown.length,\n      discards: state.discards.map(d => d.slice()),\n      tokens: state.tokens.slice(),\n      active: state.active.slice(),\n      protected: state.protected.slice(),\n      turn: state.turn, round: state.round, starter: state.starter,\n      tokensNeeded: state.tokensNeeded, winner: state.winner, over: state.over,\n      lastRoundWinners: state.lastRoundWinners.slice(),\n      seen: seat >= 0 ? state.lastSeen[seat].slice() : Array(n).fill(0),\n      last_move: state.lastMove ? JSON.parse(JSON.stringify(state.lastMove)) : null,\n      legal: seat >= 0 && seat === state.turn && !state.over ? legalMoves(state, ctx) : []\n    };\n  },\n  randomMove(s, id, ctx) {\n    const opts = legalMoves(s, ctx);\n    return opts[Math.floor(ctx.random() * opts.length)];\n  },\n  computerMove(s, id, ctx) {\n    const seat = s.turn, opts = legalMoves(s, ctx);\n    const remaining = s.hands[seat].filter(c => true);\n    const otherCard = c => { const h = s.hands[seat].slice(); h.splice(h.indexOf(c), 1); return h[0]; };\n    let best = opts[0], bestScore = -Infinity;\n    for (const m of opts) {\n      const rest = otherCard(m.card);\n      let score = 0;\n      if (m.card === 8) score = -100;\n      else if (m.card === 1) {\n        const ts = m.target === null ? -1 : ctx.players.findIndex(p => p.id === m.target);\n        score = ts >= 0 && s.lastSeen[seat][ts] >= 2 && m.guess === s.lastSeen[seat][ts] ? 50 : 6;\n      }\n      else if (m.card === 2) score = 11;\n      else if (m.card === 3) score = rest >= 4 ? 20 + rest : 2;\n      else if (m.card === 4) score = 12;\n      else if (m.card === 5) {\n        const self = m.target === ctx.players[seat].id;\n        score = self ? (rest === 8 ? -90 : 4) : 9;\n      }\n      else if (m.card === 6) score = rest === 8 ? -80 : 10 - rest;\n      else if (m.card === 7) score = 7;\n      if (score > bestScore) { bestScore = score; best = m; }\n    }\n    return best;\n  }\n};\n",
  "declarative_ui": {
   "format": "buildplay-ui",
   "version": 1,
@@ -95,7 +95,7 @@
    "name_8": "Princess",
    "server_invalid": "Illegal move"
   },
-  "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Love Letter\", \"turn\": \"Player {n} to play\", \"your_turn\": \"Your turn, Player {n}\", \"finished\": \"Finished\", \"winner\": \"Player {n} wins the match\", \"round\": \"Round {n}\", \"deck\": \"Deck {n}\", \"tokens\": \"Tokens {n}\", \"you\": \"You\", \"opp\": \"Player {n}\", \"protected\": \"Protected\", \"out\": \"Out\", \"removed\": \"Removed face up\", \"seen\": \"Seen: Player {n} holds {v}\", \"hint_card\": \"Tap a card to play it\", \"hint_target\": \"Tap a target player\", \"hint_guess\": \"Choose your Guard guess\", \"cancel\": \"Cancel\", \"play_target\": \"Target Player {n}\", \"target_self\": \"Target yourself\", \"no_target\": \"Play with no target\", \"guess\": \"Guess {v}\", \"card_1\": \"1 Guard\", \"card_2\": \"2 Priest\", \"card_3\": \"3 Baron\", \"card_4\": \"4 Handmaid\", \"card_5\": \"5 Prince\", \"card_6\": \"6 King\", \"card_7\": \"7 Countess\", \"card_8\": \"8 Princess\", \"name_2\": \"Priest\", \"name_3\": \"Baron\", \"name_4\": \"Handmaid\", \"name_5\": \"Prince\", \"name_6\": \"King\", \"name_7\": \"Countess\", \"name_8\": \"Princess\", \"server_invalid\": \"Illegal move\"};\nconst gameUI={\n  reduce(message,localState){\n    const m=message.type==='ui_event'?message.state_changed:message;\n    const s=m.view||m.state||{};\n    const strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    const t=(key,args)=>(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String((args||{})[k]===undefined?'':(args||{})[k]));\n    const seat=Number.isInteger(s.myIndex)?s.myIndex:-1;\n    const legal=(m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined&&m.acting_for_player_index===seat&&Array.isArray(s.legal))?s.legal:[];\n    const active=legal.length>0;\n    const n=(s.handCounts||[]).length;\n    const cardText=v=>t('card_'+v);\n    let sel=null;\n    if(active&&localState&&localState.mc===m.move_count&&localState.viewer===seat&&Number.isInteger(localState.card)){\n      const c=localState.card;\n      if(legal.some(mv=>mv.card===c)){\n        sel={card:c,target:(typeof localState.target==='string'?localState.target:null)};\n        if(sel.target!==null&&!legal.some(mv=>mv.card===c&&mv.target===sel.target)) sel.target=null;\n      }\n    }\n    let makeMove=null;\n    if(message.type==='ui_event'&&active&&message.event&&message.event.type==='tap'){\n      const eid=String(message.event.id||'');\n      if(eid.indexOf('hand_')===0){\n        const v=parseInt(eid.slice(5),10);\n        const movesC=legal.filter(mv=>mv.card===v);\n        if(movesC.length===1&&movesC[0].target===null&&movesC[0].guess===null) makeMove=movesC[0];\n        else if(movesC.length) sel={card:v,target:null};\n      } else if(eid.indexOf('tgt_')===0&&sel){\n        const ts=parseInt(eid.slice(4),10);\n        const tid=(s.playerIds||[])[ts];\n        const cand=legal.filter(mv=>mv.card===sel.card&&mv.target===tid);\n        if(cand.length===1) makeMove=cand[0];\n        else if(cand.length>1) sel={card:sel.card,target:tid};\n      } else if(eid.indexOf('guess_')===0&&sel&&sel.target!==null){\n        const g=parseInt(eid.slice(6),10);\n        const mv=legal.find(mv=>mv.card===sel.card&&mv.target===sel.target&&mv.guess===g);\n        if(mv) makeMove=mv;\n      } else if(eid==='notarget'&&sel){\n        const mv=legal.find(mv=>mv.card===sel.card&&mv.target===null&&mv.guess===null);\n        if(mv) makeMove=mv;\n      } else if(eid==='cancel'){\n        sel=null;\n      }\n    }\n    const pieces=[],targets=[],controls=[],labels=[];\n    labels.push({id:'title',text:t('title'),x:24,y:14,font_size:26});\n    labels.push({id:'info',text:t('round',{n:s.round})+' - '+t('deck',{n:s.deckCount}),x:470,y:20,font_size:15});\n    let status;\n    if(s.over) status=s.winner>=0?t('winner',{n:s.winner+1}):t('finished');\n    else status=active?t('your_turn',{n:seat+1}):t('turn',{n:(s.turn||0)+1});\n    labels.push({id:'status',text:status,x:24,y:48,font_size:18});\n    const rows=[];\n    for(let i=0;i<n;i++) if(i!==seat) rows.push(i);\n    rows.forEach((pi,ri)=>{\n      const y=86+ri*124;\n      let txt=t('opp',{n:pi+1})+' - '+t('tokens',{n:(s.tokens||[])[pi]});\n      if((s.protected||[])[pi]) txt+=' - '+t('protected');\n      if(!(s.active||[])[pi]) txt+=' - '+t('out');\n      labels.push({id:'name_'+pi,text:txt,x:24,y:y,font_size:16});\n      for(let j=0;j<((s.handCounts||[])[pi]||0);j++)\n        pieces.push({id:'back_'+pi+'_'+j,type:'back',board:'table',position:{x:30+j*70,y:y+24},text:'',actions:[]});\n      ((s.discards||[])[pi]||[]).slice(-8).forEach((v,j)=>\n        pieces.push({id:'disc_'+pi+'_'+j,type:'mini',board:'table',position:{x:230+j*44,y:y+30},text:cardText(v),actions:[]}));\n    });\n    if(seat>=0){\n      let txt=t('you')+' - '+t('tokens',{n:(s.tokens||[])[seat]});\n      if((s.protected||[])[seat]) txt+=' - '+t('protected');\n      if(!(s.active||[])[seat]) txt+=' - '+t('out');\n      labels.push({id:'you',text:txt,x:24,y:520,font_size:17});\n      ((s.discards||[])[seat]||[]).slice(-8).forEach((v,j)=>\n        pieces.push({id:'mydisc_'+j,type:'mini',board:'table',position:{x:24+j*44,y:548},text:cardText(v),actions:[]}));\n      if((s.removedUp||[]).length){\n        labels.push({id:'removed_label',text:t('removed'),x:480,y:520,font_size:13});\n        s.removedUp.forEach((v,j)=>\n          pieces.push({id:'rem_'+j,type:'mini',board:'table',position:{x:480+j*44,y:548},text:cardText(v),actions:[]}));\n      }\n      (s.myHand||[]).forEach((v,i)=>\n        pieces.push({id:'handp_'+i,type:'card',board:'table',position:{x:170+i*140,y:640},text:cardText(v),actions:[]}));\n      const seenParts=[];\n      (s.seen||[]).forEach((v,i)=>{ if(v&&i!==seat) seenParts.push(t('seen',{n:i+1,v:cardText(v)})); });\n      if(seenParts.length) labels.push({id:'seen',text:seenParts.join(' - '),x:24,y:614,font_size:14});\n    }\n    pieces.push({id:'deck_pile',type:'back',board:'table',position:{x:600,y:640},text:String(s.deckCount||0),actions:[]});\n    if(active){\n      const handVals=[];\n      legal.forEach(mv=>{ if(handVals.indexOf(mv.card)===-1) handVals.push(mv.card); });\n      handVals.forEach(v=>{\n        const idx=(s.myHand||[]).indexOf(v);\n        targets.push({id:'hand_'+v,board:'table',position:{x:170+(idx>=0?idx:0)*140,y:640},label:cardText(v)});\n      });\n      if(sel){\n        const tids=[];\n        legal.filter(mv=>mv.card===sel.card).forEach(mv=>{ if(mv.target!==null&&tids.indexOf(mv.target)===-1) tids.push(mv.target); });\n        tids.forEach(tid=>{\n          const ts=(s.playerIds||[]).indexOf(tid);\n          if(ts===seat) targets.push({id:'tgt_'+ts,board:'table',position:{x:470,y:660},label:t('target_self')});\n          else {\n            const ri=rows.indexOf(ts);\n            targets.push({id:'tgt_'+ts,board:'table',position:{x:610,y:86+(ri>=0?ri:0)*124+40},label:t('play_target',{n:ts+1})});\n          }\n        });\n        if(legal.some(mv=>mv.card===sel.card&&mv.target===null))\n          controls.push({id:'notarget',kind:'button',label:t('no_target')});\n        if(sel.card===1&&sel.target!==null)\n          legal.filter(mv=>mv.card===1&&mv.target===sel.target).forEach(mv=>\n            controls.push({id:'guess_'+mv.guess,kind:'button',label:t('guess',{v:t('name_'+mv.guess)})}));\n        controls.push({id:'cancel',kind:'button',label:t('cancel')});\n        labels.push({id:'hint',text:(sel.card===1&&sel.target!==null)?t('hint_guess'):t('hint_target'),x:330,y:48,font_size:14});\n      } else {\n        labels.push({id:'hint',text:t('hint_card'),x:330,y:48,font_size:14});\n      }\n    }\n    const scene={pieces:pieces,targets:targets,controls:controls,labels:labels};\n    const out={scene:scene,local_state:sel?{mc:m.move_count,viewer:seat,card:sel.card,target:sel.target}:{}};\n    if(makeMove) out.make_move=makeMove;\n    return out;\n  }\n};\n"
+  "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Love Letter\", \"turn\": \"Player {n} to play\", \"your_turn\": \"Your turn, Player {n}\", \"finished\": \"Finished\", \"winner\": \"Player {n} wins the match\", \"round\": \"Round {n}\", \"deck\": \"Deck {n}\", \"tokens\": \"Tokens {n}\", \"you\": \"You\", \"opp\": \"Player {n}\", \"protected\": \"Protected\", \"out\": \"Out\", \"removed\": \"Removed face up\", \"seen\": \"Seen: Player {n} holds {v}\", \"hint_card\": \"Tap a card to play it\", \"hint_target\": \"Tap a target player\", \"hint_guess\": \"Choose your Guard guess\", \"cancel\": \"Cancel\", \"play_target\": \"Target Player {n}\", \"target_self\": \"Target yourself\", \"no_target\": \"Play with no target\", \"guess\": \"Guess {v}\", \"card_1\": \"1 Guard\", \"card_2\": \"2 Priest\", \"card_3\": \"3 Baron\", \"card_4\": \"4 Handmaid\", \"card_5\": \"5 Prince\", \"card_6\": \"6 King\", \"card_7\": \"7 Countess\", \"card_8\": \"8 Princess\", \"name_2\": \"Priest\", \"name_3\": \"Baron\", \"name_4\": \"Handmaid\", \"name_5\": \"Prince\", \"name_6\": \"King\", \"name_7\": \"Countess\", \"name_8\": \"Princess\", \"server_invalid\": \"Illegal move\"};\nconst gameUI={\n  reduce(message,localState){\n    const m=message.type==='ui_event'?message.state_changed:message;\n    const s=m.view||m.state||{};\n    const strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    const t=(key,args)=>(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String((args||{})[k]===undefined?'':(args||{})[k]));\n    const seat=Number.isInteger(s.myIndex)?s.myIndex:-1;\n    const legal=(m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined&&m.acting_for_player_index===seat&&Array.isArray(s.legal))?s.legal:[];\n    const active=legal.length>0;\n    const n=(s.handCounts||[]).length;\n    const cardText=v=>t('card_'+v);\n    let sel=null;\n    if(active&&localState&&localState.mc===m.move_count&&localState.viewer===seat&&Number.isInteger(localState.card)){\n      const c=localState.card;\n      if(legal.some(mv=>mv.card===c)){\n        sel={card:c,target:(typeof localState.target==='string'?localState.target:null)};\n        if(sel.target!==null&&!legal.some(mv=>mv.card===c&&mv.target===sel.target)) sel.target=null;\n      }\n    }\n    let makeMove=null;\n    if(message.type==='ui_event'&&active&&message.event&&message.event.type==='tap'){\n      const eid=String(message.event.id||'');\n      if(eid.indexOf('hand_')===0){\n        const v=parseInt(eid.slice(5),10);\n        const movesC=legal.filter(mv=>mv.card===v);\n        if(movesC.length===1&&movesC[0].target===null&&movesC[0].guess===null) makeMove=movesC[0];\n        else if(movesC.length) sel={card:v,target:null};\n      } else if(eid.indexOf('tgt_')===0&&sel){\n        const ts=parseInt(eid.slice(4),10);\n        const tid=(s.playerIds||[])[ts];\n        const cand=legal.filter(mv=>mv.card===sel.card&&mv.target===tid);\n        if(cand.length===1) makeMove=cand[0];\n        else if(cand.length>1) sel={card:sel.card,target:tid};\n      } else if(eid.indexOf('guess_')===0&&sel&&sel.target!==null){\n        const g=parseInt(eid.slice(6),10);\n        const mv=legal.find(mv=>mv.card===sel.card&&mv.target===sel.target&&mv.guess===g);\n        if(mv) makeMove=mv;\n      } else if(eid==='notarget'&&sel){\n        const mv=legal.find(mv=>mv.card===sel.card&&mv.target===null&&mv.guess===null);\n        if(mv) makeMove=mv;\n      } else if(eid==='cancel'){\n        sel=null;\n      }\n    }\n    const pieces=[],targets=[],controls=[],labels=[];\n    labels.push({id:'title',text:t('title'),x:24,y:14,font_size:26});\n    labels.push({id:'info',text:t('round',{n:s.round})+' - '+t('deck',{n:s.deckCount}),x:470,y:20,font_size:15});\n    let status;\n    if(s.over) status=s.winner>=0?t('winner',{n:s.winner+1}):t('finished');\n    else status=active?t('your_turn',{n:seat+1}):t('turn',{n:(s.turn||0)+1});\n    labels.push({id:'status',text:status,x:24,y:48,font_size:18});\n    const rows=[];\n    for(let i=0;i<n;i++) if(i!==seat) rows.push(i);\n    rows.forEach((pi,ri)=>{\n      const y=86+ri*124;\n      let txt=t('opp',{n:pi+1})+' - '+t('tokens',{n:(s.tokens||[])[pi]});\n      if((s.protected||[])[pi]) txt+=' - '+t('protected');\n      if(!(s.active||[])[pi]) txt+=' - '+t('out');\n      labels.push({id:'name_'+pi,text:txt,x:24,y:y,font_size:16});\n      for(let j=0;j<((s.handCounts||[])[pi]||0);j++)\n        pieces.push({id:'back_'+pi+'_'+j,type:'back',board:'table',position:{x:30+j*70,y:y+24},text:'',actions:[]});\n      ((s.discards||[])[pi]||[]).slice(-8).forEach((v,j)=>\n        pieces.push({id:'disc_'+pi+'_'+j,type:'mini',board:'table',position:{x:230+j*44,y:y+30},text:cardText(v),actions:[]}));\n    });\n    if(seat>=0){\n      let txt=t('you')+' - '+t('tokens',{n:(s.tokens||[])[seat]});\n      if((s.protected||[])[seat]) txt+=' - '+t('protected');\n      if(!(s.active||[])[seat]) txt+=' - '+t('out');\n      labels.push({id:'you',text:txt,x:24,y:520,font_size:17});\n      ((s.discards||[])[seat]||[]).slice(-8).forEach((v,j)=>\n        pieces.push({id:'mydisc_'+j,type:'mini',board:'table',position:{x:24+j*44,y:548},text:cardText(v),actions:[]}));\n      if((s.removedUp||[]).length){\n        labels.push({id:'removed_label',text:t('removed'),x:480,y:520,font_size:13});\n        s.removedUp.forEach((v,j)=>\n          pieces.push({id:'rem_'+j,type:'mini',board:'table',position:{x:480+j*44,y:548},text:cardText(v),actions:[]}));\n      }\n      (s.myHand||[]).forEach((v,i)=>\n        pieces.push({id:'handp_'+i,type:'card',board:'table',position:{x:170+i*140,y:640},text:cardText(v),actions:[]}));\n      const seenParts=[];\n      (s.seen||[]).forEach((v,i)=>{ if(v&&i!==seat) seenParts.push(t('seen',{n:i+1,v:cardText(v)})); });\n      if(seenParts.length) labels.push({id:'seen',text:seenParts.join(' - '),x:24,y:614,font_size:14});\n    }\n    pieces.push({id:'deck_pile',type:'back',board:'table',position:{x:600,y:640},text:String(s.deckCount||0),actions:[]});\n    if(active){\n      const handVals=[];\n      legal.forEach(mv=>{ if(handVals.indexOf(mv.card)===-1) handVals.push(mv.card); });\n      handVals.forEach(v=>{\n        const idx=(s.myHand||[]).indexOf(v);\n        targets.push({id:'hand_'+v,board:'table',position:{x:170+(idx>=0?idx:0)*140,y:640},label:cardText(v)});\n      });\n      if(sel){\n        const tids=[];\n        legal.filter(mv=>mv.card===sel.card).forEach(mv=>{ if(mv.target!==null&&tids.indexOf(mv.target)===-1) tids.push(mv.target); });\n        tids.forEach(tid=>{\n          const ts=(s.playerIds||[]).indexOf(tid);\n          if(ts===seat) targets.push({id:'tgt_'+ts,board:'table',position:{x:470,y:660},label:t('target_self')});\n          else {\n            const ri=rows.indexOf(ts);\n            targets.push({id:'tgt_'+ts,board:'table',position:{x:610,y:86+(ri>=0?ri:0)*124+40},label:t('play_target',{n:ts+1})});\n          }\n        });\n        if(legal.some(mv=>mv.card===sel.card&&mv.target===null))\n          controls.push({id:'notarget',kind:'button',label:t('no_target')});\n        if(sel.card===1&&sel.target!==null)\n          legal.filter(mv=>mv.card===1&&mv.target===sel.target).forEach(mv=>\n            controls.push({id:'guess_'+mv.guess,kind:'button',label:t('guess',{v:t('name_'+mv.guess)})}));\n        controls.push({id:'cancel',kind:'button',label:t('cancel')});\n        labels.push({id:'hint',text:(sel.card===1&&sel.target!==null)?t('hint_guess'):t('hint_target'),x:330,y:48,font_size:14});\n      } else {\n        labels.push({id:'hint',text:t('hint_card'),x:330,y:48,font_size:14});\n      }\n    }\n    const scene={pieces:pieces,targets:targets,controls:controls,labels:labels};\n    const out={scene:scene,local_state:sel?{mc:m.move_count,viewer:seat,card:sel.card,target:sel.target}:{}};\n    if(makeMove) out.make_move=makeMove;\n    return out;\n  },\n  getLastMoveAnimations(view,scene){\n    if(!view||!Object.prototype.hasOwnProperty.call(view,'last_move')) return null;\n    const lm=view.last_move;\n    if(!lm||lm.kind!=='play') return [];\n    const seat=Number.isInteger(view.myIndex)?view.myIndex:-1;\n    const byId={};\n    ((scene&&scene.pieces)||[]).forEach(p=>{ byId[p.id]=p; });\n    const rowOf=pi=>{ if(seat<0) return pi; return pi<seat?pi:pi-1; };\n    const handPos=(pi,idx)=>{\n      if(pi===seat) return {x:170+idx*140,y:640};\n      return {x:30+idx*70,y:86+rowOf(pi)*124+24};\n    };\n    const discId=(pi,fullIdx)=>{\n      const total=((view.discards||[])[pi]||[]).length;\n      const j=fullIdx-Math.max(0,total-8);\n      return j<0?null:(pi===seat?'mydisc_'+j:'disc_'+pi+'_'+j);\n    };\n    const out=[];\n    const add=(pid,src,dur)=>{\n      const piece=pid?byId[pid]:null;\n      if(!piece) return;\n      out.push({piece_id:pid,duration_ms:dur,path:[{board:'table',position:src},{board:piece.board,position:piece.position}]});\n    };\n    add(discId(lm.actor,lm.playedIndex),handPos(lm.actor,lm.fromIndex||0),600);\n    (lm.extras||[]).forEach(ex=>{ add(discId(ex.seat,ex.index),handPos(ex.seat,0),600); });\n    if(lm.drawer!==null&&lm.drawer!==undefined&&Number.isInteger(lm.drawnIndex)&&lm.drawnIndex>=0){\n      const pid=lm.drawer===seat?'handp_'+lm.drawnIndex:'back_'+lm.drawer+'_'+lm.drawnIndex;\n      add(pid,{x:600,y:640},500);\n    }\n    return out;\n  }\n};\n"
  },
  "rules": "Love Letter for 2-4 players, played in rounds with a 16-card deck: Guard (1) x5, Priest (2) x2, Baron (3) x2, Handmaid (4) x2, Prince (5) x2, King (6) x1, Countess (7) x1 and Princess (8) x1. Each round the deck is shuffled with the match seed, one card is removed face down and unseen, and in 2-player rounds three more cards are removed face up. Every player is dealt one card; the player to move draws a second card and then plays one card with a move {type:\"play\", card, target, guess}, where target is a player id or null and guess is a card value or null. Guard: name a value from 2 to 8 (never Guard); if the target holds it, they are out of the round. Priest: you privately learn the target's card, and remember it until their hand changes or the round ends. Baron: you and the target privately compare your remaining cards; the lower value is out of the round and a tie eliminates nobody. Handmaid: you cannot be targeted until your next turn. Prince: the target, possibly yourself, discards their card and draws a replacement, from the face-down removed card if the deck is empty; discarding the Princess eliminates them. King: swap hands with the target. Countess: no effect when played, but a player holding the Countess with the King or a Prince must play the Countess. Princess: a player who plays or discards it is out of the round. A target must be an active, unprotected player; if every other player is protected, a card that targets another player may be played with target null and no effect, while the Prince may still target yourself. A round ends when one player remains, or when the deck is empty and the current turn finishes: then the highest remaining card wins the round, ties are broken by the highest total value of discarded cards, and players still tied each receive a token. The round winner receives a token of affection and starts the next round. The first player to 7 tokens in a 2-player match, 5 in a 3-player match or 4 in a 4-player match wins the match and takes the pot (no payout when the pot is 0). Hands, the deck order and the face-down removed card are secret; played and discarded cards, the face-up removed cards, tokens, and who is protected or out are public.",
  "ui_instructions": "Your cards are face up at the bottom; tap a card to select it. Cards that need no target play at once. If the card needs a target, tap a highlighted player area - the Prince may target yourself with the Target yourself marker - and for the Guard, then tap a guess button naming the value you think the target holds. Use Cancel to change your selection. Opponents appear as card backs with their token counts, protection and public discard piles; your own discards, any face-up removed cards, the round number and the deck count are also shown. A card you have seen with the Priest or Baron is noted under your hand. Only the player to move sees targets and controls.",
@@ -145,7 +145,8 @@
     "over",
     "lastRoundWinners",
     "lastSeen",
-    "turns"
+    "turns",
+    "lastMove"
    ],
    "additionalProperties": false,
    "properties": {
@@ -294,6 +295,91 @@
      "type": "integer",
      "minimum": 0,
      "maximum": 100000
+    },
+    "lastMove": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "kind"
+       ],
+       "properties": {
+        "kind": {
+         "enum": [
+          "play",
+          "round"
+         ]
+        },
+        "actor": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 3
+        },
+        "card": {
+         "type": "integer",
+         "minimum": 1,
+         "maximum": 8
+        },
+        "fromIndex": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 1
+        },
+        "playedIndex": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 16
+        },
+        "extras": {
+         "type": "array",
+         "maxItems": 4,
+         "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+           "seat",
+           "card",
+           "index"
+          ],
+          "properties": {
+           "seat": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+           },
+           "card": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+           },
+           "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16
+           }
+          }
+         }
+        },
+        "drawer": {
+         "type": [
+          "integer",
+          "null"
+         ],
+         "minimum": 0,
+         "maximum": 3
+        },
+        "drawnIndex": {
+         "type": "integer",
+         "minimum": -1,
+         "maximum": 1
+        }
+       }
+      }
+     ]
     }
    }
   },
@@ -319,7 +405,8 @@
     "over",
     "lastRoundWinners",
     "seen",
-    "legal"
+    "legal",
+    "last_move"
    ],
    "additionalProperties": false,
    "properties": {
@@ -513,6 +600,91 @@
        }
       }
      }
+    },
+    "last_move": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "kind"
+       ],
+       "properties": {
+        "kind": {
+         "enum": [
+          "play",
+          "round"
+         ]
+        },
+        "actor": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 3
+        },
+        "card": {
+         "type": "integer",
+         "minimum": 1,
+         "maximum": 8
+        },
+        "fromIndex": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 1
+        },
+        "playedIndex": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 16
+        },
+        "extras": {
+         "type": "array",
+         "maxItems": 4,
+         "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+           "seat",
+           "card",
+           "index"
+          ],
+          "properties": {
+           "seat": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+           },
+           "card": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+           },
+           "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16
+           }
+          }
+         }
+        },
+        "drawer": {
+         "type": [
+          "integer",
+          "null"
+         ],
+         "minimum": 0,
+         "maximum": 3
+        },
+        "drawnIndex": {
+         "type": "integer",
+         "minimum": -1,
+         "maximum": 1
+        }
+       }
+      }
+     ]
     }
    }
   },
@@ -643,7 +815,8 @@
        0
       ]
      ],
-     "turns": 0
+     "turns": 0,
+     "lastMove": null
     },
     "view_of_mover": {
      "myIndex": 0,
@@ -742,7 +915,8 @@
        "target": "u2",
        "guess": 8
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "myIndex": 1,
@@ -791,7 +965,8 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -882,7 +1057,17 @@
        0
       ]
      ],
-     "turns": 1
+     "turns": 1,
+     "lastMove": {
+      "kind": "play",
+      "actor": 0,
+      "card": 4,
+      "fromIndex": 0,
+      "playedIndex": 0,
+      "extras": [],
+      "drawer": 1,
+      "drawnIndex": 1
+     }
     },
     "expected_turn": [
      "u2"
@@ -936,7 +1121,17 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "play",
+      "actor": 0,
+      "card": 4,
+      "fromIndex": 0,
+      "playedIndex": 0,
+      "extras": [],
+      "drawer": 1,
+      "drawnIndex": 1
+     }
     },
     "expected_view_of_other": {
      "myIndex": 1,
@@ -1001,7 +1196,17 @@
        "target": null,
        "guess": null
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "play",
+      "actor": 0,
+      "card": 4,
+      "fromIndex": 0,
+      "playedIndex": 0,
+      "extras": [],
+      "drawer": 1,
+      "drawnIndex": 1
+     }
     }
    },
    {
@@ -1117,7 +1322,8 @@
        0
       ]
      ],
-     "turns": 5
+     "turns": 5,
+     "lastMove": null
     },
     "view_of_mover": {
      "myIndex": 0,
@@ -1195,7 +1401,8 @@
        "target": null,
        "guess": null
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "myIndex": 1,
@@ -1253,7 +1460,8 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1359,7 +1567,17 @@
        0
       ]
      ],
-     "turns": 6
+     "turns": 6,
+     "lastMove": {
+      "kind": "play",
+      "actor": 0,
+      "card": 2,
+      "fromIndex": 0,
+      "playedIndex": 1,
+      "extras": [],
+      "drawer": 1,
+      "drawnIndex": 1
+     }
     },
     "expected_turn": [
      "u2"
@@ -1421,7 +1639,17 @@
       6,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "play",
+      "actor": 0,
+      "card": 2,
+      "fromIndex": 0,
+      "playedIndex": 1,
+      "extras": [],
+      "drawer": 1,
+      "drawnIndex": 1
+     }
     },
     "expected_view_of_other": {
      "myIndex": 1,
@@ -1488,7 +1716,17 @@
        "target": null,
        "guess": null
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "play",
+      "actor": 0,
+      "card": 2,
+      "fromIndex": 0,
+      "playedIndex": 1,
+      "extras": [],
+      "drawer": 1,
+      "drawnIndex": 1
+     }
     }
    },
    {
@@ -1602,7 +1840,8 @@
        0
       ]
      ],
-     "turns": 6
+     "turns": 6,
+     "lastMove": null
     },
     "view_of_mover": {
      "myIndex": 0,
@@ -1750,7 +1989,8 @@
        "target": null,
        "guess": null
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "myIndex": 2,
@@ -1806,7 +2046,8 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u3",
@@ -1910,7 +2151,23 @@
        0
       ]
      ],
-     "turns": 7
+     "turns": 7,
+     "lastMove": {
+      "kind": "play",
+      "actor": 0,
+      "card": 1,
+      "fromIndex": 0,
+      "playedIndex": 0,
+      "extras": [
+       {
+        "seat": 1,
+        "card": 3,
+        "index": 1
+       }
+      ],
+      "drawer": 2,
+      "drawnIndex": 1
+     }
     },
     "expected_turn": [
      "u3"
@@ -1972,7 +2229,23 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "play",
+      "actor": 0,
+      "card": 1,
+      "fromIndex": 0,
+      "playedIndex": 0,
+      "extras": [
+       {
+        "seat": 1,
+        "card": 3,
+        "index": 1
+       }
+      ],
+      "drawer": 2,
+      "drawnIndex": 1
+     }
     },
     "expected_view_of_other": {
      "myIndex": 2,
@@ -2087,7 +2360,23 @@
        "target": "u1",
        "guess": 8
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "play",
+      "actor": 0,
+      "card": 1,
+      "fromIndex": 0,
+      "playedIndex": 0,
+      "extras": [
+       {
+        "seat": 1,
+        "card": 3,
+        "index": 1
+       }
+      ],
+      "drawer": 2,
+      "drawnIndex": 1
+     }
     }
    },
    {
@@ -2183,7 +2472,8 @@
        0
       ]
      ],
-     "turns": 3
+     "turns": 3,
+     "lastMove": null
     },
     "view_of_mover": {
      "myIndex": 0,
@@ -2246,7 +2536,8 @@
        "target": null,
        "guess": null
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "myIndex": 1,
@@ -2301,7 +2592,8 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -2399,7 +2691,8 @@
        0
       ]
      ],
-     "turns": 3
+     "turns": 3,
+     "lastMove": null
     },
     "expected_turn": [
      "u1"
@@ -2465,7 +2758,8 @@
        "target": null,
        "guess": null
       }
-     ]
+     ],
+     "last_move": null
     },
     "expected_view_of_other": {
      "myIndex": 1,
@@ -2520,7 +2814,8 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": null
     }
    },
    {
@@ -2634,7 +2929,8 @@
        0
       ]
      ],
-     "turns": 7
+     "turns": 7,
+     "lastMove": null
     },
     "view_of_mover": {
      "myIndex": 0,
@@ -2794,7 +3090,8 @@
        "target": "u3",
        "guess": 8
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "myIndex": 2,
@@ -2850,7 +3147,8 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u3",
@@ -2954,7 +3252,23 @@
        0
       ]
      ],
-     "turns": 8
+     "turns": 8,
+     "lastMove": {
+      "kind": "play",
+      "actor": 0,
+      "card": 5,
+      "fromIndex": 0,
+      "playedIndex": 1,
+      "extras": [
+       {
+        "seat": 1,
+        "card": 8,
+        "index": 0
+       }
+      ],
+      "drawer": 2,
+      "drawnIndex": 1
+     }
     },
     "expected_turn": [
      "u3"
@@ -3016,7 +3330,23 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "play",
+      "actor": 0,
+      "card": 5,
+      "fromIndex": 0,
+      "playedIndex": 1,
+      "extras": [
+       {
+        "seat": 1,
+        "card": 8,
+        "index": 0
+       }
+      ],
+      "drawer": 2,
+      "drawnIndex": 1
+     }
     },
     "expected_view_of_other": {
      "myIndex": 2,
@@ -3125,7 +3455,23 @@
        "target": "u1",
        "guess": 8
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "play",
+      "actor": 0,
+      "card": 5,
+      "fromIndex": 0,
+      "playedIndex": 1,
+      "extras": [
+       {
+        "seat": 1,
+        "card": 8,
+        "index": 0
+       }
+      ],
+      "drawer": 2,
+      "drawnIndex": 1
+     }
     }
    },
    {
@@ -3221,7 +3567,8 @@
        0
       ]
      ],
-     "turns": 40
+     "turns": 40,
+     "lastMove": null
     },
     "view_of_mover": {
      "myIndex": 0,
@@ -3328,7 +3675,8 @@
        "target": null,
        "guess": null
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "myIndex": 1,
@@ -3385,7 +3733,8 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -3478,7 +3827,10 @@
        0
       ]
      ],
-     "turns": 41
+     "turns": 41,
+     "lastMove": {
+      "kind": "round"
+     }
     },
     "expected_turn": null,
     "expected_payouts": {
@@ -3541,7 +3893,10 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "round"
+     }
     },
     "expected_view_of_other": {
      "myIndex": 1,
@@ -3598,7 +3953,10 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "round"
+     }
     }
    },
    {
@@ -3693,7 +4051,8 @@
        0
       ]
      ],
-     "turns": 41
+     "turns": 41,
+     "lastMove": null
     },
     "view_of_mover": {
      "myIndex": 0,
@@ -3769,7 +4128,8 @@
        "target": "u2",
        "guess": null
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "myIndex": 1,
@@ -3831,7 +4191,8 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -3924,7 +4285,10 @@
        0
       ]
      ],
-     "turns": 42
+     "turns": 42,
+     "lastMove": {
+      "kind": "round"
+     }
     },
     "expected_turn": null,
     "expected_payouts": {
@@ -3991,7 +4355,10 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "round"
+     }
     },
     "expected_view_of_other": {
      "myIndex": 1,
@@ -4054,7 +4421,10 @@
       0,
       0
      ],
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "round"
+     }
     }
    }
   ]
