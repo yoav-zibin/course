@@ -6,7 +6,7 @@
   "allowed_player_counts": [
     2
   ],
-  "server_code": "// Mastermind (Declarative): seat 0 codemaker, seat 1 codebreaker, one round.\n// The secret code lives only in authoritative state; viewFor hides it from\n// the codebreaker and spectators until the match is over.\nfunction scoreGuess(code, guess) {\n  let black = 0;\n  const cr = [0, 0, 0, 0, 0, 0], gr = [0, 0, 0, 0, 0, 0];\n  for (let i = 0; i < 4; i++) {\n    if (code[i] === guess[i]) black++;\n    else { cr[code[i]]++; gr[guess[i]]++; }\n  }\n  let white = 0;\n  for (let c = 0; c < 6; c++) white += Math.min(cr[c], gr[c]);\n  return { black: black, white: white };\n}\nfunction validCode(c) {\n  return Array.isArray(c) && c.length === 4 &&\n    c.every(v => Number.isInteger(v) && v >= 0 && v <= 5);\n}\nfunction clone(o) { return JSON.parse(JSON.stringify(o)); }\nfunction payoutsFor(s, ctx) {\n  if (!ctx.pot) return {};\n  const humans = ctx.players.filter(p => p.kind === 'human' && p.active !== false);\n  const winner = ctx.players[s.winner];\n  const recipients = winner && winner.kind === 'human' && winner.active !== false ? [winner] : humans;\n  const out = {};\n  if (!recipients.length) return out;\n  recipients.forEach((p, i) => {\n    out[p.id] = Math.floor(ctx.pot / recipients.length) + (i < ctx.pot % recipients.length ? 1 : 0);\n  });\n  return out;\n}\nfunction randomCode(ctx) {\n  return [0, 0, 0, 0].map(() => Math.floor(ctx.random() * 6));\n}\nconst game = {\n  newMatch(ctx) {\n    const s = { phase: 'set', code: null, guesses: [], feedback: [], turn: 0, winner: -1, over: false };\n    return { state: s, turn: [ctx.players[0].id] };\n  },\n  applyMove(state, id, move, ctx) {\n    if (state.over) throw new InvalidMove('Illegal move');\n    if (!move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('Illegal move');\n    if (ctx.players[state.turn].id !== id) throw new InvalidMove('Illegal move');\n    const want = state.phase === 'set' ? 'setCode' : state.phase === 'guess' ? 'guess' : null;\n    if (!want || move.type !== want) throw new InvalidMove('Illegal move');\n    if (Object.keys(move).length !== 2 || !validCode(move.code)) throw new InvalidMove('Illegal move');\n    const s = clone(state);\n    if (move.type === 'setCode') {\n      s.code = move.code.slice();\n      s.phase = 'guess';\n      s.turn = 1;\n    } else {\n      const f = scoreGuess(s.code, move.code);\n      s.guesses.push(move.code.slice());\n      s.feedback.push(f);\n      if (f.black === 4) { s.winner = 1; s.over = true; s.phase = 'over'; }\n      else if (s.guesses.length >= 10) { s.winner = 0; s.over = true; s.phase = 'over'; }\n    }\n    return s.over\n      ? { state: s, turn: null, payouts: payoutsFor(s, ctx) }\n      : { state: s, turn: [ctx.players[s.turn].id] };\n  },\n  viewFor(state, id, ctx) {\n    const s = clone(state);\n    const seat = ctx.players.findIndex(p => p.id === id);\n    // Only the codemaker (seat 0) sees the secret while play continues.\n    // Once the match is over the code is revealed to everyone.\n    if (!s.over && seat !== 0) s.code = null;\n    return s;\n  },\n  randomMove(state, id, ctx) {\n    return state.phase === 'set'\n      ? { type: 'setCode', code: randomCode(ctx) }\n      : { type: 'guess', code: randomCode(ctx) };\n  },\n  computerMove(state, id, ctx) {\n    if (state.phase === 'set') return { type: 'setCode', code: randomCode(ctx) };\n    // Guess only codes consistent with every feedback received so far.\n    const cand = [];\n    for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++)\n      for (let c = 0; c < 6; c++) for (let d = 0; d < 6; d++) {\n        const code = [a, b, c, d];\n        let ok = true;\n        for (let i = 0; i < state.guesses.length; i++) {\n          const f = scoreGuess(code, state.guesses[i]);\n          if (f.black !== state.feedback[i].black || f.white !== state.feedback[i].white) { ok = false; break; }\n        }\n        if (ok) cand.push(code);\n      }\n    const pick = cand.length ? cand[Math.floor(ctx.random() * cand.length)] : randomCode(ctx);\n    return { type: 'guess', code: pick };\n  }\n};\n",
+  "server_code": "// Mastermind (Declarative): seat 0 codemaker, seat 1 codebreaker, one round.\n// The secret code lives only in authoritative state; viewFor hides it from\n// the codebreaker and spectators until the match is over.\n// state.last_move is the animation record for the last accepted action,\n// replaced on every accepted move. It is privacy-safe by construction:\n// the setCode record is inert ({kind:'set'}, no code contents) and guess\n// records carry only public piece ids and board positions (no colors),\n// so viewFor can pass last_move through exactly like guesses/feedback.\nfunction scoreGuess(code, guess) {\n  let black = 0;\n  const cr = [0, 0, 0, 0, 0, 0], gr = [0, 0, 0, 0, 0, 0];\n  for (let i = 0; i < 4; i++) {\n    if (code[i] === guess[i]) black++;\n    else { cr[code[i]]++; gr[guess[i]]++; }\n  }\n  let white = 0;\n  for (let c = 0; c < 6; c++) white += Math.min(cr[c], gr[c]);\n  return { black: black, white: white };\n}\nfunction validCode(c) {\n  return Array.isArray(c) && c.length === 4 &&\n    c.every(v => Number.isInteger(v) && v >= 0 && v <= 5);\n}\nfunction clone(o) { return JSON.parse(JSON.stringify(o)); }\nfunction payoutsFor(s, ctx) {\n  if (!ctx.pot) return {};\n  const humans = ctx.players.filter(p => p.kind === 'human' && p.active !== false);\n  const winner = ctx.players[s.winner];\n  const recipients = winner && winner.kind === 'human' && winner.active !== false ? [winner] : humans;\n  const out = {};\n  if (!recipients.length) return out;\n  recipients.forEach((p, i) => {\n    out[p.id] = Math.floor(ctx.pot / recipients.length) + (i < ctx.pot % recipients.length ? 1 : 0);\n  });\n  return out;\n}\nfunction randomCode(ctx) {\n  return [0, 0, 0, 0].map(() => Math.floor(ctx.random() * 6));\n}\n// Last-move provenance helpers. Positions mirror the presentation layout\n// in ui_code exactly: staged entry pegs sit on the palette board at\n// x=44+i*44, y=36; guess pegs land on the main board at x=150+i*46,\n// y=76+row*38; scoring feedback pegs land in the 2x2 cluster at\n// x=400+(j%2)*24, y=rowY-10+floor(j/2)*20 and start from a supply bin at\n// the palette's right end (x=520+j*20, y=36). Guess peg ids are\n// g_<row>_<slot> and feedback peg ids f_<row>_<slot>: rows are\n// append-only and slots fixed, so ids are stable and never shift.\nfunction paletteSlotPos(i) { return { board: 'palette', position: { x: 44 + i * 44, y: 36 } }; }\nfunction guessCellPos(row, i) { return { board: 'main', position: { x: 150 + i * 46, y: 76 + row * 38 } }; }\nfunction feedbackSupplyPos(j) { return { board: 'palette', position: { x: 520 + j * 20, y: 36 } }; }\nfunction feedbackCellPos(row, j) { const y = 76 + row * 38; return { board: 'main', position: { x: 400 + (j % 2) * 24, y: y - 10 + Math.floor(j / 2) * 20 } }; }\nfunction guessRecord(row, black, white) {\n  const pegs = [], feedback_pegs = [];\n  for (let i = 0; i < 4; i++) pegs.push({ piece_id: 'g_' + row + '_' + i, from: paletteSlotPos(i), to: guessCellPos(row, i) });\n  for (let j = 0; j < black + white; j++) feedback_pegs.push({ piece_id: 'f_' + row + '_' + j, from: feedbackSupplyPos(j), to: feedbackCellPos(row, j) });\n  return { kind: 'guess', row: row, pegs: pegs, feedback_pegs: feedback_pegs };\n}\nconst game = {\n  newMatch(ctx) {\n    const s = { phase: 'set', code: null, guesses: [], feedback: [], turn: 0, winner: -1, over: false, last_move: null };\n    return { state: s, turn: [ctx.players[0].id] };\n  },\n  applyMove(state, id, move, ctx) {\n    if (state.over) throw new InvalidMove('Illegal move');\n    if (!move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('Illegal move');\n    if (ctx.players[state.turn].id !== id) throw new InvalidMove('Illegal move');\n    const want = state.phase === 'set' ? 'setCode' : state.phase === 'guess' ? 'guess' : null;\n    if (!want || move.type !== want) throw new InvalidMove('Illegal move');\n    if (Object.keys(move).length !== 2 || !validCode(move.code)) throw new InvalidMove('Illegal move');\n    const s = clone(state);\n    if (move.type === 'setCode') {\n      s.code = move.code.slice();\n      s.phase = 'guess';\n      s.turn = 1;\n      // Inert on purpose: the code must not appear in any view field,\n      // including last_move, for the codebreaker or spectators.\n      s.last_move = { kind: 'set' };\n    } else {\n      const f = scoreGuess(s.code, move.code);\n      s.guesses.push(move.code.slice());\n      s.feedback.push(f);\n      s.last_move = guessRecord(s.guesses.length - 1, f.black, f.white);\n      if (f.black === 4) { s.winner = 1; s.over = true; s.phase = 'over'; }\n      else if (s.guesses.length >= 10) { s.winner = 0; s.over = true; s.phase = 'over'; }\n    }\n    return s.over\n      ? { state: s, turn: null, payouts: payoutsFor(s, ctx) }\n      : { state: s, turn: [ctx.players[s.turn].id] };\n  },\n  viewFor(state, id, ctx) {\n    const s = clone(state);\n    const seat = ctx.players.findIndex(p => p.id === id);\n    // Only the codemaker (seat 0) sees the secret while play continues.\n    // Once the match is over the code is revealed to everyone.\n    // last_move needs no extra filtering: the 'set' record is inert and\n    // 'guess' records hold only public ids/positions, never the code.\n    if (!s.over && seat !== 0) s.code = null;\n    return s;\n  },\n  randomMove(state, id, ctx) {\n    return state.phase === 'set'\n      ? { type: 'setCode', code: randomCode(ctx) }\n      : { type: 'guess', code: randomCode(ctx) };\n  },\n  computerMove(state, id, ctx) {\n    if (state.phase === 'set') return { type: 'setCode', code: randomCode(ctx) };\n    // Guess only codes consistent with every feedback received so far.\n    const cand = [];\n    for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++)\n      for (let c = 0; c < 6; c++) for (let d = 0; d < 6; d++) {\n        const code = [a, b, c, d];\n        let ok = true;\n        for (let i = 0; i < state.guesses.length; i++) {\n          const f = scoreGuess(code, state.guesses[i]);\n          if (f.black !== state.feedback[i].black || f.white !== state.feedback[i].white) { ok = false; break; }\n        }\n        if (ok) cand.push(code);\n      }\n    const pick = cand.length ? cand[Math.floor(ctx.random() * cand.length)] : randomCode(ctx);\n    return { type: 'guess', code: pick };\n  }\n};\n",
   "declarative_ui": {
     "format": "buildplay-ui",
     "version": 1,
@@ -45,56 +45,64 @@
         "width": 34,
         "height": 34,
         "color": "#e53935",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "c1": {
         "shape": "circle",
         "width": 34,
         "height": 34,
         "color": "#fb8c00",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "c2": {
         "shape": "circle",
         "width": 34,
         "height": 34,
         "color": "#fdd835",
-        "text_color": "#102039"
+        "text_color": "#102039",
+        "action_outline": "ellipse"
       },
       "c3": {
         "shape": "circle",
         "width": 34,
         "height": 34,
         "color": "#43a047",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "c4": {
         "shape": "circle",
         "width": 34,
         "height": 34,
         "color": "#1e88e5",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "c5": {
         "shape": "circle",
         "width": 34,
         "height": 34,
         "color": "#8e24aa",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "hidden": {
         "shape": "circle",
         "width": 34,
         "height": 34,
         "color": "#5c7190",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "fb_black": {
         "shape": "circle",
         "width": 15,
         "height": 15,
         "color": "#111111",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "none"
       },
       "fb_white": {
         "shape": "circle",
@@ -102,14 +110,16 @@
         "height": 15,
         "color": "#ffffff",
         "text_color": "#102039",
-        "border_color": "#102039"
+        "border_color": "#102039",
+        "action_outline": "none"
       },
       "fb_empty": {
         "shape": "circle",
         "width": 15,
         "height": 15,
         "color": "#44546e",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "none"
       }
     },
     "strings": {
@@ -125,7 +135,13 @@
       "reset": "Reset",
       "server_invalid": "Illegal move"
     },
-    "ui_code": "const SOURCE_STRINGS = {\"title\": \"Mastermind\", \"status_set\": \"Codemaker: set the secret code\", \"status_guess\": \"Codebreaker: make a guess\", \"win_maker\": \"Codemaker wins\", \"win_breaker\": \"Codebreaker wins\", \"left\": \"{n} guesses left\", \"secret\": \"Secret code\", \"submit_code\": \"Set code\", \"submit_guess\": \"Guess\", \"reset\": \"Reset\", \"server_invalid\": \"Illegal move\"};\n// Mastermind presentation: a secret row plus ten guess rows on the main\n// board, and a palette board shown interactively only to the acting viewer.\n// The palette holds the four staged entry pegs (the peg for the slot being\n// edited is marked selected) and six color targets for that slot, with ids\n// slot<slot>-color-<color> that set the slot directly to that color; tapping\n// one stages the color and advances the edit to the next slot (wrapping\n// around, so any slot can be corrected). Submit sends the staged code as\n// the one authoritative move. Pieces never declare actions: all\n// interactivity is expressed through targets and controls.\nconst PEG_COLORS = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'];\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g, (_, k) => String(args[k] === undefined ? '' : args[k]));\n    const active = m.status === 'ongoing' && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    let local = (localState && Array.isArray(localState.entry) && localState.entry.length === 4\n      && localState.entry.every(v => Number.isInteger(v) && v >= 0 && v <= 5)\n      && Number.isInteger(localState.slot) && localState.slot >= 0 && localState.slot <= 3\n      && localState.move_count === m.move_count)\n      ? { entry: localState.entry.slice(), slot: localState.slot, move_count: m.move_count }\n      : { entry: [0, 0, 0, 0], slot: 0, move_count: m.move_count };\n    // Apply the event to the staged entry BEFORE building the scene, so the\n    // returned scene already shows the updated staging.\n    let makeMove = null;\n    if (message.type === 'ui_event' && active && message.event && message.event.type === 'tap') {\n      const e = message.event;\n      if (e.id === 'submit') {\n        makeMove = { type: s.phase === 'set' ? 'setCode' : 'guess', code: local.entry.slice() };\n      } else {\n        const hit = /^slot(\\d)-color-(\\d)$/.exec(e.id || '');\n        if (hit) {\n          const entry = local.entry.slice();\n          entry[Number(hit[1])] = Number(hit[2]);\n          local = { entry: entry, slot: (Number(hit[1]) + 1) % 4, move_count: m.move_count };\n        }\n      }\n    }\n    const pieces = [], targets = [], controls = [], labels = [];\n    labels.push({ id: 'title', text: t('title'), x: 24, y: 14, font_size: 26 });\n    const status = s.over\n      ? (s.winner === 1 ? t('win_breaker') : t('win_maker'))\n      : (s.phase === 'set' ? t('status_set') : t('status_guess'));\n    labels.push({ id: 'status', text: status, x: 24, y: 48, font_size: 18 });\n    labels.push({ id: 'left', text: t('left', { n: 10 - s.guesses.length }), x: 430, y: 48, font_size: 16 });\n    labels.push({ id: 'secret_label', text: t('secret'), x: 24, y: 92, font_size: 15 });\n    const known = s.code !== null && s.code !== undefined;\n    for (let i = 0; i < 4; i++) {\n      pieces.push({ id: 'secret_' + i, type: known ? 'c' + s.code[i] : 'hidden', board: 'main', position: { x: 150 + i * 46, y: 30 }, text: known ? '' : '?', actions: [] });\n    }\n    s.guesses.forEach((g, r) => {\n      const y = 76 + r * 38;\n      labels.push({ id: 'row_' + r, text: String(r + 1), x: 30, y: 84 + y - 8, font_size: 14 });\n      g.forEach((c, i) => pieces.push({ id: 'g_' + r + '_' + i, type: 'c' + c, board: 'main', position: { x: 150 + i * 46, y: y }, text: '', actions: [] }));\n      const f = s.feedback[r];\n      const kinds = [];\n      for (let b = 0; b < f.black; b++) kinds.push('fb_black');\n      for (let w = 0; w < f.white; w++) kinds.push('fb_white');\n      while (kinds.length < 4) kinds.push('fb_empty');\n      kinds.forEach((kind, j) => pieces.push({ id: 'f_' + r + '_' + j, type: kind, board: 'main', position: { x: 400 + (j % 2) * 24, y: y - 10 + Math.floor(j / 2) * 20 }, text: '', actions: [] }));\n    });\n    if (active) {\n      for (let i = 0; i < 4; i++) {\n        pieces.push({ id: 'slot_' + i, type: 'c' + local.entry[i], board: 'palette', position: { x: 44 + i * 44, y: 36 }, text: '', actions: [], selected: local.slot === i });\n      }\n      labels.push({ id: 'cur_slot', text: String(local.slot + 1), x: 222, y: 567, font_size: 13 });\n      for (let c = 0; c < 6; c++) {\n        targets.push({\n          id: 'slot' + local.slot + '-color-' + c, board: 'palette',\n          position: { x: 240 + c * 57, y: 36 },\n          color: PEG_COLORS[c],\n          aria_label: 'Slot ' + (local.slot + 1) + ' color ' + (c + 1)\n        });\n      }\n      controls.push({ id: 'submit', kind: 'button', label: s.phase === 'set' ? t('submit_code') : t('submit_guess') });\n    }\n    const scene = { pieces, targets, controls, labels };\n    const out = { scene, local_state: local };\n    if (makeMove) out.make_move = makeMove;\n    return out;\n  }\n};\n"
+    "ui_code": "const SOURCE_STRINGS = {\"title\": \"Mastermind\", \"status_set\": \"Codemaker: set the secret code\", \"status_guess\": \"Codebreaker: make a guess\", \"win_maker\": \"Codemaker wins\", \"win_breaker\": \"Codebreaker wins\", \"left\": \"{n} guesses left\", \"secret\": \"Secret code\", \"submit_code\": \"Set code\", \"submit_guess\": \"Guess\", \"reset\": \"Reset\", \"server_invalid\": \"Illegal move\"};\n// Mastermind presentation: a secret row plus ten guess rows on the main\n// board, and a palette board shown interactively only to the acting viewer.\n// The palette holds the four staged entry pegs (the peg for the slot being\n// edited is marked selected) and six color targets for that slot, with ids\n// slot<slot>-color-<color> that set the slot directly to that color; tapping\n// one stages the color and advances the edit to the next slot (wrapping\n// around, so any slot can be corrected). Submit sends the staged code as\n// the one authoritative move. Pieces never declare actions: all\n// interactivity is expressed through targets and controls.\nconst PEG_COLORS = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'];\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g, (_, k) => String(args[k] === undefined ? '' : args[k]));\n    const active = m.status === 'ongoing' && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    let local = (localState && Array.isArray(localState.entry) && localState.entry.length === 4\n      && localState.entry.every(v => Number.isInteger(v) && v >= 0 && v <= 5)\n      && Number.isInteger(localState.slot) && localState.slot >= 0 && localState.slot <= 3\n      && localState.move_count === m.move_count)\n      ? { entry: localState.entry.slice(), slot: localState.slot, move_count: m.move_count }\n      : { entry: [0, 0, 0, 0], slot: 0, move_count: m.move_count };\n    // Apply the event to the staged entry BEFORE building the scene, so the\n    // returned scene already shows the updated staging.\n    let makeMove = null;\n    if (message.type === 'ui_event' && active && message.event && message.event.type === 'tap') {\n      const e = message.event;\n      if (e.id === 'submit') {\n        makeMove = { type: s.phase === 'set' ? 'setCode' : 'guess', code: local.entry.slice() };\n      } else {\n        const hit = /^slot(\\d)-color-(\\d)$/.exec(e.id || '');\n        if (hit) {\n          const entry = local.entry.slice();\n          entry[Number(hit[1])] = Number(hit[2]);\n          local = { entry: entry, slot: (Number(hit[1]) + 1) % 4, move_count: m.move_count };\n        }\n      }\n    }\n    const pieces = [], targets = [], controls = [], labels = [];\n    labels.push({ id: 'title', text: t('title'), x: 24, y: 14, font_size: 26 });\n    const status = s.over\n      ? (s.winner === 1 ? t('win_breaker') : t('win_maker'))\n      : (s.phase === 'set' ? t('status_set') : t('status_guess'));\n    labels.push({ id: 'status', text: status, x: 24, y: 48, font_size: 18 });\n    labels.push({ id: 'left', text: t('left', { n: 10 - s.guesses.length }), x: 430, y: 48, font_size: 16 });\n    labels.push({ id: 'secret_label', text: t('secret'), x: 24, y: 92, font_size: 15 });\n    const known = s.code !== null && s.code !== undefined;\n    for (let i = 0; i < 4; i++) {\n      pieces.push({ id: 'secret_' + i, type: known ? 'c' + s.code[i] : 'hidden', board: 'main', position: { x: 150 + i * 46, y: 30 }, text: known ? '' : '?', actions: [] });\n    }\n    s.guesses.forEach((g, r) => {\n      const y = 76 + r * 38;\n      labels.push({ id: 'row_' + r, text: String(r + 1), x: 30, y: 84 + y - 8, font_size: 14 });\n      g.forEach((c, i) => pieces.push({ id: 'g_' + r + '_' + i, type: 'c' + c, board: 'main', position: { x: 150 + i * 46, y: y }, text: '', actions: [] }));\n      const f = s.feedback[r];\n      const kinds = [];\n      for (let b = 0; b < f.black; b++) kinds.push('fb_black');\n      for (let w = 0; w < f.white; w++) kinds.push('fb_white');\n      while (kinds.length < 4) kinds.push('fb_empty');\n      kinds.forEach((kind, j) => pieces.push({ id: 'f_' + r + '_' + j, type: kind, board: 'main', position: { x: 400 + (j % 2) * 24, y: y - 10 + Math.floor(j / 2) * 20 }, text: '', actions: [] }));\n    });\n    if (active) {\n      for (let i = 0; i < 4; i++) {\n        pieces.push({ id: 'slot_' + i, type: 'c' + local.entry[i], board: 'palette', position: { x: 44 + i * 44, y: 36 }, text: '', actions: [], selected: local.slot === i });\n      }\n      labels.push({ id: 'cur_slot', text: String(local.slot + 1), x: 222, y: 567, font_size: 13 });\n      for (let c = 0; c < 6; c++) {\n        targets.push({\n          id: 'slot' + local.slot + '-color-' + c, board: 'palette',\n          position: { x: 240 + c * 57, y: 36 },\n          color: PEG_COLORS[c],\n          aria_label: 'Slot ' + (local.slot + 1) + ' color ' + (c + 1)\n        });\n      }\n      controls.push({ id: 'submit', kind: 'button', label: s.phase === 'set' ? t('submit_code') : t('submit_guess') });\n    }\n    const scene = { pieces, targets, controls, labels };\n    const out = { scene, local_state: local };\n    if (makeMove) out.make_move = makeMove;\n    return out;\n  },\n  // Last-move animation. Guess pegs fly from their palette staging slots\n  // (the supply positions the server records) to the new row's cells in\n  // placement order — left to right, 350 ms each — then the scoring\n  // feedback pegs (blacks then whites, in scene slot order) fly from\n  // the palette supply bin to the feedback cluster, 250 ms each. The\n  // fb_empty placeholders are not placed pegs and are not animated.\n  // Piece ids are stable by construction: guess pegs are\n  // g_<row>_<slot> and feedback pegs f_<row>_<slot>, keyed by the\n  // append-only row and the fixed slot, so an id never shifts to a\n  // different peg. The code-setting record is inert ({kind:'set'},\n  // no code contents) and yields no motion; a view from older pinned\n  // rules without a last_move property keeps the host fallback (null).\n  getLastMoveAnimations(view, scene) {\n    if (!Object.prototype.hasOwnProperty.call(view, 'last_move')) return null;\n    const move = view.last_move;\n    if (!move || move.kind !== 'guess' || !Array.isArray(move.pegs)) return [];\n    const byId = {};\n    (scene.pieces || []).forEach(p => { byId[p.id] = p; });\n    const out = [];\n    const add = (peg, duration) => {\n      const piece = byId[peg.piece_id];\n      if (!piece) return;\n      out.push({ piece_id: peg.piece_id, duration_ms: duration, path: [\n        { board: peg.from.board, position: { x: peg.from.position.x, y: peg.from.position.y } },\n        { board: piece.board, position: { x: piece.position.x, y: piece.position.y } }\n      ] });\n    };\n    move.pegs.forEach(peg => add(peg, 350));\n    (move.feedback_pegs || []).forEach(peg => add(peg, 250));\n    return out;\n  }\n};\n",
+    "motion": {
+      "move_ms": 600,
+      "turn_pause_ms": 400,
+      "animate_own": true,
+      "easing": "ease-in-out-quad"
+    }
   },
   "rules": "Seat 0 is the codemaker and seat 1 is the codebreaker; this edition is a single round with no role swap. The codemaker first submits a secret code of 4 pegs, each one of 6 colors, repeats allowed. The codebreaker then makes up to 10 guesses. After each guess the feedback is public: one black peg for each peg of the right color in the right place, then one white peg for each remaining peg of the right color in the wrong place (counted from the leftover color counts, so duplicates never score twice). The codebreaker wins by scoring 4 black pegs within 10 guesses; if the guesses run out, the codemaker wins. The winner takes the pot. The secret code is hidden from the codebreaker and spectators until the match ends, when it is revealed to everyone.",
   "ui_instructions": "On your turn, build your code in the palette area: tap a color to set the highlighted slot to that color — the highlight advances to the next slot and wraps back to the first after the last — then press Submit. Only your turn is interactive; the board scales to the screen.",
@@ -161,7 +177,8 @@
         "feedback",
         "turn",
         "winner",
-        "over"
+        "over",
+        "last_move"
       ],
       "additionalProperties": false,
       "properties": {
@@ -242,6 +259,210 @@
         },
         "over": {
           "type": "boolean"
+        },
+        "last_move": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "set"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind",
+                "row",
+                "pegs",
+                "feedback_pegs"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "guess"
+                },
+                "row": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                },
+                "pegs": {
+                  "type": "array",
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "piece_id",
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "piece_id": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "type": "object",
+                        "required": [
+                          "board",
+                          "position"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "board": {
+                            "enum": [
+                              "main",
+                              "palette"
+                            ]
+                          },
+                          "position": {
+                            "type": "object",
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "to": {
+                        "type": "object",
+                        "required": [
+                          "board",
+                          "position"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "board": {
+                            "enum": [
+                              "main",
+                              "palette"
+                            ]
+                          },
+                          "position": {
+                            "type": "object",
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "feedback_pegs": {
+                  "type": "array",
+                  "maxItems": 4,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "piece_id",
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "piece_id": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "type": "object",
+                        "required": [
+                          "board",
+                          "position"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "board": {
+                            "enum": [
+                              "main",
+                              "palette"
+                            ]
+                          },
+                          "position": {
+                            "type": "object",
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "to": {
+                        "type": "object",
+                        "required": [
+                          "board",
+                          "position"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "board": {
+                            "enum": [
+                              "main",
+                              "palette"
+                            ]
+                          },
+                          "position": {
+                            "type": "object",
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
         }
       }
     },
@@ -254,7 +475,8 @@
         "feedback",
         "turn",
         "winner",
-        "over"
+        "over",
+        "last_move"
       ],
       "additionalProperties": false,
       "properties": {
@@ -335,6 +557,210 @@
         },
         "over": {
           "type": "boolean"
+        },
+        "last_move": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "set"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind",
+                "row",
+                "pegs",
+                "feedback_pegs"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "guess"
+                },
+                "row": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                },
+                "pegs": {
+                  "type": "array",
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "piece_id",
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "piece_id": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "type": "object",
+                        "required": [
+                          "board",
+                          "position"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "board": {
+                            "enum": [
+                              "main",
+                              "palette"
+                            ]
+                          },
+                          "position": {
+                            "type": "object",
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "to": {
+                        "type": "object",
+                        "required": [
+                          "board",
+                          "position"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "board": {
+                            "enum": [
+                              "main",
+                              "palette"
+                            ]
+                          },
+                          "position": {
+                            "type": "object",
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "feedback_pegs": {
+                  "type": "array",
+                  "maxItems": 4,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "piece_id",
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "piece_id": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "type": "object",
+                        "required": [
+                          "board",
+                          "position"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "board": {
+                            "enum": [
+                              "main",
+                              "palette"
+                            ]
+                          },
+                          "position": {
+                            "type": "object",
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "to": {
+                        "type": "object",
+                        "required": [
+                          "board",
+                          "position"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "board": {
+                            "enum": [
+                              "main",
+                              "palette"
+                            ]
+                          },
+                          "position": {
+                            "type": "object",
+                            "required": [
+                              "x",
+                              "y"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
         }
       }
     },
@@ -423,7 +849,8 @@
           "feedback": [],
           "turn": 0,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": null
         },
         "player_id": "u1",
         "other_player_id": "u2",
@@ -443,7 +870,8 @@
           "feedback": [],
           "turn": 0,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": null
         },
         "view_of_other": {
           "phase": "set",
@@ -452,7 +880,8 @@
           "feedback": [],
           "turn": 0,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": null
         },
         "expected_state": {
           "phase": "guess",
@@ -466,7 +895,10 @@
           "feedback": [],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "set"
+          }
         },
         "expected_turn": [
           "u2"
@@ -483,7 +915,10 @@
           "feedback": [],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "set"
+          }
         },
         "expected_view_of_other": {
           "phase": "guess",
@@ -492,7 +927,10 @@
           "feedback": [],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "set"
+          }
         },
         "images": [
           {
@@ -547,7 +985,8 @@
           "feedback": [],
           "turn": 0,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": null
         },
         "player_id": "u1",
         "other_player_id": "u2",
@@ -567,7 +1006,8 @@
           "feedback": [],
           "turn": 0,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": null
         },
         "view_of_other": {
           "phase": "set",
@@ -576,7 +1016,8 @@
           "feedback": [],
           "turn": 0,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": null
         },
         "expected_error": "InvalidMove",
         "expected_state": {
@@ -586,7 +1027,8 @@
           "feedback": [],
           "turn": 0,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": null
         },
         "turn": [
           "u1"
@@ -601,7 +1043,8 @@
           "feedback": [],
           "turn": 0,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": null
         },
         "expected_view_of_other": {
           "phase": "set",
@@ -610,7 +1053,8 @@
           "feedback": [],
           "turn": 0,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": null
         },
         "images": [
           {
@@ -670,7 +1114,10 @@
           "feedback": [],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "set"
+          }
         },
         "player_id": "u2",
         "other_player_id": "u1",
@@ -690,7 +1137,10 @@
           "feedback": [],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "set"
+          }
         },
         "view_of_other": {
           "phase": "guess",
@@ -704,7 +1154,10 @@
           "feedback": [],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "set"
+          }
         },
         "expected_state": {
           "phase": "guess",
@@ -730,7 +1183,134 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 0,
+            "pegs": [
+              {
+                "piece_id": "g_0_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 76
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_0_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 66
+                  }
+                }
+              },
+              {
+                "piece_id": "f_0_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 66
+                  }
+                }
+              },
+              {
+                "piece_id": "f_0_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 86
+                  }
+                }
+              }
+            ]
+          }
         },
         "expected_turn": [
           "u2"
@@ -754,7 +1334,134 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 0,
+            "pegs": [
+              {
+                "piece_id": "g_0_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 76
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_0_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 66
+                  }
+                }
+              },
+              {
+                "piece_id": "f_0_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 66
+                  }
+                }
+              },
+              {
+                "piece_id": "f_0_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 86
+                  }
+                }
+              }
+            ]
+          }
         },
         "expected_view_of_other": {
           "phase": "guess",
@@ -780,7 +1487,134 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 0,
+            "pegs": [
+              {
+                "piece_id": "g_0_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 76
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_0_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 66
+                  }
+                }
+              },
+              {
+                "piece_id": "f_0_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 66
+                  }
+                }
+              },
+              {
+                "piece_id": "f_0_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 86
+                  }
+                }
+              }
+            ]
+          }
         },
         "images": [
           {
@@ -852,7 +1686,82 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 0,
+            "pegs": [
+              {
+                "piece_id": "g_0_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 76
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": []
+          }
         },
         "player_id": "u2",
         "other_player_id": "u1",
@@ -884,7 +1793,82 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 0,
+            "pegs": [
+              {
+                "piece_id": "g_0_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 76
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": []
+          }
         },
         "view_of_other": {
           "phase": "guess",
@@ -910,7 +1894,82 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 0,
+            "pegs": [
+              {
+                "piece_id": "g_0_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 76
+                  }
+                }
+              },
+              {
+                "piece_id": "g_0_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 76
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": []
+          }
         },
         "expected_state": {
           "phase": "guess",
@@ -946,7 +2005,151 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 1,
+            "pegs": [
+              {
+                "piece_id": "g_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 114
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 124
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 580,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 124
+                  }
+                }
+              }
+            ]
+          }
         },
         "expected_turn": [
           "u2"
@@ -980,7 +2183,151 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 1,
+            "pegs": [
+              {
+                "piece_id": "g_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 114
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 124
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 580,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 124
+                  }
+                }
+              }
+            ]
+          }
         },
         "expected_view_of_other": {
           "phase": "guess",
@@ -1016,7 +2363,151 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 1,
+            "pegs": [
+              {
+                "piece_id": "g_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 114
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 124
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 580,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 124
+                  }
+                }
+              }
+            ]
+          }
         },
         "images": [
           {
@@ -1098,7 +2589,151 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 1,
+            "pegs": [
+              {
+                "piece_id": "g_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 114
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 124
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 580,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 124
+                  }
+                }
+              }
+            ]
+          }
         },
         "player_id": "u2",
         "other_player_id": "u1",
@@ -1140,7 +2775,151 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 1,
+            "pegs": [
+              {
+                "piece_id": "g_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 114
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 124
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 580,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 124
+                  }
+                }
+              }
+            ]
+          }
         },
         "view_of_other": {
           "phase": "guess",
@@ -1176,7 +2955,151 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 1,
+            "pegs": [
+              {
+                "piece_id": "g_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 114
+                  }
+                }
+              },
+              {
+                "piece_id": "g_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 114
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_1_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 104
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 124
+                  }
+                }
+              },
+              {
+                "piece_id": "f_1_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 580,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 124
+                  }
+                }
+              }
+            ]
+          }
         },
         "expected_state": {
           "phase": "over",
@@ -1222,7 +3145,151 @@
           ],
           "turn": 1,
           "winner": 1,
-          "over": true
+          "over": true,
+          "last_move": {
+            "kind": "guess",
+            "row": 2,
+            "pegs": [
+              {
+                "piece_id": "g_2_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 152
+                  }
+                }
+              },
+              {
+                "piece_id": "g_2_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 152
+                  }
+                }
+              },
+              {
+                "piece_id": "g_2_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 152
+                  }
+                }
+              },
+              {
+                "piece_id": "g_2_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 152
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_2_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 142
+                  }
+                }
+              },
+              {
+                "piece_id": "f_2_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 142
+                  }
+                }
+              },
+              {
+                "piece_id": "f_2_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 162
+                  }
+                }
+              },
+              {
+                "piece_id": "f_2_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 580,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 162
+                  }
+                }
+              }
+            ]
+          }
         },
         "expected_turn": null,
         "expected_view_of_mover": {
@@ -1269,7 +3336,151 @@
           ],
           "turn": 1,
           "winner": 1,
-          "over": true
+          "over": true,
+          "last_move": {
+            "kind": "guess",
+            "row": 2,
+            "pegs": [
+              {
+                "piece_id": "g_2_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 152
+                  }
+                }
+              },
+              {
+                "piece_id": "g_2_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 152
+                  }
+                }
+              },
+              {
+                "piece_id": "g_2_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 152
+                  }
+                }
+              },
+              {
+                "piece_id": "g_2_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 152
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_2_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 142
+                  }
+                }
+              },
+              {
+                "piece_id": "f_2_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 142
+                  }
+                }
+              },
+              {
+                "piece_id": "f_2_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 162
+                  }
+                }
+              },
+              {
+                "piece_id": "f_2_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 580,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 162
+                  }
+                }
+              }
+            ]
+          }
         },
         "expected_view_of_other": {
           "phase": "over",
@@ -1315,7 +3526,151 @@
           ],
           "turn": 1,
           "winner": 1,
-          "over": true
+          "over": true,
+          "last_move": {
+            "kind": "guess",
+            "row": 2,
+            "pegs": [
+              {
+                "piece_id": "g_2_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 152
+                  }
+                }
+              },
+              {
+                "piece_id": "g_2_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 152
+                  }
+                }
+              },
+              {
+                "piece_id": "g_2_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 152
+                  }
+                }
+              },
+              {
+                "piece_id": "g_2_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 152
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": [
+              {
+                "piece_id": "f_2_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 520,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 142
+                  }
+                }
+              },
+              {
+                "piece_id": "f_2_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 540,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 142
+                  }
+                }
+              },
+              {
+                "piece_id": "f_2_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 560,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 400,
+                    "y": 162
+                  }
+                }
+              },
+              {
+                "piece_id": "f_2_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 580,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 424,
+                    "y": 162
+                  }
+                }
+              }
+            ]
+          }
         },
         "expected_payouts": {
           "u2": 20
@@ -1470,7 +3825,82 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 8,
+            "pegs": [
+              {
+                "piece_id": "g_8_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 380
+                  }
+                }
+              },
+              {
+                "piece_id": "g_8_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 380
+                  }
+                }
+              },
+              {
+                "piece_id": "g_8_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 380
+                  }
+                }
+              },
+              {
+                "piece_id": "g_8_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 380
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": []
+          }
         },
         "player_id": "u2",
         "other_player_id": "u1",
@@ -1582,7 +4012,82 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 8,
+            "pegs": [
+              {
+                "piece_id": "g_8_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 380
+                  }
+                }
+              },
+              {
+                "piece_id": "g_8_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 380
+                  }
+                }
+              },
+              {
+                "piece_id": "g_8_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 380
+                  }
+                }
+              },
+              {
+                "piece_id": "g_8_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 380
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": []
+          }
         },
         "view_of_other": {
           "phase": "guess",
@@ -1688,7 +4193,82 @@
           ],
           "turn": 1,
           "winner": -1,
-          "over": false
+          "over": false,
+          "last_move": {
+            "kind": "guess",
+            "row": 8,
+            "pegs": [
+              {
+                "piece_id": "g_8_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 380
+                  }
+                }
+              },
+              {
+                "piece_id": "g_8_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 380
+                  }
+                }
+              },
+              {
+                "piece_id": "g_8_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 380
+                  }
+                }
+              },
+              {
+                "piece_id": "g_8_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 380
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": []
+          }
         },
         "expected_state": {
           "phase": "over",
@@ -1804,7 +4384,82 @@
           ],
           "turn": 1,
           "winner": 0,
-          "over": true
+          "over": true,
+          "last_move": {
+            "kind": "guess",
+            "row": 9,
+            "pegs": [
+              {
+                "piece_id": "g_9_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 418
+                  }
+                }
+              },
+              {
+                "piece_id": "g_9_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 418
+                  }
+                }
+              },
+              {
+                "piece_id": "g_9_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 418
+                  }
+                }
+              },
+              {
+                "piece_id": "g_9_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 418
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": []
+          }
         },
         "expected_turn": null,
         "expected_view_of_mover": {
@@ -1921,7 +4576,82 @@
           ],
           "turn": 1,
           "winner": 0,
-          "over": true
+          "over": true,
+          "last_move": {
+            "kind": "guess",
+            "row": 9,
+            "pegs": [
+              {
+                "piece_id": "g_9_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 418
+                  }
+                }
+              },
+              {
+                "piece_id": "g_9_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 418
+                  }
+                }
+              },
+              {
+                "piece_id": "g_9_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 418
+                  }
+                }
+              },
+              {
+                "piece_id": "g_9_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 418
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": []
+          }
         },
         "expected_view_of_other": {
           "phase": "over",
@@ -2037,7 +4767,82 @@
           ],
           "turn": 1,
           "winner": 0,
-          "over": true
+          "over": true,
+          "last_move": {
+            "kind": "guess",
+            "row": 9,
+            "pegs": [
+              {
+                "piece_id": "g_9_0",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 44,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 150,
+                    "y": 418
+                  }
+                }
+              },
+              {
+                "piece_id": "g_9_1",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 88,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 196,
+                    "y": 418
+                  }
+                }
+              },
+              {
+                "piece_id": "g_9_2",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 132,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 242,
+                    "y": 418
+                  }
+                }
+              },
+              {
+                "piece_id": "g_9_3",
+                "from": {
+                  "board": "palette",
+                  "position": {
+                    "x": 176,
+                    "y": 36
+                  }
+                },
+                "to": {
+                  "board": "main",
+                  "position": {
+                    "x": 288,
+                    "y": 418
+                  }
+                }
+              }
+            ],
+            "feedback_pegs": []
+          }
         },
         "expected_payouts": {
           "u1": 20
