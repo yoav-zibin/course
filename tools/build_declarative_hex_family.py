@@ -49,6 +49,13 @@ TILE_RESOURCES = ["lumber","lumber","lumber","lumber","brick","brick","brick","w
 TILE_NUMBERS = [5,2,6,3,8,10,9,12,11,4,8,10,9,4,5,6,3,11]
 TILE_COLORS = {"lumber":"#477354","brick":"#ad6651","wool":"#7997aa","grain":"#b39143","ore":"#717984","desert":"#d5c28a"}
 PLAYER_COLORS = ["#38bdf8", "#fb7185", "#a3e635", "#c084fc"]
+SERVER_TEXTS = {
+    "server_illegal_move": {
+        "en": "Illegal move", "es": "Movimiento ilegal", "fr": "Coup illégal",
+        "de": "Ungültiger Zug", "pt": "Jogada inválida", "zh": "非法着法",
+        "hi": "अमान्य चाल", "ar": "نقلة غير قانونية",
+    },
+}
 
 
 def hex_cells(radius: int):
@@ -156,6 +163,7 @@ def geometry_for(kind):
 
 def translated_strings(kind, locale):
     common = dict(UI_TEXT[locale])
+    common.update({key: values[locale] for key, values in SERVER_TEXTS.items()})
     common["cards_hidden"] = {"en": "{n} hidden cards", "es": "{n} cartas ocultas", "fr": "{n} cartes cachées", "de": "{n} verdeckte Karten", "pt": "{n} cartas ocultas", "zh": "{n} 张隐藏卡牌", "hi": "{n} छिपे कार्ड", "ar": "{n} بطاقات مخفية"}[locale]
     title = TITLES[kind][LOCALES.index(locale)]
     common["title"] = title
@@ -232,7 +240,10 @@ def small_svg(kind, caption, frame=0):
 
 def package(kind):
     cells, index, camps = geometry_for(kind)
-    catangeom = catan_geometry()
+    catangeom = catan_geometry() if kind == "catan" else {
+        "tiles": [], "nodes": [], "edges": [], "nodeEdges": [], "nodeTiles": [],
+        "tileNodes": [], "board": {"x": 0, "y": 0}, "player_colors": PLAYER_COLORS,
+    }
     strings = translated_strings(kind, "en")
     geom_prefix = "const KIND=" + json.dumps(kind) + ";\nconst HEX_CELLS=" + json.dumps(cells, separators=(",", ":")) + ";\nconst HEX_INDEX=" + json.dumps(index, separators=(",", ":")) + ";\nconst HEX_CAMP_IDS=" + json.dumps(camps, separators=(",", ":")) + ";\nconst CATAN_GEOMETRY=" + json.dumps(catangeom, separators=(",", ":")) + ";\nconst CATAN_TILES=" + json.dumps(catangeom["tiles"], separators=(",", ":")) + ";\n"
     server_code = geom_prefix + HEX_ENGINE

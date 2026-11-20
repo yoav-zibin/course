@@ -68,7 +68,7 @@ for (const kind of kinds) {
       response = ui.reducer.reduce({type:'ui_event', event:{type:'tap', id:`piece_${sourceCell}`}, state_changed:message}, local);
       local = response.local_state;
     }
-    if(response.scene.targets.some(target=>!Number.isFinite(target.size)||target.size<=0)) fail(`${kind}: a legal target has no usable hit area`);
+    if(response.scene.targets.some(target=>!target.hit_area||!Number.isFinite(target.hit_area.width)||!Number.isFinite(target.hit_area.height)||target.hit_area.width<=0||target.hit_area.height<=0)) fail(`${kind}: a legal target has no usable hit area`);
     response = ui.reducer.reduce({type:'ui_event', event:{type:'tap', id:idFor(test.move)}, state_changed:message}, local);
     if (canonical(response.make_move) !== canonical(test.move)) fail(`${kind}: UI did not emit ${canonical(test.move)}`);
 

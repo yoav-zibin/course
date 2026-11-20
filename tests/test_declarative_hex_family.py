@@ -8,6 +8,7 @@ import pytest
 from game_platform.agent_import import GameImport
 from game_platform.declarative_ui import DeclarativeLogic
 from game_platform.game_logic import GameLogic
+from game_platform.game_text import server_text_problems
 
 PACKAGES = Path(__file__).resolve().parents[1] / "games" / "declarative"
 
@@ -20,6 +21,12 @@ def constants(source, name):
     match = re.search(rf"const {name}=(.*?);\n", source)
     assert match, name
     return json.loads(match.group(1))
+
+
+@pytest.mark.parametrize("kind", ["chinese_checkers", "abalone", "havannah"])
+def test_server_output_has_a_localized_template(kind):
+    body = package(kind)
+    assert server_text_problems(body.declarative_ui["strings"], body.server_code) == []
 
 
 def context(count):
