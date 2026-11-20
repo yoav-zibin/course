@@ -30,7 +30,7 @@ KINDS = ('tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domine
          'mau_mau','dos','kisolo','thirty_one','gobblet','chutes_ladders',
          'six_mens_morris','connect6','ataxx','whist','scopa',
          'sim','paper_soccer','hackenbush','cartographers','dots_boxes','catan','oware','quarto','codenames','pentago','onitama','trivial_pursuit','love_letter','mastermind','scattergories','chinese_checkers','abalone','havannah')
-DEMO_KINDS = (*KINDS, 'backgammon', 'twistfive', 'lanterntrails', 'crownfields', 'flipside')
+DEMO_KINDS = (*KINDS, 'backgammon', 'twistfive', 'lanterntrails', 'crownfields', 'flipside', 'stitchtime')
 
 
 @contextmanager
