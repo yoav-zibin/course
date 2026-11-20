@@ -83,18 +83,22 @@ see [GAME_DEVELOPMENT_GUIDE.md](GAME_DEVELOPMENT_GUIDE.md).
 
 ## 3. Modes of play
 
-- **Pass-and-play (single player, one device):** all seats share one
-  screen; the player whose turn it is acts. Works fully offline.
-- **Against the computer:** one human against server-computed computer
-  opponents, from any seat the game allows.
-- **Online multiplayer:** matches with other signed-in players — a lobby
-  where the creator sets the player count and stake, invites by short
-  link, open matches anyone can join, and random-opponent matchmaking.
-- **Spectating:** non-players can watch a match through the spectator
-  view.
-- **Offline play:** single-player matches run entirely on the device;
-  online moves made offline are queued and sent when connectivity
-  returns.
+Every match records `match_kind`: `computer`, `pass_and_play`, or `multiplayer`.
+See [the match contract](docs/match-kinds.md).
+
+- **Against computers (`computer`):** exactly one human account/seat and computer
+  opponents. Only the owner can read or control the match; no sharing or joining.
+- **Pass-and-play (`pass_and_play`):** one account owns every human seat, including
+  one-seat solo games. The device can be passed between people. No computers,
+  sharing or joining; no other account can see the match.
+- **Multiplayer (`multiplayer`):** humans only. Share invitations so the other
+  players can join; multiplayer turn notifications and alerts apply.
+- **Cloud saves and offline play:** all matches save locally first and then to
+  the cloud. Single-player means either of the first two kinds: one logged-in
+  account controls all turns and can keep playing offline without a turn limit.
+  Reconnection uploads all pending progress, including finished matches.
+  Multiplayer queues the user's legal move and sends it when connected again.
+
 
 ## 4. Devices and resolutions
 

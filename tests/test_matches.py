@@ -19,6 +19,9 @@ def test_create_a_human_match(api: Api) -> None:
         "game_id": game_id,
         "game_version": 1,
         "owner_user_id": alice,
+        "match_kind": "multiplayer",
+        "cloud_revision": 0,
+        "single_player_state": None,
         "status": "waiting_for_players",
         "invite_code": match["invite_code"],
         "end_reason": None,
@@ -111,20 +114,15 @@ def test_rematch_requires_a_finished_match_and_an_original_player(api: Api) -> N
     ) == (403, "you are not a player in this match")
 
 
-def test_legacy_computer_match_rematch_is_a_human_lobby(api: Api) -> None:
+def test_legacy_computer_match_cannot_become_a_shared_rematch(api: Api) -> None:
     alice = api.new_user("alice")
     game_id = api.new_game(owner=alice, allowed_player_counts=[2, 3])
     match_id = api.new_match(
         owner=alice, game_id=game_id, num_computer_opponents=2, start=True
     )
     api.move(match_id, as_user=alice, next_turn=None, state={"winner": 0})
-    rematch = api.ok("POST", f"/matches/{match_id}/rematch", as_user=alice)
-    assert rematch["status"] == "waiting_for_players"
-    assert rematch["game_id"] == game_id and rematch["game_version"] == 1
-    assert [p["user_id"] for p in rematch["players"]] == [alice]
-    assert all(p["kind"] == "human" for p in rematch["players"])
-    assert rematch["state"] is None
-    assert api.ok("POST", f"/matches/{match_id}/rematch", as_user=alice)["id"] == rematch["id"]
+    assert api.request("POST", f"/matches/{match_id}/rematch", as_user=alice).status_code == 409
+    assert api.ok("GET", f"/matches/{match_id}", as_user=alice)["match_kind"] == "computer"
 
 
 def test_create_match_checks_the_game(api: Api) -> None:
@@ -204,7 +202,7 @@ def test_start_is_rejected_when_it_does_not_make_sense(api: Api) -> None:
     assert error(start(two)) == (409, "the match has already started")
 
 
-def test_anyone_can_view_a_match(api: Api) -> None:
+def test_only_owner_can_view_a_computer_match(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice)
     match_id = api.new_match(
@@ -213,22 +211,15 @@ def test_anyone_can_view_a_match(api: Api) -> None:
     api.move(match_id, as_user=alice, next_turn=1, state={"pot": 5})
     # The computer took its turn at once and handed it back to alice.
 
-    as_stranger = api.ok("GET", f"/matches/{match_id}", as_user=bob)
-    anonymous = api.ok("GET", f"/matches/{match_id}")
-    # Each response carries its own server_time; everything else is the same.
-    assert {**as_stranger, "server_time": None} == {**anonymous, "server_time": None}
-    # A non-player sees the game's spectator view (the echo game's
-    # viewFor is the same public view for everyone, so it equals the
-    # state here) — never the full state itself.
-    assert api.summary(anonymous) == {
+    assert api.request("GET", f"/matches/{match_id}", as_user=bob).status_code == 404
+    assert api.request("GET", f"/matches/{match_id}").status_code == 404
+    assert api.summary(api.ok("GET", f"/matches/{match_id}", as_user=alice)) == {
         "status": "ongoing",
         "players": ["alice", "computer"],
         "turn": [0],
         "state": {"pot": 5},
     }
-    assert [
-        move["new_state"] for move in api.ok("GET", f"/matches/{match_id}/moves")
-    ] == [{"pot": 5}, {"pot": 5}]
+    assert api.request("GET", f"/matches/{match_id}/moves").status_code == 404
     # Alice, seated, sees her views of both states.
     assert [
         move["new_state"]

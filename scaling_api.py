@@ -204,6 +204,7 @@ def install(app, *, debug_tools):
                 _match_out(platform, x, caller_id) for x in result.items
                 if (game := store.get_game_version_without_code(x.game_id, x.game_version))
                 and game.is_declarative
+                and (x.effective_match_kind == "multiplayer" or x.owner_user_id == caller_id)
             ],
             "next_cursor": result.next_cursor,
         }
@@ -220,6 +221,7 @@ def install(app, *, debug_tools):
         match = platform.get_match(match_id=match_id, caller_id=caller_id)
         stop = min(start + limit, len(match.moves))
         moves = match.moves[start:stop]
+        saved_views = (match.single_player_state or {}).get("moves")
         # Apply per-player views to history as well as current state. Each
         # view is computed with the move prefix it was recorded at, so its
         # viewFor gets the same isolated view seed as in GamePlatform.view_history.
@@ -227,21 +229,20 @@ def install(app, *, debug_tools):
             MoveOut.of(
                 replace(
                     move,
-                    new_state=platform.view_state(
+                    new_state=(saved_views[start + offset].get("new_state") if saved_views is not None else platform.view_state(
                         replace(
                             match,
                             state=move.new_state,
                             moves=history_prefix(match.moves, start + offset + 1),
                         ),
                         caller_id,
-                    ),
+                    )),
                 ), caller_id=caller_id
             )
             for offset, move in enumerate(moves)
         ]
-        initial = platform.view_state(
-            replace(match, state=match.initial_state, moves=()), caller_id
-        )
+        initial = (match.single_player_state.get("initialState") if match.single_player_state is not None
+                   else platform.view_state(replace(match, state=match.initial_state, moves=()), caller_id))
         return {
             "items": items,
             "next_start": stop if stop < len(match.moves) else None,

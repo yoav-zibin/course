@@ -385,15 +385,16 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /games/{id}/unpublish` | game secret/master | Hide a game from the public catalog |
 | `POST /bug-reports` | optional | Send a screenshot, bug or feature description and recent app diagnostics; see [Bug reports](#bug-reports) |
 | `POST /feedback` | yes | Legacy feedback API `{kind, target_type, target_id?, text, page?}`; see [Feedback](#feedback) |
-| `POST /matches` | yes | Create a public human-only match `{game_id, max_loss?, turn_seconds?}` (`turn_seconds`: 60, 180 or 600 for a [speed match](#speed-matches)); the caller is player 0 |
+| `POST /matches` | yes | Create a human-only multiplayer match `{game_id, match_kind?: "multiplayer", client_match_id?, max_loss?, turn_seconds?}` (`turn_seconds`: 60, 180 or 600 for a [speed match](#speed-matches)); the caller is player 0 |
 | `GET /matches?status=&game_id=` | yes | List the caller's matches (owned or seated, minus hidden ones) |
-| `GET /matches/{id}` |  | Get a match; anyone can view it, so it can be shared by URL. Speed matches include `turn_deadline` and `server_time` |
-| `POST /matches/{id}/join` | yes | Take a seat |
+| `GET /matches/{id}` | owner for single player | Get a match with `match_kind` and `cloud_revision`. Multiplayer may be viewed through shared links; private computer/pass-and-play details require owner authentication. Speed matches include `turn_deadline` and `server_time` |
+| `POST /matches/single-player-sync` | yes | Save a private computer/pass-and-play snapshot `{match, expected_revision}`; idempotent retry, 409 on a competing cloud revision; returns owner-only `single_player_state` |
+| `POST /matches/{id}/join` | yes | Take a human multiplayer seat; private single-player matches reject joining |
 | `POST /matches/{id}/start` | yes | Start the match (owner only); the server calls the game's `newMatch` |
 | `POST /matches/{id}/leave` | yes | Leave the match |
 | `POST /matches/{id}/moves` | yes | Make a move `{move, expected_move_count?}`; the server runs the game's `applyMove` |
 | `DELETE /matches/{id}/players/{user_id}` | yes | Owner removes a player before the match starts (like them leaving; the stake is refunded); they can't join it again. |
-| `GET /matches/{id}/moves` |  | Full move history |
+| `GET /matches/{id}/moves` | owner for single player | Permitted caller’s move history; private single-player history is owner-only |
 | `DELETE /matches/{id}` | yes | A seated player may cancel a waiting or free match, or hide an ended match from their own list. Ongoing matches holding tokens must use the normal leave/settlement flow |
 | `GET /users/me/saved-games` | yes | The caller's saved games, most recently saved first |
 | `PUT /users/me/saved-games/{game_id}` | yes | Save a game (idempotent); returns the library |
@@ -430,11 +431,15 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   `game_version` it was created with, and that version's rules apply for the whole match,
   even if the game is later updated or deleted. Clients load that version's `code` from
   `GET /games/{game_id}/versions/{game_version}`.
-- All online matches, including older matches, are public and contain human players in join order. Starting
-  requires the number of seats to be in the game's `allowed_player_counts`.
-  Computer opponents are available in local practice.
-  Matches have no privacy setting. Anyone can open a match link and take an
-  available seat; invitations are sharing links, not access permissions.
+- Every match has `match_kind`: `computer`, `pass_and_play`, or `multiplayer`.
+  Computer matches have one human owner seat and computer opponents;
+  pass-and-play matches have only human seats controlled by one owner account.
+  Both are private to that account and cannot be shared, joined or spectated.
+  Multiplayer contains only human accounts and uses invitations and notifications.
+  All three save locally first and then to the cloud. Downloaded single-player
+  games keep accepting turns offline and sync their full progress on reconnect.
+  See [match kinds and cloud saves](docs/match-kinds.md) for the ownership,
+  synchronization, migration and development contract.
 - A move is accepted from any player whose turn it is. The client sends the game's
   own move object; the server runs `applyMove`, whose result names the set of seats
   that may move next (`turn_of_player_indices`), and a `null` turn ends the match
@@ -538,12 +543,15 @@ Rematches keep the setting.
 
 ### Match links and invites
 
-All matches are public and can be opened through their match link. The portal
-lists your own matches; invitations open directly from URLs.
-Existing matches remain viewable if their game is later unpublished or deleted;
-`GET /matches/{id}/game` supplies their pinned rendering package. The
-[data cleanup](docs/match-data-cleanup.md) removes retired privacy flags from
-persisted match records.
+Multiplayer matches can be opened through shared match links and invitations.
+Computer and pass-and-play matches can only be read by their owner and never
+provide invitations or join controls. The portal lists all three kinds from
+your account, including cloud-saved single-player games.
+Existing matches remain available to their permitted viewers if the game is
+later unpublished or deleted; `GET /matches/{id}/game` uses the same access rule
+and supplies the pinned rendering package. The
+[data migration](docs/match-data-cleanup.md) backfills kinds and removes invalid
+legacy rosters.
 
 - **Invites** use `<public_base_url>/invite/abcd`. `MatchOut.invite_code` is the
   automatically assigned reservation, or null after release. Full lobbies remain
@@ -897,7 +905,7 @@ Once the server is running, open these pages in a browser:
   out, or link more logins to your account from the account menu (see [Third-party
   login](#third-party-login)). The left side lists your matches (your move, ongoing,
   waiting for players, over). Create a match for friends on
-  a game's page, or practice locally against computers. The selected match shows
+  a game's page, or play a private cloud-saved match against computers. The selected match shows
   its players and the actions you can take (join and start if you own it,
   leave, delete or hide), and renders its declarative scene with platform-owned
   boards, pieces and controls. The page polls for other players' moves. Links like
@@ -1079,16 +1087,16 @@ joining or leaving, the match ending), and again if a move the game sent was rej
 
 | Field | Meaning |
 |-------|---------|
-| `state` | The viewer's view of the match state: what the server code's `viewFor` returned for them (`null` for spectators). The full state never leaves the server |
+| `state` | The viewer's filtered `viewFor` output (`null` for multiplayer spectators). A private single-player snapshot also contains full rules state, returned only to its owner for offline play |
 | `view` | The same view as `state`, carried under its own name: a client renders this and keeps no state of its own |
-| `players` | Every seat, in order. Online seats have `kind: "human"` and the user's `player_id`; local practice and legacy matches may also have `"computer"` seats. Departed seats keep their index and become inactive; seats can be added mid-match where the game allows it |
+| `players` | Every seat, in order. Multiplayer seats are human accounts. Private computer matches have one human owner and computer seats; pass-and-play seats are controlled by their single owner. Departed multiplayer seats keep their index and become inactive |
 | `turn_of_player_indices` | The seats that may move next; `null` once the match is over |
 | `status` | `"ongoing"` or `"over"` (games aren't loaded while a match waits for players) |
 | `end_reason` | When over: `"finished"` (a move ended it) or `"player_left"` |
 | `move_count` | How many moves were made |
 | `token_pot` | The match's token pot (see [Match rules](#match-rules)) |
 | `my_player_index` | The viewer's seat, to decide what to show (e.g. whose cards). `null` for spectators |
-| `acting_for_player_index` | The seat this game should make the next move for, or `null` if it must wait. In online matches it is only ever the viewer's own seat |
+| `acting_for_player_index` | The seat this game should make the next move for, or `null` if it must wait. Multiplayer allows only the viewer's own seat; the single-player owner controls their match's human seats |
 
 ### `make_move`: game to platform
 

@@ -4,6 +4,14 @@ All playable games use a declarative presentation package and authoritative
 JavaScript rules. Start with [Authoring declarative games](docs/declarative-games.md)
 and the [interaction requirements](docs/declarative-game-requirements.md).
 
+Read [match kinds, ownership and cloud saves](docs/match-kinds.md) before changing
+match logic or Portal flows. Every match is cloud-backed. Private `computer` and
+`pass_and_play` matches belong to one account and use deterministic downloaded
+rules for unlimited offline turns, with cloud sync on reconnect. Shared
+`multiplayer` matches contain humans only and use the authoritative server move,
+invite and notification APIs. Game rules must work with stable seat identities
+in all supported kinds; pass-and-play does not create additional accounts.
+
 Use the numbered steps to create a new game. For an authorized edit to an existing
 game, follow the partial-update instructions below.
 

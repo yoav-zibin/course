@@ -15,6 +15,7 @@ MIN_PLAYERS: Final = 1
 MAX_PLAYERS: Final = 10
 
 MatchStatus = Literal["waiting_for_players", "ongoing", "over"]
+MatchKind = Literal["computer", "pass_and_play", "multiplayer"]
 SeatKind = Literal["human", "computer"]
 # "timed_out": a speed match ended because a player ran out of time to move.
 EndReason = Literal["finished", "player_left", "timed_out", "solo_computers_only"]
@@ -373,7 +374,8 @@ class GameTestSeeds:
 class Seat:
     player_index: int
     kind: SeatKind
-    # Set exactly when [kind] is "human".
+    # Account for a human seat. Other pass-and-play seats are human placeholders
+    # with no account; their stable local identity is logic_player_id.
     user_id: str | None
     # Account ownership can change on merge; a game's opaque state may still
     # contain the original player ID. Keep that game identity stable.
@@ -473,6 +475,22 @@ class Match:
     # A rematch: the original match's players. While it waits, a seat is held for
     # each of them who hasn't joined yet, so a stranger can't take it.
     reserved_for_user_ids: frozenset[str] = frozenset()
+    # None is accepted only for pre-migration records. All newly written matches
+    # declare their kind; computer records remain private even before migration.
+    match_kind: MatchKind | None = None
+    cloud_revision: int = 0
+    # Owner-only, portable save for the two single-account modes. It contains
+    # the local rules state and full replay, including turns made while offline.
+    single_player_state: dict[str, JsonValue] | None = None
+    # Query-store encoding only; never included in API responses. Keeping the
+    # encoding separate prevents game-defined dictionaries being mistaken for it.
+    single_player_state_compressed: str | None = None
+
+    @property
+    def effective_match_kind(self) -> MatchKind:
+        # A legacy or malformed computer roster must never become public just
+        # because it still carries an old multiplayer/default discriminator.
+        return "computer" if self.num_computer_opponents else self.match_kind or "multiplayer"
 
     def held_seats(self) -> int:
         """Seats a waiting rematch holds for original players not yet seated."""
@@ -503,6 +521,8 @@ class Match:
     def player_id_of(self, seat: Seat) -> str:
         """The v2 player id of a seat: a human's user id, or "computer-N" for
         the Nth computer seat (counting from 1, in seat order)."""
+        if seat.logic_player_id is not None:
+            return seat.logic_player_id
         if seat.kind == "human":
             assert seat.user_id is not None
             return seat.logic_player_id or seat.user_id
@@ -522,13 +542,15 @@ class Match:
 
     @property
     def active_human_user_ids(self) -> tuple[str, ...]:
-        return tuple(s.user_id for s in self.seats if s.kind == "human" and s.active)
+        return tuple(s.user_id for s in self.seats if s.kind == "human" and s.active and s.user_id is not None)
 
     @property
     def num_computer_opponents(self) -> int:
         return sum(1 for seat in self.seats if seat.kind == "computer")
 
     def involves(self, user_id: str) -> bool:
+        if self.effective_match_kind != "multiplayer":
+            return user_id == self.owner_user_id
         # Someone whose seat a computer took over after a timeout stays a viewer.
         return (
             user_id == self.owner_user_id

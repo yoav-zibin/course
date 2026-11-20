@@ -1,11 +1,11 @@
 import {test,expect,Page,APIRequestContext} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {createGame,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
+import {createGame,createUser,loginAs,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
 import sharedCopy from '../src/platform/ui-copy.json';
 
 const fixture=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/tictactoe.json'),'utf8'));
-test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Portal acceptance tests require a disposable loopback server.');});
+test.beforeEach(async({baseURL,page,request},info)=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Portal acceptance tests require a disposable loopback server.');if(/^(?:host controls|short screens|empty fitted|browser Back from a local|full localized|a delayed browser Back|bundled public-state|a genuinely finished)/.test(info.title))await restore(page,await account(request,'Player 1'));});
 async function account(request:APIRequestContext,name:string){const response=await request.post('/users',{data:{display_name:name}});expect(response.ok()).toBeTruthy();return response.json();}
 async function restore(page:Page,user:any){await page.addInitScript(user=>{localStorage.setItem('game-platform.accounts.v1',JSON.stringify([user]));localStorage.setItem('game-platform.current-account.v1',user.id);},user);}
 async function game(request:APIRequestContext,name:string){const id=await createGame(request,name);const response=await request.get(`/games/${id}`);expect(response.ok(),await response.text()).toBeTruthy();return response.json();}
@@ -25,7 +25,7 @@ test('host controls and the offline starter game retain all eight languages with
   const original=await saves();let current='en';
   const board=await page.getByTestId('game-stage').locator('svg').first().elementHandle();
   for(const locale of ['es','fr','de','pt','zh','hi','ar','en']){
-    await page.getByRole('button',{name:copy('Log in',current),exact:true}).click();
+    await page.getByRole('button',{name:copy('Account menu',current),exact:true}).click();
     const entry=locales.find((item:any)=>item.code===locale),endonym=entry.native_name||entry.name||locale;
     const language=page.getByRole('button').filter({hasText:endonym});await language.last().click();
     await expect(page.locator('html')).toHaveAttribute('lang',locale);await expect(page.locator('html')).toHaveAttribute('dir',locale==='ar'?'rtl':'ltr');
@@ -160,6 +160,7 @@ test('full localized instructions remain available between public turns, at game
   await expect(page.getByTestId('game-instructions')).not.toContainText(created.translations.ar.game_logic_rules);
   await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();
   await expect(page.getByTestId('game-stage')).toBeVisible();
+  await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
   const helpButton=page.getByRole('button',{name:'How to play',exact:true});
   const helpBounds=await helpButton.boundingBox(),boardBounds=await page.getByTestId('game-stage').boundingBox();
   expect(helpBounds).not.toBeNull();expect(boardBounds).not.toBeNull();
@@ -297,6 +298,7 @@ test('a full legacy browser cache is evicted automatically while durable saves a
   expect(preserved.legacy.unknownRecovery).toEqual({keep:true});
   expect(preserved.saved.responses['/games/preserved/versions/7'].server_code).toBe('exact saved rules');
   expect(preserved.credentials).toBe('[]');expect(preserved.selection).toBe('visitor');expect(preserved.other).toBe('protected other account bytes');
+  const owner=await createUser(request,'Player 1');await loginAs(page,owner);await page.reload();await expect(page.getByTestId('header-account')).toHaveAccessibleName('Account menu');await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
   await page.evaluate(async()=>{if('serviceWorker'in navigator)await navigator.serviceWorker.ready;});await context.setOffline(true);
   await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
@@ -331,7 +333,7 @@ test('bundled public-state game is playable offline without handoffs, persists, 
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   // Account preferences stay reachable without leaving the current native game.
-  await page.getByRole('button',{name:'Log in',exact:true}).click();await expect(page.getByRole('button',{name:/Language:.*English/})).toBeVisible();await page.getByRole('button',{name:'Close dialog'}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();await expect(page.getByRole('button',{name:/Language:.*English/})).toBeVisible();await page.getByRole('button',{name:'Close dialog'}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   // Install/cache the universal shell before taking the device offline.
   await page.evaluate(async()=>{if('serviceWorker'in navigator)await navigator.serviceWorker.ready;});
   await context.setOffline(true);
@@ -360,7 +362,7 @@ test('a genuinely finished local draw stays translated offline in detail and mat
   await expect(page.getByTestId('match-outcome')).toHaveText('Draw');
   // Spanish has never been downloaded in this fresh browser context.
   await context.setOffline(true);
-  await page.getByRole('button',{name:'Log in',exact:true}).click();
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
   await page.getByRole('button',{name:/Language:.*Español/}).click();
   await expect(page.locator('html')).toHaveAttribute('lang','es');
   await page.getByRole('button',{name:'Cerrar diálogo',exact:true}).click();

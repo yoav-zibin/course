@@ -3,8 +3,10 @@
 This is the in-repo reference for the server-side Game API, adapted from the
 professor's spec ("Game Platform: server-side Game API"). **Other teams:
 code against this document.** November 6 changes: playerLeft shares the move
-result contract. Online matches are public and human-only; computers are
-available in local practice and validation walks.
+result contract. Every match has `match_kind`: `computer`, `pass_and_play` or `multiplayer`.
+Private computer/pass-and-play matches are cloud-saved for their single owner,
+with locally executed offline turns. Multiplayer has human accounts only and
+uses invites and notifications. See [match kinds and cloud saves](match-kinds.md).
 
 ## How it works
 
@@ -15,8 +17,8 @@ available in local practice and validation walks.
 | Initial state | The server calls `newMatch` at start |
 | A move | Client sends a small game-defined `move`; the server calls `applyMove` |
 | Validation | `applyMove` rejects illegal moves with `InvalidMove` (HTTP 400) |
-| Computer opponents | `computerMove` supplies moves in local practice and validation walks |
-| What clients see | `viewFor(state, playerId)` — hidden information stays on the server |
+| Computer opponents | `computerMove` supplies moves in private computer matches and validation walks |
+| What clients see | `viewFor(state, playerId)`; multiplayer full state stays server-side, private offline snapshots are owner-only |
 | Randomness | Seeded by the server per call (`ctx.random`), so reproducible |
 | Tokens | Each human stakes up to `max_loss`; server code pays out the pot |
 | Testing | Random walks + fuzzing whenever `server_code` changes; only passing versions publish |
@@ -177,29 +179,40 @@ viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
 |---|---|
 | `POST /games` | Creates and publishes a complete game: `declarative_ui`, `server_code`, schemas (in `unit_tests`), translations and images are supplied; all creation gates must pass. `/games/declarative` is a creation alias. |
 | `PATCH /games/{id}` | The single content update API. Include the game secret or master password in `game_addition_request_id_and_secret`; all content fields are optional. Server-code, unit-test or mechanical-rule changes run server checks; presentation changes require recorded tests for the merged payload; metadata changes use lightweight checks. |
-| `POST /matches` | `{game_id, max_loss?, turn_seconds?}` — creates a match with human players |
+| `POST /matches` | `{game_id, match_kind?: "multiplayer", client_match_id?, max_loss?, turn_seconds?}` — creates a human-only multiplayer lobby; repeated client IDs preserve one match |
+| `POST /matches/single-player-sync` | `{match, expected_revision}` — owner-only computer/pass-and-play full snapshot upload; returns `match_kind`, `cloud_revision`, `single_player_state`; 409 preserves another device’s revision |
 | `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat and deduct the stake (409 if the balance is too low); mid-match the server calls `playerJoined` |
 | `POST /matches/{id}/leave` | Before the start, a refund; mid-match, `playerLeft` |
 | `POST /matches/{id}/maybeLeave`, `POST /matches/{id}/playerLeft` | Leave preview + confirm |
 | `POST /matches/{id}/start` | `{}` — the server calls `newMatch` |
 | `POST /matches/{id}/moves` | `{move, expected_move_count?}`, only from a human in `turn` (403 otherwise); 400 for `InvalidMove` |
-| `GET /matches/{id}` | The caller's `view` and the pot — never the state; the full state only in the debug tools. A caller without a seat gets the spectator view (`viewFor` with a null player), in history and move reads too, so a shared match link shows the game's public view |
-| `GET /matches/{id}/game` | The match's pinned game package, including when the game was later unpublished or deleted, so spectators can still render the match |
+| `GET /matches/{id}` | The permitted caller's filtered `view` and pot. Multiplayer spectators receive `viewFor` with a null player; private single-player snapshots and full state are returned only to the owner |
+| `GET /matches/{id}/game` | The pinned game package, including retained unpublished/deleted versions. Private single-player matches require owner authentication; multiplayer spectators may render the match |
 | `GET /matches/{id}/moves` | Each move's player id, move and time, with the caller's view of the resulting state (the spectator view for a caller without a seat) |
 | `GET /auth/me` | Your profile, including your token balance |
 
-## Human-only online matches
+## Match kinds and access
 
-Online matches contain human players. Computer opponent selection, random
-matchmaking and open-match discovery have been removed. All matches are public;
-`viewFor` still controls each player's and spectator's view of hidden information.
-Local practice and random walks continue to exercise `computerMove`.
+Every match is cloud-backed and has `match_kind`. `computer` and `pass_and_play`
+are private single-player matches: one account controls the match and is the only
+account allowed to read its details, pinned match package, history and full offline
+snapshot. Neither kind supports invitations, account joining, spectators or turn
+notifications. Computer has exactly one human seat plus computers; pass-and-play
+has only human seats controlled by its owner. One-seat solo games use pass-and-play.
 
-There is no match privacy setting or invite-only audience, including for older
-matches and rematches. Invitations are convenient sharing and joining links;
-they grant no additional viewing permissions. Cached clients' obsolete privacy
-fields are ignored. Spectators can read match details, history and move views
-without an invitation, and take an available seat under the ordinary game rules.
+`multiplayer` contains only human accounts and supports sharing, joining,
+spectators and notifications. Invitations are sharing/joining links, not an
+additional audience restriction for multiplayer. Obsolete `private` request fields
+do not override the kind's permissions. `viewFor` controls hidden information for
+multiplayer players and spectators.
+
+Single-player clients save each action locally first, execute the same pinned
+deterministic rules for multiple offline turns, then upload their complete
+snapshot/history on reconnect through `POST /matches/single-player-sync`.
+Cloud revision checks preserve competing offline branches. Multiplayer uses the
+ordinary authoritative move API and durable local outgoing queue. Validation
+walks may still call `computerMove` independently of the live match-kind rules.
+See [the full match contract](match-kinds.md).
 
 Timeouts end a match — a server timer fires at the deadline, and reads and
 moves check too — and pay its outstanding pot to the players who did not hold
@@ -324,8 +337,10 @@ protocol for a published game is the same one the portal speaks:
   "move": ...}` — no `new_state`, no next turn; the server validates and
   applies it.
 
-Portal practice (local, offline play) is not offered for online matches:
-game logic runs on the server.
+Private single-player matches run the same deterministic rules locally, persist
+each accepted turn and synchronize their complete snapshot/history on reconnect.
+They have no invite or join API. Multiplayer remains server-authoritative and
+never includes computer opponents.
 
 ## Updating the existing games (Phase 7 — landed)
 

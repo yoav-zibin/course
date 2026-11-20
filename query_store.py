@@ -796,6 +796,17 @@ class QueryStore:
             if body:
                 record = replace(record, **json.loads(body))
         if kind == "matches":
+            if record.single_player_state_compressed is not None:
+                from game_platform.single_player import decode_save
+                record = replace(record, single_player_state=decode_save(record.single_player_state_compressed),
+                                 single_player_state_compressed=None)
+            if record.single_player_state is not None:
+                from game_platform.single_player import save_moves
+                snapshot = record.single_player_state
+                return replace(record, state=snapshot.get("logicState"),
+                               initial_state=snapshot.get("initialState"),
+                               single_player_state=snapshot,
+                               moves=save_moves(snapshot, record.owner_user_id, record.created_at))
             count = data.get("move_count", 0)
             record = replace(
                 record,
@@ -842,6 +853,11 @@ class QueryStore:
                     self.raw_put(ref.collection("body").document(f"{i:06}"), None)
                 fields["body_chunks"] = len(parts)
                 record = replace(record, code="", server_code=None)
+            if kind == "matches" and record.single_player_state is not None:
+                from game_platform.single_player import encode_save
+                compressed = encode_save(record.single_player_state)
+                if compressed is not None:
+                    record = replace(record, single_player_state=None, single_player_state_compressed=compressed)
             payload = ADAPTERS[kind].dump_json(record).decode()
             if len(payload.encode()) > 800000:
                 raise ValueError(
@@ -854,6 +870,7 @@ class QueryStore:
                     "user_id",
                     "game_id",
                     "game_version",
+                    "match_kind",
                     "status",
                     "created_by_user_id",
                     "match_id",
@@ -1020,6 +1037,19 @@ class QueryStore:
                 [match.owner_user_id, *match.human_user_ids], match_id=match.id)
             ref = self.ref("matches", match.id)
             old = self.raw_get(ref) or {}
+            if match.single_player_state is not None:
+                # A complete offline session is one atomic save, regardless of
+                # how many turns happened offline. The portable snapshot is the
+                # replay source; no per-move transaction-write limit applies.
+                self._put(
+                    "matches", match.id, replace(match, moves=(), state=None, initial_state=None),
+                    move_count=len(match.moves),
+                    last_move_player_index=match.moves[-1].player_index if match.moves else None,
+                    participants=[match.owner_user_id], visible_to=[match.owner_user_id],
+                    historical_participants=sorted(set(old.get("historical_participants", ())) | {match.owner_user_id}),
+                    deletion_metadata_version=old.get("deletion_metadata_version", 1 if not old else 0),
+                )
+                return
             previous = old.get("move_count", 0)
             if isinstance(match.moves, MoveHistory):
                 if match.moves.persisted_count != previous:
@@ -1034,7 +1064,8 @@ class QueryStore:
                     ref.collection("moves").document(f"{index:012}"),
                     {"json": MOVE_ADAPTER.dump_json(move).decode()},
                 )
-            participants = sorted({match.owner_user_id, *match.human_user_ids})
+            participants = (sorted({match.owner_user_id, *match.human_user_ids})
+                            if match.effective_match_kind == "multiplayer" else [match.owner_user_id])
             self._put(
                 "matches",
                 match.id,

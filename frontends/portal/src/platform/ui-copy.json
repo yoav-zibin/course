@@ -3436,5 +3436,203 @@
     "zh": "搜索暂不可用。请重试。",
     "hi": "खोज उपलब्ध नहीं है। फिर से कोशिश करें।",
     "ar": "البحث غير متاح. حاول مرة أخرى."
+  },
+  "pending saves": {
+    "es": "guardados pendientes",
+    "fr": "sauvegardes en attente",
+    "de": "ausstehende Speicherungen",
+    "pt": "salvamentos pendentes",
+    "zh": "待同步存档",
+    "hi": "लंबित सेव",
+    "ar": "عمليات حفظ معلقة"
+  },
+  "Your progress is saved locally and will sync to the cloud when connected.": {
+    "es": "Tu progreso se guarda localmente y se sincronizará con la nube cuando te conectes.",
+    "fr": "Votre progression est enregistrée localement et sera synchronisée dans le cloud à la reconnexion.",
+    "de": "Dein Fortschritt ist lokal gespeichert und wird bei Verbindung mit der Cloud synchronisiert.",
+    "pt": "Seu progresso está salvo localmente e será sincronizado com a nuvem ao conectar.",
+    "zh": "进度已保存在本地，联网后会同步到云端。",
+    "hi": "आपकी प्रगति स्थानीय रूप से सहेजी गई है और इंटरनेट जुड़ने पर क्लाउड से सिंक होगी।",
+    "ar": "تم حفظ تقدمك محليًا وستتم مزامنته مع السحابة عند الاتصال."
+  },
+  "Downloaded single-player games keep working offline; progress syncs when you reconnect.": {
+    "es": "Las partidas individuales descargadas funcionan sin conexión; el progreso se sincroniza al reconectarte.",
+    "fr": "Les parties individuelles téléchargées restent jouables hors connexion ; la progression se synchronise à la reconnexion.",
+    "de": "Heruntergeladene Einzelspielerspiele funktionieren offline weiter; der Fortschritt wird bei erneuter Verbindung synchronisiert.",
+    "pt": "Jogos individuais baixados continuam funcionando offline; o progresso sincroniza ao reconectar.",
+    "zh": "已下载的单人游戏可继续离线游玩，重新联网后同步进度。",
+    "hi": "डाउनलोड किए गए एकल-खिलाड़ी गेम ऑफ़लाइन चलते रहते हैं; दोबारा जुड़ने पर प्रगति सिंक होती है।",
+    "ar": "تستمر الألعاب الفردية المحمّلة في العمل دون اتصال؛ وتُزامَن النتائج عند إعادة الاتصال."
+  },
+  "Private to your account": {
+    "es": "Privada para tu cuenta",
+    "fr": "Privée, réservée à votre compte",
+    "de": "Nur für dein Konto sichtbar",
+    "pt": "Privada da sua conta",
+    "zh": "仅你的账号可见",
+    "hi": "केवल आपके खाते के लिए निजी",
+    "ar": "خاصة بحسابك"
+  },
+  "Against computers": {
+    "es": "Contra computadoras",
+    "fr": "Contre des ordinateurs",
+    "de": "Gegen Computer",
+    "pt": "Contra computadores",
+    "zh": "对战电脑",
+    "hi": "कंप्यूटर के विरुद्ध",
+    "ar": "ضد الكمبيوتر"
+  },
+  "Multiplayer": {
+    "es": "Multijugador",
+    "fr": "Multijoueur",
+    "de": "Mehrspieler",
+    "pt": "Multijogador",
+    "zh": "多人游戏",
+    "hi": "मल्टीप्लेयर",
+    "ar": "متعددة اللاعبين"
+  },
+  "Saved locally · waiting to sync": {
+    "es": "Guardado localmente · pendiente de sincronización",
+    "fr": "Enregistrée localement · synchronisation en attente",
+    "de": "Lokal gespeichert · wartet auf Synchronisierung",
+    "pt": "Salvo localmente · aguardando sincronização",
+    "zh": "已保存在本地 · 等待同步",
+    "hi": "स्थानीय रूप से सहेजा गया · सिंक की प्रतीक्षा में",
+    "ar": "محفوظة محليًا · بانتظار المزامنة"
+  },
+  "Saved in the cloud": {
+    "es": "Guardado en la nube",
+    "fr": "Enregistrée dans le cloud",
+    "de": "In der Cloud gespeichert",
+    "pt": "Salvo na nuvem",
+    "zh": "已保存到云端",
+    "hi": "क्लाउड में सहेजा गया",
+    "ar": "محفوظة في السحابة"
+  },
+  "Delete finished match": {
+    "es": "Eliminar partida terminada",
+    "fr": "Supprimer la partie terminée",
+    "de": "Beendete Partie löschen",
+    "pt": "Excluir partida concluída",
+    "zh": "删除已结束的对局",
+    "hi": "समाप्त मैच मिटाएँ",
+    "ar": "حذف المباراة المنتهية"
+  },
+  "Single player": {
+    "es": "Un jugador",
+    "fr": "Un seul joueur",
+    "de": "Einzelspieler",
+    "pt": "Um jogador",
+    "zh": "单人游戏",
+    "hi": "एकल खिलाड़ी",
+    "ar": "لاعب واحد"
+  },
+  "Single-player matches": {
+    "es": "Partidas individuales",
+    "fr": "Parties individuelles",
+    "de": "Einzelspielerpartien",
+    "pt": "Partidas individuais",
+    "zh": "单人对局",
+    "hi": "एकल-खिलाड़ी मैच",
+    "ar": "المباريات الفردية"
+  },
+  "Your account keeps every match saved in the cloud.": {
+    "es": "Tu cuenta guarda todas las partidas en la nube.",
+    "fr": "Votre compte conserve chaque partie dans le cloud.",
+    "de": "Dein Konto speichert jede Partie in der Cloud.",
+    "pt": "Sua conta mantém todas as partidas salvas na nuvem.",
+    "zh": "你的账号会将每场对局保存到云端。",
+    "hi": "आपका खाता हर मैच क्लाउड में सहेजता है।",
+    "ar": "يحفظ حسابك كل مباراة في السحابة."
+  },
+  "This deletes your private match from your account and this device.": {
+    "es": "Esto elimina tu partida privada de tu cuenta y de este dispositivo.",
+    "fr": "Cette action supprime votre partie privée de votre compte et de cet appareil.",
+    "de": "Dadurch wird deine private Partie aus deinem Konto und von diesem Gerät gelöscht.",
+    "pt": "Isso exclui sua partida privada da conta e deste dispositivo.",
+    "zh": "这会从你的账号和此设备中删除这场私人对局。",
+    "hi": "इससे आपका निजी मैच आपके खाते और इस डिवाइस से मिट जाएगा।",
+    "ar": "سيؤدي هذا إلى حذف مباراتك الخاصة من حسابك ومن هذا الجهاز."
+  },
+  "No single-player matches yet. Choose a game to get started.": {
+    "es": "Aún no hay partidas individuales. Elige un juego para empezar.",
+    "fr": "Aucune partie individuelle pour le moment. Choisissez un jeu pour commencer.",
+    "de": "Noch keine Einzelspielerpartien. Wähle ein Spiel, um zu beginnen.",
+    "pt": "Ainda não há partidas individuais. Escolha um jogo para começar.",
+    "zh": "还没有单人对局。选择一个游戏开始吧。",
+    "hi": "अभी कोई एकल-खिलाड़ी मैच नहीं है। शुरू करने के लिए कोई गेम चुनें।",
+    "ar": "لا توجد مباريات فردية بعد. اختر لعبة للبدء."
+  },
+  "Match saved locally. Connect to save it in the cloud and get an invite link.": {
+    "es": "Partida guardada localmente. Conéctate para guardarla en la nube y obtener un enlace de invitación.",
+    "fr": "Partie enregistrée localement. Connectez-vous au réseau pour la sauvegarder dans le cloud et obtenir un lien d’invitation.",
+    "de": "Partie lokal gespeichert. Verbinde dich mit dem Internet, um sie in der Cloud zu speichern und einen Einladungslink zu erhalten.",
+    "pt": "Partida salva localmente. Conecte-se para salvá-la na nuvem e obter um link de convite.",
+    "zh": "对局已保存在本地。联网后可保存到云端并获取邀请链接。",
+    "hi": "मैच स्थानीय रूप से सहेजा गया। इसे क्लाउड में सहेजने और आमंत्रण लिंक पाने के लिए इंटरनेट से जुड़ें।",
+    "ar": "تم حفظ المباراة محليًا. اتصل بالإنترنت لحفظها في السحابة والحصول على رابط دعوة."
+  },
+  "Play against computers, pass the device, or invite friends. All matches save to your account across web, iPhone, and Android.": {
+    "es": "Juega contra computadoras, pasa el dispositivo o invita a amigos. Todas las partidas se guardan en tu cuenta en la web, iPhone y Android.",
+    "fr": "Jouez contre des ordinateurs, passez l’appareil ou invitez des amis. Toutes les parties sont enregistrées dans votre compte sur le Web, iPhone et Android.",
+    "de": "Spiele gegen Computer, reiche das Gerät weiter oder lade Freunde ein. Alle Partien werden in deinem Konto für Web, iPhone und Android gespeichert.",
+    "pt": "Jogue contra computadores, passe o dispositivo ou convide amigos. Todas as partidas são salvas na sua conta na web, no iPhone e no Android.",
+    "zh": "对战电脑、传递设备，或邀请好友。所有对局都会保存到你的账号，可在网页、iPhone 和 Android 上使用。",
+    "hi": "कंप्यूटर से खेलें, डिवाइस पास करें या दोस्तों को बुलाएँ। सभी मैच वेब, iPhone और Android पर आपके खाते में सहेजे जाते हैं।",
+    "ar": "العب ضد الكمبيوتر أو مرّر الجهاز أو ادعُ أصدقاءك. تُحفظ جميع المباريات في حسابك عبر الويب وiPhone وAndroid."
+  },
+  "A private match against computers, saved to your account. Keep playing offline; your progress syncs when you reconnect. Your seat is chosen randomly.": {
+    "es": "Una partida privada contra computadoras, guardada en tu cuenta. Sigue jugando sin conexión; el progreso se sincroniza al reconectarte. Tu asiento se elige al azar.",
+    "fr": "Une partie privée contre des ordinateurs, enregistrée dans votre compte. Continuez hors connexion ; la progression se synchronise à la reconnexion. Votre place est choisie au hasard.",
+    "de": "Eine private Partie gegen Computer, in deinem Konto gespeichert. Spiele offline weiter; dein Fortschritt wird bei erneuter Verbindung synchronisiert. Dein Platz wird zufällig gewählt.",
+    "pt": "Uma partida privada contra computadores, salva na sua conta. Continue offline; o progresso sincroniza ao reconectar. Seu lugar é escolhido aleatoriamente.",
+    "zh": "与你的账号关联的私人电脑对局。可继续离线游玩，重新联网后同步进度。你的位置随机分配。",
+    "hi": "कंप्यूटर के विरुद्ध निजी मैच आपके खाते में सहेजा जाता है। ऑफ़लाइन खेलते रहें; दोबारा जुड़ने पर प्रगति सिंक होगी। आपकी सीट यादृच्छिक रूप से चुनी जाती है।",
+    "ar": "مباراة خاصة ضد الكمبيوتر، محفوظة في حسابك. واصل اللعب دون اتصال؛ يُزامَن تقدمك عند إعادة الاتصال. يتم اختيار مقعدك عشوائيًا."
+  },
+  "Play with other people, with no computer opponents. Share the invite so friends can join. Turn notifications keep everyone up to date.": {
+    "es": "Juega con otras personas, sin computadoras. Comparte la invitación para que tus amigos se unan. Las notificaciones de turno mantienen a todos al día.",
+    "fr": "Jouez avec d’autres personnes, sans ordinateurs. Partagez l’invitation pour que vos amis vous rejoignent. Les notifications de tour tiennent tout le monde informé.",
+    "de": "Spiele mit anderen Menschen, ohne Computergegner. Teile die Einladung, damit Freunde beitreten können. Zugbenachrichtigungen halten alle auf dem Laufenden.",
+    "pt": "Jogue com outras pessoas, sem computadores. Compartilhe o convite para que amigos entrem. As notificações de turno mantêm todos informados.",
+    "zh": "与其他真人玩家对战，不含电脑对手。分享邀请让好友加入。回合通知会提醒每位玩家。",
+    "hi": "दूसरे लोगों के साथ खेलें, कंप्यूटर विरोधियों के बिना। दोस्तों को जोड़ने के लिए आमंत्रण साझा करें। बारी की सूचनाएँ सभी को जानकारी देती हैं।",
+    "ar": "العب مع أشخاص آخرين دون خصوم من الكمبيوتر. شارك الدعوة لينضم الأصدقاء. تُبقي إشعارات الأدوار الجميع على اطلاع."
+  },
+  "A private game saved to your account. Play offline after downloading the game; progress syncs when you reconnect.": {
+    "es": "Una partida privada guardada en tu cuenta. Juega sin conexión tras descargar el juego; el progreso se sincroniza al reconectarte.",
+    "fr": "Une partie privée enregistrée dans votre compte. Jouez hors connexion après avoir téléchargé le jeu ; la progression se synchronise à la reconnexion.",
+    "de": "Ein privates Spiel in deinem Konto. Spiele nach dem Herunterladen offline; der Fortschritt wird bei erneuter Verbindung synchronisiert.",
+    "pt": "Um jogo privado salvo na sua conta. Jogue offline após baixá-lo; o progresso sincroniza ao reconectar.",
+    "zh": "保存到你账号的私人游戏。下载游戏后可离线游玩，重新联网后同步进度。",
+    "hi": "आपके खाते में सहेजा गया निजी गेम। डाउनलोड के बाद ऑफ़लाइन खेलें; दोबारा जुड़ने पर प्रगति सिंक होगी।",
+    "ar": "لعبة خاصة محفوظة في حسابك. العب دون اتصال بعد تنزيل اللعبة؛ يُزامَن تقدمك عند إعادة الاتصال."
+  },
+  "Take turns with friends on one device. Only your account owns and can see this match. Keep playing offline; progress syncs to the cloud when you reconnect.": {
+    "es": "Túrnate con amigos en un dispositivo. Solo tu cuenta posee y puede ver esta partida. Sigue sin conexión; el progreso se sincroniza con la nube al reconectarte.",
+    "fr": "Jouez à tour de rôle avec des amis sur un appareil. Seul votre compte possède et peut voir cette partie. Continuez hors connexion ; la progression se synchronise dans le cloud à la reconnexion.",
+    "de": "Spielt abwechselnd mit Freunden auf einem Gerät. Nur dein Konto besitzt diese Partie und kann sie sehen. Spiele offline weiter; der Fortschritt wird bei erneuter Verbindung mit der Cloud synchronisiert.",
+    "pt": "Reveze com amigos em um dispositivo. Só sua conta é dona e pode ver esta partida. Continue offline; o progresso sincroniza com a nuvem ao reconectar.",
+    "zh": "与好友轮流使用同一设备。只有你的账号拥有并能查看这场对局。可继续离线游玩，重新联网后将进度同步到云端。",
+    "hi": "एक डिवाइस पर दोस्तों के साथ बारी-बारी से खेलें। केवल आपका खाता इस मैच का मालिक है और इसे देख सकता है। ऑफ़लाइन खेलते रहें; दोबारा जुड़ने पर प्रगति क्लाउड से सिंक होगी।",
+    "ar": "تناوب اللعب مع الأصدقاء على جهاز واحد. حسابك وحده يملك هذه المباراة ويمكنه رؤيتها. واصل دون اتصال؛ يُزامَن تقدمك مع السحابة عند إعادة الاتصال."
+  },
+  "Every match is saved to your account. Single-player matches are private; multiplayer matches are shared with human players.": {
+    "es": "Cada partida se guarda en tu cuenta. Las individuales son privadas; las multijugador se comparten con personas.",
+    "fr": "Chaque partie est enregistrée dans votre compte. Les parties individuelles sont privées ; les parties multijoueurs sont partagées avec des joueurs humains.",
+    "de": "Jede Partie wird in deinem Konto gespeichert. Einzelspielerpartien sind privat; Mehrspielerpartien werden mit menschlichen Spielern geteilt.",
+    "pt": "Toda partida é salva na sua conta. Partidas individuais são privadas; partidas multijogador são compartilhadas com pessoas.",
+    "zh": "每场对局都会保存到你的账号。单人对局为私人对局；多人对局与其他真人玩家共享。",
+    "hi": "हर मैच आपके खाते में सहेजा जाता है। एकल-खिलाड़ी मैच निजी हैं; मल्टीप्लेयर मैच मानव खिलाड़ियों के साथ साझा होते हैं।",
+    "ar": "تُحفظ كل مباراة في حسابك. المباريات الفردية خاصة؛ والمباريات متعددة اللاعبين مشتركة مع لاعبين بشريين."
+  },
+  "Your private computer and pass-and-play matches save locally first and sync to the cloud. Download a game once, then keep playing offline.": {
+    "es": "Tus partidas privadas contra computadoras y por turnos en un dispositivo se guardan primero localmente y se sincronizan con la nube. Descarga un juego una vez y sigue sin conexión.",
+    "fr": "Vos parties privées contre l’ordinateur ou sur un appareil partagé sont d’abord enregistrées localement, puis synchronisées dans le cloud. Téléchargez un jeu une fois pour continuer hors connexion.",
+    "de": "Deine privaten Computer- und Weiterreichen-Partien werden zuerst lokal gespeichert und mit der Cloud synchronisiert. Lade ein Spiel einmal herunter und spiele offline weiter.",
+    "pt": "Suas partidas privadas contra computadores e no mesmo dispositivo são salvas primeiro localmente e sincronizadas com a nuvem. Baixe um jogo uma vez e continue offline.",
+    "zh": "你的私人电脑对局和传递设备对局会先保存在本地，再同步到云端。下载游戏一次后，即可继续离线游玩。",
+    "hi": "कंप्यूटर और डिवाइस पास करके खेले जाने वाले आपके निजी मैच पहले स्थानीय रूप से सहेजे जाते हैं, फिर क्लाउड से सिंक होते हैं। गेम एक बार डाउनलोड करें, फिर ऑफ़लाइन खेलते रहें।",
+    "ar": "تُحفظ مبارياتك الخاصة ضد الكمبيوتر وبتمرير الجهاز محليًا أولًا ثم تُزامَن مع السحابة. نزّل اللعبة مرة واحدة ثم واصل اللعب دون اتصال."
   }
 }

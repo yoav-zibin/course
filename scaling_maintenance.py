@@ -126,9 +126,14 @@ def validate_matches(store, *, limit=100, cursor=None):
             )
             last = move
             moves += 1
+        # Portable private histories retain displayed views, while match.state
+        # retains the full local rules state. Compare like representations;
+        # authoritative server histories still record and compare full state.
+        final_state = (match.single_player_state.get("state")
+                       if match.single_player_state is not None else match.state)
         # An administrative timeout/resignation can change the turn/status
-        # without appending a game move; the game state must still agree.
-        if last and last.new_state != match.state:
+        # without appending a game move; the recorded state must still agree.
+        if last and last.new_state != final_state:
             raise ValueError(f"final state mismatch: {match.id}")
     return {
         "matches": len(result.items),

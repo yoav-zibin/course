@@ -62,8 +62,9 @@ test('list Leave frees a waiting guest seat while preserving the host lobby',asy
   expect((await listed(request,host)).some((item:any)=>item.id===match.id)).toBe(true);expect((await listed(request,guest)).some((item:any)=>item.id===match.id)).toBe(false);
 });
 
-test('local carousels are newest first, show opponent labels and disappear independently when emptied',async({page},info)=>{
+test('local carousels are newest first, show opponent labels and disappear independently when emptied',async({page,request},info)=>{
   test.setTimeout(60000);
+  await loginAs(page,await createUser(request,uniqueName('Single-player list owner')));
   await page.goto('/portal#matches');await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
   await expect(page.getByTestId('computer-local-matches')).toHaveCount(0);await expect(page.getByTestId('pass-local-matches')).toHaveCount(0);
   async function start(computer:boolean){await page.goto('/portal#local');await page.getByRole('button',{name:computer?'Practice with a computer':'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);return new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;}
@@ -78,9 +79,9 @@ test('local carousels are newest first, show opponent labels and disappear indep
   expect((await computers.boundingBox())!.y).toBeLessThan((await passes.boundingBox())!.y);
   await expect(card(page,newComputer).getByRole('heading',{name:/Tic-tac-toe against Computer/})).toBeVisible();await expect(card(page,newPass).getByRole('heading',{name:'Tic-tac-toe against Player 2',exact:true})).toBeVisible();
   await expect(card(page,newPass).getByRole('button',{name:'Delete',exact:true})).toBeVisible();
-  for(const id of [newComputer,oldComputer]){await card(page,id).getByRole('button',{name:'Leave',exact:true}).click();await expect(page.getByText('This removes the saved match from this device.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Confirm leaving',exact:true}).click();await expect(card(page,id)).toHaveCount(0);}
+  for(const id of [newComputer,oldComputer]){await card(page,id).getByRole('button',{name:'Delete',exact:true}).click();await expect(page.getByText('This deletes your private match from your account and this device.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Delete',exact:true}).last().click();await expect(card(page,id)).toHaveCount(0);}
   await expect(computers).toHaveCount(0);await expect(passes).toBeVisible();
   await card(page,newPass).getByRole('button',{name:'Delete',exact:true}).click();await page.getByRole('button',{name:'Delete',exact:true}).last().click();await expect(card(page,newPass)).toHaveCount(0);await expect(card(page,oldPass)).toBeVisible();
-  await card(page,oldPass).getByRole('button',{name:'Leave',exact:true}).click();await page.getByRole('button',{name:'Confirm leaving',exact:true}).click();await expect(passes).toHaveCount(0);
+  await card(page,oldPass).getByRole('button',{name:'Delete',exact:true}).click();await page.getByRole('button',{name:'Delete',exact:true}).last().click();await expect(passes).toHaveCount(0);
   await page.reload();await expect(page.getByTestId('computer-local-matches')).toHaveCount(0);await expect(page.getByTestId('pass-local-matches')).toHaveCount(0);
 });

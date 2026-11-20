@@ -149,7 +149,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
     if(Platform.OS!=='android')return;
     const listener=BackHandler.addEventListener('hardwareBackPress',()=>{
       if(account){setAccount(false);return true;}
-      if(p.selectedMatch){navigate(p.selectedMatch.localMode?'local':'matches');return true;}
+      if(p.selectedMatch){navigate('matches');return true;}
       if(p.selectedGameId){p.actions.clearGame();setScreen('games');return true;}
       if(screen!=='games'){navigate('games');return true;}
       return false;
@@ -187,7 +187,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
         <ScrollView key={contentKey} style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},focus&&{paddingTop:42}]} keyboardShouldPersistTaps="handled">
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
-          {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {t('ui.offline.pending_moves','pending moves')}. {p.pending ? t('ui.offline.move_saved','Your move is saved on this device and will sync when connected.') : t('ui.offline.downloaded_play','Downloaded games are available on this device.')}</Notice>}
+          {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {copyText('pending saves')}. {p.pending ? copyText('Your progress is saved locally and will sync to the cloud when connected.') : copyText('Downloaded single-player games keep working offline; progress syncs when you reconnect.')}</Notice>}
           {notificationBanner&&!inbox&&<View style={{gap:10}}><NotificationItem item={notificationBanner} onOpen={openNotification}/>{!gameVisible&&<Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button>}</View>}
           {appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
           {pendingInvite&&!p.account&&invitePreview?.usable&&<Card><Title small>{copyText('You’re invited to play')}</Title><Copy muted>{copyText('Log in or continue as a guest to join this match.')}</Copy><Row><Button onPress={()=>setAccount(true)}>{copyText('Log in to join')}</Button><Button secondary onPress={()=>{clearInvite();writeRoute(`match=${encodeURIComponent(invitePreview.match.id)}`);}}>{copyText('Watch match')}</Button></Row></Card>}

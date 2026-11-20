@@ -13,6 +13,10 @@ test('notification consent requires a confirmed handoff between different human 
   for (const update of [{move_count:0},{localMode:'pass'},{turn_of_player_indices:[0]},{status:'over',turn_of_player_indices:null},{players:[before.players[0],{...before.players[1],kind:'computer' as const,user_id:null}]}]) assert.equal(handsTurnToOpponent(before,{...after,...update},'alice'),false,JSON.stringify(update));
   assert.equal(handsTurnToOpponent({...before,players:[before.players[0]]},after,'alice'),false);
   assert.equal(handsTurnToOpponent(before,after,'bob'),false);
+  for(const match_kind of ['computer','pass_and_play'] as const) {
+    assert.equal(handsTurnToOpponent({...before,match_kind},after,'alice'),false);
+    assert.equal(handsTurnToOpponent(before,{...after,match_kind},'alice'),false);
+  }
 });
 
 test('notification navigation accepts current server invitations/rematches and rejects foreign or non-player URLs',()=>{

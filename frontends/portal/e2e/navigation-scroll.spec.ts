@@ -1,7 +1,9 @@
 import {test,expect} from '@playwright/test';
+import {createUser,loginAs,uniqueName} from './helpers';
 
-test('destination navigation resets scrolling after a long saved-game list without a footer',async({page,baseURL})=>{
+test('destination navigation resets scrolling after a long saved-game list without a footer',async({page,request,baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Navigation checks require a disposable loopback server.');
+  await loginAs(page,await createUser(request,uniqueName('Navigation owner')));
   await page.goto('/portal');
   for(let i=0;i<3;i++){
     await page.goto('/portal#local');

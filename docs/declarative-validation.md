@@ -192,6 +192,8 @@ It completes all five recorded stages for each exact payload and private
 secret before the regular import creates a persistent catalog game. This
 publication is distinct from the earlier disposable demo evidence: no startup
 catalog fallback or validation bypass is used. Browser verification of the
-deployed catalog and device-only practice uses real published packages and
-blocks production account/match writes; online match tests use the disposable
-local server.
+deployed catalog and the then-device-only practice used real published packages
+and blocked production account/match writes; online match tests used the
+disposable local server. This historical evidence predates [cloud-backed
+single-player matches](match-kinds.md); new persistence checks must allow and
+verify authorized account-scoped cloud saves on the disposable server.

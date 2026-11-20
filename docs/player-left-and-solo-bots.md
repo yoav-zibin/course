@@ -1,5 +1,10 @@
 # November 6: leaving matches and single-player bots
 
+> Historical report: [match kinds and cloud saves](match-kinds.md) supersedes
+> any computer takeover or permanent device-only behavior described below.
+> Multiplayer has humans only; computer and pass-and-play matches are private
+> to one owner account and sync offline progress to the cloud.
+
 Implementation plan (directly on `main`):
 
 1. Share the state/turn/payouts result contract between `applyMove` and

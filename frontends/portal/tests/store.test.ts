@@ -11,21 +11,25 @@ import { ApiError } from '../src/core/api';
 import { matchOutcome } from '../src/core/results';
 import { presentationSteps } from '../src/game/interactions';
 
-function browserStorage() {
+function browserStorage(signedInGuest = false) {
   const values: Record<string,string> = {};
   Object.defineProperties(values, {
     getItem: { value: (key: string) => Object.hasOwn(values, key) ? values[key] : null },
     setItem: { writable: true, configurable: true, value: (key: string, value: string) => { values[key] = String(value); } },
     removeItem: { value: (key: string) => { delete values[key]; } },
   });
+  if (signedInGuest) { values['game-platform.accounts.v1']=JSON.stringify([{id:'visitor',password:'synthetic-guest-credential',display_name:''}]);values['game-platform.current-account.v1']='visitor'; }
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: values }); return values;
 }
 function mockedFetch(extra: (url: URL, init: RequestInit) => any = () => undefined) {
   const original = globalThis.fetch;
+  const cloud = new Map<string, any>();
   globalThis.fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = new URL(String(input)); let value = await extra(url, init);
     if (value === undefined) {
-      if (url.pathname === '/i18n/locales') value = { locales: [{ code: 'en', name: 'English', direction: 'ltr' }] };
+      if (url.pathname === '/matches/single-player-sync') { const body=JSON.parse(init.body as string), previous=cloud.get(body.match.id); value={...body.match,cloud_revision:(previous?.cloud_revision || 0)+1,single_player_state:body.match}; cloud.set(value.id,value); }
+      else if (url.pathname.startsWith('/matches/local-') && cloud.has(url.pathname.slice('/matches/'.length))) value=cloud.get(url.pathname.slice('/matches/'.length));
+      else if (url.pathname === '/i18n/locales') value = { locales: [{ code: 'en', name: 'English', direction: 'ltr' }] };
       else if (url.pathname.startsWith('/i18n/bundle/')) value = { catalog: { messages: {}, direction: 'ltr' }, games: {} };
       else if (url.pathname === '/storage/capabilities') value = { pagination: false };
       else if (url.pathname === '/auth/config') value = {};
@@ -43,6 +47,79 @@ function testRuntime() {
     if (!result.ok) throw new Error(result.message); return result.result;
   };
 }
+
+test('signed-out users must sign in before creating any match',async()=>{
+  browserStorage();const restore=mockedFetch();
+  try {
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    await assert.rejects(store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0}),/Log in/);
+    await assert.rejects(store.actions.createMatch({game_id:'bundled-tictactoe'}),/Log in/);
+    assert.equal(store.getSnapshot().localMatches.length,0);
+  } finally {restore();}
+});
+
+test('multiplayer creation is durable before POST and retries a lost acknowledgement using the same match id',async()=>{
+  browserStorage(true);const repository=new AccountRepository('https://local.test');let remote:any,first=true;const ids:string[]=[];
+  const restore=mockedFetch(async(url,init)=>{
+    if(url.pathname==='/matches'&&init.method==='POST') {
+      const body=JSON.parse(init.body as string);ids.push(body.client_match_id);
+      const durable=await repository.read('visitor');assert.ok(durable.creations?.[body.client_match_id]);assert.equal(durable.responses[`/matches/${body.client_match_id}`].match_kind,'multiplayer');
+      remote ||= {...durable.responses[`/matches/${body.client_match_id}`],cloud_pending:false,invite_code:'abcd'};
+      if(first){first=false;throw new TypeError('response lost after creation');}
+      return remote;
+    }
+    if(remote&&url.pathname===`/matches/${remote.id}`)return remote;
+  });
+  try {
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    const created=await store.actions.createMatch({game_id:'bundled-tictactoe',bet_per_player:0});await store.actions.refresh();
+    assert.equal(created.match_kind,'multiplayer');assert.ok((await repository.read('visitor')).creations?.[created.id]);
+    const restarted=new PortalStore(testRuntime());await restarted.bootstrap('https://local.test');
+    assert.deepEqual(ids,[created.id,created.id]);assert.deepEqual((await repository.read('visitor')).creations,{});
+    assert.equal(restarted.getSnapshot().selectedMatch!.id,created.id);assert.equal(restarted.getSnapshot().selectedMatch!.invite_code,'abcd');
+  } finally {restore();}
+});
+
+test('a failed initial local save prevents a multiplayer creation request',async()=>{
+  const saved=browserStorage(true);let posts=0;const restore=mockedFetch((url,init)=>{if(url.pathname==='/matches'&&init.method==='POST')posts++;});
+  try {
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    const set=(saved as any).setItem;(saved as any).setItem=(key:string,value:string)=>{if(key===new AccountRepository('https://local.test').key('visitor'))throw new DOMException('Quota exceeded','QuotaExceededError');set(key,value);};
+    await assert.rejects(store.actions.createMatch({game_id:'bundled-tictactoe'}),error=>(error as Error).name==='QuotaExceededError');
+    assert.equal(posts,0);assert.equal(store.getSnapshot().selectedMatch,null);
+  } finally {restore();}
+});
+
+test('a clean cloud mirror deleted on another device is archived and removed from the match list',async()=>{
+  browserStorage(true);let deleted=false,id='';const restore=mockedFetch(url=>{
+    if(deleted&&url.pathname===`/matches/${id}`)throw new ApiError(404,'Match deleted');
+  });
+  try {
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    await store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0});await store.actions.refresh();
+    id=store.getSnapshot().selectedMatch!.id;assert.equal(store.getSnapshot().selectedMatch!.cloud_pending,false);
+    deleted=true;await store.actions.refreshMatch();
+    const data=await new AccountRepository('https://local.test').read('visitor');assert.equal(data.local[id],undefined);
+    assert.equal(data.archivedMatches.find(item=>item.id===id)?.match.id,id);assert.equal(store.getSnapshot().selectedMatch,null);
+    assert.ok(!store.getSnapshot().localMatches.some(match=>match.id===id));assert.ok(!store.getSnapshot().myMatches.some(match=>match.id===id));
+  } finally {restore();}
+});
+
+test('a deleted cloud match with unsent turns keeps its complete local branch for conflict review',async()=>{
+  browserStorage(true);let deleted=false,id='';const restore=mockedFetch((url,init)=>{
+    if(deleted&&url.pathname==='/matches/single-player-sync')throw new ApiError(409,'Match deleted');
+    if(deleted&&url.pathname===`/matches/${id}`)throw new ApiError(404,'Match deleted');
+  });
+  try {
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    await store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0});await store.actions.refresh();id=store.getSnapshot().selectedMatch!.id;
+    deleted=true;await store.actions.submitMove({cell:0});await store.actions.refresh();await store.actions.refreshMatch();
+    const data=await new AccountRepository('https://local.test').read('visitor');assert.equal(data.local[id].move_count,1);
+    assert.equal(data.local[id].moves.length,1);assert.match(data.conflicts[id].message,/preserved/);
+    assert.ok(!data.archivedMatches.some(item=>item.id===id));assert.equal(store.getSnapshot().selectedMatch!.id,id);
+    assert.equal(store.actions.presentationMessage().acting_for_player_index,1);
+  } finally {restore();}
+});
 
 test('refresh completes without requesting retired match discovery endpoints', async()=>{
   browserStorage();const paths:string[]=[];
@@ -124,7 +201,7 @@ test('a quota failure updating a pinned pending download only skips optional cac
 });
 
 test('full device storage still opens online matches and games while keeping saved play intact',async()=>{
-  const saved=browserStorage();
+  const saved=browserStorage(true);
   const game={...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8')),id:'online-quota-game',version:7};
   const match={id:'online-quota-match',game_id:game.id,game_version:game.version,players:[],status:'ongoing',state:{exact:true},turn_of_player_indices:[0],move_count:0};
   const restore=mockedFetch(url=>url.pathname===`/matches/${match.id}`?match:url.pathname.startsWith(`/games/${game.id}`)?game:undefined);
@@ -177,7 +254,7 @@ test('offline cached reads update recency and a recovered cache write publishes 
 });
 
 test('public bundled rules support continuous pass-and-play, win, restart and replay', async () => {
-  browserStorage(); const restore = mockedFetch();
+  browserStorage(true); const restore = mockedFetch();
   try {
     const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test');
     await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0, names: ['Alex', 'Sam'] });
@@ -196,7 +273,7 @@ test('public bundled rules support continuous pass-and-play, win, restart and re
   } finally { restore(); }
 });
 test('real bundled computer turns advance using the same shared offline engine', async () => {
-  browserStorage(); const restore = mockedFetch();
+  browserStorage(true); const restore = mockedFetch();
   try {
     const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.startPractice('bundled-tictactoe', { humans: 1, computers: 1 });
     await store.actions.submitMove({ cell: 4 }); const match = store.getSnapshot().selectedMatch!;
@@ -206,7 +283,7 @@ test('real bundled computer turns advance using the same shared offline engine',
 });
 test('local computer batches deliver every accepted intermediate view before publishing the final board', async () => {
   for (const [players, actions] of [[2, 4], [4, 4], [2, 200]]) {
-    browserStorage();
+    browserStorage(true);
     const fixture = {id:'local-batch',version:1,name:'Local batch',description:'',allowed_player_counts:[players],renderer_type:'declarative',
       declarative_ui:{format:'buildplay-ui',version:1,viewport:{width:400,height:300},boards:[],piece_types:{},ui_code:'const gameUI={reduce(){return {scene:{}};}};'},
       server_code:`const game={
@@ -251,7 +328,7 @@ test('computer practice keeps the chosen human view, identity and turn through r
       viewFor(s,id,ctx){return {...s,private_for:id};},computerMove(){return {go:true};}
     };` };
   for (const count of [2,3,4]) for (const humanSeat of [0,count-1]) for (const signedIn of [false,true]) {
-    const saved=browserStorage();
+    const saved=browserStorage(true);
     if(signedIn){saved['game-platform.accounts.v1']=JSON.stringify([{id:'alice',password:'credential-never-in-game',display_name:'Alice'}]);saved['game-platform.current-account.v1']='alice';}
     const restore=mockedFetch(url=>url.pathname.startsWith('/games/practice-seats')?fixture:undefined);
     try {
@@ -282,7 +359,7 @@ test('pass-and-play replay attributes each saved private view to its historical 
     viewFor(s,id,ctx){const seat=ctx.players.findIndex(p=>p.id===id);return {...s,private_for:id,hand_counts:ctx.players.map((p,i)=>i+1),your_hand:Array.from({length:seat+1},()=>seat)};}
   };`};
   for(const count of [2,3,4]){
-    browserStorage();const restore=mockedFetch(url=>url.pathname.startsWith('/games/private-replay')?fixture:undefined);
+    browserStorage(true);const restore=mockedFetch(url=>url.pathname.startsWith('/games/private-replay')?fixture:undefined);
     try{
       const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');await store.actions.startPractice(fixture.id,{humans:count,computers:0});
       const id=store.getSnapshot().selectedMatch!.id;
@@ -298,7 +375,7 @@ test('pass-and-play replay attributes each saved private view to its historical 
   }
 });
 test('invalid local counts and human positions cannot create a saved match',async()=>{
-  browserStorage();const restore=mockedFetch();
+  browserStorage(true);const restore=mockedFetch();
   try{
     const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
     for(const options of [{humans:0,computers:2},{humans:1.5,computers:.5},{humans:1,computers:-1},{humans:1,computers:1,humanSeat:-1},{humans:1,computers:1,humanSeat:2},{humans:1,computers:1,humanSeat:.5}]){
@@ -308,7 +385,7 @@ test('invalid local counts and human positions cannot create a saved match',asyn
   }finally{restore();}
 });
 for (const publicState of [false, undefined, 'true']) test(`private or unknown state (${publicState}) preserves handoff and history protection after restart`, async () => {
-  browserStorage();
+  browserStorage(true);
   const fixture = { ...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json', import.meta.url), 'utf8')), id: 'private-handoff', all_state_public: publicState };
   const restore = mockedFetch(url => url.pathname.startsWith('/games/private-handoff') ? fixture : undefined);
   try {
@@ -327,7 +404,7 @@ for (const publicState of [false, undefined, 'true']) test(`private or unknown s
   } finally { restore(); }
 });
 for (const gameId of ['bundled-tictactoe', 'downloaded-public']) test(`${gameId} matches with a saved pending handoff immediately allow play and history after restart`, async () => {
-  browserStorage();
+  browserStorage(true);
   const fixture = { ...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json', import.meta.url), 'utf8')), id: gameId, all_state_public: true };
   const restore = mockedFetch(url => url.pathname.startsWith('/games/downloaded-public') ? fixture : undefined);
   try {
@@ -346,7 +423,7 @@ for (const gameId of ['bundled-tictactoe', 'downloaded-public']) test(`${gameId}
   } finally { restore(); }
 });
 test('local-only launch loads accounts and resumes local play while making zero network calls', async () => {
-  const saved=browserStorage(); saved['game-platform.accounts.v1']=JSON.stringify([{id:'alice',password:'saved-credential',display_name:'Alice'}]); saved['game-platform.current-account.v1']='alice';
+  const saved=browserStorage(true); saved['game-platform.accounts.v1']=JSON.stringify([{id:'alice',password:'saved-credential',display_name:'Alice'}]); saved['game-platform.current-account.v1']='alice';
   const original=globalThis.fetch; let requests=0; globalThis.fetch=(async()=>{requests++;throw new Error('Unexpected network request');}) as typeof fetch;
   try {
     const store=new PortalStore(testRuntime()); await store.actions.bootstrap('https://must-not-contact.test',true); assert.equal(store.getSnapshot().ready,true); assert.equal(store.getSnapshot().network,false); assert.equal(store.getSnapshot().account!.id,'alice');
@@ -440,7 +517,7 @@ test('a late API failure cannot publish the previous account private error to th
   }finally{restore();}
 });
 test('actual Backgammon package runs through shared practice and persists a legal move', async () => {
-  browserStorage();
+  browserStorage(true);
   const source = JSON.parse(readFileSync(new URL('../../../games/declarative/backgammon.json', import.meta.url), 'utf8'));
   const game = { ...source, id: 'backgammon-test', version: 4, renderer_type: 'declarative', game_schemas: Object.fromEntries(['state','move','view'].map(key => [key, source.unit_tests[`${key}_schema`]])) };
   const restore = mockedFetch(url => url.pathname === '/games/backgammon-test' ? game : undefined);
@@ -481,7 +558,7 @@ test('slow poll cache cannot roll back a confirmed newer state or replace queued
   await repository.cache('alice','/matches/m',{id:'m',move_count:5,state:'remote while conflicted'});assert.equal((await repository.read('alice')).responses['/matches/m'].state,'confirmed');
 });
 test('opening a game URL synchronously detaches the restored match before its package download', async () => {
-  browserStorage(); let finish!: (value: any) => void; const download = new Promise(resolve => { finish = resolve; });
+  browserStorage(true); let finish!: (value: any) => void; const download = new Promise(resolve => { finish = resolve; });
   const restore = mockedFetch(url => url.pathname === '/games/new-game' ? download : undefined);
   try {
     const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0 });
@@ -494,7 +571,7 @@ test('opening a game URL synchronously detaches the restored match before its pa
   } finally { restore(); }
 });
 test('failed game-package fetch cannot pair an old match with a newly selected game', async () => {
-  browserStorage(); const restore = mockedFetch(url => { if (url.pathname === '/games/missing') throw new ApiError(404, 'Game not found'); });
+  browserStorage(true); const restore = mockedFetch(url => { if (url.pathname === '/games/missing') throw new ApiError(404, 'Game not found'); });
   try {
     const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0 });
     await assert.rejects(store.actions.selectGame('missing'), /Game not found/);
@@ -536,7 +613,7 @@ for(const mismatch of [{id:'another-game',version:7},{id:'withdrawn-game',versio
   }finally{restore();}
 });
 test('opening another match never pairs its private view with the previous game package', async () => {
-  browserStorage();
+  browserStorage(true);
   let release!: (value: any) => void, started!: () => void;
   const download = new Promise(resolve => { release = resolve; });
   const downloading = new Promise<void>(resolve => { started = resolve; });
@@ -794,12 +871,12 @@ test('backend merge refusal retains the original account and both sides remain r
   } finally { restore(); }
 });
 test('linked local practice remains visible and resumes after a canonical-account restart', async () => {
-  const saved = browserStorage(); saved['game-platform.accounts.v1'] = JSON.stringify([{ id: 'alice', password: 'guest-secret', display_name: 'Guest' }]); saved['game-platform.current-account.v1'] = 'alice';
+  const saved = browserStorage(true); saved['game-platform.accounts.v1'] = JSON.stringify([{ id: 'alice', password: 'guest-secret', display_name: 'Guest' }]); saved['game-platform.current-account.v1'] = 'alice';
   const verified = { user_id: 'bob', password: 'verified-secret', display_name: 'Verified' };
   const restore = mockedFetch(url => url.pathname === '/users/alice/merge' ? { id: 'bob' } : url.pathname === '/auth/me' ? verified : undefined);
   try {
     const store = new PortalStore(testRuntime(), async () => verified); await store.bootstrap('https://local.test'); await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0 });
-    const id = store.getSnapshot().selectedMatch!.id; const originalPlayers = store.getSnapshot().selectedMatch!.players;
+    await store.actions.refresh(); const id = store.getSnapshot().selectedMatch!.id; const originalPlayers = store.getSnapshot().selectedMatch!.players;
     const sourceKey = new AccountRepository('https://local.test').key('alice'); const sourceBytes = saved[sourceKey];
     await store.actions.browserLogin(true); assert.equal(store.getSnapshot().account!.id, 'bob'); assert.ok(store.getSnapshot().localMatches.some(m => m.id === id)); assert.equal(saved[sourceKey], sourceBytes);
     const restarted = new PortalStore(testRuntime()); await restarted.bootstrap('https://local.test'); assert.equal(restarted.getSnapshot().account!.id, 'bob'); assert.equal(restarted.getSnapshot().selectedMatch!.id, id); assert.deepEqual(restarted.getSnapshot().selectedMatch!.players, originalPlayers);
@@ -807,12 +884,12 @@ test('linked local practice remains visible and resumes after a canonical-accoun
   } finally { restore(); }
 });
 test('failed canonical data commit keeps the original account selectable and all original saves untouched', async () => {
-  const saved = browserStorage(); saved['game-platform.accounts.v1'] = JSON.stringify([{ id: 'alice', password: 'guest-secret', display_name: 'Guest' }]); saved['game-platform.current-account.v1'] = 'alice';
+  const saved = browserStorage(true); saved['game-platform.accounts.v1'] = JSON.stringify([{ id: 'alice', password: 'guest-secret', display_name: 'Guest' }]); saved['game-platform.current-account.v1'] = 'alice';
   const verified = { user_id: 'bob', password: 'verified-secret', display_name: 'Verified' }; const repository = new AccountRepository('https://local.test');
   const restore = mockedFetch(url => url.pathname === '/users/alice/merge' ? { id: 'bob' } : url.pathname === '/auth/me' ? verified : undefined);
   try {
     const store = new PortalStore(testRuntime(), async () => verified); await store.bootstrap('https://local.test'); await store.actions.startPractice('bundled-tictactoe', { humans: 2, computers: 0 });
-    const originalSource = saved[repository.key('alice')], originalAccounts = saved['game-platform.accounts.v1'];
+    await store.actions.refresh(); const originalSource = saved[repository.key('alice')], originalAccounts = saved['game-platform.accounts.v1'];
     (saved as any).setItem = (key: string, value: string) => { if (key === repository.key('bob')) throw new Error('disk full'); saved[key] = String(value); };
     await assert.rejects(store.actions.browserLogin(true), /disk full/); assert.equal(store.getSnapshot().account!.id, 'alice'); assert.ok(store.getSnapshot().accounts.some(a => a.id === 'alice')); assert.equal(saved['game-platform.accounts.v1'], originalAccounts); assert.equal(saved[repository.key('alice')], originalSource); assert.match(store.getSnapshot().storageError!, /remains selectable/);
   } finally { restore(); }

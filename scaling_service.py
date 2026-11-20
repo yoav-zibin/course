@@ -345,7 +345,7 @@ class ScalablePlatform(GamePlatform):
                 raise ConflictError(
                     "wait until shared matches end before merging these accounts"
                 )
-        if sum(len(m.moves) for m in matches) > 250:
+        if sum(len(m.moves) for m in matches if m.single_player_state is None) > 250:
             raise ConflictError(
                 "large account merge requires the resumable maintenance job"
             )
@@ -355,6 +355,8 @@ class ScalablePlatform(GamePlatform):
             store.put_push_subscription(replace(row, user_id=into.id))
         for match in matches:
             jobs._merge_match(store, match, source.id, into.id)
+            if match.single_player_state is not None:
+                continue
             ref = store.ref("matches", match.id)
             for index, move in enumerate(match.moves):
                 if move.made_by_user_id == source.id:
@@ -437,6 +439,11 @@ class ScalablePlatform(GamePlatform):
     def _schedule_match(self, match):
         # One durable job per match. Revision fencing prevents an old job from
         # taking a turn after a human has already changed the match.
+        if match.single_player_state is not None:
+            ref = self._store.ref("jobs", match.id)
+            if self._store.raw_get(ref):
+                self._store.raw_put(ref, None)
+            return
         game = self._store.get_game_version(match.game_id, match.game_version)
         if game is None or not game.is_declarative:
             ref = self._store.ref("jobs", match.id)

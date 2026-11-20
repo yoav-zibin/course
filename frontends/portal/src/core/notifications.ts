@@ -20,7 +20,7 @@ export function pendingNotifications(items: InAppNotification[], baseUrl: string
 
 /** A confirmed human move that hands control to a different human player. */
 export function handsTurnToOpponent(before: Match, after: Match, userId: string): boolean {
-  if (before.localMode || after.localMode || before.id !== after.id || before.status !== 'ongoing' || after.status !== 'ongoing' || after.move_count <= before.move_count) return false;
+  if (before.localMode || after.localMode || before.match_kind && before.match_kind !== 'multiplayer' || after.match_kind && after.match_kind !== 'multiplayer' || before.id !== after.id || before.status !== 'ongoing' || after.status !== 'ongoing' || after.move_count <= before.move_count) return false;
   const humans = before.players.filter(player => player.kind === 'human' && player.active !== false && player.user_id);
   const own = humans.find(player => player.user_id === userId);
   if (!own || humans.length < 2 || !before.turn_of_player_indices?.includes(own.player_index) || after.turn_of_player_indices?.includes(own.player_index)) return false;

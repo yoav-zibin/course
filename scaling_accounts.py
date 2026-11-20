@@ -236,7 +236,7 @@ def _merge_match_moves(store, ref, job, state, source_id, into_id):
     record = store._decode("matches", row, doc.reference, detail=False)
     start = state.get("move_start", 0) if match_doc_id == doc.id else 0
     count = (row or {}).get("move_count", 0)
-    if record is not None and start < count:
+    if record is not None and record.single_player_state is None and start < count:
         stop = min(start + 100, count)
         moves = (
             record.moves[start:stop] if isinstance(record.moves, MoveHistory) else ()
@@ -363,6 +363,10 @@ def _merge_library(store, record, source_id, into_id):
 
 def _merge_match(store, record, source_id, into_id):
     updated = record
+    if record.single_player_state is not None and record.owner_user_id == source_id:
+        from game_platform.single_player import transfer_save
+        updated = replace(updated, single_player_state=transfer_save(
+            record.single_player_state, source_id, into_id), cloud_revision=record.cloud_revision + 1)
     if record.owner_user_id == source_id:
         updated = replace(updated, owner_user_id=into_id)
     if any(seat.user_id == source_id for seat in updated.seats):

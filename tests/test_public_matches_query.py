@@ -113,10 +113,8 @@ def test_query_creation_and_rematches_are_human_only_but_old_computer_matches_co
                    json={"move": {"add": amount}})
             api.platform.run_due_jobs()
         assert store.get_match(legacy_id).status == "over"
-        rematch = api.ok("POST", f"/matches/{legacy_id}/rematch", as_user=alice)
-        assert rematch["status"] == "waiting_for_players"
-        assert [(p["kind"], p["user_id"]) for p in rematch["players"]] == [("human", alice)]
-        api.ok("POST", f"/matches/{rematch['id']}/join", as_user=bob)
+        assert api.request("POST", f"/matches/{legacy_id}/rematch", as_user=alice).status_code == 409
+        assert api.request("GET", f"/matches/{legacy_id}", as_user=bob).status_code == 404
     finally:
         api.platform.close_workers()
 

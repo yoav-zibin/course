@@ -1,7 +1,7 @@
 # BuildPlay shared player app
 
 One React Native application runs on Android, iOS and the web. Screens, accounts,
-match controls, synchronization, local practice and the declarative SVG renderer
+match controls, cloud synchronization, offline single-player play and the declarative SVG renderer
 live in `src/`. Platform files provide storage, browser login, gestures and
 isolated execution. The Python backend remains authoritative for online games.
 
@@ -51,8 +51,13 @@ builds and CI artifacts. Generated `android/`, `ios/` and web bundles are ignore
   lower-priority downloads are evicted first. Local games, queued moves, conflicts
   and their dependencies retain their existing protections. A downloaded online
   match can accept your current move offline and sync it after reconnecting.
-- Local pass-and-play and computer practice use downloaded pinned rules and a
-  separate local state/seed. They work offline. Bundled Tic-tac-toe is available
+- Every match persists `match_kind`: `computer`, `pass_and_play` or `multiplayer`.
+  Computer and pass-and-play matches are private to one logged-in owner, have no
+  share/join controls or opponent notifications, and save locally before syncing
+  full state/history to the cloud. They accept unlimited offline turns with
+  downloaded pinned rules; reconnect/boot retries preserve match IDs and revisions.
+  Multiplayer contains human accounts only and uses invites and notifications.
+  See [the shared contract](../../docs/match-kinds.md). Bundled Tic-tac-toe is available
   on a fresh installation. Games declaring `all_state_public: true` keep the board
   visible between turns. Other games hide the next player's board until a handoff
   is confirmed, including older games without this declaration.

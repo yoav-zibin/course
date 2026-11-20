@@ -41,8 +41,11 @@ Declarative games are the portal's playable `Game` records. They appear in the
 `renderer_type: "declarative"` identifies their presentation package. The portal
 shows the stored localized name. Their create/join/start/move/history APIs retain
 server validation. Sending a forged scene, local state, dice or illegal move
-cannot replace server state. Offline practice runs locally; multiplayer and
-online computer matches remain server authoritative.
+cannot replace authoritative multiplayer state. Private computer/pass-and-play
+matches run the same deterministic rules locally, persist actions before input
+continues and synchronize complete snapshots to their owner’s cloud account.
+Multiplayer remains server authoritative and contains human accounts only.
+See [match kinds and cloud saves](match-kinds.md).
 
 Ten existing HTML games also have declarative editions: Battleship, Checkers,
 Chess, Four-player Chess, Quoridor, Crazy Eights, Go Fish, Hearts, Spades and

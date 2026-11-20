@@ -55,7 +55,7 @@ export function responseRetentionPriorities(data: AccountData, userId?: string):
 }
 
 export function protectedResponsePaths(data: AccountData, activeGame?: {id: string; version?: number}): Set<string> {
-  const matches = new Set([...Object.keys(data.queues), ...Object.keys(data.conflicts), ...Object.keys(data.local), ...(data.selectedId ? [data.selectedId] : [])]);
+  const matches = new Set([...Object.keys(data.queues), ...Object.keys(data.creations || {}), ...Object.keys(data.conflicts), ...Object.keys(data.local), ...(data.selectedId ? [data.selectedId] : [])]);
   const knownGames = new Set<string>();
   const paths = new Set<string>(); const visited = new Set<object>(); let inspected = 0, conservative = false;
   const inspect = (value: any, depth = 0) => {

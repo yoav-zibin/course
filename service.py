@@ -1652,6 +1652,10 @@ class GamePlatform:
             )
         for match in self._store.list_all_matches():
             updated = match
+            if match.single_player_state is not None and match.owner_user_id == from_user_id:
+                from game_platform.single_player import transfer_save
+                updated = replace(updated, single_player_state=transfer_save(
+                    match.single_player_state, from_user_id, into_user_id))
             if match.owner_user_id == from_user_id:
                 updated = replace(updated, owner_user_id=into_user_id)
             if any(seat.user_id == from_user_id for seat in updated.seats):
@@ -2572,10 +2576,21 @@ class GamePlatform:
         game_id: str,
         bet_per_player: int = 0,
         turn_seconds: int | None = None,
+        client_match_id: str | None = None,
     ) -> Match:
         """[turn_seconds] makes a speed match (see SPEED_TURN_SECONDS); None is a
         regular match with no time limit."""
         with self._lock:
+            if client_match_id is not None:
+                if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", client_match_id):
+                    raise InvalidRequestError("invalid client_match_id")
+                self._check_client_match_not_deleted(client_match_id)
+                previous = self._store.get_match(client_match_id)
+                if previous is not None:
+                    if (previous.owner_user_id, previous.game_id, previous.bet_per_player,
+                            previous.turn_seconds) != (caller_id, game_id, bet_per_player, turn_seconds):
+                        raise ConflictError("client_match_id is already used by a different match")
+                    return previous
             if turn_seconds is not None and (
                 type(turn_seconds) is not int or turn_seconds not in SPEED_TURN_SECONDS
             ):
@@ -2587,11 +2602,14 @@ class GamePlatform:
                 raise NotFoundError("game not found")
             if type(bet_per_player) is not int or not 0 <= bet_per_player <= 1000000:
                 raise InvalidRequestError("invalid token stake")
+            if game.rules.max_players == 1 and (bet_per_player or turn_seconds is not None):
+                raise InvalidRequestError("single-player matches have no stakes or server clock")
             return self._new_match(
                 game,
                 caller_id=caller_id,
                 bet_per_player=bet_per_player,
                 turn_seconds=turn_seconds,
+                client_match_id=client_match_id,
             )
 
     def _new_match(
@@ -2601,13 +2619,14 @@ class GamePlatform:
         caller_id: str,
         bet_per_player: int = 0,
         turn_seconds: int | None = None,
+        client_match_id: str | None = None,
     ) -> Match:
         """Stores a new waiting match of [game] owned (and first seated) by [caller_id].
         The caller holds the lock and has checked the game."""
         if not game.is_declarative:
             raise InvalidRequestError("HTML games no longer support matches")
         now = self._clock()
-        match_id = self._new_id()
+        match_id = client_match_id or self._new_id()
         # The seed is a per-match server secret and never sent to clients.
         seed = self._new_seed()
         seed_version = 3
@@ -2615,6 +2634,7 @@ class GamePlatform:
             id=match_id,
             game_id=game.id,
             owner_user_id=caller_id,
+            match_kind="pass_and_play" if game.rules.max_players == 1 else "multiplayer",
             game_version=game.version,
             status="waiting_for_players",
             seats=_waiting_seats(
@@ -2648,9 +2668,145 @@ class GamePlatform:
 
     def get_match(self, match_id: str, *, caller_id: str | None = None) -> Match:
         with self._lock:
-            return self._get_match(match_id)
+            match = self._get_match(match_id)
+            self._check_match_viewer(match, caller_id)
+            return match
 
-    def get_match_game(self, match_id: str) -> Game:
+    @staticmethod
+    def _check_match_viewer(match: Match, caller_id: str | None) -> None:
+        if match.effective_match_kind != "multiplayer" and caller_id != match.owner_user_id:
+            raise NotFoundError("match not found")
+
+    def _check_client_match_not_deleted(self, match_id: str) -> None:
+        if getattr(self._store, "scalable", False):
+            record = self._store.raw_get(self._store.ref("matches", match_id))
+            if record is not None and record.get("tombstone"):
+                raise ConflictError("this match was deleted; create a new match")
+
+    def sync_single_player(self, *, caller_id: str, snapshot: dict,
+                           expected_revision: int = 0) -> Match:
+        """Atomically save an owner-only local branch with optimistic concurrency.
+
+        Identical retries survive lost acknowledgements. A different device cannot
+        overwrite newer progress: the caller must resolve a revision conflict.
+        """
+        from game_platform.single_player import validate_save, save_seats, save_moves
+        with self._lock:
+            self._require_user(caller_id)
+            game_id = snapshot.get("game_id")
+            version = snapshot.get("game_version")
+            if game_id == "bundled-tictactoe" and version == 1:
+                self._ensure_bundled_game()
+            if not isinstance(game_id, str) or type(version) is not int:
+                raise InvalidRequestError("game_id and game_version are required")
+            game = self._store.get_game_version(game_id, version)
+            if game is None or not game.is_declarative:
+                raise NotFoundError("game version not found")
+            try:
+                snapshot = validate_save(snapshot, caller_id, game)
+            except (ValueError, TypeError, OverflowError) as error:
+                raise InvalidRequestError(str(error)) from error
+            previous = self._store.get_match(snapshot["id"])
+            self._check_client_match_not_deleted(snapshot["id"])
+            if previous is not None:
+                self._check_match_viewer(previous, caller_id)
+                if (previous.owner_user_id != caller_id
+                        or previous.effective_match_kind == "multiplayer"
+                        or previous.bet_per_player or previous.token_pot):
+                    raise ConflictError("this match cannot accept a single-player save")
+                if previous.single_player_state == snapshot:
+                    return previous
+                if (previous.game_id, previous.game_version, previous.effective_match_kind) != (
+                        game.id, game.version, snapshot["match_kind"]):
+                    raise ConflictError("a saved match's game and kind cannot change")
+                if previous.cloud_revision != expected_revision:
+                    raise ConflictError("single-player cloud revision changed; preserve and resolve the local branch")
+                if previous.single_player_state is not None:
+                    old = previous.single_player_state
+                    if (old["players"] != snapshot["players"]
+                            or old["created_at"] != snapshot["created_at"]
+                            or snapshot["moves"][:len(old["moves"])] != old["moves"]):
+                        raise ConflictError("a saved match's roster and recorded history cannot be replaced")
+            elif expected_revision != 0:
+                raise ConflictError("single-player cloud save no longer exists")
+            created = (previous.created_at if previous is not None else
+                       dt.datetime.fromisoformat(snapshot["created_at"].replace("Z", "+00:00")))
+            match = Match(
+                id=snapshot["id"], game_id=game.id, game_version=game.version,
+                owner_user_id=caller_id, match_kind=snapshot["match_kind"],
+                cloud_revision=(previous.cloud_revision if previous else 0) + 1,
+                single_player_state=snapshot, status=snapshot["status"],
+                seats=save_seats(snapshot), state=snapshot["logicState"],
+                initial_state=snapshot["initialState"],
+                initial_turn_player_indices=(None if snapshot["initialTurn"] is None else
+                                             frozenset(snapshot["initialTurn"])),
+                turn_of_player_indices=(None if snapshot["turn_of_player_indices"] is None else
+                                         frozenset(snapshot["turn_of_player_indices"])),
+                end_reason="finished" if snapshot["status"] == "over" else None,
+                moves=save_moves(snapshot, caller_id, created),
+                hidden_for_user_ids=frozenset(), created_at=created, updated_at=self._clock(),
+            )
+            self._store.put_match(match)
+            return match
+
+    def _ensure_bundled_game(self) -> None:
+        """Retain the exact trusted rules shipped in every app, once per store."""
+        if self._store.get_game_version("bundled-tictactoe", 1) is not None:
+            return
+        from pathlib import Path
+        package = json.loads((Path(__file__).parent / "frontends/portal/src/core/bundled-tictactoe.json").read_text())
+        now = self._clock()
+        game = Game(
+            id=package["id"], version=package["version"], name=package["name"],
+            description=package["description"], code="", server_code=package["server_code"],
+            game_schemas=package["game_schemas"], import_package=package,
+            all_state_public=True, rules=GameRules(
+                allowed_player_counts=tuple(package["allowed_player_counts"]),
+                allows_leave_mid_match=False, allows_join_mid_match=False),
+            created_at=now, updated_at=now,
+        )
+        self._store.add_game_version(game)
+
+    def single_player_snapshot(self, match: Match) -> dict | None:
+        """An owner can continue a retained legacy practice in the local runner.
+
+        New portable saves preserve their original client random stream. Legacy
+        server practice adopts a fresh local stream after its retained board;
+        the former server secret never leaves the server.
+        """
+        if match.effective_match_kind == "multiplayer" or match.status == "waiting_for_players":
+            return None
+        if match.single_player_state is not None:
+            return match.single_player_state
+        initial, views = self.view_history(match, match.owner_user_id)
+        owner = self._store.get_user(match.owner_user_id)
+        return {
+            "id": match.id, "game_id": match.game_id, "game_version": match.game_version,
+            "owner_user_id": match.owner_user_id, "match_kind": match.effective_match_kind,
+            "localMode": "computer" if match.effective_match_kind == "computer" else "pass",
+            "players": [{"player_index": seat.player_index, "id": match.player_id_of(seat),
+                         "kind": seat.kind, "user_id": seat.user_id, "active": seat.active,
+                         "name": (owner.display_name if owner and seat.user_id == owner.id else
+                                  f"Player {seat.player_index + 1}" if seat.kind == "human" else
+                                  f"Computer {seat.player_index + 1}")}
+                        for seat in match.seats],
+            "logicState": match.state, "state": self.view_state(match, match.owner_user_id),
+            "practiceSeed": int.from_bytes(hashlib.sha256(match.id.encode()).digest()[:4], "big"),
+            "moves": [{"move_number": move.move_number, "player_index": move.player_index,
+                       "new_state": view, "next_turn_player_indices": (
+                           None if move.next_turn_player_indices is None else sorted(move.next_turn_player_indices)),
+                       "move": move.move}
+                      for move, view in zip(match.moves, views)],
+            "initialState": initial,
+            "initialTurn": (None if match.initial_turn_player_indices is None else
+                            sorted(match.initial_turn_player_indices)),
+            "turn_of_player_indices": (None if match.turn_of_player_indices is None else
+                                        sorted(match.turn_of_player_indices)),
+            "move_count": len(match.moves), "status": match.status,
+            "created_at": match.created_at.isoformat(), "awaitingHandoff": False,
+        }
+
+    def get_match_game(self, match_id: str, *, caller_id: str | None = None) -> Game:
         """The pinned renderer and rules needed to open a public match.
 
         Matches outlive game publication. The match reference exposes only its
@@ -2658,6 +2814,7 @@ class GamePlatform:
         """
         with self._lock:
             match = self._get_match(match_id)
+            self._check_match_viewer(match, caller_id)
             game = self._store.get_game_version(match.game_id, match.game_version)
             if game is None or not game.is_declarative:
                 raise NotFoundError("game version not found")
@@ -2675,6 +2832,7 @@ class GamePlatform:
                      if self._match_is_declarative(match))
                 )
                 if caller_id not in match.hidden_for_user_ids
+                and (match.effective_match_kind == "multiplayer" or match.owner_user_id == caller_id)
                 and (status is None or match.status == status)
                 and (game_id is None or match.game_id == game_id)
             ]
@@ -2686,6 +2844,8 @@ class GamePlatform:
 
     def _join(self, match: Match, *, caller_id: str) -> Match:
         """Seats [caller_id] in [match]. The caller holds the lock."""
+        if match.effective_match_kind != "multiplayer":
+            raise ForbiddenError("single-player matches cannot be joined or shared")
         if not self._match_is_declarative(match):
             raise NotFoundError("match not found")
         if match.seat_of(caller_id) is not None:
@@ -2785,6 +2945,8 @@ class GamePlatform:
     def request_rematch(self, *, caller_id: str, match_id: str) -> Match:
         with self._lock:
             match = self._get_match(match_id)
+            if match.effective_match_kind != "multiplayer":
+                raise ConflictError("start a new single-player match to play again")
             self._get_seat(match, caller_id)
             if match.status != "over":
                 raise ConflictError(
@@ -2812,6 +2974,7 @@ class GamePlatform:
                 id=self._new_id(),
                 game_id=match.game_id,
                 owner_user_id=caller_id,
+                match_kind="multiplayer",
                 game_version=match.game_version,
                 status="waiting_for_players",
                 seats=_waiting_seats(
@@ -3459,6 +3622,8 @@ class GamePlatform:
         """Arranges for the computer seats holding the turn of a v2 match to
         move: immediately when the configured delay is zero, otherwise on a
         timer, so the moves happen even if no human is online to watch."""
+        if match.single_player_state is not None:
+            return
         game = self._store.get_game_version(match.game_id, match.game_version)
         if (
             game is None
@@ -3500,6 +3665,8 @@ class GamePlatform:
         logic fails is recorded and the match is left as it was."""
         with self._lock:
             match = self._store.get_match(match_id)
+            if match is not None and match.single_player_state is not None:
+                return
             if match is not None and not self._match_is_declarative(match):
                 return
             if match is not None:
@@ -3644,6 +3811,10 @@ class GamePlatform:
         every game must define for exactly this purpose. The full state
         itself is never shown to anyone. A failing viewFor is recorded
         and shows no state rather than leaking the full one."""
+        if match.effective_match_kind != "multiplayer" and caller_id != match.owner_user_id:
+            return None
+        if match.single_player_state is not None:
+            return match.single_player_state.get("state")
         if match.state is None:
             return None
         game = self._store.get_game_version(match.game_id, match.game_version)
@@ -3702,6 +3873,10 @@ class GamePlatform:
         historical state is viewed with the move count it was
         recorded at, so its viewFor gets the same viewer-specific random stream
         as the corresponding live view."""
+        if match.single_player_state is not None:
+            self._check_match_viewer(match, caller_id)
+            snapshot = match.single_player_state
+            return snapshot.get("initialState"), [move.get("new_state") for move in snapshot["moves"]]
         moves = list(match.moves)
         initial_view = self.view_state(
             replace(match, state=match.initial_state, moves=()), caller_id
@@ -3728,6 +3903,8 @@ class GamePlatform:
             if match.num_computer_opponents and len(match.human_user_ids) != 1:
                 raise ConflictError("computer opponents are only supported in single-player matches")
             num_players = len(match.seats)
+            if match.effective_match_kind == "multiplayer" and num_players < 2:
+                raise ConflictError("multiplayer matches need at least two human players")
             allowed_player_counts = self._rules_of(match).allowed_player_counts
             if num_players not in allowed_player_counts:
                 raise ConflictError(
@@ -3770,6 +3947,9 @@ class GamePlatform:
     def leave_match(self, *, caller_id: str, match_id: str) -> Match:
         with self._lock:
             match = self._get_match(match_id)
+            self._check_match_viewer(match, caller_id)
+            if match.single_player_state is not None:
+                raise ConflictError("delete a single-player save instead of leaving its seats")
             seat = self._get_seat(match, caller_id)
             if match.status == "over":
                 raise ConflictError("the match is over")
@@ -3980,6 +4160,9 @@ class GamePlatform:
         join clears the preview, and [confirm_leave] applies it exactly."""
         with self._lock:
             match = self._get_match(match_id)
+            self._check_match_viewer(match, caller_id)
+            if match.single_player_state is not None:
+                raise ConflictError("delete a single-player save instead of leaving its seats")
             self._get_seat(match, caller_id)
             if match.status == "over":
                 raise ConflictError("the match is over")
@@ -4002,6 +4185,9 @@ class GamePlatform:
         never stale."""
         with self._lock:
             match = self._get_match(match_id)
+            self._check_match_viewer(match, caller_id)
+            if match.single_player_state is not None:
+                raise ConflictError("delete a single-player save instead of leaving its seats")
             seat = self._get_seat(match, caller_id)
             if match.status == "over":
                 raise ConflictError("the match is over")
@@ -4036,6 +4222,9 @@ class GamePlatform:
             self._require_user(caller_id)
             # Reading the match applies any timeout first (see _enforce_clock).
             match = self._get_match(match_id)
+            self._check_match_viewer(match, caller_id)
+            if match.single_player_state is not None:
+                raise ConflictError("save single-player turns with /matches/single-player-sync")
             if any(t.user_id == caller_id for t in match.timeouts) and (
                 match.seat_of(caller_id) is None or match.end_reason == "timed_out"
             ):
@@ -4098,6 +4287,10 @@ class GamePlatform:
         Creating a match gives no delete rights on its own."""
         with self._lock:
             match = self._get_match(match_id)
+            if match.effective_match_kind != "multiplayer":
+                self._check_match_viewer(match, caller_id)
+                self._delete_match_and_invites(match_id)
+                return
             if match.status != "over" and caller_id in match.active_human_user_ids:
                 if match.status == "ongoing" and match.token_pot > 0:
                     raise ConflictError(
@@ -4130,7 +4323,8 @@ class GamePlatform:
         QueryStore includes the absent code document in its read set, so two
         processes choosing the same code cannot overwrite one another's match.
         """
-        if match.invite_code is not None or game.rules.max_players < 2:
+        if (match.effective_match_kind != "multiplayer"
+                or match.invite_code is not None or game.rules.max_players < 2):
             return match
         for _ in range(128):
             code = self._new_invite_token()
@@ -4172,6 +4366,8 @@ class GamePlatform:
         """
         with self._lock:
             match = self._get_match(match_id)
+            if match.effective_match_kind != "multiplayer":
+                raise ForbiddenError("single-player matches cannot be shared")
             if not match.involves(caller_id):
                 raise ForbiddenError("you are not a player in this match")
             if match.status != "waiting_for_players":
@@ -4281,6 +4477,9 @@ class GamePlatform:
         invite = self._store.get_invite(token)
         if (invite is None or invite.revoked
                 or (invite.expires_at is not None and self._clock() >= invite.expires_at)):
+            raise NotFoundError("invite not found")
+        match = self._store.get_match(invite.match_id)
+        if match is not None and match.effective_match_kind != "multiplayer":
             raise NotFoundError("invite not found")
         return invite
 
@@ -4539,6 +4738,8 @@ class GamePlatform:
         filled with the match's game name and [actor_name]. The caller holds the
         lock; delivery itself is the notifier's background work, off the request path.
         """
+        if match.effective_match_kind != "multiplayer":
+            return
         game = self._store.get_game_version(match.game_id, match.game_version)
         game_name = game.name if game is not None else ""
         target_url = url or f"/static/portal.html#match={match.id}"
@@ -5283,7 +5484,9 @@ class GamePlatform:
 
     def _save(self, match: Match) -> Match:
         match = replace(match, updated_at=self._clock())
-        if match.status != "waiting_for_players" or match.num_computer_opponents:
+        if match.effective_match_kind != "multiplayer":
+            match = replace(match, cloud_revision=match.cloud_revision + 1)
+        if match.status != "waiting_for_players" or match.effective_match_kind != "multiplayer":
             match = self._release_match_invite(match)
         self._store.put_match(match)
         return match

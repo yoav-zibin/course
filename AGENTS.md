@@ -57,3 +57,12 @@ increase its limits without the user's authorization.
 The original 10M-user/1B-match/100K-game capacity target is still unproved. The
 handoff separates completed deployment work from remaining integration and
 scale-validation tasks.
+
+# Match kinds and persistence
+
+Before changing matches, offline storage, sharing or notifications, read
+[the match contract](docs/match-kinds.md). Every match is cloud-backed and has
+`match_kind` (`computer`, `pass_and_play`, `multiplayer`). The first two are
+private to one owner account and accept unlimited locally saved offline turns;
+multiplayer has human accounts only and uses sharing and notifications. Preserve
+pending local work until cloud acknowledgement, including during migrations.

@@ -1,10 +1,14 @@
 import { ApiError, PortalApi } from './api';
 import { AccountRepository, equal } from './repository';
 import type { Account, AccountData, Match, QueueEntry } from './types';
+import {syncSinglePlayerMatches} from './single-player-sync';
+import {syncMatchCreations} from './match-creation-sync';
 export interface SyncOptions { paginated: boolean; guard(): void; freshRequestId?: string; matchId?: string; onConfirmed?(before: Match, after: Match): void }
 /** Shared sync policy. Caller identity is captured before every asynchronous step;
  * the same request key survives process death and a lost server response. */
 export async function syncAccount(api: PortalApi, repository: AccountRepository, account: Account, options: SyncOptions): Promise<AccountData> {
+  await syncMatchCreations(api, repository, account, options);
+  await syncSinglePlayerMatches(api, repository, account, options);
   return repository.lock(account.id, async () => {
     const data = await repository.read(account.id);
     for (const id of options.matchId ? [options.matchId] : Object.keys(data.queues)) {

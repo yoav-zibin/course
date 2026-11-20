@@ -1,5 +1,10 @@
 # Web portal offline play and three games
 
+> Updated November 20, 2026: all matches now save to the cloud. Private computer
+> and pass-and-play matches save locally first and sync after reconnecting.
+> [Match kinds and cloud saves](match-kinds.md) supersedes the historical
+> device-only practice behavior and deployment notes in this report.
+
 ## Scope
 
 This contribution changes the existing web portal and adds Dots & Boxes, Reversi,
@@ -35,8 +40,9 @@ competitive card service. No API change is proposed here.
 - Match lists, individual matches, exact game versions, and names are saved per
   account on this device. The existing Auth component retains login credentials;
   neither game JavaScript nor the worker receives credentials.
-- Local practice starts a separate device-only match against computers or in
-  pass-and-play mode. It never creates a cloud match or uploads practice moves.
+- Computer and pass-and-play matches belong privately to their signed-in owner.
+  Each action saves locally first; reconnect uploads the complete match snapshot
+  and history to the cloud, including matches finished offline.
 - Real match moves normally are persisted before submission, with `expected_move_count`.
   Only the user's current turn, or a computer turn they can act for, is available.
   Other remote humans' turns cannot be played offline.

@@ -60,6 +60,7 @@ from game_platform.schemas import (
     InviteOut,
     InviteViewOut,
     MatchCreate,
+    SinglePlayerSync,
     FeedbackCreate,
     FeedbackOut,
     FeedbackStatusChange,
@@ -455,11 +456,14 @@ def _match_out(
     platform: GamePlatform, match: Match, caller_id: str | None = None
 ) -> MatchOut:
     """A match for the API, stamped with the platform's time (for speed-match
-    countdowns). The state is the caller's view of it — their own viewFor
-    view when seated, the game's spectator view otherwise (see
-    [GamePlatform.view_state]): the full state never leaves the server."""
+    countdowns). Multiplayer returns the caller's viewFor projection. Private
+    single-player matches also return the owner's complete portable save so
+    that account can resume its local rules runner on another device."""
+    snapshot = (platform.single_player_snapshot(match)
+                if caller_id == match.owner_user_id and match.effective_match_kind != "multiplayer"
+                else None)
     return MatchOut.of(
-        replace(match, state=platform.view_state(match, caller_id)),
+        replace(match, state=platform.view_state(match, caller_id), single_player_state=snapshot),
         now=platform.now(),
     )
 
@@ -1123,6 +1127,7 @@ def create_match(
         game_id=body.game_id,
         bet_per_player=body.effective_bet_per_player,
         turn_seconds=body.turn_seconds,
+        client_match_id=body.client_match_id,
     )
     return _match_out(platform, match, caller_id=caller_id)
 
@@ -1138,6 +1143,13 @@ def list_matches(
     return [_match_summary_out(platform, match) for match in matches]
 
 
+@router.post("/matches/single-player-sync")
+def sync_single_player(platform: Platform, caller_id: CallerId, body: SinglePlayerSync) -> MatchOut:
+    match = platform.sync_single_player(
+        caller_id=caller_id, snapshot=body.match, expected_revision=body.expected_revision)
+    return _match_out(platform, match, caller_id=caller_id)
+
+
 @router.get("/matches/{match_id}")
 def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchOut:
     return _match_out(
@@ -1147,9 +1159,9 @@ def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId) ->
 
 
 @router.get("/matches/{match_id}/game")
-def get_match_game(platform: Platform, match_id: str) -> GameOut:
+def get_match_game(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> GameOut:
     """The retained game package used to render this public match."""
-    return GameOut.of(platform.get_match_game(match_id))
+    return GameOut.of(platform.get_match_game(match_id, caller_id=caller_id))
 
 
 @router.delete("/matches/{match_id}", status_code=HTTPStatus.NO_CONTENT)

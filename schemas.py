@@ -30,6 +30,7 @@ from game_platform.models import (
     InviteAcceptance,
     LinkedAccount,
     Match,
+    MatchKind,
     Feedback,
     MatchStatus,
     Move,
@@ -643,6 +644,8 @@ class MatchCreate(_Request):
     model_config = _example({"game_id": ""})
 
     game_id: str
+    match_kind: Literal["multiplayer"] = "multiplayer"
+    client_match_id: Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -681,6 +684,13 @@ class MoveCreate(_Request):
     expected_move_count: int | None = None
 
 
+class SinglePlayerSync(_Request):
+    """An owner save, persisted locally before upload. No token/stake authority."""
+
+    match: dict[str, JsonValue]
+    expected_revision: Annotated[int, Field(ge=0, strict=True)] = 0
+
+
 class SeatTimeoutOut(BaseModel):
     """A seat whose time to move ran out in a speed match."""
 
@@ -711,6 +721,9 @@ class MatchOut(BaseModel):
     game_id: str
     game_version: int
     owner_user_id: str
+    match_kind: MatchKind = "multiplayer"
+    cloud_revision: int = 0
+    single_player_state: dict[str, JsonValue] | None = None
     status: MatchStatus
     invite_code: str | None = None
     end_reason: EndReason | None
@@ -766,6 +779,9 @@ class MatchOut(BaseModel):
             game_id=match.game_id,
             game_version=match.game_version,
             owner_user_id=match.owner_user_id,
+            match_kind=match.effective_match_kind,
+            cloud_revision=match.cloud_revision,
+            single_player_state=match.single_player_state,
             status=match.status,
             invite_code=match.invite_code,
             end_reason=match.end_reason,
@@ -840,6 +856,8 @@ class MatchSummaryOut(BaseModel):
     game_id: str
     game_version: int
     owner_user_id: str
+    match_kind: MatchKind = "multiplayer"
+    cloud_revision: int = 0
     status: MatchStatus
     invite_code: str | None = None
     end_reason: EndReason | None
@@ -865,7 +883,7 @@ class MatchSummaryOut(BaseModel):
     def of(cls, match: Match, now: dt.datetime | None = None) -> "MatchSummaryOut":
         # Catalog/list summaries must not look up a legacy match's last move.
         full = MatchOut.of(match, now=now, include_last_move=False).model_dump(
-            exclude={"state", "last_move_player_index"})
+            exclude={"state", "last_move_player_index", "single_player_state"})
         return cls(**full, result=MatchResultOut.of(match))
 
 

@@ -2,6 +2,16 @@
 
 This change adds a **pure, read-only** checker and two account-merge fixes. It is an API-change proposal for review, not a production data migration. No live cloud data was queried or fuzzed.
 
+## Match kinds
+
+All live matches persist `match_kind` and follow [the current match contract](match-kinds.md).
+`computer` has exactly one owner human seat plus computers; `pass_and_play` has
+human seats controlled by one owner account and no computers; `multiplayer` has
+only human accounts. Private single-player records are owner-readable only, have
+zero stakes and synchronize durable offline history to the cloud. Legacy mixed
+computer/multiple-account matches are invalid and are removed by migration.
+The historical invariant-checker coverage below predates these added rules.
+
 ## API
 
 `POST /validation/invariants` checks the lists in the request; it does not fetch records by ID, authenticate as those users, run game code, or change the live store. Since it only processes supplied data, this endpoint requires no authentication. Existing endpoints are unchanged.
@@ -15,7 +25,7 @@ This change adds a **pure, read-only** checker and two account-merge fixes. It i
   }],
   "matches": [{
     "id": "match-1", "game_id": "puzzle", "game_version": 1,
-    "owner_user_id": "alice", "status": "ongoing",
+    "owner_user_id": "alice", "match_kind": "pass_and_play", "status": "ongoing",
     "seats": [{"player_index": 0, "kind": "human", "user_id": "alice"}],
     "initial_turn_player_indices": [0], "turn_of_player_indices": [0],
     "moves": []

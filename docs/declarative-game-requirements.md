@@ -31,7 +31,7 @@ compliance with the requirements below.
 - In online matches, the server remains authoritative for legal moves, dice
   rolls, dealing, private information, scores and results. The UI receives only
   its viewer's filtered information and submits moves through `make_move`.
-  Offline practice may run the same tested rules locally in a separate practice
+  Private cloud-saved single-player play runs the same tested rules locally in a separate
   context; it must never overwrite authoritative online match state or results.
 
 Platform-generated browser compatibility wrappers used by current authoring

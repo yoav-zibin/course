@@ -7,6 +7,7 @@ import {gameSearchPrefix,gameSuggestions} from './game-search';
 import {isValidDownloadedGame, presentationHistoryPath} from './offline-match-data';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
+import {hydrateSinglePlayer, localRevision, needsCloudSave, singlePlayerKind} from './single-player';
 import {handsTurnToOpponent, pendingNotifications} from './notifications';
 import { importNativeLegacy, finishNativeImport } from './native-migration';
 import * as storage from '../platform/storage';
@@ -99,7 +100,12 @@ export class PortalStore {
     const game = match.game_id === bundled.id && match.game_version === bundled.version ? bundled : data.responses[`/games/${match.game_id}/versions/${match.game_version}`];
     return game?.all_state_public !== true;
   }
-  private decorate(match: Match | null): Match | null { return match ? { ...match, ...(this.data.local[match.id]?.awaitingHandoff ? { awaitingHandoff: this.awaitingLocalHandoff(this.data.local[match.id]) } : {}), pending: this.data.queues[match.id]?.length || 0, conflict: this.data.conflicts[match.id] || null } : null; }
+  private decorate(match: Match | null): Match | null {
+    if (!match) return null;
+    const local = this.data.local[match.id];
+    return {...match, ...(local || {}), ...(local ? {match_kind: singlePlayerKind(local)!, cloud_pending: needsCloudSave(local), awaitingHandoff: this.awaitingLocalHandoff(local)} : {cloud_pending:!!this.data.creations?.[match.id]}),
+      pending: this.data.queues[match.id]?.length || 0, conflict: this.data.conflicts[match.id] || null};
+  }
   private publishData(data: AccountData) {
     this.mergeVolatile(data);this.data = data; const selected = this.state.selectedMatch;
     const next = selected ? data.local[selected.id] || data.responses[`/matches/${selected.id}`] || selected : null;
@@ -111,7 +117,7 @@ export class PortalStore {
       else if (path.startsWith('/users?ids=') && Array.isArray(value)) for (const profile of value) if (profile?.id) profiles[profile.id] = profile;
     }
     this.patch({matchGames:this.downloadedGameNames(),profiles:{...profiles,...this.state.profiles}});
-    this.patch({ ...(ownProfile && !this.state.profile && !this.state.deletionUpdating ? {profile: ownProfile, account: {...this.state.account!, canonical_user_id: ownProfile.id}} : {}), localMatches: Object.values(data.local), conflicts: data.conflicts, archived: [...data.archivedMatches, ...data.archives], pending: Object.values(data.queues).reduce((n, q) => n + q.length, 0), selectedMatch: this.decorate(next), myMatches: this.state.myMatches.map(m => this.decorate(data.responses[`/matches/${m.id}`] || m)!) });
+    this.patch({ ...(ownProfile && !this.state.profile && !this.state.deletionUpdating ? {profile: ownProfile, account: {...this.state.account!, canonical_user_id: ownProfile.id}} : {}), localMatches: Object.values(data.local).map(match => this.decorate(match) as LocalMatch), conflicts: data.conflicts, archived: [...data.archivedMatches, ...data.archives], pending: Object.values(data.queues).reduce((n, q) => n + q.length, 0) + Object.values(data.local).filter(needsCloudSave).length + Object.keys(data.creations || {}).length, selectedMatch: this.decorate(next), myMatches: this.state.myMatches.map(m => this.decorate(data.responses[`/matches/${m.id}`] || m)!) });
   }
   private mergeVolatile(data: AccountData) {
     const pending=this.volatileResponses.get(this.identity());if(!pending)return;
@@ -140,6 +146,8 @@ export class PortalStore {
       if(!durableBranch)value=preserve(this.data.responses[path],value);
       const persisted=saved.data.responses[path];this.mergeVolatile(saved.data);
       this.data.responses=saved.data.responses;this.data.responseRecency=saved.data.responseRecency;this.data.cacheClock=saved.data.cacheClock;
+      this.data.local=saved.data.local;
+      if (matchId && this.data.local[matchId]) this.patch({localMatches:Object.values(this.data.local).map(match => this.decorate(match) as LocalMatch)});
       this.rememberVolatile(path,value,persisted);
       if(this.cacheErrorPath===path&&equal(persisted,value)&&this.state.storageError?.startsWith('Could not save downloaded data:')){this.cacheErrorPath=null;this.patch({storageError:null});}
     } catch(error) {guard();value=preserve(this.data.responses[path],value);this.rememberVolatile(path,value,this.data.responses[path]);this.cacheErrorPath=path;this.patch({storageError:`Could not save downloaded data: ${(error as Error).message}`});}
@@ -229,7 +237,7 @@ export class PortalStore {
     const hidden = new Set(this.data.archivedMatches.map(item => item.id));
     const combined = new Map((complete ? [] : this.state.myMatches).map(match => [match.id,match]));
     // A match disappearing from a server page must not hide a pending action.
-    for (const id of new Set([...Object.keys(this.data.queues),...Object.keys(this.data.conflicts)])) {
+    for (const id of new Set([...Object.keys(this.data.queues),...Object.keys(this.data.creations || {}),...Object.keys(this.data.conflicts)])) {
       const match = this.data.responses[`/matches/${encodeURIComponent(id)}`];
       if (match) combined.set(id,match);
     }
@@ -457,7 +465,25 @@ export class PortalStore {
     const guard = this.capture(); const token = this.selection;
     this.startOfflineDownloads();
     await this.claimDailyLogin().catch(() => {}); guard(); if (token !== this.selection) return;
-    if (this.data.local[selected.id]) { await this.reloadData(); return; }
+    if(this.data.creations?.[selected.id]) {
+      await this.sync(undefined,selected.id).catch(()=>{});guard();
+      await this.reloadData();guard();
+      if(this.data.creations?.[selected.id])return;
+    }
+    if (this.data.local[selected.id]) {
+      if (!this.localOnly && this.state.account && isOnline()) {
+        await this.sync(undefined,selected.id).catch(() => {}); guard();
+        if (this.data.local[selected.id] && !needsCloudSave(this.data.local[selected.id]) && !this.data.conflicts[selected.id]) {
+          try {await this.read(`/matches/${encodeURIComponent(selected.id)}`);}
+          catch(error) {
+            guard();
+            if(error instanceof ApiError && error.status===404)await this.archiveMatch(selected.id,{deleted:true,onlySynced:true});
+          }
+          guard();
+        }
+      }
+      await this.reloadData(); return;
+    }
     let match: Match;
     if (this.data.queues[selected.id]?.length) { await this.sync().catch(() => {}); guard(); match = this.data.responses[`/matches/${selected.id}`] || selected; }
     else match = await this.read(`/matches/${encodeURIComponent(selected.id)}`);
@@ -536,7 +562,11 @@ export class PortalStore {
     if (inviteToken) this.selectedInvite = {matchId: id, token: inviteToken};
     else if (this.selectedInvite?.matchId !== id) this.selectedInvite = null;
     const token = ++this.selection; const guard = this.capture(); await this.reloadData();
-    const match = initialMatch || this.data.local[id] || await this.read(`/matches/${encodeURIComponent(id)}`); guard(); if (token !== this.selection) return;
+    const fetched = initialMatch || this.data.local[id] || (this.data.creations?.[id] ? this.data.responses[`/matches/${id}`] : await this.read(`/matches/${encodeURIComponent(id)}`)); guard(); if (token !== this.selection) return;
+    if (initialMatch?.single_player_state) {
+      await this.cache(`/matches/${encodeURIComponent(id)}`,initialMatch); guard();
+    }
+    const match = this.data.local[id] || fetched;
     const packageMatches = this.state.game?.id === match.game_id && this.state.game.version === match.game_version;
     this.patch({ selectedMatch: this.decorate(match), game: packageMatches ? this.state.game : null, selectedGameId: match.game_id, replayIndex: null, history: null });
     try { await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) {data.selectedId = id; if(!data.local[id])data.responses[`/matches/${id}`]=match;} }); }
@@ -566,7 +596,7 @@ export class PortalStore {
     const sessionGuard = this.capture(),guard=()=>{sessionGuard();if(!selectionCommitted)intentGuard?.();};guard();
     const id = response.user_id || response.id; if (!id || !response.password) throw new Error('Invalid account response');
     const account: Account = { ...response, id, linked: response.linked_accounts ?? response.linked ?? [] };
-    const sourceIds = [...new Set([...removeIds, response.merged_from_user_id].filter((value): value is string => typeof value === 'string' && !!value && value !== id))];
+    const sourceIds = [...new Set([...removeIds, response.merged_from_user_id, ...(!this.state.account ? ['visitor'] : [])].filter((value): value is string => typeof value === 'string' && !!value && value !== id))];
     // This durable write precedes removing an alias from either account index.
     // A failed write leaves the old login and every original namespace intact.
     try { await this.repository.preserveMergedAccounts(id, sourceIds); } catch (error) { guard(); this.patch({ storageError: 'Linked account data could not be copied. The previous account remains selectable and its saved games and pending actions were kept.' }); throw error; }
@@ -657,21 +687,41 @@ export class PortalStore {
       return own;
     } finally {try {guard(); this.patch({deletionUpdating: false});} catch { /* The selected account owns its state. */ }}
   }
-  async createMatch(options: any) { const match = await this.request('POST', '/matches', options); await this.cache(`/matches/${match.id}`, match); await this.selectMatch(match.id); return match; }
+  async createMatch(options: any) {
+    const account=this.state.account;if(!account)throw new Error(copyText('Log in to save your matches in the cloud.'));
+    const guard=this.capture(),game=await this.pinnedGame(options.game_id);guard();
+    if(!game.allowed_player_counts.some(count=>count>=2))throw new Error(copyText('Single-player games use pass and play.'));
+    const id=requestId(),owner=this.turnIdentity();
+    const match:Match={id,game_id:game.id,game_version:game.version,owner_user_id:owner,match_kind:'multiplayer',
+      status:'waiting_for_players',state:null,players:[{id:owner,user_id:owner,player_index:0,kind:'human',active:true,name:account.display_name}],
+      turn_of_player_indices:null,move_count:0,created_at:new Date().toISOString(),cloud_pending:true,bet_per_player:options.bet_per_player || 0,token_pot:0};
+    const body={...options,match_kind:'multiplayer',num_computer_opponents:0,client_match_id:id};
+    await this.repository.mutate(account.id,data=>{guard();data.creations ||= {};data.creations[id]={requestId:id,body};data.responses[`/matches/${id}`]=match;
+      data.responses[`/games/${game.id}/versions/${game.version}`]=this.exactPackage(game.id,game.version)||game;
+      const listed=savedList<Match>(data.responses['/matches']);data.responses['/matches']=[match,...listed.filter(item=>item.id!==id)];data.selectedId=id;});
+    guard();await this.reloadData();guard();this.patch({myMatches:unique([match,...this.state.myMatches])});await this.selectMatch(id,undefined,match);
+    if(!this.localOnly&&isOnline())void this.sync().catch(()=>{});
+    return this.decorate(match)!;
+  }
   private async requestMatchAction(match: Match, action: string, body?: any) { const token = this.selection; const path=action==='join'&&this.selectedInvite?.matchId===match.id?`/invites/${encodeURIComponent(this.selectedInvite.token)}/accept`:`/matches/${encodeURIComponent(match.id)}/${action}`; const result = await this.request('POST', path, body); if (result?.id) { await this.cache(`/matches/${result.id}`, result); if (token === this.selection && this.state.selectedMatch?.id === match.id) this.patch({ selectedMatch: this.decorate(result) }); } await this.refreshProfile().catch(() => {}); return result; }
   async matchAction(action: string, body?: any) { const match = this.state.selectedMatch; if (!match) throw new Error('Choose a match first'); return this.requestMatchAction(match,action,body); }
   async removePlayer(userId: string) { const match = this.state.selectedMatch; if (!match) return; const token = this.selection; const result = await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}/players/${encodeURIComponent(userId)}`); await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); }
-  async archiveMatch(id: string, { deleted = false, hidePermanently = true }: { deleted?: boolean; hidePermanently?: boolean } = {}) {
+  async archiveMatch(id: string, { deleted = false, hidePermanently = true, onlySynced = false }: { deleted?: boolean; hidePermanently?: boolean; onlySynced?: boolean } = {}) {
     const guard = this.capture(), owner = this.identity(), token = this.selection;
-    await this.repository.mutate(owner, data => {
+    const archived=await this.repository.mutate(owner, data => {
       guard();
+      // A turn may have been saved while the deletion-check GET was in flight.
+      // Recheck under the storage lock before retiring a clean cloud mirror.
+      if(onlySynced && (!data.local[id] || needsCloudSave(data.local[id]) || data.conflicts[id] || data.queues[id]?.length))return false;
       if (!deleted && !data.local[id] && (data.queues[id]?.length || data.conflicts[id] || this.data.conflicts[id])) throw new Error(copyText('Sync or resolve pending actions before hiding this match.'));
       const archives = hidePermanently ? data.archivedMatches : data.archives;
       archives.push({ id, match: data.local[id] || data.responses[`/matches/${id}`], moves: data.queues[id] || [], savedAt: new Date().toISOString() });
       delete data.local[id]; delete data.queues[id]; delete data.conflicts[id]; delete data.responses[`/matches/${id}`];
       if (Array.isArray(data.responses['/matches'])) data.responses['/matches'] = data.responses['/matches'].filter((match: Match) => match.id !== id);
       if (data.selectedId === id) data.selectedId = null;
+      return true;
     });
+    if(!archived)return;
     guard(); if (token === this.selection && this.state.selectedMatch?.id === id) this.clearMatch();
     await this.reloadData(); guard(); this.patch({ myMatches: this.state.myMatches.filter(m => m.id !== id) });
   }
@@ -696,12 +746,12 @@ export class PortalStore {
     else if (id) {await this.reloadData();guard();}
     return result;
   }
-  private async sync(freshRequestId?: string, matchId?: string) {
+  private async sync(freshRequestId?: string, matchId?: string): Promise<void> {
     if (this.localOnly || !this.state.account || !isOnline() || (!freshRequestId && Date.now() < this.retryAfter)) return;
-    if (this.syncPromise) return this.syncPromise;
+    if (this.syncPromise) { await this.syncPromise; return this.sync(freshRequestId,matchId); }
     const account = this.state.account; const guard = this.capture();
     const confirmed: {before: Match; after: Match}[] = [];
-    const pending = syncAccount(this.api, this.repository, account, { paginated: this.paginated, guard, freshRequestId, matchId, onConfirmed: (before, after) => confirmed.push({before, after}) }).then(async data => { guard(); const previous = this.state.selectedMatch; this.patch({ network: isOnline() }); this.publishData(data); const selected = this.state.selectedMatch; if (selected && selected.move_count !== previous?.move_count) { await this.recoverPresentation(selected, previous || undefined).catch(() => {}); guard(); await this.refreshProfile().catch(() => {}); } for (const {before, after} of confirmed) {guard(); await this.offerNotificationPrompt(before, after);} }).catch(error => { guard(); if (!(error instanceof ApiError)) { this.retryAfter = Date.now() + 10000; this.patch({ network: false }); } throw error; }).finally(() => { if (this.syncPromise === pending) this.syncPromise = null; }); this.syncPromise = pending; return pending;
+    const pending = syncAccount(this.api, this.repository, account, { paginated: this.paginated, guard, freshRequestId, matchId, onConfirmed: (before, after) => confirmed.push({before, after}) }).then(async data => { guard(); const previous = this.state.selectedMatch; this.patch({ network: isOnline() }); this.publishData(data); const selected = this.state.selectedMatch; if (selected && selected.move_count !== previous?.move_count) { await this.recoverPresentation(selected, previous || undefined).catch(() => {}); guard(); await this.refreshProfile().catch(() => {}); } for (const {before, after} of confirmed) {guard(); await this.offerNotificationPrompt(before, after);} }).catch(error => { guard(); if (!(error instanceof ApiError) && !isQuotaError(error) && (error instanceof TypeError || /network|fetch|offline|connection|abort/i.test(error.message || ''))) { this.retryAfter = Date.now() + 10000; this.patch({ network: false }); } throw error; }).finally(() => { if (this.syncPromise === pending) this.syncPromise = null; }); this.syncPromise = pending; return pending;
   }
   async submitMove(move: any) {
     const match = this.state.selectedMatch; if (!match) return;
@@ -726,7 +776,7 @@ export class PortalStore {
     // A fresh online post needs no preliminary GET. Any retry reconciles history.
     try { await this.sync(entry.requestId, match.id); } catch (error) { if (error instanceof ApiError && error.status !== 409) throw error; this.patch({ error: 'Action saved on this device. It will sync after reconnecting.' }); }
   }
-  async resolveConflict(id: string) { const remote = await this.request('GET', `/matches/${encodeURIComponent(id)}`); await this.repository.mutate(this.identity(), data => { data.archives.push({ id, moves: data.queues[id] || [], conflict: data.conflicts[id], savedAt: new Date().toISOString() }); delete data.queues[id]; delete data.conflicts[id]; data.responses[`/matches/${id}`] = remote; }); await this.reloadData(); }
+  async resolveConflict(id: string) { const remote = await this.request('GET', `/matches/${encodeURIComponent(id)}`); await this.repository.mutate(this.identity(), data => { data.archives.push({ id, ...(data.local[id] ? {match:data.local[id]} : {}), moves: data.queues[id] || [], conflict: data.conflicts[id], savedAt: new Date().toISOString() }); delete data.queues[id]; delete data.conflicts[id]; if (data.local[id] && remote.single_player_state) delete data.local[id]; data.responses[`/matches/${id}`] = remote; hydrateSinglePlayer(data,remote); }); await this.reloadData(); }
   private async callGame(game: Game, name: string, args: any[], match: LocalMatch): Promise<any> { if (!game.server_code) throw new Error('Download the game rules before playing locally'); return this.rulesExecutor({ server_code: game.server_code, game_schemas: game.game_schemas }, name, args, { players: match.players.map(p => ({ id: p.id, kind: p.kind, active: p.active !== false, display_name: p.name || `Player ${p.player_index + 1}`, picture_url: '', max_loss: 0 })), pot: 0, move_count: match.move_count }, (match.practiceSeed + match.move_count) >>> 0, Date.parse(match.created_at)); }
   private async practiceResult(game: Game, match: LocalMatch, result: any, record = true, actor: number | null = null) {
     const ids = match.players.map(p => p.id);
@@ -746,32 +796,39 @@ export class PortalStore {
     }
   }
   async startPractice(gameId: string, options: PracticeOptions = {}) {
+    if (!this.state.account && !this.localOnly) throw new Error(copyText('Log in to save your matches in the cloud.'));
     const guard = this.capture(); const game = await this.pinnedGame(gameId);
     const humans = options.humans ?? 1, computers = options.computers ?? 1, humanSeat = options.humanSeat ?? 0, total = humans + computers;
     if (!Number.isInteger(humans) || humans < 1 || !Number.isInteger(computers) || computers < 0 || !Number.isInteger(humanSeat) || humanSeat < 0 || humanSeat + humans > total) throw new Error(copyText('Choose valid local player counts and a human seat.'));
+    if (computers > 0 && humans !== 1) throw new Error(copyText('Computer matches have one human player. Use pass and play for several people on one device.'));
     if (!game.allowed_player_counts.includes(total)) throw new Error(`This game supports ${game.allowed_player_counts.join(', ')} players`);
     const id = `local-${requestId()}`; const owner = this.identity();
     const match = { id, game_id: game.id, game_version: game.version, owner_user_id: owner, players: Array.from({ length: total }, (_, i) => {
       const human = i >= humanSeat && i < humanSeat + humans;
       return { player_index: i, id: `local-player-${i}`, kind: human ? 'human' : 'computer', user_id: i === humanSeat ? owner : null, active: true, name: options.names?.[i] || (i === humanSeat ? this.state.account?.display_name || `Player ${i + 1}` : human ? `Player ${i + 1}` : `Computer ${i + 1}`) };
-    }), status: 'ongoing', state: null, logicState: null, turn_of_player_indices: [0], move_count: 0, created_at: new Date().toISOString(), localMode: humans > 1 ? 'pass' : 'computer', practiceSeed: Math.floor(Math.random() * 4294967296), moves: [], initialState: null, initialTurn: [0], token_pot: 0, bet_per_player: 0 } as LocalMatch;
+    }), status: 'ongoing', state: null, logicState: null, turn_of_player_indices: [0], move_count: 0, created_at: new Date().toISOString(), match_kind: computers ? 'computer' : 'pass_and_play', localMode: computers ? 'computer' : 'pass', practiceSeed: Math.floor(Math.random() * 4294967296), moves: [], initialState: null, initialTurn: [0], token_pot: 0, bet_per_player: 0, local_revision:1, synced_local_revision:0, cloud_revision:0, cloud_pending:true } as LocalMatch;
     await this.practiceResult(game, match, await this.callGame(game, 'newMatch', [], match), false); match.initialState = match.state; match.initialTurn = match.turn_of_player_indices; await this.practiceComputers(game, match); guard();
     const gamePackage=this.exactPackage(game.id,game.version);if(!gamePackage)throw new Error('Exact downloaded game rules are unavailable for offline play.');
     await this.repository.mutate(owner, data => { data.local[id] = match; data.responses[`/games/${game.id}/versions/${game.version}`] = gamePackage; data.selectedId = id; }); guard(); await this.reloadData(); ++this.selection; this.patch({ selectedMatch: match, game, selectedGameId: game.id, history: null, replayIndex: null });
-    if (!this.localOnly && this.state.account && isOnline()) void this.request('POST', `/users/me/recent-games/${encodeURIComponent(game.id)}`).then(recentGames => this.patch({ recentGames })).catch(() => {}); return match;
+    if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {}); return match;
   }
   async practiceMove(move: any) {
+    if (!this.state.account && !this.localOnly) throw new Error(copyText('Log in to save your matches in the cloud.'));
     const selected = this.state.selectedMatch as LocalMatch; if (!selected || !this.data.local[selected.id]) throw new Error('Choose a local match first');
     if (this.state.replayIndex !== null || this.awaitingLocalHandoff(this.data.local[selected.id])) throw new Error('Return to the live board and confirm the next player is ready');
     const guard = this.capture(); const owner = this.identity();
     await this.repository.lock(owner, async () => {
       const data = await this.repository.read(owner); const original = data.local[selected.id];
       if (!original || original.move_count !== selected.move_count || original.status !== 'ongoing' || this.awaitingLocalHandoff(original, data)) throw new Error('Local match changed. Refresh before moving.');
-      const next: LocalMatch = JSON.parse(JSON.stringify(original)); const game = data.responses[`/games/${next.game_id}/versions/${next.game_version}`]; if (!game?.server_code) throw new Error('Download this game once before playing offline');
+      const next: LocalMatch = JSON.parse(JSON.stringify(original)); const packagePath=`/games/${next.game_id}/versions/${next.game_version}`;
+      const game = data.responses[packagePath] || (next.game_id===bundled.id && next.game_version===bundled.version ? bundled : undefined); if (!game?.server_code) throw new Error('Download this game once before playing offline');
+      if(!data.responses[packagePath])data.responses[packagePath]=game;
       const actor = next.localMode === 'pass' ? next.turn_of_player_indices?.find(i => next.players[i].kind === 'human') : localHumanSeat(next);
       if (actor === undefined || !next.turn_of_player_indices?.includes(actor)) throw new Error('It is not your turn');
       await this.practiceResult(game, next, await this.callGame(game, 'applyMove', [next.logicState, next.players[actor].id, move], next), true, actor); await this.practiceComputers(game, next); guard();
+      const humanMove = next.moves?.find(item => item.move_number === original.move_count + 1); if (humanMove) humanMove.move = move;
       next.awaitingHandoff = game.all_state_public !== true && next.localMode === 'pass' && next.status === 'ongoing' && next.turn_of_player_indices?.[0] !== actor;
+      next.local_revision = localRevision(original) + 1; next.cloud_pending = true;
       data.local[next.id] = next; await this.repository.write(owner, data); guard();
       // Publish the accepted views with the final board so the renderer can
       // present computer actions that were committed in this single batch.
@@ -780,8 +837,28 @@ export class PortalStore {
       })));
       this.publishData(data);
     });
+    if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {});
   }
-  async revealLocal() { const id = this.state.selectedMatch?.id; if (!id) return; await this.repository.mutate(this.identity(), data => { if (data.local[id]) data.local[id].awaitingHandoff = false; }); await this.reloadData(); }
+  async revealLocal() { const id = this.state.selectedMatch?.id; if (!id) return; await this.repository.mutate(this.identity(), data => { if (data.local[id]) {data.local[id].awaitingHandoff = false;data.local[id].local_revision = localRevision(data.local[id])+1;data.local[id].cloud_pending=true;} }); await this.reloadData(); if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {}); }
+  async deleteSinglePlayer(id: string) {
+    const guard=this.capture(),match=this.data.local[id];
+    if(!match) {
+      if(this.localOnly)return this.archiveMatch(id);
+      if(!this.state.account||!isOnline())throw new Error(copyText('Connect to the internet to delete this cloud match.'));
+      const remote=await this.request('GET',`/matches/${encodeURIComponent(id)}`);guard();
+      if(!singlePlayerKind(remote))throw new Error(copyText('Choose a single-player match first.'));
+      await this.request('DELETE',`/matches/${encodeURIComponent(id)}`);guard();
+      return this.archiveMatch(id,{deleted:true});
+    }
+    if (!this.localOnly) {
+      if (!this.state.account || !isOnline()) throw new Error(copyText('Connect to the internet to delete this cloud match.'));
+      await this.sync(undefined,id);guard();
+      const latest=this.data.local[id];
+      if (!latest || needsCloudSave(latest) || this.data.conflicts[id]) throw new Error(copyText('Save or resolve this match before deleting it.'));
+      await this.request('DELETE',`/matches/${encodeURIComponent(id)}`);guard();
+    }
+    await this.archiveMatch(id,{deleted:true});
+  }
   async loadHistory() {
     const match = this.state.selectedMatch; if (!match) return;
     const guard = this.capture(); const token = this.selection; const replayToken = this.replaySelection;
@@ -833,7 +910,7 @@ export class PortalStore {
     // Local pass-and-play snapshots contain the next human's private view.
     // During replay its viewer must follow that frame, not the live match turn.
     const local = this.data.local[match.id]; const seat = local ? local.localMode === 'pass' ? view.turn_of_player_indices?.find(i => match.players[i].kind === 'human') ?? localHumanSeat(match) : localHumanSeat(match) : match.players.find(p => p.user_id === this.state.account?.id && p.active !== false)?.player_index ?? null;
-    const allowed = replay === null && !match.pending && !match.conflict && !this.awaitingLocalHandoff(local) && view.status === 'ongoing' && seat !== null && view.turn_of_player_indices?.includes(seat);
+    const allowed = replay === null && !match.pending && (local || !match.conflict) && (!local || this.state.account || this.localOnly) && !this.awaitingLocalHandoff(local) && view.status === 'ongoing' && seat !== null && view.turn_of_player_indices?.includes(seat);
     const texts = this.state.game ? gameTexts(this.state.game) : null;
     return { type: 'state_changed', state: view.state ?? null, view: view.state ?? null, players: match.players.map(p => ({ player_index: p.player_index, player_id: p.id, kind: p.kind, name: p.name || (p.user_id ? this.state.profiles[p.user_id]?.display_name || (p.user_id === this.state.account?.id ? this.state.account.display_name : `Player ${p.player_index + 1}`) : `Computer ${p.player_index + 1}`), picture_url: p.user_id ? this.state.profiles[p.user_id]?.picture_url || '' : '' })), turn_of_player_indices: view.turn_of_player_indices, turn_of_player_index: view.turn_of_player_indices?.[0] ?? null, my_player_index: seat, acting_for_player_index: allowed ? seat : null, status: view.status, end_reason: view.end_reason, move_count: view.move_count, last_move_player_index: replay === null ? match.last_move_player_index ?? null : replayActor, token_pot: view.token_pot || 0, replay: replay === null ? null : { index: replay, total: match.move_count }, presentation_history: this.presentationHistory().slice(-12), locale: getLocale(), direction: getDirection(), strings: texts?.strings || this.state.game?.declarative_ui?.strings || {} };
   }
@@ -854,7 +931,7 @@ export class PortalStore {
     createMatch: (options: any) => this.perform(() => this.createMatch(options)),
     matchAction: (action: 'join' | 'start' | 'leave' | 'rematch' | 'maybeLeave' | 'playerLeft', body?: any) => this.perform(() => this.matchAction(action, body)), removePlayer: (id: string) => this.perform(() => this.removePlayer(id)),
     leaveMatch: (id?: string) => this.perform(() => this.leaveMatch(id)), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),
-    startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.archiveMatch(id)),
+    startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.deleteSinglePlayer(id)),
     loadHistory: () => this.perform(() => this.loadHistory()), replay: (index: number | null) => this.perform(() => this.replay(index), false), presentationMessage: () => this.presentationMessage(), presentationHistory: () => this.presentationHistory(),
     saveGame: (id: string, saved: boolean) => this.perform(async () => { await this.request(saved ? 'PUT' : 'DELETE', `${this.paginated ? '/v2' : ''}/users/me/saved-games/${encodeURIComponent(id)}`); await this.list('savedGames'); }),
     openInvite: (token: string) => this.perform(() => this.openInvite(token)),

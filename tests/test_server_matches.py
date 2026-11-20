@@ -227,7 +227,7 @@ def test_computer_moves_on_the_server(api: Api):
     # brought the count to 4 and the turn came back to Alice.
     assert after["state"]["count"] == 4
     assert after["turn_of_player_indices"] == [0]
-    moves = api.ok("GET", f"/matches/{match_id}/moves")
+    moves = api.ok("GET", f"/matches/{match_id}/moves", as_user=alice)
     assert [m["player_id"] for m in moves] == [alice, "computer-1"]
     assert moves[1]["move"] is None  # Computer choices are private too.
 

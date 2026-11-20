@@ -1,44 +1,40 @@
-# Offline practice
+# Offline single-player play and cloud saves
 
-The portal runs a saved game's `server_code` locally for device practice. Games
-keep the server-side contract and their existing server/client code; they do not
-need a separate rules implementation or a new game version for this feature.
+The Portal runs the pinned game's `server_code` locally for private single-player
+matches (`computer` and `pass_and_play`). Both are owned by one logged-in account,
+saved locally first and synchronized to the cloud. Read [the current match
+contract](match-kinds.md) for permissions, fields, conflicts and migration rules.
 
-Open the game and start practice online once to save its pinned version and
-rules on the device. Practice can then continue after disconnecting and
-reloading, including on `portal.html?game=...` routes. A new practice can also
-start offline once that game's version has been saved. Device storage is scoped
-to the signed-in account; clearing browser storage removes local progress.
+Download the pinned rules once. A match can then continue across any number of
+human turns, computer replies, handoffs and app restarts without internet.
+Reconnection automatically saves the complete pending history and state in the
+cloud so the owner can resume from another device. Finished matches sync too.
+The UI distinguishes a durable local save waiting for sync from a cloud save.
 
-When browser storage fills, the portal automatically frees the least recently
-used recoverable caches and retries the save. Game responses and translation
-bundles share this LRU order across accounts and languages. Old migration
-backups can also shed their cached responses. Pending moves, their snapshots
-and rules, saved practice games and history, archives, login credentials and
-preferences are retained. A full but readable browser store remains accessible
-on reload. Storage that is disabled, or filled entirely with durable data,
-still reports a failed save rather than discarding progress.
+- `newMatch`, `applyMove`, `computerMove` and `viewFor` use the deterministic
+  prelude shared with `game_logic.py`, including seeded randomness and frozen time.
+- Rules run in the existing isolated executor with no account password or network
+  access. The trusted renderer receives only the appropriate `viewFor` output.
+- Persist the full rules state, seed, seat identities, pinned game version,
+  initial position and move history before accepting another local turn.
+- Computer matches have exactly one human seat plus computers. Pass-and-play has
+  one or more human seats controlled by the owner and no computers. Neither kind
+  offers invitations, spectators, account joining or multiplayer alerts.
+- All private single-player matches have a zero token pot. A local result cannot
+  create rewards or become a token multiplayer match.
+- Upload through the owner-authenticated single-player sync endpoint with the
+  same match ID and expected cloud revision. Preserve unsynced branches on a
+  conflict; never overwrite another device's newer saved revision silently.
+- Protect pending snapshots, histories and dependencies from cache eviction.
+  Recoverable downloads may be evicted and fetched again. Clearing app/browser
+  data before cloud acknowledgement can lose pending progress.
+- Existing device saves upload when the updated app opens with their owning
+  account. A backend migration alone cannot retrieve another device's files.
 
-- `newMatch`, `applyMove`, `computerMove`, and `viewFor` use the same deterministic
-  prelude as `game_logic.py`, including `InvalidMove`, seeded randomness, the
-  frozen clock, and `estimateWinChance`. A parity test guards this contract.
-- Rules execute in a Worker inside an opaque-origin sandbox, with network access
-  blocked by CSP and a parent-controlled timeout. No account password is passed
-  to game code. Declarative presentation reduces view messages in isolation, and
-  the trusted renderer draws the returned scene. Cached HTML games, local matches
-  and queued moves are removed from the portal cache.
-- Full rules state stays in device storage; the UI receives the appropriate
-  `viewFor` output. State, turn, initial position, and move history survive reload.
-- Against-computer practice advances computer turns locally. Pass-and-play uses
-  the same rules and changes the viewing/acting seat to the next human.
-- Practice always has a zero token pot, uses `local-` IDs, and never uploads moves
-  or payouts. Online matches continue through the authoritative server API. A
-  local result cannot be promoted into a token match.
+Multiplayer uses the existing local outgoing-move queue and server validation.
+An offline move is limited to the logged-in player's legal turn and does not
+let that account control other human players. Its idempotency key survives retries.
 
-Validation includes computer play, pass-and-play completion, poker's private
-view, illegal moves, persisted history, offline page reload,
-no match writes, sandbox isolation/timeout, and existing online computer play.
-
-The optional single-player state-saving REST API is not needed for offline
-practice: account-scoped device storage already provides persistence. Cross-device
-practice synchronization is outside this change.
+Relevant checks cover offline multi-turn completion/reload, reconnect uploads,
+lost acknowledgements, cross-device continuation, revision conflicts, owner-only
+access, no sharing/notifications for private kinds, and human-only multiplayer.

@@ -41,7 +41,7 @@ test('Privacy opens from the bottom of the profile and preserves the profile dra
   await expect(page.getByRole('textbox',{name:'Display name',exact:true})).toHaveValue('Unsubmitted privacy profile draft');
   await expect(page.getByRole('button',{name:'Privacy',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'On this device',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Single-player matches',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Privacy',exact:true})).toHaveCount(0);
   expect(page.url()).toBe(before);expect(errors).toEqual([]);
 });

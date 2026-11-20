@@ -6,6 +6,7 @@ export {utf8Size} from '../platform/recoverable-cache';
 import {originEvictions} from '../platform/origin-cache';
 import {protectedResponsePaths,responseRetentionPriorities} from './cache-policy';
 import {apiOrigin,DEFAULT_API_ORIGIN} from '../platform/credential-vault';
+import {hydrateSinglePlayer} from './single-player';
 export const LEGACY_ORIGIN_KEY='game-platform.portal.origin.v1';
 export interface StorageAdapter { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem?(key: string): Promise<void>; keys(): Promise<string[]>; exclusive<T>(name: string, run: () => Promise<T>): Promise<T> }
 export const emptyAccountData = (): AccountData => ({ version: 1, responses: {}, queues: {}, conflicts: {}, local: {}, archives: [], archivedMatches: [], selectedId: null });
@@ -118,7 +119,9 @@ export class AccountRepository {
       if (path === '/portal/match-games' && value && typeof value === 'object' && !Array.isArray(value)) {
         value = {...(previous && typeof previous === 'object' && !Array.isArray(previous) ? previous : {}),...value};
       }
-      data.responses[path] = value; touchResponse(data,path);
+      data.responses[path] = value;
+      if (matchId) hydrateSinglePlayer(data,value);
+      touchResponse(data,path);
       try {await this.write(id,data);} catch (error) {
         // A replaceable download may be served from memory. Durable mutation
         // callers still receive write failures and never lose their old save.
@@ -134,11 +137,15 @@ export class AccountRepository {
   }
   async preserveMergedAccounts(targetId: string, sourceIds: string[]): Promise<void> {
     const sources: { id: string; data: AccountData }[] = [];
-    for (const id of [...new Set(sourceIds)].filter(id => id && id !== targetId)) sources.push({ id, data: await this.read(id) });
+    for (const id of [...new Set(sourceIds)].filter(id => id && id !== targetId)) {
+      const data=await this.read(id);
+      if(id==='visitor' && data.visitor_claimed_by && data.visitor_claimed_by!==targetId)continue;
+      sources.push({id,data});
+    }
     if (!sources.length) return;
     await this.mutate(targetId, target => {
       for (const { id, data: source } of sources) {
-        const collisions: Record<string, any> = {}; const packages: Record<string, any> = {}; const matches: Record<string, any> = {}; const copied: string[] = [];
+        const collisions: Record<string, any> = {}; const packages: Record<string, any> = {}; const matches: Record<string, any> = {}; const copied: string[] = []; const copiedCreations:string[]=[];
         for (const [localId, match] of Object.entries(source.local)) {
           const path = `/games/${match.game_id}/versions/${match.game_version}`; const sourcePackage = source.responses[path]; const targetPackage = target.responses[path];
           if (target.local[localId] && !equal(target.local[localId], match) || sourcePackage && targetPackage && !equal(sourcePackage, targetPackage)) {
@@ -149,17 +156,28 @@ export class AccountRepository {
           target.local[localId] = JSON.parse(JSON.stringify(match)); copied.push(localId);
           if (sourcePackage && !targetPackage) target.responses[path] = JSON.parse(JSON.stringify(sourcePackage));
         }
+        for(const [matchId,creation] of Object.entries(source.creations || {})) {
+          const snapshot=source.responses[`/matches/${matchId}`];if(!snapshot)continue;
+          const path=`/games/${snapshot.game_id}/versions/${snapshot.game_version}`, sourcePackage=source.responses[path], targetPackage=target.responses[path];
+          if(target.creations?.[matchId] && !equal(target.creations[matchId],creation)
+            || sourcePackage && targetPackage && !equal(sourcePackage,targetPackage))continue;
+          target.creations ||= {};target.creations[matchId]=JSON.parse(JSON.stringify(creation));copiedCreations.push(matchId);
+          if(!target.responses[`/matches/${matchId}`])target.responses[`/matches/${matchId}`]={...JSON.parse(JSON.stringify(snapshot)),owner_user_id:targetId,
+            players:snapshot.players.map((player:any)=>({...player,...(player.user_id===id?{user_id:targetId}:{})}))};
+          if(sourcePackage&&!targetPackage)target.responses[path]=JSON.parse(JSON.stringify(sourcePackage));
+        }
         for (const matchId of new Set([...Object.keys(source.queues), ...Object.keys(source.conflicts)])) {
           const snapshot = source.responses[`/matches/${matchId}`]; if (!snapshot) continue;
           matches[matchId] = snapshot; const path = `/games/${snapshot.game_id}/versions/${snapshot.game_version}`; if (source.responses[path]) packages[path] = source.responses[path];
         }
-        const record = JSON.parse(redactedArchive({ kind: 'account-merge', sourceAccount: id, localIds: copied, localMatches: collisions, matches, packages, queues: source.queues, conflicts: source.conflicts, previousArchives: source.archives, archivedMatches: source.archivedMatches }));
+        const record = JSON.parse(redactedArchive({ kind: 'account-merge', sourceAccount: id, localIds: copied, localMatches: collisions, matches, packages, queues: source.queues, creations:source.creations, conflicts: source.conflicts, previousArchives: source.archives, archivedMatches: source.archivedMatches }));
         // Online intents never become the surviving account's outgoing queue.
         // Their original request IDs and bases remain available for review.
         if (!target.archives.some(existing => { if (existing.kind !== record.kind || existing.sourceAccount !== id) return false; const { savedAt: _savedAt, ...previous } = existing; return equal(previous, record); })) target.archives.push({ ...record, savedAt: new Date().toISOString() });
-        if (!target.selectedId && source.selectedId && target.local[source.selectedId]) target.selectedId = source.selectedId;
+        if (!target.selectedId && source.selectedId && (target.local[source.selectedId] || copiedCreations.includes(source.selectedId))) target.selectedId = source.selectedId;
       }
     });
+    if(sources.some(source=>source.id==='visitor'))await this.mutate('visitor',data=>{data.visitor_claimed_by=targetId;});
   }
   trim(data: AccountData, id?: string) {
     const pinned = protectedResponsePaths(data,id ? this.activeGames.get(id) : undefined);

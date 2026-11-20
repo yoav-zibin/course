@@ -10,6 +10,10 @@ This is a comparison of application source
 `600e8e35ab3d7338055e4f28eaa3d165be4bdba2`, the revision selected when the audit
 started. It does not establish parity for later commits or physical devices.
 
+The current [match contract](match-kinds.md) also replaces permanent device-only
+practice with private cloud-saved computer/pass-and-play matches. This historical
+audit does not verify the later cloud synchronization or kind migration.
+
 The current portal has since removed the footer, Preferences screen and
 On this device navigation tab, and moved Privacy into the account dialog.
 The coverage and findings below describe the pinned audit revision, including

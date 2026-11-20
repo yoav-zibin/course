@@ -8,6 +8,10 @@
 > **Updated Nov 18, 2026:** games are platform-owned with no creator user ID.
 > `/v2/builder/games` is now an unauthenticated platform catalog alias.
 
+> **Updated Nov 20, 2026:** [Match kinds and cloud saves](match-kinds.md) replaces
+> the historical separation between device-only practice and cloud matches.
+> All three match kinds are cloud-backed; only multiplayer can be shared.
+
 From Chad (sc5386) to Ian (zkamenov) and his agent. Updated October 30, 2026.
 This note is the handoff. A coordination comment is also on your code commit
 `e45a25a`; Chad has not sent a separate email.

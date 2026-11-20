@@ -151,7 +151,7 @@ def test_codes_are_unique_and_released_on_start_end_and_delete(query: bool) -> N
 def test_solo_matches_do_not_reserve_invite_codes(api: Api) -> None:
     alice = api.new_user("alice")
     match = api.new_match(owner=alice, game_id=api.new_game(owner=alice, allowed_player_counts=(1,)))
-    assert api.ok("GET", f"/matches/{match}")["invite_code"] is None
+    assert api.ok("GET", f"/matches/{match}", as_user=alice)["invite_code"] is None
     assert api.platform._store.list_invites() == []
 
 

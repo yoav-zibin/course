@@ -28,7 +28,7 @@ function apiWith(respond: (method: string, path: string, init: RequestInit) => a
 }
 
 test('browser fetch is invoked without a PortalApi receiver', async () => {
-  const fetcher = function (this: unknown) { assert.equal(this, undefined); return Promise.resolve(new Response('{}', { status: 200 })); };
+  const fetcher = function (this: unknown) { 'use strict'; assert.equal(this, undefined); return Promise.resolve(new Response('{}', { status: 200 })); };
   const api = new PortalApi('https://buildplay.fun', () => 'en', fetcher as typeof fetch);
   assert.deepEqual(await api.request('GET', '/health'), {});
 });
@@ -159,4 +159,18 @@ test('merge collisions retain canonical matches/packages and preserve the source
   await repository.preserveMergedAccounts('bob', ['alice']); const target = await repository.read('bob');
   assert.equal(target.local['local-collision'].logicState.branch, 'canonical'); assert.equal(target.responses['/games/g/versions/3'].server_code, 'canonical rules');
   assert.equal(target.archives[0].localMatches['local-collision'].logicState.branch, 'old'); assert.equal(target.archives[0].packages['/games/g/versions/3'].server_code, 'original source rules');
+});
+
+test('account merge preserves an idempotent unsent lobby creation with its rules and immutable player id',async()=>{
+  const {storage,repository}=await fixture();
+  await repository.mutate('alice',data=>{
+    data.creations={'new-lobby':{requestId:'same-stable-request',body:{game_id:'g',client_match_id:'new-lobby',match_kind:'multiplayer'}}};
+    data.responses['/matches/new-lobby']={...match,id:'new-lobby',match_kind:'multiplayer',status:'waiting_for_players'};
+    data.responses['/games/g/versions/3']={id:'g',version:3,server_code:'pinned rules'};data.selectedId='new-lobby';
+  });
+  const original=storage.values.get(repository.key('alice'));await repository.preserveMergedAccounts('bob',['alice']);
+  const merged=await repository.read('bob');assert.equal(merged.creations!['new-lobby'].requestId,'same-stable-request');
+  assert.equal(merged.responses['/matches/new-lobby'].owner_user_id,'bob');assert.equal(merged.responses['/matches/new-lobby'].players[0].user_id,'bob');
+  assert.equal(merged.responses['/matches/new-lobby'].players[0].id,'alice');assert.equal(merged.selectedId,'new-lobby');
+  assert.equal(merged.responses['/games/g/versions/3'].server_code,'pinned rules');assert.equal(storage.values.get(repository.key('alice')),original);
 });
