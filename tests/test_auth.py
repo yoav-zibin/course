@@ -734,33 +734,6 @@ def test_equal_rank_merge_keeps_the_requested_direction() -> None:
     assert platform.get_user(ann.id).id == bob.id
 
 
-# Open matches
-
-
-def test_open_matches_lists_joinable_matches_without_login() -> None:
-    api = Api()
-    owner = api.new_user("owner")
-    game_id = api.new_game(owner=owner, allowed_player_counts=(2, 3))
-    waiting = api.new_match(game_id=game_id, owner=owner)
-    response = api.client.get("/matches/open")
-    assert response.status_code == 200
-    assert [match["id"] for match in response.json()] == [waiting]
-
-
-def test_open_matches_excludes_full_matches_but_keeps_joinable_ones() -> None:
-    api = Api()
-    owner = api.new_user("owner")
-    other = api.new_user("other")
-    strict_id = api.new_game(owner=owner, allowed_player_counts=(2,))
-    api.new_match(game_id=strict_id, owner=owner, joiners=[other], start=True)
-    open_id = api.new_game(
-        owner=owner, allowed_player_counts=(2, 3), allows_join_mid_match=True
-    )
-    joinable = api.new_match(game_id=open_id, owner=owner, joiners=[other], start=True)
-    response = api.client.get("/matches/open")
-    assert [match["id"] for match in response.json()] == [joinable]
-
-
 def test_login_with_an_invalid_kind_is_rejected() -> None:
     platform = GamePlatform(store=InMemoryStore(), clock=Clock())
     with pytest.raises(InvalidRequestError):

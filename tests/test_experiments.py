@@ -81,7 +81,7 @@ def test_match_start_tracking_uses_match_timestamp_without_advancing_clock() -> 
         import_package={"declarative_ui": TEST_DECLARATIVE_UI},
     )
     match = platform.create_match(
-        caller_id=user.id, game_id=game.id, num_computer_opponents=0
+        caller_id=user.id, game_id=game.id
     )
     started = platform.start_match(caller_id=user.id, match_id=match.id)
     match_start_event = next(

@@ -23,7 +23,7 @@ STATIC = Path(__file__).resolve().parent / "static"
 # with the pages: a missing area answers "not available in the local preview".
 FORWARDED = frozenset({
     "auth", "users", "games", "matches", "v2", "i18n", "push", "invites",
-    "matchmaking", "storage", "feedback", "client-errors", "batch", "game-proposals",
+    "storage", "feedback", "client-errors", "batch", "game-proposals",
 })
 
 

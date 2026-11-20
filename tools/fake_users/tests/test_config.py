@@ -32,8 +32,6 @@ def test_settings_changes_are_checked_and_converted():
     assert (s.max_users, s.users_per_hour, s.skip_games) == (8, 30.0, ("Debug", "Poker"))
     with pytest.raises(ConfigError, match="unknown settings: nope"):
         settings_from_dict({"nope": 1})
-    with pytest.raises(ConfigError, match="add up to 100"):
-        settings_from_dict({"mix_vs_computer": 90})
     with pytest.raises(ConfigError, match="think_min_seconds <= think_max_seconds"):
         settings_from_dict({"think_min_seconds": 5, "think_max_seconds": 1})
     with pytest.raises(ConfigError, match="leave_probability"):
@@ -47,7 +45,7 @@ def test_settings_changes_are_checked_and_converted():
 def test_a_bad_change_keeps_the_old_settings():
     base = settings_from_dict({"max_users": 3})
     with pytest.raises(ConfigError):
-        settings_from_dict({"max_users": 4, "mix_quick_match": 99}, base)
+        settings_from_dict({"max_users": 4, "leave_probability": 99}, base)
     assert base.max_users == 3
 
 

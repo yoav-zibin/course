@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from game_platform.api import create_app
 from game_platform.config import AuthConfig, PushConfig
-from game_platform.models import GameRules
+from game_platform.models import GameRules, Match, Seat
 from game_platform.push import PushNotifier
 from game_platform.senders import CodeSender
 from game_platform.service import GamePlatform
@@ -103,6 +103,22 @@ class FakeClock:
     def __call__(self) -> dt.datetime:
         self._now += dt.timedelta(minutes=1)
         return self._now
+
+
+def legacy_computer_match(platform: GamePlatform, match: Match, count: int) -> Match:
+    """Seed pre-retirement bot seats for persisted-match worker/history coverage.
+
+    Online creation only accepts humans. Tests that exercise existing computer
+    matches must install their historical seats through storage instead.
+    """
+    humans = tuple(seat for seat in match.seats if seat.kind == "human")
+    computers = tuple(
+        Seat(player_index=len(humans) + index, kind="computer", user_id=None)
+        for index in range(count)
+    )
+    seeded = replace(match, seats=(*humans, *computers))
+    platform._store.put_match(seeded)
+    return seeded
 
 
 class Api:
@@ -292,9 +308,13 @@ class Api:
             "POST",
             "/matches",
             as_user=owner,
-            json={"game_id": game_id, "num_computer_opponents": num_computer_opponents},
+            json={"game_id": game_id},
         )
         match_id = match["id"]
+        if num_computer_opponents:
+            legacy_computer_match(
+                self.platform, self.platform._store.get_match(match_id), num_computer_opponents
+            )
         for joiner in joiners:
             self.ok("POST", f"/matches/{match_id}/join", as_user=joiner)
         if start:

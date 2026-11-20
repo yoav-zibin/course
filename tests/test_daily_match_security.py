@@ -168,11 +168,11 @@ def test_partial_payout_cannot_be_replaced_by_a_player_refund(api):
 
 
 @pytest.mark.parametrize("reason", ["revoked", "expired", "consumed"])
-def test_unusable_bearer_invites_no_longer_disclose_private_matches(api, reason):
+def test_unusable_invites_keep_public_views_and_never_expose_hidden_cards(api, reason):
     alice, bob, outsider = [api.new_user(name) for name in ("alice", "bob", "outsider")]
     game_id = _create_game(api, alice)
     match_id = api.ok("POST", "/matches", as_user=alice,
-                      json={"game_id": game_id, "private": True})["id"]
+                      json={"game_id": game_id})["id"]
     invite = api.ok("POST", f"/matches/{match_id}/invites", as_user=alice,
                     json={"max_uses": 1} if reason == "consumed" else {})
     token = invite["token"]
@@ -185,8 +185,10 @@ def test_unusable_bearer_invites_no_longer_disclose_private_matches(api, reason)
         api.platform._store.put_invite(replace(stored, expires_at=dt.datetime(2000, 1, 1, tzinfo=dt.timezone.utc)))
     for caller in (None, outsider):
         response = api.request("GET", f"/invites/{token}", as_user=caller)
-        assert response.status_code == 404
-        assert match_id not in response.text
+        assert response.status_code == 200
+        assert response.json()["match"]["id"] == match_id
+        assert response.json()["usable"] is False
         assert "secret-of-" not in response.text
+    assert api.request("POST", f"/invites/{token}/accept", as_user=outsider).status_code == 409
     # A seated player retains their own authenticated view independently of the link.
     assert api.ok("GET", f"/matches/{match_id}", as_user=bob)["state"]["your_secret"] == f"secret-of-{bob}"

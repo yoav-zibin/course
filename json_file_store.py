@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # feedback and game popularity aggregates). There is no migration path: a file
 # whose format_version is not 1 is rejected rather than loaded, so an older
 # or newer file can never silently lose games, re-expose unpublished games or
-# private matches, or drop subscriptions, invites, experiments or feedback.
+# match details, or drop subscriptions, invites, experiments or feedback.
 FORMAT_VERSION: Final = 1
 
 

@@ -634,12 +634,7 @@ def test_quickjs_computer_turn_survives_restart_and_duplicate_job(store):
         },
         owner,
     )
-    match = api.ok(
-        "POST",
-        "/matches",
-        as_user=owner,
-        json={"game_id": game["id"], "num_computer_opponents": 1},
-    )
+    match = {"id": api.new_match(owner=owner, game_id=game["id"], num_computer_opponents=1)}
     api.ok("POST", f"/matches/{match['id']}/start", as_user=owner, json={})
     api.ok(
         "POST",
@@ -688,8 +683,7 @@ def test_one_durable_job_advances_consecutive_computers_and_stops_at_a_human_or_
             .replace("{[playerId]: ctx.pot}", "{[ctx.players[0].id]: ctx.pot}"),
         "allowed_player_counts": [4],
     }, owner)
-    match = api.ok("POST", "/matches", as_user=owner,
-                   json={"game_id": game["id"], "num_computer_opponents": 3})
+    match = {"id": api.new_match(owner=owner, game_id=game["id"], num_computer_opponents=3)}
     api.ok("POST", f"/matches/{match['id']}/start", as_user=owner, json={})
     api.ok("POST", f"/matches/{match['id']}/moves", as_user=owner,
            json={"move": {"add": 3}, "expected_move_count": 0})
@@ -819,18 +813,13 @@ def test_seed_resume_does_not_reset_existing_user(store):
     assert store.get_user(user.id).token_balance == 17
 
 
-def test_quick_match_uses_bounded_queries_and_reserves_same_player_slot(store):
+def test_match_writes_omit_retired_visibility_and_matchmaking_metadata(store):
     api = api_for(store)
-    alice, bob = api.new_user("alice"), api.new_user("bob")
-    game = api.new_game(owner=alice)
-    platform = api.client.app.state.platform
-    with patch.object(
-        store, "list_all_matches", side_effect=AssertionError("global scan")
-    ):
-        first = platform.quick_match(caller_id=alice, game_id=game)
-        assert platform.quick_match(caller_id=alice, game_id=game).id == first.id
-        joined = platform.quick_match(caller_id=bob, game_id=game)
-        assert joined.id == first.id and joined.status == "ongoing"
+    owner = api.new_user("owner")
+    match_id = api.new_match(owner=owner, game_id=api.new_game(owner=owner))
+    raw = store.raw_get(store.ref("matches", match_id))
+    assert not {"private", "joinable", "matchmaking_player_count"} & raw.keys()
+    assert not {"private", "matchmaking_player_count"} & json.loads(raw["json"]).keys()
 
 
 def test_payout_ledger_and_lost_response_retry_are_atomic(store):
@@ -1761,8 +1750,8 @@ def test_partial_payout_delete_retries_conserve_tokens_on_query_backend(store):
 
 
 @pytest.mark.parametrize("reason", ["revoked", "expired", "consumed"])
-def test_unusable_private_invite_does_not_disclose_match_on_query_backend(store, reason):
-    from game_platform.tests.test_daily_match_security import test_unusable_bearer_invites_no_longer_disclose_private_matches
+def test_unusable_invite_keeps_public_spectator_view_on_query_backend(store, reason):
+    from game_platform.tests.test_daily_match_security import test_unusable_invites_keep_public_views_and_never_expose_hidden_cards
     api = api_for(store)
     api.platform = api.client.app.state.platform
-    test_unusable_bearer_invites_no_longer_disclose_private_matches(api, reason)
+    test_unusable_invites_keep_public_views_and_never_expose_hidden_cards(api, reason)

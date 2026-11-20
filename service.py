@@ -1788,39 +1788,6 @@ class GamePlatform:
             self._store.put_user(old)
         return into
 
-    def list_open_matches(self) -> list[Match]:
-        """Matches anyone may join: waiting for players, or ongoing with mid-match
-        joins allowed. Match details are public by URL anyway, so listing them is
-        consistent."""
-        with self._lock:
-            matches = (
-                *self._store.list_matches_by_status("waiting_for_players"),
-                *self._store.list_matches_by_status("ongoing"),
-            )
-            return [
-                match
-                for match in map(
-                    self._enforce_clock,
-                    (match for match in sorted(matches, key=lambda item: (item.created_at, item.id))
-                     if self._match_is_declarative(match)),
-                )
-                if not match.private
-                and not match.num_computer_opponents
-                # A rematch whose free seats are all held for its original players
-                # has nothing to offer anyone else.
-                and not (
-                    match.held_seats()
-                    and len(match.seats) + match.held_seats()
-                    >= self._rules_of(match).max_players
-                )
-                and (game := self._store.get_game(match.game_id)) is not None
-                and game.published and not game.deleted
-                and (match.status == "waiting_for_players" or (
-                    match.status == "ongoing"
-                    and self._rules_of(match).allows_join_mid_match
-                ))
-            ]
-
     def _require_translatable(self, code: str | None, server_code: str | None = None) -> None:
         """translation.require_strings: client code that fails game_text.lint is refused,
         with the checker's problems in plain words. Games with no client code are exempt;
@@ -2599,8 +2566,6 @@ class GamePlatform:
         *,
         caller_id: str,
         game_id: str,
-        num_computer_opponents: int,
-        private: bool = False,
         bet_per_player: int = 0,
         turn_seconds: int | None = None,
     ) -> Match:
@@ -2616,16 +2581,11 @@ class GamePlatform:
             game = self._get_live_game(game_id)
             if not game.published:
                 raise NotFoundError("game not found")
-            self._check_fits(game.rules, num_players=1 + num_computer_opponents)
             if type(bet_per_player) is not int or not 0 <= bet_per_player <= 1000000:
                 raise InvalidRequestError("invalid token stake")
-            if bet_per_player and num_computer_opponents:
-                raise InvalidRequestError("paid matches with computer opponents are not supported")
             return self._new_match(
                 game,
                 caller_id=caller_id,
-                num_computer_opponents=num_computer_opponents,
-                private=private,
                 bet_per_player=bet_per_player,
                 turn_seconds=turn_seconds,
             )
@@ -2635,9 +2595,6 @@ class GamePlatform:
         game: Game,
         *,
         caller_id: str,
-        num_computer_opponents: int = 0,
-        private: bool = False,
-        matchmaking_player_count: int | None = None,
         bet_per_player: int = 0,
         turn_seconds: int | None = None,
     ) -> Match:
@@ -2658,7 +2615,7 @@ class GamePlatform:
             status="waiting_for_players",
             seats=_waiting_seats(
                 human_user_ids=[caller_id],
-                num_computer_opponents=num_computer_opponents,
+                num_computer_opponents=0,
             ),
             state=None,
             turn_of_player_indices=None,
@@ -2667,8 +2624,6 @@ class GamePlatform:
             hidden_for_user_ids=frozenset(),
             created_at=now,
             updated_at=now,
-            private=private,
-            matchmaking_player_count=matchmaking_player_count,
             bet_per_player=bet_per_player,
             turn_seconds=turn_seconds,
             seed=seed,
@@ -2692,10 +2647,6 @@ class GamePlatform:
                 caller_id is None or not match.involves(caller_id)
             ):
                 raise NotFoundError("match not found")
-            # Private matches are invisible to outsiders, who see them through an
-            # invite (GET /invites/{token}) instead.
-            if match.private and (caller_id is None or not match.involves(caller_id)):
-                raise NotFoundError("match not found")
             return match
 
     def list_matches(
@@ -2714,46 +2665,13 @@ class GamePlatform:
                 and (game_id is None or match.game_id == game_id)
             ]
 
-    def set_num_computer_opponents(
-        self, *, caller_id: str, match_id: str, num_computer_opponents: int
-    ) -> Match:
-        with self._lock:
-            match = self._get_owned_match(caller_id=caller_id, match_id=match_id)
-            if match.status != "waiting_for_players":
-                raise ConflictError(
-                    "computer opponents can only be changed before the match starts"
-                )
-            humans = match.human_user_ids
-            if num_computer_opponents and (len(humans) != 1 or match.matchmaking_player_count is not None):
-                raise ConflictError("computer opponents are only supported in single-player matches")
-            if num_computer_opponents and match.bet_per_player:
-                raise InvalidRequestError("paid matches with computer opponents are not supported")
-            self._check_fits(
-                self._rules_of(match),
-                num_players=len(humans) + num_computer_opponents,
-            )
-            return self._save(
-                replace(
-                    match,
-                    seats=_waiting_seats(
-                        human_user_ids=humans,
-                        num_computer_opponents=num_computer_opponents,
-                    ),
-                )
-            )
-
     def join_match(self, *, caller_id: str, match_id: str) -> Match:
         with self._lock:
             match = self._get_match(match_id)
-            if match.private and match.seat_of(caller_id) is None:
-                raise ForbiddenError(
-                    "this match is private; join it with an invite link"
-                )
             return self._join(match, caller_id=caller_id)
 
     def _join(self, match: Match, *, caller_id: str) -> Match:
-        """Seats [caller_id] in [match], whatever its privacy; quick matches start
-        once they have all their players. The caller holds the lock."""
+        """Seats [caller_id] in [match]. The caller holds the lock."""
         if not self._match_is_declarative(match):
             raise NotFoundError("match not found")
         if match.seat_of(caller_id) is not None:
@@ -2772,7 +2690,7 @@ class GamePlatform:
         if match.status == "over":
             raise ConflictError("the match is over")
         if match.num_computer_opponents:
-            raise ConflictError("computer opponents are only supported in single-player matches; remove them before inviting players")
+            raise ConflictError("this legacy computer match cannot accept human opponents")
         clock_restart = None
         if match.status == "ongoing":
             seats = self._take_seat_mid_match(match, user_id=caller_id)
@@ -2848,16 +2766,6 @@ class GamePlatform:
             actor_name=joiner.display_name if joiner is not None else "",
             tag_suffix="join",
         )
-        target = saved.matchmaking_player_count
-        if (
-            target is not None
-            and saved.status == "waiting_for_players"
-            and len(saved.seats) >= target
-        ):
-            game = self._store.get_game_version(saved.game_id, saved.game_version)
-            if game is not None and game.server_code:
-                # A quick match starts by running the game's newMatch.
-                return self._begin_match(saved, game)
         return saved
 
     def request_rematch(self, *, caller_id: str, match_id: str) -> Match:
@@ -2874,8 +2782,7 @@ class GamePlatform:
                 if rematch is not None and rematch.status != "over":
                     if rematch.seat_of(caller_id) is not None:
                         return rematch
-                    # An original player rejoins directly: a private match's
-                    # rematch is private too, and they need no invite for it.
+                    # An original player rejoins their reserved seat directly.
                     return self._join(rematch, caller_id=caller_id)
 
             game = self._get_game(match.game_id)
@@ -2886,9 +2793,6 @@ class GamePlatform:
                     or not game_version.is_declarative):
                 raise ConflictError("this game is no longer available for rematches")
 
-            solo_bot_rematch = (
-                len(match.human_user_ids) == 1 and match.num_computer_opponents > 0
-            )
             now = self._clock()
             rematch = Match(
                 id=self._new_id(),
@@ -2898,9 +2802,7 @@ class GamePlatform:
                 status="waiting_for_players",
                 seats=_waiting_seats(
                     human_user_ids=[caller_id],
-                    num_computer_opponents=match.num_computer_opponents
-                    if solo_bot_rematch
-                    else 0,
+                    num_computer_opponents=0,
                 ),
                 state=None,
                 turn_of_player_indices=None,
@@ -2910,20 +2812,11 @@ class GamePlatform:
                 created_at=now,
                 updated_at=now,
                 turn_seconds=match.turn_seconds,
-                # Same audience as the original: a private match's rematch stays
-                # private. The stake is not carried over: nobody's tokens are
-                # committed by someone else asking for a rematch.
-                private=match.private,
                 # Hold a seat for every original player, so a stranger can't take
                 # the last one before the opponent comes back.
                 reserved_for_user_ids=frozenset(match.human_user_ids),
             )
             self._store.put_match(rematch)
-            if solo_bot_rematch:
-                rematch = self.start_match(
-                    caller_id=caller_id,
-                    match_id=rematch.id,
-                )
             self._save(replace(match, rematch_match_id=rematch.id))
             requester = self._require_user(caller_id)
             self._notify_match_event(
@@ -3848,8 +3741,6 @@ class GamePlatform:
             match = self._get_owned_match(caller_id=caller_id, match_id=match_id)
             if match.status != "waiting_for_players":
                 raise ConflictError("players can only be removed before the match starts")
-            if match.matchmaking_player_count is not None:
-                raise ConflictError("players can't be removed from a quick match")
             if user_id == caller_id:
                 raise ConflictError(
                     "the owner cannot remove themselves; delete the match instead"
@@ -4216,56 +4107,6 @@ class GamePlatform:
                 )
             )
 
-    # Matchmaking: random opponents
-
-    def quick_match(
-        self, *, caller_id: str, game_id: str, num_players: int | None = None
-    ) -> Match:
-        """Finds random opponents. Seats the caller in the oldest public quick match
-        of the game that is waiting for players, or creates one for others to find.
-        A quick match waits for [num_players] humans (default: the game's smallest
-        count above one) and starts by itself when the last one joins. Asking again
-        while already waiting returns the same match."""
-        with self._lock:
-            game = self._get_live_game(game_id)
-            if not game.published:
-                raise NotFoundError("game not found")
-            multiplayer = sorted(c for c in game.rules.allowed_player_counts if c >= 2)
-            if not multiplayer:
-                raise ConflictError("this game is single-player only")
-            target = num_players if num_players is not None else multiplayer[0]
-            if target not in multiplayer:
-                raise InvalidRequestError(
-                    f"this game can't be played by {target} players; "
-                    f"choose one of {multiplayer}"
-                )
-            waiting = [
-                match
-                for match in self._store.list_matches_by_status("waiting_for_players")
-                if match.game_id == game.id
-                and self._match_is_declarative(match)
-                and match.matchmaking_player_count == target
-                and match.status == "waiting_for_players"
-                and not match.private
-                and not match.num_computer_opponents
-            ]
-            already_waiting = next(
-                (match for match in waiting if match.seat_of(caller_id) is not None),
-                None,
-            )
-            if already_waiting is not None:
-                return already_waiting
-            # Same version only, so every player in a quick match agrees on rules.
-            oldest = next(
-                (match for match in waiting if match.game_version == game.version),
-                None,
-            )
-            if oldest is not None:
-                return self._join(oldest, caller_id=caller_id)
-            return self._new_match(
-                game, caller_id=caller_id, matchmaking_player_count=target
-            )
-
     # Invites: links (and QR codes) to a match, which also track referrals
 
     def create_invite(
@@ -4315,20 +4156,11 @@ class GamePlatform:
             return invite
 
     def view_invite(self, token: str) -> InviteView:
-        """What an invite link shows: its match (even a private one, since the token
-        is the secret), who sent it, and why it can't be used, if it can't. Public,
-        and counted as a view in the creator's referral stats."""
+        """Shows the public match, inviter and any reason the link cannot be used.
+        Counted as a view in the creator's referral stats."""
         with self._lock:
             invite = self._get_invite(token)
             match = self._get_match(invite.match_id)
-            if match.private and (
-                invite.revoked
-                or (invite.expires_at is not None and self._clock() >= invite.expires_at)
-                or (invite.max_uses is not None and len(invite.acceptances) >= invite.max_uses)
-            ):
-                # The bearer link grants private viewing as well as joining.
-                # Revoking/expiring/consuming it must withdraw both capabilities.
-                raise NotFoundError("invite not found")
             invite = replace(invite, views=invite.views + 1)
             self._store.put_invite(invite)
             game = self._store.get_game_version(match.game_id, match.game_version)
@@ -4353,8 +4185,8 @@ class GamePlatform:
             self._get_invite(token)
 
     def accept_invite(self, *, caller_id: str, token: str) -> Match:
-        """Takes a seat through an invite, even in a private match. Players already
-        in the match just get it back, so opening your own link is harmless."""
+        """Takes a seat through an invite. Players already in the match just get
+        it back, so opening your own link is harmless."""
         with self._lock:
             invite = self._get_invite(token)
             match = self._get_match(invite.match_id)
@@ -5065,7 +4897,7 @@ class GamePlatform:
                 raise missing
             return record.id, record.name, {"game_version": record.version}
         if target_type == "match":
-            if not isinstance(record, Match) or (record.private and not record.involves(caller.id)):
+            if not isinstance(record, Match):
                 raise missing
             # A match's name needs its game: the admin page looks the games up, so
             # sending feedback doesn't need another read.
@@ -5388,13 +5220,6 @@ class GamePlatform:
         if seat is None or not seat.active:
             raise ForbiddenError("you are not a player in this match")
         return seat
-
-    def _check_fits(self, rules: GameRules, *, num_players: int) -> None:
-        if num_players > rules.max_players:
-            raise InvalidRequestError(
-                f"{num_players} players is more than the game's maximum of "
-                f"{rules.max_players}"
-            )
 
     def _check_player_indices(
         self, match: Match, player_indices: frozenset[int]

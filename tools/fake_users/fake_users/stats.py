@@ -54,7 +54,6 @@ class Stats:
         "leaves",
         "couldnt_move",
         "speed_matches",
-        "skipped_games",
         "errors",
     )
 

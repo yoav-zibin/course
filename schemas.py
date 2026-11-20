@@ -640,12 +640,23 @@ class FeedbackOut(BaseModel):
 
 
 class MatchCreate(_Request):
-    model_config = _example({"game_id": "", "num_computer_opponents": 1})
+    model_config = _example({"game_id": ""})
 
     game_id: str
-    num_computer_opponents: Annotated[int, Field(ge=0)] = 0
-    # Private matches aren't listed as open and can only be joined with an invite.
-    private: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _retired_options(cls, value: object) -> object:
+        # Cached clients may still send the former defaults. Visibility is always
+        # public, and a request for computers must fail instead of changing intent.
+        if isinstance(value, dict):
+            value = dict(value)
+            value.pop("private", None)
+            computers = value.pop("num_computer_opponents", 0)
+            if type(computers) is not int or computers != 0:
+                raise ValueError("online matches support human players only")
+        return value
+
     bet_per_player: Annotated[int, Field(ge=0, le=1000000)] = 0
     # The v2 name for [bet_per_player]: the most tokens each human can lose in
     # the match, staked into the pot when they join. Wins over bet_per_player
@@ -658,20 +669,6 @@ class MatchCreate(_Request):
     # A speed match: the seconds each player has to move, 60, 180 or 600. Omit it
     # (or send null) for a regular match with no time limit.
     turn_seconds: int | None = None
-
-
-class QuickMatchRequest(_Request):
-    model_config = _example({"game_id": "", "num_players": 2})
-
-    game_id: str
-    # How many humans to wait for; defaults to the game's smallest count above one.
-    num_players: PlayerCount | None = None
-
-
-class MatchUpdate(_Request):
-    model_config = _example({"num_computer_opponents": 1})
-
-    num_computer_opponents: Annotated[int, Field(ge=0)]
 
 
 class MoveCreate(_Request):
@@ -740,9 +737,6 @@ class MatchOut(BaseModel):
     rematch_match_id: str | None
     created_at: dt.datetime
     updated_at: dt.datetime
-    private: bool = False
-    # Set on quick matches: how many players it waits for before starting itself.
-    matchmaking_player_count: int | None = None
     # Speed matches: seconds per move (None for a regular match); when the human
     # seats with the turn run out of time (None when there's no running clock); and
     # seats that ran out of time.
@@ -804,8 +798,6 @@ class MatchOut(BaseModel):
             rematch_match_id=match.rematch_match_id,
             created_at=match.created_at,
             updated_at=match.updated_at,
-            private=match.private,
-            matchmaking_player_count=match.matchmaking_player_count,
         )
 
 
@@ -860,8 +852,6 @@ class MatchSummaryOut(BaseModel):
     rematch_match_id: str | None
     created_at: dt.datetime
     updated_at: dt.datetime
-    private: bool = False
-    matchmaking_player_count: int | None = None
     turn_seconds: int | None = None
     turn_deadline: dt.datetime | None = None
     timeouts: list[SeatTimeoutOut] = []

@@ -77,7 +77,6 @@ def test_directed_invite_resolves_player_code_and_preserves_share_links():
     _subscribe_ok(api, bob, "https://push.example.com/bob")
     game = api.new_game(owner=alice)
     match = api.new_match(owner=alice, game_id=game)
-    api.platform._store.put_match(replace(api.platform._store.get_match(match), private=True))
     code = api.ok("GET", f"/users/{bob}", as_user=bob)["referral_code"]
     invite = api.ok("POST", f"/matches/{match}/invites", as_user=alice,
                     json={"recipient_user_id": code})
@@ -86,7 +85,7 @@ def test_directed_invite_resolves_player_code_and_preserves_share_links():
     assert entry["event"] == "invite_request"
     assert entry["url"] == "/i/" + invite["token"]
     assert notifier.messages[0].notification_id == entry["id"]
-    # Opening the bearer link grants access to the private match and acceptance.
+    # Opening the link shows the public match and permits invite acceptance.
     assert api.ok("GET", f"/invites/{invite['token']}")["match"]["id"] == match
     assert api.ok("POST", f"/invites/{invite['token']}/accept", as_user=bob)["id"] == match
     before = len(_feed(api, outsider)["items"])
@@ -101,13 +100,11 @@ def test_directed_invite_resolves_player_code_and_preserves_share_links():
                        json={"recipient_user_id": bob}).status_code == 403
 
 
-def test_rematch_request_only_notifies_once_and_private_recipient_can_accept():
+def test_rematch_request_only_notifies_once_and_recipient_can_accept():
     api = Api()
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game = api.new_game(owner=alice)
     match = api.new_match(owner=alice, game_id=game, joiners=[bob], start=True)
-    # Use the underlying record to make the existing two-person match private.
-    api.platform._store.put_match(replace(api.platform._store.get_match(match), private=True))
     api.move(match, as_user=alice, next_turn=None)
     path = f"/matches/{match}/rematch"
     rematch = api.ok("POST", path, as_user=alice)

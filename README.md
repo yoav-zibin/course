@@ -36,22 +36,21 @@ legal destinations. The [authoring guide](docs/declarative-games.md#always-show-
 also describes click, rotation and resize hints for browser and native hosts.
 Declarative games use the regular catalog and match APIs and are labeled
 **(Declarative)** in the portal. Their board supports pinch zoom and panning;
-multiplayer and computer matches animate opponent moves between server updates.
+multiplayer matches animate opponent moves between server updates.
 Your own moves update immediately.
 Backgammon shares the regular game's authoritative rules JavaScript.
 
 - **Game**: a playable rules package with authoritative QuickJS `server_code`
   and a declarative UI package.
-- **Match**: playing a game with a set of players (humans and computer opponents).
+- **Match**: playing a game with human players online, or practicing locally with computers.
 - **Move**: a turn that replaces the match's opaque JSON state and either passes the turn
   to a set of players (any of whom may move next) or ends the match.
 
 All data lives in process memory behind the `Store` interface (`store.py`), so it can later
 be swapped for a database. The in-memory store maintains secondary indexes for
 user-linked login accounts, match participants, and match status, avoiding full user or
-match scans on common login, match-history, open-match, and quick-match candidate
-requests. These indexes are process-local and do not make the file-backed
-persistence safe across multiple server processes. With no Firestore configured, the server binary uses `JsonFileStore`
+match scans on common login and match-history requests. These indexes are
+process-local and do not make the file-backed persistence safe across multiple server processes. With no Firestore configured, the server binary uses `JsonFileStore`
 (`json_file_store.py`), which also saves everything to a JSON file; see
 [Data file](#data-file). The production deployment instead runs the Firestore
 query store (`query_store.py`), which keeps the data in Firestore and reads it
@@ -264,11 +263,10 @@ freed yet; a deleted account's code becomes free again.) The code appears as
 
 Every invite link names the person who shared it: `/r/<code>` (for example
 `https://buildplay.fun/r/48213`), or `/r/<code>#match=<id>` from a match's Invite
-friends button (in a private match the button copies a match invite link instead,
-`/portal#invite=<token>` from `POST /matches/{id}/invites`, since only those seat
-new players; the portal opens it as a dialog with the inviter and game, has visitors
-log in or continue as a guest, sends the token with a new guest so the referral
-counts, and then takes the seat). "Copy my invite link" in the account menu copies your own. `/r/<code>`
+friends button. Match invitation links (`/portal#invite=<token>`, created with
+`POST /matches/{id}/invites`) open a dialog with the inviter and game, let visitors
+log in or continue as a guest, and then take a seat. "Copy my invite link" in the
+account menu copies your own referral link. `/r/<code>`
 redirects to `/portal?ref=<code>`; the code goes in the query so the browser keeps the
 link's `#match=` part. Older links name the user id instead (`/portal#ref=<userId>`,
 `/portal#match=<id>&ref=<userId>`) and still work, and so does the long form for an
@@ -372,7 +370,6 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `GET /i18n/locales` |  | The supported languages (see [Languages](#languages)) |
 | `GET /i18n/{locale}` |  | Every text in one language: UI labels, status labels, error messages |
 | `POST /users/{id}/merge` | yes | Merge this account into `into_user_id` (authenticate as this user and send `into_password`, the target's password) |
-| `GET /matches/open` |  | Matches anyone may join (waiting, or ongoing with mid-match joins) |
 | `POST /games` | | Create and publish a complete game; existing secrets are rejected (see GAME_DEVELOPMENT_GUIDE.md) |
 | `POST /games/declarative` | | Alias for creating a complete native-ready game with `declarative_ui` |
 | `GET /games/declarative/schema` | | Declarative package and scene JSON Schema |
@@ -385,26 +382,24 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `POST /games/{id}/unpublish` | game secret/master | Hide a game from the public catalog |
 | `POST /bug-reports` | optional | Send a screenshot, bug or feature description and recent app diagnostics; see [Bug reports](#bug-reports) |
 | `POST /feedback` | yes | Legacy feedback API `{kind, target_type, target_id?, text, page?}`; see [Feedback](#feedback) |
-| `POST /matches` | yes | Create a match `{game_id, num_computer_opponents, private?, turn_seconds?}` (`turn_seconds`: 60, 180 or 600 for a [speed match](#speed-matches)); the caller is player 0 |
+| `POST /matches` | yes | Create a public human-only match `{game_id, max_loss?, turn_seconds?}` (`turn_seconds`: 60, 180 or 600 for a [speed match](#speed-matches)); the caller is player 0 |
 | `GET /matches?status=&game_id=` | yes | List the caller's matches (owned or seated, minus hidden ones) |
 | `GET /matches/{id}` |  | Get a match; anyone can view it, so it can be shared by URL. Speed matches include `turn_deadline` and `server_time` |
-| `PATCH /matches/{id}` | yes | Set `num_computer_opponents` before the match starts (owner only) |
 | `POST /matches/{id}/join` | yes | Take a seat |
 | `POST /matches/{id}/start` | yes | Start the match (owner only); the server calls the game's `newMatch` |
 | `POST /matches/{id}/leave` | yes | Leave the match |
 | `POST /matches/{id}/moves` | yes | Make a move `{move, expected_move_count?}`; the server runs the game's `applyMove` |
-| `DELETE /matches/{id}/players/{user_id}` | yes | Owner removes a player before the match starts (like them leaving; the stake is refunded); they can't join it again. Not for quick matches |
+| `DELETE /matches/{id}/players/{user_id}` | yes | Owner removes a player before the match starts (like them leaving; the stake is refunded); they can't join it again. |
 | `GET /matches/{id}/moves` |  | Full move history |
 | `DELETE /matches/{id}` | yes | A seated player may cancel a waiting or free match, or hide an ended match from their own list. Ongoing matches holding tokens must use the normal leave/settlement flow |
 | `GET /users/me/saved-games` | yes | The caller's saved games, most recently saved first |
 | `PUT /users/me/saved-games/{game_id}` | yes | Save a game (idempotent); returns the library |
 | `DELETE /users/me/saved-games/{game_id}` | yes | Unsave a game (idempotent); returns the library |
-| `POST /matchmaking/quick-match` | yes | Play random opponents `{game_id, num_players?}` (see [Matchmaking](#matchmaking-private-matches-and-invites)) |
 | `POST /matches/{id}/invites` | yes | Create an invite link + QR code `{expires_in_seconds?, max_uses?}` (players only) |
 | `GET /users/me/invites?match_id=` | yes | The caller's match invites, with views and who accepted |
 | `GET /invites/{token}` |  | What an invite opens: the match, game and inviter, and whether it's still usable (counts a view) |
 | `GET /invites/{token}/qr.svg` |  | The invite link as an SVG QR code |
-| `POST /invites/{token}/accept` | yes | Take a seat through the invite (works for private matches) |
+| `POST /invites/{token}/accept` | yes | Take a seat through the invite |
 | `POST /invites/{token}/revoke` | yes | Stop the link working (its creator or the match's owner) |
 | `GET /users/me/referrals` | yes | The caller's referral stats: invites, views, acceptances, sign-ups and referred users |
 | `GET /push/config` |  | Whether web push is set up, and the VAPID public key to subscribe with |
@@ -433,13 +428,13 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   `game_version` it was created with, and that version's rules apply for the whole match,
   even if the game is later updated or deleted. Clients load that version's `code` from
   `GET /games/{game_id}/versions/{game_version}`.
-- Before the start, humans sit in join order followed by the computers. Starting requires
-  the total number of seats to be in the game's `allowed_player_counts`.
+- All online matches are public and contain human players in join order. Starting
+  requires the number of seats to be in the game's `allowed_player_counts`.
+  Computer opponents are available in local practice.
 - A move is accepted from any player whose turn it is. The client sends the game's
   own move object; the server runs `applyMove`, whose result names the set of seats
   that may move next (`turn_of_player_indices`), and a `null` turn ends the match
-  (`end_reason: "finished"`). When a computer seat has the turn, the server computes
-  and submits the computer's move itself.
+  (`end_reason: "finished"`).
   `expected_move_count` optionally guards against two clients submitting the same move.
 - **Token stakes.** Every human's stake is taken when they join and held in the
   match's pot. The server code decides the split: the move that ends the match
@@ -449,17 +444,17 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   to the players who did not hold the turn, split evenly (refunded evenly to
   everyone only when every player held the turn).
 - Leaving a waiting match frees the seat (the owner must delete the match instead). Leaving
-  an ongoing match replaces the leaver with a computer (which keeps the turn) if the game
-  `allows_leave_mid_match`, and otherwise ends it (`end_reason: "player_left"`). The match
-  also ends if its last human leaves.
+  an ongoing match calls the game's `playerLeft` when `allows_leave_mid_match`; the
+  departed seat stays inactive. Otherwise leaving ends it (`end_reason: "player_left"`).
+  The match also ends if its last human leaves.
 - Joining an ongoing match requires `allows_join_mid_match`; the joiner takes over the
-  first computer seat, or adds a seat if the game's maximum player count allows it.
+  next available seat if the game's maximum player count allows it.
   In a paid match the joiner stakes `bet_per_player` like everyone else (it is added to
   `token_pot`); a joiner who can't afford it is turned away (409).
 - Joining a paid match that hasn't started checks that the joiner can afford the stake
   (counting today's grant); it is taken when the match starts. The owner can remove a
   waiting player (the portal shows a Remove button), who then can't rejoin that match.
-- A rematch (`POST /matches/{id}/rematch`) is private if the original was, holds a seat
+- A rematch (`POST /matches/{id}/rematch`) is public, holds a seat
   for each original player until they come back (others get 409 while only held seats are
   free), and starts with no stake.
 
@@ -490,8 +485,8 @@ Any logged-in user (guests included) can send feedback in their own words:
 - `target_type` is `"user"`, `"game"` or `"match"` with its `target_id`, or `"platform"`
   (the website itself, with no `target_id`).
 - `text` is 5 to 1000 characters after trimming (400 otherwise). The target must exist and
-  be visible to the sender (a private match they're not in counts as missing), and nobody
-  can send feedback about themselves (merged accounts included). All games belong to the platform.
+  be visible to the sender, and nobody can send feedback about themselves (merged
+  accounts included). All games belong to the platform.
 - At most 20 messages per person in a rolling 24 hours (429 `feedback_daily_limit`).
   Sending the same kind of feedback on the same target again within 24 hours replaces that
   message's text (200) instead of adding one (201), and doesn't count again.
@@ -516,55 +511,39 @@ Any logged-in user (guests included) can send feedback in their own words:
 
 A match is *regular* (no time limit, the default) or a *speed* match, chosen when it's
 created with `turn_seconds`: 60, 180 or 600 seconds per move (other values get a 400).
-Rematches keep the setting; quick matches are always regular.
+Rematches keep the setting.
 
 - The clock starts when the match starts and restarts after every accepted move, also
   when the same player moves again (a raise and its answer, chained jumps), and when a
   person takes over a seat that has the turn. It doesn't run while the match waits for
-  players, once it's over, or while only computers have the turn: computer seats never
-  time out.
+  players or once it's over.
 - A human seat that has the turn and hasn't moved by the deadline times out (every such
-  seat, when several have the turn). If the game `allows_leave_mid_match` and nothing is
-  bet, a computer takes over the seat exactly as when a player leaves, the clock
-  restarts, and the person can keep watching the match. Otherwise, or when no human is
-  left to play the computers' moves, the match ends with `end_reason: "timed_out"`. Bets
-  aren't refunded, as when a paid match ends by a player leaving.
-- There's no background job: the server checks the clock whenever a speed match is read,
-  listed or moved in (so it also works when the slow player closed their browser), inside
+  seat, when several have the turn). The match ends with `end_reason: "timed_out"`;
+  its pot goes to the players who did not hold the turn, split evenly (refunded
+  evenly to everyone only when every player held the turn). Timeouts never create bots.
+- A server timer checks the deadline; reads and moves also check the clock, inside
   the same lock as moves, so a timeout happens exactly once. A move after the deadline
   is rejected with 409 `your time to move ran out` (code `turn_time_ran_out`), also when
   it comes later from an offline queue.
 - Matches return `turn_seconds`, `turn_deadline` (when the human seats with the turn run
   out of time, or `null`), `server_time` (to show a countdown even if the device's clock
   is off) and `timeouts` (`[{player_index, user_id, at}]`, the seats that ran out of time).
-- Push notifications: the player who timed out gets "Time ran out in {game}: a computer
-  took over your seat"; when the match ends instead, every human player gets "{game}
-  ended: time ran out".
+- Push notifications tell the human players that the match ended because time ran out.
 - Games see a timed-out ending as `end_reason: "player_left"` in `state_changed` (see
   [Game API](#game-api)), so the Game API is unchanged.
 
-### Matchmaking, private matches and invites
+### Public matches and invites
 
-- **Quick match** (`POST /matchmaking/quick-match`) finds random opponents: it seats
-  you in the oldest public quick match of that game (same game version) waiting for
-  players, or creates one for others to find. `num_players` defaults to the game's
-  smallest player count above one; each count is its own queue. When the last player
-  joins, the match starts by itself, exactly like the portal's Start button (seat 0
-  moves first and the game creates its initial state), and seat 0 gets a "your turn"
-  push. Asking again while waiting returns the same match. To cancel, the owner
-  deletes the match and anyone else leaves it.
-- **Private matches** (`private: true` on `POST /matches`) never appear in
-  `GET /matches/open` or matchmaking, are a 404 to anyone not in
-  them, and `POST /matches/{id}/join` refuses outsiders (403). Invites are the way in.
+All matches can be opened directly through their match link. The portal lists your
+own matches and invitations; it does not offer open-match discovery or random matchmaking.
+
 - **Invites** are links of the form `<public_base_url>/portal#invite=<token>`, also
   served as a QR code at `/invites/{token}/qr.svg`. The 16-character token is the
   secret (96 random bits), so anyone holding the link can see the match and take a
   seat. Any player in the match can create one, optionally expiring
   (`expires_in_seconds`, 60s to 30 days) or limited (`max_uses`). A link stops seating
-  people when it's revoked, expired, used up, or the match is over;
-  revoked, expired and used-up links also stop exposing private matches (404).
-  Seated players continue through their authenticated match endpoints.
-  Other unusable links report `usable: false` from `GET /invites/{token}` with a localized
+  people when it's revoked, expired, used up, or the match is over.
+  Unusable links report `usable: false` from `GET /invites/{token}` with a localized
   `unusable_reason` and a stable `unusable_code`. Deleting a match deletes its invites.
 - **Referrals**: every match invite records how often it was opened (`views`) and who
   took a seat with it (`acceptances`). A newcomer who signs up with
@@ -908,9 +887,9 @@ Once the server is running, open these pages in a browser:
   a texted or emailed code, or as a guest — and switch between accounts, log
   out, or link more logins to your account from the account menu (see [Third-party
   login](#third-party-login)). The left side lists your matches (your move, ongoing,
-  waiting for players, over), a form to create a match for any game with some computer
-  opponents, and open matches you can join. The selected match shows its players and
-  the actions you can take (join, add or remove computers and start if you own it,
+  waiting for players, over) and invitations. Create a public match for friends on
+  a game's page, or practice locally against computers. The selected match shows
+  its players and the actions you can take (join and start if you own it,
   leave, delete or hide), and renders its declarative scene with platform-owned
   boards, pieces and controls. The page polls for other players' moves. Links like
   `/portal#match=<id>` open a match directly, also for people who aren't playing in it.
@@ -1061,9 +1040,9 @@ New HTML submissions, matches and rematches are rejected. See
 
 Every game has `server_code` (the server-side Game API, specified in
 `docs/server-side-game-api.md`): plain JavaScript the server runs authoritatively —
-it holds the state and the rules, validates every move, and moves computer opponents
-itself. The client then only renders the view the server sends it. A game cannot be
-created without server code.
+it holds the state and the rules and validates every online move. The client
+then only renders the view the server sends it. A game cannot be created without
+server code.
 
 ### `state_changed`: platform to game
 
@@ -1093,14 +1072,14 @@ joining or leaving, the match ending), and again if a move the game sent was rej
 |-------|---------|
 | `state` | The viewer's view of the match state: what the server code's `viewFor` returned for them (`null` for spectators). The full state never leaves the server |
 | `view` | The same view as `state`, carried under its own name: a client renders this and keeps no state of its own |
-| `players` | Every seat, in order. `kind` is `"human"` or `"computer"`; `player_id` is the user's id for humans and `computer-1`, ... for computers. Seats can change kind when players leave or join, and seats can be added mid-match |
+| `players` | Every seat, in order. Online seats have `kind: "human"` and the user's `player_id`; local practice and legacy matches may also have `"computer"` seats. Departed seats keep their index and become inactive; seats can be added mid-match where the game allows it |
 | `turn_of_player_indices` | The seats that may move next; `null` once the match is over |
 | `status` | `"ongoing"` or `"over"` (games aren't loaded while a match waits for players) |
 | `end_reason` | When over: `"finished"` (a move ended it) or `"player_left"` |
 | `move_count` | How many moves were made |
 | `token_pot` | The match's token pot (see [Match rules](#match-rules)) |
 | `my_player_index` | The viewer's seat, to decide what to show (e.g. whose cards). `null` for spectators |
-| `acting_for_player_index` | The seat this game should make the next move for, or `null` if it must wait. It is only ever the viewer's own seat — the server moves computers itself |
+| `acting_for_player_index` | The seat this game should make the next move for, or `null` if it must wait. In online matches it is only ever the viewer's own seat |
 
 ### `make_move`: game to platform
 
@@ -1138,17 +1117,17 @@ For compatibility, `state_changed` still carries the legacy `turn_of_player_inde
 
 The server code holds the rules: see `docs/server-side-game-api.md` for the
 contract (deterministic logic, `viewFor` views so secrets never leave the server,
-computers moved by the server, token payouts). In short:
+and token payouts).
 
-- **Computers are moved by the server.** The game's `computerMove` supplies their
-  moves, whether or not any human is online; no client ever moves for another seat.
+- **Online players are human.** The game's `computerMove` is used by local
+  computer practice and server-side validation walks.
 - **Randomness comes from `ctx.random`.** The server seeds it per call, so every
   call is reproducible and a match replays exactly.
 - **The state is private.** Only `viewFor` views ever leave the server, so hidden
   information (like poker hands) stays hidden.
 - **Handle seat changes.** Games that allow leaving or joining mid-match implement
-  `playerLeft` / `playerJoined`; a player who leaves an ongoing match is replaced
-  by a computer seat where the game allows it.
+  `playerLeft` / `playerJoined`; a player who leaves keeps their seat index and
+  becomes inactive.
 
 ### Example games
 
@@ -1173,8 +1152,8 @@ python -m game_platform.example_data                  # applies them; writes dat
 
 Every operation runs through `GamePlatform` and the games' real server logic, so
 an illegal move fails the build instead of producing a state the game cannot
-continue from; ids, passwords and timestamps are fixed, and computer opponents
-move synchronously, so the output is the same on every run.
+continue from; human players' moves, ids, passwords and timestamps are fixed,
+so the output is the same on every run.
 
 ## Testing
 

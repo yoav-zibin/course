@@ -108,17 +108,6 @@ def test_finished_match_list_carries_the_result_without_the_state(api: Api) -> N
     assert detail["state"] == {"winner": 0}
 
 
-def test_open_match_list_omits_state(api: Api) -> None:
-    owner = api.new_user("owner")
-    game_id = api.new_game(owner=owner, allowed_player_counts=(2, 3))
-    match_id = api.new_match(game_id=game_id, owner=owner)
-
-    matches = api.client.get("/matches/open").json()
-    item = next(match for match in matches if match["id"] == match_id)
-    assert "state" not in item
-    assert item["status"] == "waiting_for_players"
-
-
 def test_server_game_list_ships_no_view_and_detail_keeps_views(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = _create_game(api, alice)

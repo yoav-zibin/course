@@ -65,13 +65,9 @@ def run(project, database):
         ("/v2/builder/games", alice),
         ("/v2/matches", alice),
         ("/v2/matches?status=over&game_id=" + game, alice),
-        ("/v2/matches/open", None),
         (f"/v2/matches/{match}/history?limit=1", bob),
     ]:
         api.ok("GET", path, as_user=user)
-    quick_game = api.new_game(owner=alice)
-    first = second.quick_match(caller_id=alice, game_id=quick_game)
-    assert second.quick_match(caller_id=bob, game_id=quick_game).id == first.id
     seed(
         store,
         run_id="cloud-capacity-100",

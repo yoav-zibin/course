@@ -6,7 +6,7 @@ const headers=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password}
 async function sharedLobby(request:APIRequestContext) {
   const host=await createUser(request,uniqueName('Leave host')),guest=await createUser(request,uniqueName('Leave guest'));
   const name=uniqueName('Leave game'),gameId=await createGame(request,name);
-  const created=await request.post('/matches',{headers:headers(host),data:{game_id:gameId,num_computer_opponents:0,private:true}});
+  const created=await request.post('/matches',{headers:headers(host),data:{game_id:gameId}});
   expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
   const invitation=await request.post(`/matches/${match.id}/invites`,{headers:headers(host),data:{}});
   expect(invitation.ok(),await invitation.text()).toBeTruthy();const invite=await invitation.json();

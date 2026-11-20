@@ -665,15 +665,6 @@
     "hi": "इतिहास का यह दृश्य पूरा नहीं दिख सका। कृपया एक-एक चाल करके देखें।",
     "ar": "تعذّر إكمال عرض هذه الخطوة من السجل. جرّب التنقل يدويًا."
   },
-  "Invite only": {
-    "es": "Partida privada",
-    "fr": "Partie privée",
-    "de": "Private Partie",
-    "pt": "Partida privada",
-    "zh": "私人对局",
-    "hi": "निजी मैच",
-    "ar": "مباراة خاصة"
-  },
   "Public match": {
     "es": "Partida pública",
     "fr": "Partie publique",
@@ -899,24 +890,6 @@
     "hi": "गेम शुरू करें",
     "ar": "ابدأ اللعبة"
   },
-  "Add a computer": {
-    "es": "Añadir oponente computadora",
-    "fr": "Ajouter un adversaire ordinateur",
-    "de": "Computergegner hinzufügen",
-    "pt": "Adicionar oponente computador",
-    "zh": "添加电脑对手",
-    "hi": "कंप्यूटर प्रतिद्वंद्वी जोड़ें",
-    "ar": "إضافة خصم حاسوبي"
-  },
-  "Remove a computer": {
-    "es": "Quitar computadora",
-    "fr": "Retirer l'ordinateur",
-    "de": "Computer entfernen",
-    "pt": "Remover computador",
-    "zh": "移除电脑",
-    "hi": "कंप्यूटर हटाएँ",
-    "ar": "إزالة الحاسوب"
-  },
   "Share match": {
     "es": "Compartir partida",
     "fr": "Partager la partie",
@@ -1141,15 +1114,6 @@
     "zh": "对局邀请二维码",
     "hi": "मैच निमंत्रण का QR कोड",
     "ar": "رمز QR لدعوة المباراة"
-  },
-  "Anyone with this invite can join this private match.": {
-    "es": "Cualquiera que tenga esta invitación puede unirse a la partida privada.",
-    "fr": "Toute personne disposant de cette invitation peut rejoindre cette partie privée.",
-    "de": "Jeder mit dieser Einladung kann der privaten Partie beitreten.",
-    "pt": "Qualquer pessoa com este convite pode entrar na partida privada.",
-    "zh": "持有此邀请的人均可加入这场私人对局。",
-    "hi": "इस निमंत्रण वाला कोई भी व्यक्ति निजी मैच में शामिल हो सकता है।",
-    "ar": "يمكن لأي شخص لديه هذه الدعوة الانضمام إلى المباراة الخاصة."
   },
   "Send the link or scan the QR code to join.": {
     "es": "Envía el enlace o escanea el código QR para unirte.",
@@ -1556,41 +1520,14 @@
     "hi": "ऑनलाइन खेलें",
     "ar": "اللعب عبر الإنترنت"
   },
-  "Create a match for friends or computer opponents. Everyone shares the same match across devices.": {
-    "es": "Prepara a tus oponentes en la sala de espera.",
-    "fr": "Préparez vos adversaires dans le salon.",
-    "de": "Richte deine Gegner in der Lobby ein.",
-    "pt": "Configure seus oponentes no lobby.",
-    "zh": "在大厅里设置你的对手。",
-    "hi": "लॉबी में अपने प्रतिद्वंद्वी तय करें।",
-    "ar": "جهّز خصومك في الردهة."
-  },
-  "Computer opponents": {
-    "es": "Oponentes del ordenador",
-    "fr": "Adversaires ordinateur",
-    "de": "Computergegner",
-    "pt": "Oponentes do computador",
-    "zh": "电脑对手",
-    "hi": "कंप्यूटर प्रतिद्वंद्वी",
-    "ar": "خصوم الكمبيوتر"
-  },
-  "Who can join?": {
-    "es": "¿Quién puede unirse?",
-    "fr": "Qui peut rejoindre ?",
-    "de": "Wer kann beitreten?",
-    "pt": "Quem pode entrar?",
-    "zh": "谁可以加入？",
-    "hi": "कौन शामिल हो सकता है?",
-    "ar": "من يمكنه الانضمام؟"
-  },
-  "Public lobby": {
-    "es": "Sala pública",
-    "fr": "Salon public",
-    "de": "Öffentliche Lobby",
-    "pt": "Sala pública",
-    "zh": "公开房间",
-    "hi": "सार्वजनिक लॉबी",
-    "ar": "غرفة عامة"
+  "Create a match for friends. Everyone shares the same match across devices.": {
+    "es": "Crea una partida para tus amigos. Todos comparten la misma partida en distintos dispositivos.",
+    "fr": "Créez une partie pour vos amis. Tous partagent la même partie sur différents appareils.",
+    "de": "Erstelle eine Partie für Freunde. Alle spielen dieselbe Partie auf verschiedenen Geräten.",
+    "pt": "Crie uma partida para amigos. Todos compartilham a mesma partida em diferentes dispositivos.",
+    "zh": "为朋友创建对局。所有人都可在不同设备上参与同一场对局。",
+    "hi": "दोस्तों के लिए मैच बनाएँ। सभी अलग-अलग डिवाइस पर एक ही मैच खेलते हैं।",
+    "ar": "أنشئ مباراة للأصدقاء. يشارك الجميع في المباراة نفسها عبر أجهزتهم."
   },
   "Tokens per person": {
     "es": "Entrada por jugador",
@@ -1645,15 +1582,6 @@
     "zh": "创建对局 ↗",
     "hi": "मैच बनाएँ ↗",
     "ar": "إنشاء مباراة ↗"
-  },
-  "Find an open match": {
-    "es": "Encontrar una partida abierta",
-    "fr": "Trouver une partie ouverte",
-    "de": "Offene Partie finden",
-    "pt": "Encontrar uma partida aberta",
-    "zh": "查找开放对局",
-    "hi": "खुला मैच खोजें",
-    "ar": "البحث عن مباراة مفتوحة"
   },
   "Play on this device": {
     "es": "Jugar en este dispositivo ↗",
@@ -1754,15 +1682,6 @@
     "hi": "चालें",
     "ar": "نقلات"
   },
-  " · Invite only": {
-    "es": " · Solo con invitación",
-    "fr": " · Sur invitation uniquement",
-    "de": " · Nur mit Einladung",
-    "pt": " · Somente por convite",
-    "zh": " · 仅限邀请",
-    "hi": " · केवल निमंत्रण से",
-    "ar": " · بالدعوة فقط"
-  },
   " · {v0} min per move": {
     "es": " · {v0} min por jugada",
     "fr": " · {v0} min par coup",
@@ -1790,14 +1709,14 @@
     "hi": "छिपाएँ",
     "ar": "إخفاء"
   },
-  "Jump back into a game or find a new lobby.": {
-    "es": "Vuelve a una partida o encuentra una sala nueva.",
-    "fr": "Reprenez une partie ou trouvez un nouveau salon.",
-    "de": "Steige wieder in ein Spiel ein oder finde eine neue Lobby.",
-    "pt": "Volte a um jogo ou encontre uma nova sala.",
-    "zh": "回到一局游戏，或寻找新的大厅。",
-    "hi": "किसी खेल में लौटें या नया लॉबी खोजें।",
-    "ar": "عد إلى لعبة أو ابحث عن ردهة جديدة."
+  "Jump back into your matches or open an invitation.": {
+    "es": "Vuelve a tus partidas o abre una invitación.",
+    "fr": "Reprenez vos parties ou ouvrez une invitation.",
+    "de": "Kehre zu deinen Partien zurück oder öffne eine Einladung.",
+    "pt": "Volte às suas partidas ou abra um convite.",
+    "zh": "返回你的对局或打开邀请。",
+    "hi": "अपने मैचों में लौटें या निमंत्रण खोलें।",
+    "ar": "عد إلى مبارياتك أو افتح دعوة."
   },
   "Log in to see your matches": {
     "es": "Iniciar sesión",
@@ -1843,33 +1762,6 @@
     "zh": "加载更多对局",
     "hi": "और मैच लोड करें",
     "ar": "تحميل المزيد من المباريات"
-  },
-  "Open matches you can join": {
-    "es": "Partidas abiertas a las que puedes unirte",
-    "fr": "Parties ouvertes que vous pouvez rejoindre",
-    "de": "Offene Partien, denen du beitreten kannst",
-    "pt": "Partidas abertas em que você pode entrar",
-    "zh": "可以加入的公开对局",
-    "hi": "खुले मैच जिनमें आप शामिल हो सकते हैं",
-    "ar": "مباريات مفتوحة يمكنك الانضمام إليها"
-  },
-  "No open matches right now. Create a public match to invite someone.": {
-    "es": "No hay partidas abiertas ahora. Crea una partida pública para invitar a alguien.",
-    "fr": "Aucune partie ouverte pour le moment. Créez une partie publique pour inviter quelqu’un.",
-    "de": "Zurzeit gibt es keine offenen Partien. Erstelle eine öffentliche Partie, um jemanden einzuladen.",
-    "pt": "Nenhuma partida aberta agora. Crie uma partida pública para convidar alguém.",
-    "zh": "目前没有开放对局。创建公开对局来邀请其他人吧。",
-    "hi": "अभी कोई खुला मैच नहीं है। किसी को बुलाने के लिए सार्वजनिक मैच बनाएँ।",
-    "ar": "لا توجد مباريات مفتوحة حاليًا. أنشئ مباراة عامة لدعوة الآخرين."
-  },
-  "Load more open matches": {
-    "es": "Cargar más partidas abiertas",
-    "fr": "Charger plus de parties ouvertes",
-    "de": "Weitere offene Partien laden",
-    "pt": "Carregar mais partidas abertas",
-    "zh": "加载更多开放对局",
-    "hi": "और खुले मैच लोड करें",
-    "ar": "تحميل المزيد من المباريات المفتوحة"
   },
   "Local games are saved here, including after you close the app. Download a game once to play without internet.": {
     "es": "Las partidas locales se guardan aquí, incluso después de cerrar la aplicación. Descarga un juego una vez para jugar sin internet.",
@@ -1952,14 +1844,14 @@
     "hi": "सुरक्षित रखा डेटा कॉपी करें",
     "ar": "نسخ البيانات المحفوظة"
   },
-  "Invite links let friends join a match, including invite-only matches.": {
-    "es": "Los enlaces de invitación permiten a tus amigos unirse a una partida, incluso si es privada.",
-    "fr": "Les liens d’invitation permettent à vos amis de rejoindre une partie, même privée.",
-    "de": "Über Einladungslinks können Freunde einer Partie beitreten, auch wenn sie nur auf Einladung zugänglich ist.",
-    "pt": "Links de convite permitem que amigos entrem em partidas, inclusive nas privadas.",
-    "zh": "朋友可通过邀请链接加入对局，包括仅限邀请的私人对局。",
-    "hi": "निमंत्रण लिंक से मित्र मैच में शामिल हो सकते हैं, निजी मैच में भी।",
-    "ar": "تتيح روابط الدعوة للأصدقاء الانضمام إلى مباراة، حتى إن كانت خاصة."
+  "Invite links let friends join a match.": {
+    "es": "Los enlaces de invitación permiten a tus amigos unirse a una partida.",
+    "fr": "Les liens d’invitation permettent à vos amis de rejoindre une partie.",
+    "de": "Über Einladungslinks können Freunde einer Partie beitreten.",
+    "pt": "Links de convite permitem que amigos entrem em uma partida.",
+    "zh": "朋友可通过邀请链接加入对局。",
+    "hi": "निमंत्रण लिंक से मित्र मैच में शामिल हो सकते हैं।",
+    "ar": "تتيح روابط الدعوة للأصدقاء الانضمام إلى مباراة."
   },
   "Log in to use an invite": {
     "es": "Inicia sesión para usar una invitación",

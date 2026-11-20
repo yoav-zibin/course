@@ -119,12 +119,12 @@ def test_a_merged_away_account_is_still_yourself(api: Api) -> None:
     assert send(api, bob, "user", ann_old).json()["target_id"] == ann
 
 
-def test_a_private_match_you_cant_see_cant_get_feedback(api: Api) -> None:
+def test_any_public_match_can_receive_feedback(api: Api) -> None:
     ann, bob, cy = api.new_user("ann"), api.new_user("bob"), api.new_user("cy")
     game = api.new_game(owner=bob)
-    private = api.ok("POST", "/matches", as_user=bob, json={"game_id": game, "private": True})["id"]
-    assert error(send(api, cy, "match", private)) == (400, "there is no such user, game or match")
-    assert send(api, bob, "match", private).status_code == 201
+    match_id = api.ok("POST", "/matches", as_user=bob, json={"game_id": game})["id"]
+    assert send(api, cy, "match", match_id).status_code == 201
+    assert send(api, bob, "match", match_id).status_code == 201
 
 
 # Limits

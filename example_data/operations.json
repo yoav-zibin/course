@@ -61,8 +61,7 @@
     "op": "create_match",
     "id": "ttt-ongoing",
     "as": "user1",
-    "game": "tictactoe",
-    "num_computer_opponents": 0
+    "game": "tictactoe"
   },
   {
     "op": "join",
@@ -86,8 +85,7 @@
     "op": "create_match",
     "id": "ttt-x-won",
     "as": "user2",
-    "game": "tictactoe",
-    "num_computer_opponents": 0
+    "game": "tictactoe"
   },
   {
     "op": "join",
@@ -143,8 +141,7 @@
     "op": "create_match",
     "id": "ttt-draw",
     "as": "user5",
-    "game": "tictactoe",
-    "num_computer_opponents": 0
+    "game": "tictactoe"
   },
   {
     "op": "join",
@@ -232,8 +229,7 @@
     "op": "create_match",
     "id": "nim-ongoing",
     "as": "user3",
-    "game": "nim",
-    "num_computer_opponents": 0
+    "game": "nim"
   },
   {
     "op": "join",
@@ -265,14 +261,17 @@
     "op": "create_match",
     "id": "ttt-waiting",
     "as": "user4",
-    "game": "tictactoe",
-    "num_computer_opponents": 0
+    "game": "tictactoe"
   },
   {
     "op": "create_match",
     "id": "ttt-ready",
     "as": "user8",
-    "game": "tictactoe",
-    "num_computer_opponents": 1
+    "game": "tictactoe"
+  },
+  {
+    "op": "join",
+    "as": "user6",
+    "match": "ttt-ready"
   }
 ]

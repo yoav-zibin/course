@@ -1032,15 +1032,6 @@ class QueryStore:
                     {"json": MOVE_ADAPTER.dump_json(move).decode()},
                 )
             participants = sorted({match.owner_user_id, *match.human_user_ids})
-            game = self.get_game_version(match.game_id, match.game_version)
-            joinable = not match.private and not match.num_computer_opponents and (
-                match.status == "waiting_for_players"
-                or (
-                    match.status == "ongoing"
-                    and game is not None
-                    and game.rules.allows_join_mid_match
-                )
-            )
             self._put(
                 "matches",
                 match.id,
@@ -1059,9 +1050,6 @@ class QueryStore:
                 visible_to=[
                     u for u in participants if u not in match.hidden_for_user_ids
                 ],
-                private=match.private,
-                joinable=joinable,
-                matchmaking_player_count=match.matchmaking_player_count,
             )
 
     def get_match(self, match_id):
@@ -1094,11 +1082,6 @@ class QueryStore:
                 # which made this test flaky: the two matches' ids sorted
                 # the other way round).
                 return sorted(matches, key=lambda m: m.created_at)
-
-    def list_matches_by_status(self, status):
-        """Every match with [status], read in bounded pages; scalable clients
-        that only need a page use the paged v2 API instead."""
-        return self._list_all("matches", [("status", "==", status)])
 
     def list_all_matches(self):
         return self._list("matches")

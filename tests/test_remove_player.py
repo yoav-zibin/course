@@ -128,16 +128,3 @@ def test_only_the_owner_can_remove_and_only_before_the_start() -> None:
         409,
         "players can only be removed before the match starts",
     )
-
-
-def test_quick_matches_have_no_removal() -> None:
-    api = Api()
-    alice, bob = api.new_user("alice"), api.new_user("bob")
-    game_id = api.new_game(owner=alice, allowed_player_counts=(3,))
-    match = api.ok("POST", "/matchmaking/quick-match", as_user=alice, json={"game_id": game_id})
-    api.ok("POST", "/matchmaking/quick-match", as_user=bob, json={"game_id": game_id})
-    response = remove(api, match["id"], bob, as_user=alice)
-    assert (response.status_code, response.json()["detail"]) == (
-        409,
-        "players can't be removed from a quick match",
-    )

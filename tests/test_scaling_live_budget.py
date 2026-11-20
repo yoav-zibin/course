@@ -1,3 +1,4 @@
+from game_platform.tests.helpers import legacy_computer_match
 import datetime as dt
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
@@ -144,8 +145,9 @@ def test_real_sdk_and_event_driven_worker_use_budgeted_emulator(tmp_path):
     catalog = copy_catalog(store, run_id="demo", copies=1, now=platform._clock())
     game = next(x["id"] for x in catalog if x["kind"] == "tictactoe")
     match = platform.create_match(
-        caller_id=alice.id, game_id=game, num_computer_opponents=1
+        caller_id=alice.id, game_id=game
     )
+    match = legacy_computer_match(platform, match, 1)
     platform.start_match(caller_id=alice.id, match_id=match.id)
     platform.resume_computer_moves()
     try:

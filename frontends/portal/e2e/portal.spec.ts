@@ -90,17 +90,34 @@ test('empty fitted board space permits native touch scrolling and retains real p
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeAttached();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
 });
 
-test('a newly created match stays selected after reloading a game detail link',async({page,request})=>{
+test('online matches have human-only public controls and stay selected after reload',async({page,request})=>{
   const user=await account(request,'Reload player'),created=await game(request,uniqueName('Reload game'));
   await restore(page,user);await page.goto(`/portal#game=${created.id}`);
+  await expect(page.getByText('Computer opponents',{exact:true})).toHaveCount(0);
+  await expect(page.getByText('Who can join?',{exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Find an open match',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Practice with computers',exact:true})).toBeVisible();
+  const creation=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/matches');
   await page.getByRole('button',{name:/^Create match/}).click();
+  expect((await creation).postDataJSON()).toEqual({game_id:created.id,bet_per_player:0,turn_seconds:null});
   await expect(page.getByRole('button',{name:'Share match',exact:true})).toBeVisible();
   await expect(page).toHaveURL(/#match=/);
+  await expect(page.getByText('Public match',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Add a computer',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Remove a computer',exact:true})).toHaveCount(0);
   const current=new URL(page.url()),selected=new URLSearchParams(current.hash.slice(1)).get('match');
+  const state=await (await request.get(`/matches/${selected}`)).json();
+  expect(state.players).toHaveLength(1);expect(state.players[0].kind).toBe('human');
+  expect(state).not.toHaveProperty('private');
   const resumed=page.waitForResponse(response=>new URL(response.url()).pathname===(selected?`/matches/${selected}`:`/games/${created.id}`));
   await page.reload();
   await resumed;
   await expect(page.getByRole('button',{name:'Share match',exact:true})).toBeVisible();
+  const opened:string[]=[];page.on('request',request=>opened.push(new URL(request.url()).pathname));
+  await page.goto('/portal#matches');
+  await expect(page.getByText('Open matches you can join',{exact:true})).toHaveCount(0);
+  await expect(page.getByText('No open matches right now. Create a public match to invite someone.',{exact:true})).toHaveCount(0);
+  expect(opened).not.toContain('/matches/open');expect(opened).not.toContain('/v2/matches/open');
 });
 
 test('browser Back from a local match restores its game detail screen and play controls',async({page,request})=>{
@@ -324,10 +341,10 @@ test('a genuinely finished local draw stays translated offline in detail and mat
   await page.goto('/portal#local');await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
 });
 
-test('private invitation survives guest sign-in and creates a usable shared link and QR code',async({page,request})=>{
+test('invitation survives guest sign-in and creates a usable shared link and QR code',async({page,request})=>{
   test.setTimeout(120000);
   const owner=await account(request,'Invite host'),created=await game(request,`Shared invite ${Date.now()}`),headers={'X-User-Id':owner.id,'X-User-Password':owner.password};
-  const response=await request.post('/matches',{headers,data:{game_id:created.id,num_computer_opponents:0,private:true}});expect(response.ok()).toBeTruthy();const match=await response.json();
+  const response=await request.post('/matches',{headers,data:{game_id:created.id}});expect(response.ok()).toBeTruthy();const match=await response.json();
   const inviteResponse=await request.post(`/matches/${match.id}/invites`,{headers,data:{}});expect(inviteResponse.ok()).toBeTruthy();const invite=await inviteResponse.json();
   await page.goto(`/portal#invite=${invite.token}`);await page.getByRole('button',{name:'Log in to join',exact:true}).click();
   await page.getByRole('textbox',{name:/Your name|Display name/}).fill('Invited guest');await page.getByRole('button',{name:'Continue as guest',exact:true}).click();
@@ -346,7 +363,7 @@ test('two browser players share turns, a lost reply cannot duplicate a move, and
   test.setTimeout(120000);
   const a=await account(request,'Shared Alice'),b=await account(request,'Shared Bob');
   const created=await game(request,`Shared cross-device ${Date.now()}`),headers={'X-User-Id':a.id,'X-User-Password':a.password};
-  const response=await request.post('/matches',{headers,data:{game_id:created.id,num_computer_opponents:0}});expect(response.ok()).toBeTruthy();const match=await response.json();
+  const response=await request.post('/matches',{headers,data:{game_id:created.id}});expect(response.ok()).toBeTruthy();const match=await response.json();
   await restore(page,a);await page.goto(`/portal#match=${match.id}`);
   const partner=await browser.newContext({baseURL});const bob=await partner.newPage();await restore(bob,b);await bob.goto(`/portal#match=${match.id}`);
   await bob.getByRole('button',{name:'Join match',exact:true}).click();

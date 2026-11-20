@@ -2,8 +2,8 @@
 
 Fake users that use the game platform's **real website** like people do: each one opens the
 portal in its own headless Chromium browser context, signs up as a guest, starts or joins
-matches (against computers, with a friend through an invite link, or a quick match with random
-opponents), plays with random clicks, sometimes leaves, and goes. It never calls the REST API
+public matches with a friend through an invite link, plays with random clicks, sometimes
+leaves, and goes. It never calls the REST API
 itself and never uses the builder or the AI agent.
 
 Other teams use it to put realistic load on a server: to show auto-scaling, and to trigger
@@ -62,7 +62,6 @@ All of these can change on the control page while running (the starting values a
 | `max_users` | At most this many fake users at once (also capped by memory) |
 | `users_per_hour` | How often a new fake user arrives, on average (random gaps, like real visitors) |
 | `think_min_seconds`, `think_max_seconds` | The random pause between actions |
-| `mix_vs_computer`, `mix_with_friends`, `mix_quick_match` | How new matches are made, in percent (adds up to 100) |
 | `speed_match_percent` | Percent of created matches that are Speed matches (1 minute per move) |
 | `invite_link_percent` | Percent of new fake users who arrive through another fake user's `/r/<code>` link |
 | `leave_probability` | Chance of leaving the match after each move |
@@ -72,10 +71,9 @@ All of these can change on the control page while running (the starting values a
 | `lobby_wait_seconds` | How long a lobby owner waits for people before trying to start or deleting an unfilled lobby |
 | `skip_games` | Game names never chosen (the debug game accepts any typed move) |
 
-Against computers, a fake user picks a player count on the game's page and presses **Play
-with computers**; the match starts right away. With friends, the host presses **Invite
-friends** and the copied link goes to another fake user (counting toward `max_users`). A
-lobby can't take computers, so a host whose lobby nobody joins deletes it.
+The host creates a public match, then presses **Invite friends**. The copied link
+goes to another fake user (counting toward `max_users`). All online players are
+humans; a host whose lobby nobody joins deletes it.
 
 A new fake user arrives at the portal logged out, so the portal sends them to its welcome
 page; they continue as a guest there and come back.
@@ -87,9 +85,6 @@ actions: board targets, scene buttons, or a movable piece followed by an allowed
 They watch the portal's own view of the match for a new move. After `move_tries` clicks without one, they
 count "couldn't move" and leave. They never type and never click outside the game, except the
 portal's own controls.
-
-Quick match uses the portal's **Random** card, which picks any game; a fake user backs out of a
-game on the skip list (counted as "skipped games").
 
 ## The health page
 

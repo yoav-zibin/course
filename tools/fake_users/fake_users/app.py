@@ -145,14 +145,9 @@ CONTROL_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
     <label>Speed matches (%)<input id="speed_match_percent" name="speed_match_percent" type="number" min="0" max="100"></label>
     <label>Arrive by invite link (%)<input id="invite_link_percent" name="invite_link_percent" type="number" min="0" max="100"></label>
     <label>Clicks before "couldn't move"<input id="move_tries" name="move_tries" type="number" min="1"></label>
-    <label>Lobby wait before adding a computer (s)<input id="lobby_wait_seconds" name="lobby_wait_seconds" type="number" min="0" step="any"></label>
+    <label>Lobby wait for invited players (s)<input id="lobby_wait_seconds" name="lobby_wait_seconds" type="number" min="0" step="any"></label>
     <label>Games to skip (comma-separated)<input id="skip_games" name="skip_games"></label>
   </div>
-  <fieldset><legend>Match mix (%, must add up to 100)</legend><div class="grid">
-    <label>Against computers<input id="mix_vs_computer" name="mix_vs_computer" type="number" min="0" max="100"></label>
-    <label>With friends (invite link)<input id="mix_with_friends" name="mix_with_friends" type="number" min="0" max="100"></label>
-    <label>Quick match (random opponents)<input id="mix_quick_match" name="mix_quick_match" type="number" min="0" max="100"></label>
-  </div></fieldset>
   <div class="row" style="margin-top:12px"><button class="solid" type="submit">Apply changes</button><span class="lbl">Changes apply right away, also while running.</span></div>
 </form>
 </main><script>
@@ -190,7 +185,7 @@ const TILES = [
   ['accounts_created', 'accounts created'], ['referral_signups', 'signed up through a link'],
   ['matches_created', 'matches created'], ['matches_joined', 'matches joined'], ['matches_finished', 'matches finished'],
   ['speed_matches', 'speed matches'], ['moves', 'moves made'], ['leaves', 'left a match'],
-  ['couldnt_move', "couldn't move"], ['skipped_games', 'skipped games (quick match)'], ['errors', 'errors'], ['median', 'portal median (ms)'], ['p95', 'portal p95 (ms)'],
+  ['couldnt_move', "couldn't move"], ['errors', 'errors'], ['median', 'portal median (ms)'], ['p95', 'portal p95 (ms)'],
 ];
 // A table row; each cell is text, {text, cls, span}, {href, text} (a link) or {tag, cls}.
 function row(cells) {

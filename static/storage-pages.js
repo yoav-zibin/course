@@ -2,12 +2,11 @@
 // One page per query is retained. Polling refreshes that page, never the catalog.
 window.StoragePages = (() => {
   let capabilities;
-  // The in-flight capabilities fetch, so concurrent first calls (the three
-  // catalog lists in one refresh) share one request instead of each firing
-  // their own. Cleared on failure so a later call retries.
+  // The in-flight capabilities fetch lets concurrent first calls share one
+  // request. Cleared on failure so a later call retries.
   let capabilitiesPromise;
   const entries = new Map();
-  const supported = new Set(["/games", "/matches", "/matches/open"]);
+  const supported = new Set(["/games", "/matches"]);
   async function enabled() {
     if (capabilities !== undefined) return capabilities;
     if (!capabilitiesPromise) {

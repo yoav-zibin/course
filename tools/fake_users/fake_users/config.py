@@ -36,10 +36,6 @@ class Settings:
     # Think time between actions, in seconds (random between the two).
     think_min_seconds: float = 1.0
     think_max_seconds: float = 4.0
-    # How new matches are made, in percent (must add up to 100).
-    mix_vs_computer: int = 50
-    mix_with_friends: int = 30
-    mix_quick_match: int = 20
     # Percent of the matches a fake user creates that are Speed matches (1 min per move).
     speed_match_percent: int = 20
     # Percent of new fake users who arrive through another fake user's invite link.
@@ -52,18 +48,10 @@ class Settings:
     another_match_probability: float = 0.4
     # Random clicks to try before giving up on a turn ("couldn't move").
     move_tries: int = 12
-    # How long a lobby owner waits for other people before adding a computer.
+    # How long a lobby owner waits for invited people before abandoning a lobby.
     lobby_wait_seconds: float = 45.0
     # Games never chosen by name (the debug game accepts any move).
     skip_games: tuple[str, ...] = ("Debug",)
-
-    @property
-    def mix(self) -> dict[str, int]:
-        return {
-            "vs_computer": self.mix_vs_computer,
-            "with_friends": self.mix_with_friends,
-            "quick_match": self.mix_quick_match,
-        }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -104,9 +92,6 @@ def validate(settings: Settings) -> None:
         problems.append("users_per_hour must be 0 or more")
     if not 0 <= settings.think_min_seconds <= settings.think_max_seconds:
         problems.append("think time must satisfy 0 <= think_min_seconds <= think_max_seconds")
-    mix = settings.mix
-    if any(value < 0 for value in mix.values()) or sum(mix.values()) != 100:
-        problems.append(f"the match mix must be 0 or more and add up to 100 (now {sum(mix.values())})")
     for name in ("speed_match_percent", "invite_link_percent"):
         if not 0 <= getattr(settings, name) <= 100:
             problems.append(f"{name} must be between 0 and 100")

@@ -18,7 +18,7 @@ def test_solo_only_game_cannot_add_a_second_seat(api: Api):
     game = api.new_game(owner=alice, allowed_player_counts=[1])
     match = api.new_match(owner=alice, game_id=game)
     assert error(api.request('POST', f'/matches/{match}/join', as_user=bob)) == (409, 'the match is full')
-    assert api.request('POST', '/matches', as_user=alice, json={'game_id': game, 'num_computer_opponents': 1}).status_code == 400
+    assert api.request('POST', '/matches', as_user=alice, json={'game_id': game, 'num_computer_opponents': 1}).status_code == 422
 
 
 def test_same_game_can_offer_solo_and_multiplayer(api: Api):

@@ -178,11 +178,7 @@ def test_query_portal_pages_filter_html_without_losing_cursor_or_reading_source(
     response = client.get("/legacy/games")
     assert response.status_code == 200
     assert [game["id"] for game in response.json()["items"]] == ["still-html"]
-    # A stale matchmaking reservation must not return a retired pinned version
-    # after the current game has migrated to declarative presentation.
-    store.put_match(replace(old, status="waiting_for_players", token_pot=0))
-    store.raw_put(store.ref("matchmaking", json.dumps(["alice", html.id, 2])),
-                  {"match_id": old.id})
-    replacement = platform.quick_match(caller_id="alice", game_id=html.id)
+    # New matches always use the current declarative version.
+    replacement = platform.create_match(caller_id="alice", game_id=html.id)
     assert replacement.id != old.id
     assert replacement.game_version == 2

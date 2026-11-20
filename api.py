@@ -68,7 +68,6 @@ from game_platform.schemas import (
     MatchOut,
     MatchSummaryOut,
     MatchHistoryOut,
-    MatchUpdate,
     MergeRequest,
     MoveCreate,
     MoveOut,
@@ -80,7 +79,6 @@ from game_platform.schemas import (
     NotificationReadOut,
     PushSubscribe,
     PushSubscriptionOut,
-    QuickMatchRequest,
     ReferralsOut,
     TranslationOut,
     TranslationSet,
@@ -1125,30 +1123,10 @@ def create_match(
     match = platform.create_match(
         caller_id=caller_id,
         game_id=body.game_id,
-        num_computer_opponents=body.num_computer_opponents,
-        private=body.private,
         bet_per_player=body.effective_bet_per_player,
         turn_seconds=body.turn_seconds,
     )
     return _match_out(platform, match, caller_id=caller_id)
-
-
-@router.post("/matchmaking/quick-match")
-def quick_match(
-    platform: Platform, caller_id: CallerId, body: QuickMatchRequest
-) -> MatchOut:
-    """Plays against random opponents: joins the oldest quick match of the game that
-    is waiting for players, or starts a new one for others to join. The match starts
-    by itself once it has all its players; poll it (or wait for the push notification)
-    until its status is "ongoing". Calling again while waiting returns the same match;
-    the owner cancels by deleting it, anyone else by leaving."""
-    return _match_out(
-        platform,
-        platform.quick_match(
-            caller_id=caller_id, game_id=body.game_id, num_players=body.num_players
-        ),
-        caller_id=caller_id,
-    )
 
 
 @router.get("/matches")
@@ -1162,31 +1140,12 @@ def list_matches(
     return [_match_summary_out(platform, match) for match in matches]
 
 
-@router.get("/matches/open")
-def list_open_matches(platform: Platform) -> list[MatchSummaryOut]:
-    """Matches anyone may join: waiting for players, or ongoing with mid-match joins
-    allowed. Public, like match details themselves."""
-    return [_match_summary_out(platform, match) for match in platform.list_open_matches()]
-
-
 @router.get("/matches/{match_id}")
 def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchOut:
     return _match_out(
         platform, platform.get_match(match_id, caller_id=caller_id),
         caller_id=caller_id,
     )
-
-
-@router.patch("/matches/{match_id}")
-def update_match(
-    platform: Platform, caller_id: CallerId, match_id: str, body: MatchUpdate
-) -> MatchOut:
-    match = platform.set_num_computer_opponents(
-        caller_id=caller_id,
-        match_id=match_id,
-        num_computer_opponents=body.num_computer_opponents,
-    )
-    return _match_out(platform, match, caller_id=caller_id)
 
 
 @router.delete("/matches/{match_id}", status_code=HTTPStatus.NO_CONTENT)
@@ -1313,9 +1272,8 @@ def create_invite(
     match_id: str,
     body: InviteCreate | None = None,
 ) -> InviteOut:
-    """Creates a link (and QR code) that lets anyone who has it see the match and
-    take a seat, including in a private match. Any player in the match may create
-    one; who uses it is recorded for the creator's referral stats."""
+    """Creates a link (and QR code) for joining a match. Any player in the match
+    may create one; who uses it is recorded for the creator's referral stats."""
     body = body if body is not None else InviteCreate()
     invite = platform.create_invite(
         caller_id=caller_id,

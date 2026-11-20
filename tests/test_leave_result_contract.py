@@ -86,15 +86,11 @@ def test_bots_cannot_be_added_to_multiplayer_or_joined_via_invite(api):
     game = api.new_game(owner=alice, allowed_player_counts=[2, 3, 4], allows_join_mid_match=True)
     multi = api.new_match(owner=alice, game_id=game, joiners=[bob])
     assert api.request("PATCH", f"/matches/{multi}", as_user=alice,
-                       json={"num_computer_opponents": 1}).status_code == 409
+                       json={"num_computer_opponents": 1}).status_code == 405
     solo = api.new_match(owner=alice, game_id=game, num_computer_opponents=1)
     assert api.request("POST", f"/matches/{solo}/join", as_user=bob).status_code == 409
     invitation = api.ok("POST", f"/matches/{solo}/invites", as_user=alice, json={})
     assert api.request("POST", f"/invites/{invitation['token']}/accept", as_user=bob).status_code == 409
-    assert solo not in [m["id"] for m in api.ok("GET", "/matches/open")]
-    api.ok("PATCH", f"/matches/{solo}", as_user=alice, json={"num_computer_opponents": 0})
-    joined = api.ok("POST", f"/matches/{solo}/join", as_user=bob)
-    assert all(p["kind"] == "human" for p in joined["players"])
 
 
 def test_legacy_mixed_match_ends_and_refunds_once(api):

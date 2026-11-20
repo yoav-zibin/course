@@ -19,11 +19,11 @@ def _invite(api: Api, match_id: str, *, as_user: str, **body: object) -> dict:
     return response.json()
 
 
-def test_an_invite_link_seats_someone_in_a_private_match(api: Api) -> None:
+def test_an_invite_link_seats_someone_in_a_public_match(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice)
     match_id = api.ok(
-        "POST", "/matches", as_user=alice, json={"game_id": game_id, "private": True}
+        "POST", "/matches", as_user=alice, json={"game_id": game_id}
     )["id"]
     invite = _invite(api, match_id, as_user=alice)
     token = invite["token"]

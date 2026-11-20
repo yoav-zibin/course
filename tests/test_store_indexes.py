@@ -31,7 +31,7 @@ def test_linked_account_index_tracks_updates_deletes_and_snapshots() -> None:
     assert restored.get_user_by_linked_account("google", "google-subject") is None
 
 
-def test_match_indexes_track_participants_status_and_snapshots() -> None:
+def test_match_indexes_track_participants_and_snapshots() -> None:
     store = InMemoryStore()
     api = Api(store=store)
     alice, bob, carol = (
@@ -47,11 +47,6 @@ def test_match_indexes_track_participants_status_and_snapshots() -> None:
         first_id,
         second_id,
     ]
-    assert [match.id for match in store.list_matches_by_status("waiting_for_players")] == [
-        first_id,
-        second_id,
-    ]
-
     first = store.get_match(first_id)
     second = store.get_match(second_id)
     assert first is not None and second is not None
@@ -60,13 +55,10 @@ def test_match_indexes_track_participants_status_and_snapshots() -> None:
     )
     store.put_match(replace(second, status="over"))
     assert [match.id for match in store.list_matches_involving(bob)] == [second_id]
-    assert [match.id for match in store.list_matches_by_status("over")] == [second_id]
+    assert store.get_match(second_id).status == "over"
 
     restored = InMemoryStore.of_snapshot(store.snapshot())
     assert [match.id for match in restored.list_matches_involving(bob)] == [second_id]
-    assert [match.id for match in restored.list_matches_by_status("waiting_for_players")] == [
-        first_id,
-    ]
     restored.delete_match(second_id)
     assert restored.list_matches_involving(bob) == []
-    assert restored.list_matches_by_status("over") == []
+    assert restored.get_match(second_id) is None

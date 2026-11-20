@@ -52,9 +52,11 @@ def test_every_published_game_leaves_through_the_shared_api(api, entry, mode):
     api.platform._computer_move_delay_seconds = 3600
     match = api.ok("POST", "/matches", as_user=users[0], json={
         "game_id": game.id, "max_loss": 0 if mode == "solo" else 7,
-        "num_computer_opponents": count - human_count,
     })
     mid = match["id"]
+    if count > human_count:
+        from game_platform.tests.helpers import legacy_computer_match
+        legacy_computer_match(api.platform, api.platform._store.get_match(mid), count - human_count)
     for user in users[1:]:
         api.ok("POST", f"/matches/{mid}/join", as_user=user)
     started = api.ok("POST", f"/matches/{mid}/start", as_user=users[0], json={})

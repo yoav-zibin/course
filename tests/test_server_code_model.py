@@ -117,10 +117,8 @@ def test_match_max_loss_and_player_ids(api: Api):
     assert match["pending_leave_player_id"] is None
     assert match["pending_leave_payout"] is None
 
-    solo = api.ok(
-        "POST", "/matches", as_user=owner,
-        json={"game_id": game["id"], "num_computer_opponents": 1},
-    )
+    solo_id = api.new_match(owner=owner, game_id=game["id"], num_computer_opponents=1)
+    solo = api.ok("GET", f"/matches/{solo_id}", as_user=owner)
     assert [p["id"] for p in solo["players"]] == [owner, "computer-1"]
     assert "seed" not in solo
 

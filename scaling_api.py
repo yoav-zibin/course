@@ -174,34 +174,6 @@ def install(app, *, debug_tools):
         platform.set_saved_game(caller_id=caller_id, game_id=game_id, saved=False)
         return Response(status_code=204)
 
-    @app.get("/v2/matches/open", response_model=CursorPageOut[MatchOut])
-    def open_matches(
-        platform: Platform,
-        limit: int = Query(50, ge=1, le=100),
-        cursor: str | None = None,
-    ):
-        store = store_of(platform)
-        result = page(
-            store,
-            "matches",
-            filters=[("joinable", "==", True)],
-            limit=limit,
-            cursor=cursor,
-            scope="public-open",
-        )
-        # Publication can change after a match is created. Check current metadata
-        # without fetching game source or updating every historical match.
-        items = []
-        for match in result.items:
-            if match.num_computer_opponents:
-                continue
-            game = store.get_game_without_code(match.game_id)
-            pinned = store.get_game_version_without_code(match.game_id, match.game_version)
-            if (game and game.is_declarative and game.published and not game.deleted
-                    and pinned and pinned.is_declarative):
-                items.append(_match_out(platform, match))
-        return {"items": items, "next_cursor": result.next_cursor}
-
     @app.get("/v2/matches", response_model=CursorPageOut[MatchOut])
     def matches(
         platform: Platform,

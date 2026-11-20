@@ -86,8 +86,6 @@ integration tests must pass before upgrading that SDK.
   repeatedly with a stable run ID until complete. Account jobs handle normalized
   libraries. Portal owners should use the versioned API for library UI.
 * `/v2/matches`: authenticated membership; optional status/game filters.
-* `/v2/matches/open`: public joinable matches, including mid-game joins; current
-  game publication is checked before returning a row.
 * `/v2/matches/{id}/history`: authorized, per-player views; `start` and `limit`,
   with `next_start`, `total` and the player's view of the initial state.
 * `/v2/admin/{kind}`: master-password-protected administrative pages when debug
@@ -133,8 +131,8 @@ and do not fetch match histories. Old report retention needs operator cleanup.
 
 `scaling_tools activity --source-writers-stopped --run-id RUN --users 100
 --games 10 --matches 1000 --max-writes 500000` generates a reproducible September
-2026 month through the real service and QuickJS rules. It includes private invites,
-human/computer mixtures, and waiting/ongoing/completed matches. It is an offline
+2026 month through the real service and QuickJS rules. It includes public matches,
+invitations, and waiting/ongoing/completed matches between human players. It is an offline
 historical workload, not browser traffic, and currently uses one synthetic counter
 game family with no stakes or mid-match departures. Each match and its checkpoint
 commit together. Stop destination workers while generating historical jobs. Budget

@@ -234,10 +234,7 @@ def test_leaving_directly_applies_player_left_without_a_preview(api: Api):
 def test_the_last_human_leaving_ends_the_match(api: Api):
     alice = api.new_user("alice")
     game_id = _create_game(api, alice)
-    match = api.ok(
-        "POST", "/matches", as_user=alice,
-        json={"game_id": game_id, "num_computer_opponents": 1},
-    )
+    match = {"id": api.new_match(owner=alice, game_id=game_id, num_computer_opponents=1)}
     api.ok("POST", f"/matches/{match['id']}/start", as_user=alice, json={})
 
     left = api.ok("POST", f"/matches/{match['id']}/leave", as_user=alice)

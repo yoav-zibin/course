@@ -44,6 +44,20 @@ function testRuntime() {
   };
 }
 
+test('refresh completes without requesting retired match discovery endpoints', async()=>{
+  browserStorage();const paths:string[]=[];
+  const restore=mockedFetch(url=>{
+    paths.push(url.pathname);
+    if(['/matches/open','/v2/matches/open','/matchmaking/quick-match'].includes(url.pathname)) throw new Error('Retired match discovery');
+  });
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');await store.actions.refresh();
+    assert.equal(store.getSnapshot().error,null);
+    assert.ok(paths.includes('/games'));
+    assert.ok(!paths.some(path=>path.includes('/matches/open')||path.includes('/quick-match')));
+  }finally{restore();}
+});
+
 for(const signedIn of [false,true])test(`bootstrap releases its initial loading state for ${signedIn?'a saved account':'a visitor'}`,async()=>{
   const saved=browserStorage(),restore=mockedFetch();
   if(signedIn){saved['game-platform.accounts.v1']=JSON.stringify([{id:'alice',password:'synthetic-secret',display_name:'Alice'}]);saved['game-platform.current-account.v1']='alice';}
@@ -509,18 +523,18 @@ test('opening another match never pairs its private view with the previous game 
     assert.equal(store.getSnapshot().game!.id, 'other-game');
   } finally { restore(); }
 });
-for (const operation of ['addBots', 'removePlayer'] as const) test(`a delayed ${operation} response cannot reopen a match after navigation`, async () => {
+test('a delayed removePlayer response cannot reopen a match after navigation', async () => {
   browserStorage(); let release!: (value: any) => void;
   const response = new Promise(resolve => { release = resolve; });
   const match = (id: string) => ({ id, game_id: 'bundled-tictactoe', game_version: 1, players: [], status: 'waiting_for_players', state: null, turn_of_player_indices: [], move_count: 0 });
   const restore = mockedFetch((url, init) => {
-    if (init.method === 'PATCH' || init.method === 'DELETE') return response;
+    if (init.method === 'DELETE') return response;
     if (url.pathname === '/matches/first') return match('first');
     if (url.pathname === '/matches/second') return match('second');
   });
   try {
     const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.selectMatch('first');
-    const pending = operation === 'addBots' ? store.actions.addBots(1) : store.actions.removePlayer('someone');
+    const pending = store.actions.removePlayer('someone');
     await store.actions.selectMatch('second'); release(match('first')); await pending;
     assert.equal(store.getSnapshot().selectedMatch!.id, 'second');
   } finally { restore(); }

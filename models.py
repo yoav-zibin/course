@@ -401,8 +401,7 @@ class Move:
 
 @dataclass(frozen=True, kw_only=True)
 class SeatTimeout:
-    """A human seat in a speed match whose time to move ran out; a computer took it
-    over (or the match ended)."""
+    """A human seat in a speed match whose time to move ran out."""
 
     player_index: int
     user_id: str
@@ -429,16 +428,8 @@ class Match:
     hidden_for_user_ids: frozenset[str]
     created_at: dt.datetime
     updated_at: dt.datetime
-    # A private match is left out of open-match listings and matchmaking, and only
-    # its players and people with an invite link can see or join it. Defaults to
-    # False so older data files load.
-    private: bool = False
     # The match created as a replay of this match, if any.
     rematch_match_id: str | None = None
-    # Set on matches created by matchmaking (a quick match with random opponents):
-    # the number of players it waits for. The match starts by itself when that many
-    # have joined. Defaults to None so older data files load.
-    matchmaking_player_count: int | None = None
 
     # None turn means this legacy match has no recorded starting snapshot.
     initial_state: JsonValue = None
@@ -556,8 +547,7 @@ class InviteAcceptance:
 
 @dataclass(frozen=True, kw_only=True)
 class Invite:
-    """A shareable link (or QR code) to one match. The token is the secret: whoever
-    has it can see the match and take a seat, even in a private match."""
+    """A shareable link (or QR code) for joining a match and tracking referrals."""
 
     token: str
     match_id: str

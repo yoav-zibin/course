@@ -72,7 +72,7 @@ def test_the_example_data_covers_many_match_states() -> None:
         ("ttt-draw", "over", "finished", None, "user5 user6"),
         ("nim-ongoing", "ongoing", None, [0], "user3 user7"),
         ("ttt-waiting", "waiting_for_players", None, None, "user4"),
-        ("ttt-ready", "waiting_for_players", None, None, "user8 cpu"),
+        ("ttt-ready", "waiting_for_players", None, None, "user8 user6"),
     ]
     assert all(game.is_declarative for game in snapshot.game_versions)
     assert all(game.all_state_public for game in snapshot.game_versions)

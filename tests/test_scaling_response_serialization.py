@@ -59,7 +59,6 @@ def paginated_api():
         "/v2/games",
         "/v2/builder/games",
         "/v2/users/me/saved-games",
-        "/v2/matches/open",
         "/v2/matches",
     ],
 )
@@ -69,7 +68,7 @@ def test_pages_keep_encoder_json_without_python_response_traversal(paginated_api
     arguments = {"platform": api.platform, "limit": 1, "cursor": None}
     if path == "/v2/games":
         arguments["q"] = ""
-    elif path not in ("/v2/matches/open", "/v2/builder/games"):
+    elif path != "/v2/builder/games":
         arguments["caller_id"] = owner
     if path == "/v2/matches":
         arguments.update(status=None, game_id=None)
@@ -113,18 +112,16 @@ def test_catalog_alias_preserves_public_visibility_and_shared_cursors(paginated_
     assert [item["id"] for item in api.ok("GET", "/v2/games")["items"]] == [games[1]]
     assert api.ok("GET", "/v2/users/me/saved-games", as_user=other)["items"] == []
     assert [item["id"] for item in api.ok("GET", "/v2/builder/games", as_user=owner)["items"]] == [games[1]]
-    assert api.ok("GET", "/v2/matches/open")["items"] == []
 
 
-def test_match_pages_preserve_private_membership_and_player_state_views(paginated_api):
+def test_match_pages_preserve_membership_and_player_state_views(paginated_api):
     api, store, owner, other, _, _ = paginated_api
     outsider = api.new_user("outsider")
     game_id = api.create_game({
-        "name": "Private counter", "code": "<div></div>",
+        "name": "Counter", "code": "<div></div>",
         "allowed_player_counts": [2], "server_code": COUNTER_GAME,
     }, owner)["id"]
     match_id = api.new_match(owner=owner, game_id=game_id, joiners=[other], start=True)
-    store.put_match(replace(store.get_match(match_id), private=True))
 
     assert api.request("GET", "/v2/matches").status_code == 401
     for caller in (owner, other):
@@ -132,8 +129,9 @@ def test_match_pages_preserve_private_membership_and_player_state_views(paginate
         assert page["next_cursor"] is None
         assert len(page["items"]) == 1
         match = page["items"][0]
-        assert match["id"] == match_id and match["private"] is True
+        assert match["id"] == match_id and "private" not in match
         assert match["state"] == {"count": 0, "your_secret": f"secret-of-{caller}"}
         assert not {"seed", "initial_state", "moves", "pending_leave_state"} & match.keys()
     assert api.ok("GET", "/v2/matches", as_user=outsider)["items"] == []
-    assert match_id not in {item["id"] for item in api.ok("GET", "/v2/matches/open")["items"]}
+    spectator = api.ok("GET", f"/matches/{match_id}", as_user=outsider)
+    assert spectator["state"] == {"count": 0}

@@ -25,7 +25,6 @@ from game_platform.models import (
     Invite,
     LinkedAccountKind,
     Match,
-    MatchStatus,
     Feedback,
     User,
     TokenMovement,
@@ -120,10 +119,6 @@ class Store(Protocol):
 
     def list_matches_for_game(self, game_id: str) -> list[Match]:
         """Matches played with [game_id], oldest first."""
-        ...
-
-    def list_matches_by_status(self, status: MatchStatus) -> list[Match]:
-        """Matches with [status], oldest first."""
         ...
 
     def delete_match(self, match_id: str) -> None: ...
@@ -290,7 +285,6 @@ class InMemoryStore:
         self._deleted_game_ids: set[str] = set()
         self._matches: dict[str, Match] = {}
         self._match_ids_by_user: dict[str, set[str]] = {}
-        self._match_ids_by_status: dict[str, set[str]] = {}
         self._match_order: dict[str, int] = {}
         self._next_match_order = 0
         self._unpublished_game_ids: set[str] = set()
@@ -609,15 +603,9 @@ class InMemoryStore:
                 del self._match_ids_by_user[user_id]
         for user_id in current_users - previous_users:
             self._match_ids_by_user.setdefault(user_id, set()).add(match.id)
-        if previous is not None and previous.status != match.status:
-            match_ids = self._match_ids_by_status[previous.status]
-            match_ids.discard(match.id)
-            if not match_ids:
-                del self._match_ids_by_status[previous.status]
         if previous is None:
             self._match_order[match.id] = self._next_match_order
             self._next_match_order += 1
-        self._match_ids_by_status.setdefault(match.status, set()).add(match.id)
         self._matches[match.id] = match
 
     @staticmethod
@@ -658,20 +646,7 @@ class InMemoryStore:
             match_ids.discard(match_id)
             if not match_ids:
                 del self._match_ids_by_user[user_id]
-        match_ids = self._match_ids_by_status[match.status]
-        match_ids.discard(match_id)
-        if not match_ids:
-            del self._match_ids_by_status[match.status]
         del self._match_order[match_id]
-
-    def list_matches_by_status(self, status: MatchStatus) -> list[Match]:
-        return [
-            self._matches[match_id]
-            for match_id in sorted(
-                self._match_ids_by_status.get(status, ()),
-                key=self._match_order.__getitem__,
-            )
-        ]
 
     def list_all_game_versions(self) -> list[Game]:
         return [

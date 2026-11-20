@@ -18,8 +18,8 @@ import type { Account, AccountData, Game, Match, LocalMatch, ListKind, PortalSta
 export * from './types';
 export { t } from '../platform/i18n';
 
-const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, accounts: [], profile: null, deletionUpdating: false, profiles: {}, authConfig: {}, games: [], popularGames: [], recentGames: [], myMatches: [], openMatches: [], savedGames: [], invites: [], notifications: [], notificationCursor: null, unreadNotifications: 0, notificationPrompt: false, notificationPromptReady: false, localMatches: [], selectedMatch: null, selected: null, selectedGame: null, game: null, selectedGameId: null, history: null, replayIndex: null, pending: 0, conflicts: {}, archived: [], network: isOnline(), loading: false, error: null, storageError: null, locale: 'en', query: '', cursors: {} });
-const listPaths: Record<ListKind, string> = { games: '/games', myMatches: '/matches', openMatches: '/matches/open', savedGames: '/users/me/saved-games', invites: '/users/me/invites' };
+const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, accounts: [], profile: null, deletionUpdating: false, profiles: {}, authConfig: {}, games: [], popularGames: [], recentGames: [], myMatches: [], savedGames: [], invites: [], notifications: [], notificationCursor: null, unreadNotifications: 0, notificationPrompt: false, notificationPromptReady: false, localMatches: [], selectedMatch: null, selected: null, selectedGame: null, game: null, selectedGameId: null, history: null, replayIndex: null, pending: 0, conflicts: {}, archived: [], network: isOnline(), loading: false, error: null, storageError: null, locale: 'en', query: '', cursors: {} });
+const listPaths: Record<ListKind, string> = { games: '/games', myMatches: '/matches', savedGames: '/users/me/saved-games', invites: '/users/me/invites' };
 const unique = <T extends { id?: string; token?: string }>(values: T[]): T[] => [...new Map(values.map(v => [v.id || v.token, v])).values()];
 const savedList = <T>(value: unknown): T[] => Array.isArray(value) ? value : [];
 const localHumanSeat = (match: Match) => match.players.find(player => player.kind === 'human' && player.active !== false)?.player_index ?? 0;
@@ -170,7 +170,7 @@ export class PortalStore {
       this.patch({ accounts, account }); await this.reloadData();
       const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);if(incoming)await rememberUrlAttribution(incoming,base,accounts);
       const snapshot = this.data;
-      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList(snapshot.responses['/matches']), openMatches: savedList(snapshot.responses['/matches/open']), savedGames: savedList(snapshot.responses['/users/me/saved-games']) });
+      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList(snapshot.responses['/matches']), savedGames: savedList(snapshot.responses['/users/me/saved-games']) });
       if (snapshot.selectedId) { const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`]; if (match) this.patch({ selectedMatch: this.decorate(match), game: snapshot.responses[`/games/${match.game_id}/versions/${match.game_version}`] || null }); }
       subscribeI18n(() => this.localize());
       if (!localOnly) this.stopConnectivity = watchConnectivity(online => { this.patch({ network: online }); if (online) { this.retryAfter = 0; void this.refresh().catch(() => {}); } });
@@ -190,7 +190,7 @@ export class PortalStore {
       if (this.state.account && isOnline()) await this.sync().catch(() => {});
       guard();
       if (this.state.selectedMatch) { await this.refreshMatch(); return; }
-      const jobs: Promise<any>[] = [this.list('games'), this.list('openMatches'), this.read('/auth/config').then(authConfig => { guard(); this.patch({ authConfig }); }), this.read('/games/popular').then(popularGames => { guard(); this.patch({ popularGames: popularGames.map(localizeGame) }); })];
+      const jobs: Promise<any>[] = [this.list('games'), this.read('/auth/config').then(authConfig => { guard(); this.patch({ authConfig }); }), this.read('/games/popular').then(popularGames => { guard(); this.patch({ popularGames: popularGames.map(localizeGame) }); })];
       if (this.state.account) jobs.push(this.refreshNotifications(), this.list('myMatches'), this.list('savedGames'), this.list('invites'), this.read('/users/me/recent-games').then(recentGames => { guard(); this.patch({ recentGames: recentGames.map(localizeGame) }); }), this.refreshProfile());
       const results = await Promise.allSettled(jobs); guard();
       await this.claimDailyLogin().catch(() => {}); guard();
@@ -283,7 +283,7 @@ export class PortalStore {
     this.notificationPromptClaim = pending; return pending;
   }
   private async loadProfiles() {
-    const guard = this.capture(); const ids = [...new Set([...this.state.myMatches, ...this.state.openMatches, ...(this.state.selectedMatch ? [this.state.selectedMatch] : [])].flatMap(m => m.players || []).map(p => p.user_id).filter(Boolean))].filter(id => !this.state.profiles[id!]).slice(0, 200);
+    const guard = this.capture(); const ids = [...new Set([...this.state.myMatches, ...(this.state.selectedMatch ? [this.state.selectedMatch] : [])].flatMap(m => m.players || []).map(p => p.user_id).filter(Boolean))].filter(id => !this.state.profiles[id!]).slice(0, 200);
     if (!ids.length) return; const profiles = await this.read(`/users?ids=${encodeURIComponent(ids.join(','))}`); guard(); this.patch({ profiles: { ...this.state.profiles, ...Object.fromEntries(profiles.map((p: any) => [p.id, p])) } });
   }
   async refreshMatch() {
@@ -384,7 +384,7 @@ export class PortalStore {
     await this.writeSelection(id,current).catch(()=>{});current();
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
     this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts, authConfig, account, locale, storageError, network: !this.localOnly && isOnline() }); const guard = this.capture(); await this.reloadData(); guard();
-    this.patch({ games: savedList(this.data.responses['/games']), myMatches: savedList(this.data.responses['/matches']), openMatches: savedList(this.data.responses['/matches/open']) }); await this.refresh(); guard();
+    this.patch({ games: savedList(this.data.responses['/games']), myMatches: savedList(this.data.responses['/matches']) }); await this.refresh(); guard();
   }
   async logout(id = this.state.account?.id) {
     const accounts = this.state.accounts.filter(a => a.id !== id);
@@ -449,9 +449,7 @@ export class PortalStore {
     } finally {try {guard(); this.patch({deletionUpdating: false});} catch { /* The selected account owns its state. */ }}
   }
   async createMatch(options: any) { const match = await this.request('POST', '/matches', options); await this.cache(`/matches/${match.id}`, match); await this.selectMatch(match.id); return match; }
-  async quickMatch(gameId = '', numPlayers?: number) { const match = await this.request('POST', '/matchmaking/quick-match', { game_id: gameId, ...(numPlayers ? { num_players: numPlayers } : {}) }); await this.cache(`/matches/${match.id}`, match); await this.selectMatch(match.id); return match; }
   async matchAction(action: string, body?: any) { const match = this.state.selectedMatch; if (!match) throw new Error('Choose a match first'); const token = this.selection; const result = await this.request('POST', `/matches/${encodeURIComponent(match.id)}/${action}`, body); if (result?.id) { await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); } await this.refreshProfile().catch(() => {}); return result; }
-  async addBots(count: number) { const match = this.state.selectedMatch; if (!match) return; const token = this.selection; const result = await this.request('PATCH', `/matches/${encodeURIComponent(match.id)}`, { num_computer_opponents: count }); await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); }
   async removePlayer(userId: string) { const match = this.state.selectedMatch; if (!match) return; const token = this.selection; const result = await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}/players/${encodeURIComponent(userId)}`); await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); }
   async archiveMatch(id: string, { deleted = false, hidePermanently = true }: { deleted?: boolean; hidePermanently?: boolean } = {}) {
     const guard = this.capture(), owner = this.identity(), token = this.selection;
@@ -637,8 +635,8 @@ export class PortalStore {
     verifyCode: (method: 'email' | 'phone', id: string, code: string, name?: string, link?: boolean,intentGuard?:()=>void) => this.perform(() => this.verifyCode(method, id, code, name, link,intentGuard)), google: (token: string, link?: boolean,intentGuard?:()=>void) => this.perform(() => this.google(token, link,intentGuard)),
     requestAccountDeletion: () => this.perform(() => this.changeAccountDeletion(true), false), cancelAccountDeletion: () => this.perform(() => this.changeAccountDeletion(false), false),
     switchAccount: (id: string,intentGuard?:()=>void) => this.perform(() => this.switchAccount(id,intentGuard)), logout: (id?: string) => this.perform(() => this.logout(id)), updateProfile: (patch: any) => this.perform(() => this.updateProfile(patch)),
-    createMatch: (options: any) => this.perform(() => this.createMatch(options)), quickMatch: (gameId?: string, count?: number) => this.perform(() => this.quickMatch(gameId, count)),
-    matchAction: (action: 'join' | 'start' | 'leave' | 'rematch' | 'maybeLeave' | 'playerLeft', body?: any) => this.perform(() => this.matchAction(action, body)), addBots: (count: number) => this.perform(() => this.addBots(count)), removePlayer: (id: string) => this.perform(() => this.removePlayer(id)),
+    createMatch: (options: any) => this.perform(() => this.createMatch(options)),
+    matchAction: (action: 'join' | 'start' | 'leave' | 'rematch' | 'maybeLeave' | 'playerLeft', body?: any) => this.perform(() => this.matchAction(action, body)), removePlayer: (id: string) => this.perform(() => this.removePlayer(id)),
     leaveMatch: () => this.perform(() => this.leaveMatch()), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),
     startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.archiveMatch(id)),
     loadHistory: () => this.perform(() => this.loadHistory()), replay: (index: number | null) => this.perform(() => this.replay(index), false), presentationMessage: () => this.presentationMessage(), presentationHistory: () => this.presentationHistory(),

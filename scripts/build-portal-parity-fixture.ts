@@ -45,7 +45,7 @@ function actionsFor(game:any,message:any,move:any){
 }
 const accountData=emptyAccountData();
 accountData.responses['/games']=games.map(({game}:any)=>clone(game));
-Object.assign(accountData.responses,{'/auth/config':{},'/matches':[],'/matches/open':[],'/users/me/saved-games':[],'/users/me/invites':[],'/games/popular':[]});
+Object.assign(accountData.responses,{'/auth/config':{},'/matches':[],'/users/me/saved-games':[],'/users/me/invites':[],'/games/popular':[]});
 for(const item of games){
   const {game,slug}=item;
   accountData.responses[`/games/${game.id}`]=game;

@@ -105,33 +105,20 @@ def generate(store, *, run_id, users, games, matches, max_writes):
             new_invite_token=lambda: mid + "-invite",
         )
         people = rng.sample(range(users), rng.randint(1, 4))
-        computers = rng.randrange(4) if len(people) == 1 else 0
         # A complete service operation and checkpoint are one commit, so a
         # lost response or interrupted process cannot duplicate payouts.
         with store.atomic():
             match = platform.create_match(
                 caller_id=uid(people[0]),
                 game_id=gid(i % games),
-                num_computer_opponents=computers,
-                private=rng.random() < 0.25,
             )
             match = replace(
                 match,
                 seed=int.from_bytes(hashlib.sha256(mid.encode()).digest()[:4], "big"),
             )
             store.put_match(match)
-            invite = (
-                platform.create_invite(caller_id=uid(people[0]), match_id=mid)
-                if match.private and len(people) > 1
-                else None
-            )
             for person in people[1:]:
-                if match.private:
-                    match = platform.accept_invite(
-                        caller_id=uid(person), token=invite.token
-                    )
-                else:
-                    match = platform.join_match(caller_id=uid(person), match_id=mid)
+                match = platform.join_match(caller_id=uid(person), match_id=mid)
             if rng.random() >= 0.15:
                 match = platform.start_match(
                     caller_id=uid(people[0]),
@@ -144,16 +131,13 @@ def generate(store, *, run_id, users, games, matches, max_writes):
                         break
                     now[0] += dt.timedelta(seconds=rng.randint(1, 120))
                     seat = match.seats[min(match.turn_of_player_indices)]
-                    if seat.kind == "computer":
-                        platform._run_computer_moves(mid)
-                    else:
-                        platform.make_move(
-                            caller_id=seat.user_id,
-                            match_id=mid,
-                            move={"add": rng.randint(1, 3)},
-                            expected_move_count=len(match.moves),
-                            request_id=f"activity:{i}:{len(match.moves)}",
-                        )
+                    platform.make_move(
+                        caller_id=seat.user_id,
+                        match_id=mid,
+                        move={"add": rng.randint(1, 3)},
+                        expected_move_count=len(match.moves),
+                        request_id=f"activity:{i}:{len(match.moves)}",
+                    )
             store.raw_put(
                 manifest,
                 {

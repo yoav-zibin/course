@@ -26,7 +26,6 @@ from game_platform.models import (
     Invite,
     LinkedAccountKind,
     Match,
-    MatchStatus,
     Feedback,
     User,
     TokenMovement,
@@ -267,10 +266,6 @@ class SavingStore:
     def list_matches_for_game(self, game_id: str) -> list[Match]:
         with self._lock:
             return self._inner.list_matches_for_game(game_id)
-
-    def list_matches_by_status(self, status: MatchStatus) -> list[Match]:
-        with self._lock:
-            return self._inner.list_matches_by_status(status)
 
     def delete_match(self, match_id: str) -> None:
         with self._lock:

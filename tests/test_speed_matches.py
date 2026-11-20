@@ -4,6 +4,8 @@ durable deadline job the background worker runs (test_query_store.py covers
 that path). The tests set the clock by hand; nothing waits for real."""
 from game_platform.tests.helpers import TEST_DECLARATIVE_UI
 
+from game_platform.tests.helpers import legacy_computer_match
+
 import datetime as dt
 import threading
 from collections.abc import Sequence
@@ -121,9 +123,10 @@ class World:
         match = self.platform.create_match(
             caller_id=self.ann,
             game_id=self.game,
-            num_computer_opponents=computers,
             turn_seconds=turn_seconds,
         )
+        if computers:
+            match = legacy_computer_match(self.platform, match, computers)
         for user in joiners:
             self.platform.join_match(caller_id=user, match_id=match.id)
         if start:
@@ -176,12 +179,12 @@ def test_only_60_180_or_600_seconds_are_accepted() -> None:
     world = World()
     for seconds in (60, 180, 600, None):
         world.platform.create_match(
-            caller_id=world.ann, game_id=world.game, num_computer_opponents=0, turn_seconds=seconds
+            caller_id=world.ann, game_id=world.game, turn_seconds=seconds
         )
     for seconds in (0, 30, 61, 300, -60, 3600):
         with pytest.raises(InvalidRequestError, match="turn_seconds must be 60, 180 or 600"):
             world.platform.create_match(
-                caller_id=world.ann, game_id=world.game, num_computer_opponents=0, turn_seconds=seconds
+                caller_id=world.ann, game_id=world.game, turn_seconds=seconds
             )
 
 
@@ -319,7 +322,7 @@ def test_a_v2_timeout_ends_without_running_a_computer() -> None:
         import_package={"declarative_ui": TEST_DECLARATIVE_UI},
     )
     match = platform.create_match(
-        caller_id=ann, game_id=game.id, num_computer_opponents=0, turn_seconds=60
+        caller_id=ann, game_id=game.id, turn_seconds=60
     )
     platform.join_match(caller_id=bob, match_id=match.id)
     platform.start_match(caller_id=ann, match_id=match.id)
@@ -356,7 +359,7 @@ def test_the_match_ends_in_a_paid_match() -> None:
         user = world.platform._store.get_user(uid)
         world.platform._store.put_user(replace(user, token_balance=10))
     match = world.platform.create_match(
-        caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=1, turn_seconds=60
+        caller_id=world.ann, game_id=world.game, bet_per_player=1, turn_seconds=60
     )
     world.platform.join_match(caller_id=world.bob, match_id=match.id)
     world.platform.start_match(caller_id=world.ann, match_id=match.id)
@@ -377,7 +380,7 @@ def test_a_timeout_pays_the_pot_to_the_players_without_the_turn() -> None:
         user = world.platform._store.get_user(uid)
         world.platform._store.put_user(replace(user, token_balance=10))
     match = world.platform.create_match(
-        caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=2, turn_seconds=60
+        caller_id=world.ann, game_id=world.game, bet_per_player=2, turn_seconds=60
     )
     world.platform.join_match(caller_id=world.bob, match_id=match.id)
     world.platform.join_match(caller_id=world.cy, match_id=match.id)
@@ -403,7 +406,7 @@ def test_a_timeout_refunds_evenly_when_everyone_held_the_turn() -> None:
         user = world.platform._store.get_user(uid)
         world.platform._store.put_user(replace(user, token_balance=10))
     match = world.platform.create_match(
-        caller_id=world.ann, game_id=world.game, num_computer_opponents=0, bet_per_player=2, turn_seconds=60
+        caller_id=world.ann, game_id=world.game, bet_per_player=2, turn_seconds=60
     )
     world.platform.join_match(caller_id=world.bob, match_id=match.id)
     world.platform.start_match(caller_id=world.ann, match_id=match.id)
@@ -510,17 +513,15 @@ def test_joining_a_seat_without_the_turn_leaves_the_clock_alone() -> None:
     assert match.turn_deadline == started
 
 
-# Rematches and quick matches
+# Rematches
 
 
-def test_rematches_keep_the_setting_and_quick_matches_stay_regular() -> None:
+def test_rematches_keep_the_clock_setting() -> None:
     world = World(leave=False)
     match_id = world.match(turn_seconds=180, joiners=[world.bob])
     world.move(match_id, world.ann, None)
     rematch = world.platform.request_rematch(caller_id=world.bob, match_id=match_id)
     assert rematch.turn_seconds == 180
-    quick = world.platform.quick_match(caller_id=world.cy, game_id=world.game)
-    assert quick.turn_seconds is None
 
 
 # Notifications

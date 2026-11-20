@@ -10,7 +10,6 @@ import time
 from typing import TYPE_CHECKING
 
 from fake_users import moves
-from fake_users.scheduler import pick
 
 if TYPE_CHECKING:
     from fake_users.generator import Generator
@@ -169,22 +168,14 @@ class FakeUser:
         except Exception:
             pass  # really just "Random": create_match says so
 
-    async def page_error(self) -> str:
-        banner = self.page.locator("#page-error")
-        return (await banner.inner_text()).strip() if await banner.count() and await banner.is_visible() else ""
-
     async def new_match(self) -> bool:
         """Makes or joins a match; False when it was abandoned (a skipped game)."""
-        kind = pick(self.settings.mix, self.rng)
         await self.back_to_games()
         await self.think(0.5, 2)
-        if kind == "quick_match":
-            return await self.quick_match()
-        return await self.create_match(with_friends=kind == "with_friends")
+        return await self.create_match()
 
-    async def create_match(self, *, with_friends: bool) -> bool:
-        """Makes a match: against computers, or a lobby (inviting a friend when
-        [with_friends]). False when the lobby couldn't start and was deleted."""
+    async def create_match(self) -> bool:
+        """Creates a human match and invites a friend; deletes an unfilled lobby."""
         page = self.page
         cards = page.locator("#game-library > *")
         names = await cards.evaluate_all(
@@ -200,26 +191,16 @@ class FakeUser:
         if self.rng.uniform(0, 100) < self.settings.speed_match_percent and await speed.is_visible():
             await page.select_option("#match-speed", "60")
             self.g.stats.count("speed_matches")
-        computers = page.locator("#play-computers")
-        if not with_friends and await computers.is_visible():
-            # Computers are picked before the match exists; it starts right away.
-            choice = page.locator("#computer-player-count")
-            if await choice.is_visible():  # hidden when the game has one player count
-                counts = await choice.locator("option").evaluate_all("os => os.map(o => o.value)")
-                if counts:
-                    await choice.select_option(self.rng.choice(counts))
-            await computers.click()
-        else:
-            await page.click("#create")
+        await page.click("#create")
         await page.wait_for_selector("#match:not([hidden])", timeout=15_000)
         self.g.stats.count("matches_created")
         self.act()
         match = await self.wait_for_match()
         self.g.stats.game_count("matches_created", match)
         if match["status"] != "waiting_for_players":
-            return True  # against computers, or a solo game: it starts by itself
+            return True  # a solo game starts by itself
         await self.show_controls()
-        if with_friends and self.g.invite_friend(await self.copy_invite_link()):
+        if self.g.invite_friend(await self.copy_invite_link()):
             await self.wait_for_people(match["humans"] + 1)
         if not await self.start_lobby():
             await self.abandon(await moves.read_match(self.page) or match)
@@ -236,33 +217,6 @@ class FakeUser:
             return None
         self.act()
         return link if link.startswith("http") else None
-
-    async def quick_match(self) -> bool:
-        page = self.page
-        await page.locator("#game-library > *[aria-label^='Random']").first.click()
-        try:
-            await page.wait_for_selector("#match:not([hidden])", timeout=20_000)
-        except Exception:
-            raise RuntimeError(f"quick match didn't open a match: {await self.page_error() or 'no message'}") from None
-        self.act()
-        match = await self.wait_for_match()
-        # "Random" may pick any game; back out of the ones the settings skip.
-        title = (await page.locator("#match-toolbar-title").inner_text()).lower()
-        if any(name.lower() in title for name in self.settings.skip_games):
-            await self.abandon(match)
-            self.g.stats.count("skipped_games")
-            return False
-        if match["owner"]:
-            self.g.stats.count("matches_created")
-            self.g.stats.game_count("matches_created", match)
-            await self.show_controls()
-            await self.wait_for_people(2)
-            if not await self.start_lobby():
-                await self.abandon(await moves.read_match(self.page) or match)
-                return False
-        else:
-            self.g.stats.count("matches_joined")
-        return True
 
     async def abandon(self, match: dict) -> None:
         """Gets out of a match without playing: the owner of a lobby deletes it, others leave."""
@@ -306,9 +260,7 @@ class FakeUser:
             await self.think(1, 2)
 
     async def start_lobby(self) -> bool:
-        """Starts the lobby once it can start; False if it can't (not enough people).
-        Portals that let a lobby add computers get them added first; current ones
-        pick computers before the match exists, so a lobby only has people."""
+        """Starts the lobby when enough invited people have joined."""
         for _ in range(12):
             match = await moves.read_match(self.page)
             if match and match["status"] != "waiting_for_players":
@@ -320,12 +272,8 @@ class FakeUser:
                 await start.click()
                 self.act()
                 return True
-            plus = self.page.locator("#actions button[aria-label='Add computer opponent']")
-            if await plus.count() and await plus.is_enabled():
-                await plus.click()
-                self.act()
-            elif match and match["seats"] < self.fewest_players(match):
-                return False  # nobody came, and computers can't join a lobby
+            if match and match["seats"] < self.fewest_players(match):
+                return False  # nobody came
             await asyncio.sleep(1)
         return False
 

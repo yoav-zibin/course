@@ -24,16 +24,6 @@ def index_config(namespace):
         ],
         "matches": [
             (["game_id", "game_version"], "participants"),
-            (
-                [
-                    "game_id",
-                    "game_version",
-                    "matchmaking_player_count",
-                    "status",
-                    "private",
-                ],
-                None,
-            ),
         ],
         "invites": [(["created_by_user_id", "match_id"], None)],
         "game_test_traces": [
@@ -56,7 +46,6 @@ def index_config(namespace):
         "game_popularity": {"score": "desc"},
         "matches": {
             "owner_user_id": "order",
-            "joinable": "order",
             "participants": "array",
             "historical_participants": "array",
             "visible_to": "array",

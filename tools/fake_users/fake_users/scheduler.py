@@ -42,14 +42,3 @@ def next_arrival_seconds(users_per_hour: float, rng: random.Random) -> float:
     if users_per_hour <= 0:
         return math.inf
     return rng.expovariate(users_per_hour / 3600.0)
-
-
-def pick(weights: dict[str, int], rng: random.Random) -> str:
-    """A key of [weights], chosen in proportion to its (non-negative) weight."""
-    total = sum(weights.values())
-    roll = rng.uniform(0, total)
-    for key, weight in weights.items():
-        if roll < weight:
-            return key
-        roll -= weight
-    return next(key for key, weight in reversed(weights.items()) if weight > 0)

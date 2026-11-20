@@ -120,60 +120,6 @@ class ScalablePlatform(GamePlatform):
                 self._logic_cache.pop(next(iter(self._logic_cache)), None)
             return super()._logic_for(game)
 
-    def quick_match(self, *, caller_id, game_id, num_players=None):
-        with self._store.atomic():
-            game = self._get_live_game(game_id)
-            if not game.published:
-                raise NotFoundError("game not found")
-            multiplayer = sorted(c for c in game.rules.allowed_player_counts if c >= 2)
-            if not multiplayer:
-                raise ConflictError("this game is single-player only")
-            target = num_players if num_players is not None else multiplayer[0]
-            if target not in multiplayer:
-                raise InvalidRequestError("unsupported player count")
-            # Serialize concurrent requests from the same player, even when no
-            # waiting match exists yet. Query candidates remain bounded.
-            slot = self._store.ref(
-                "matchmaking", json.dumps([caller_id, game_id, target])
-            )
-            previous = self._store.raw_get(slot)
-            if previous:
-                existing = self._store.get_match(previous["match_id"])
-                if (
-                    existing
-                    and existing.status == "waiting_for_players"
-                    and self._match_is_declarative(existing)
-                    and not existing.num_computer_opponents
-                    and existing.seat_of(caller_id) is not None
-                ):
-                    return existing
-            filters = [
-                ("game_id", "==", game_id),
-                ("game_version", "==", game.version),
-                ("matchmaking_player_count", "==", target),
-                ("status", "==", "waiting_for_players"),
-                ("private", "==", False),
-            ]
-            docs = self._store._query("matches", filters, limit=1)
-            candidate = (
-                self._store._decode(
-                    "matches", docs[0].to_dict(), docs[0].reference
-                )
-                if docs else None
-            )
-            if candidate and not candidate.num_computer_opponents:
-                result = (
-                    candidate
-                    if candidate.seat_of(caller_id) is not None
-                    else self._join(candidate, caller_id=caller_id)
-                )
-            else:
-                result = self._new_match(
-                    game, caller_id=caller_id, matchmaking_player_count=target
-                )
-            self._store.raw_put(slot, {"match_id": result.id, "user_id": caller_id})
-            return result
-
     def referrals(self, *, caller_id):
         with self._store.atomic():
             return (

@@ -68,11 +68,16 @@ def _create_game(api: Api, owner: str, server_code: str = COUNTER_GAME) -> str:
 
 def _start(api: Api, owner: str, game_id: str, joiner: str | None = None,
            **match_changes) -> str:
+    computers = match_changes.pop("num_computer_opponents", 0)
     match = api.ok(
         "POST", "/matches", as_user=owner,
         json={"game_id": game_id, **match_changes},
     )
     match_id = match["id"]
+    if computers:
+        from game_platform.tests.helpers import legacy_computer_match
+        platform = api.client.app.state.platform
+        legacy_computer_match(platform, platform._store.get_match(match_id), computers)
     if joiner is not None:
         api.ok("POST", f"/matches/{match_id}/join", as_user=joiner)
     started = api.ok("POST", f"/matches/{match_id}/start", as_user=owner, json={})

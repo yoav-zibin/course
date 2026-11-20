@@ -37,8 +37,8 @@ def test_settings_change_live_and_bad_ones_are_refused(tmp_path):
     auth = ("", "s3cret")
     ok = client.post("/settings", auth=auth, json={"max_users": "7", "speed_match_percent": "40"})
     assert ok.status_code == 200 and generator.settings.max_users == 7 and generator.settings.speed_match_percent == 40
-    bad = client.post("/settings", auth=auth, json={"mix_vs_computer": 99})
-    assert bad.status_code == 400 and "add up to 100" in bad.json()["error"]
+    bad = client.post("/settings", auth=auth, json={"leave_probability": 99})
+    assert bad.status_code == 400 and "leave_probability" in bad.json()["error"]
     remote = client.post("/settings", auth=auth, json={"target_url": "https://buildplay.fun"})
     assert remote.status_code == 400 and "allow_remote_target" in remote.json()["error"]
     assert generator.settings.target_url == "http://127.0.0.1:8000"

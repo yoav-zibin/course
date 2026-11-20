@@ -13,7 +13,7 @@ import time
 
 import httpx
 
-from game_platform.tests.test_server_matches import COUNTER_GAME, COMPUTER_STARTS_GAME
+from game_platform.tests.test_server_matches import COUNTER_GAME
 
 
 def run(*, restart=False):
@@ -130,33 +130,12 @@ def run(*, restart=False):
                 )["move_count"]
                 == 5
             )
-        # Both workers poll the same durable computer-turn job. Exactly one move
-        # must become visible to the human, even after several polling cycles.
-        computer_game = game(COMPUTER_STARTS_GAME)
-        computer_match = ok(
-            0,
-            "POST",
-            "/matches",
-            user=alice,
-            body={"game_id": computer_game, "num_computer_opponents": 1},
-        )["id"]
-        ok(1, "POST", f"/matches/{computer_match}/start", user=alice, body={})
-        deadline = time.monotonic() + 30
-        while True:
-            result = ok(0, "GET", f"/matches/{computer_match}", user=alice)
-            if result["move_count"]:
-                break
-            assert time.monotonic() < deadline, "computer job did not complete"
-            time.sleep(0.3)
-        time.sleep(1.5)
-        assert ok(1, "GET", f"/matches/{computer_match}", user=alice)["move_count"] == 1
         return {
             "two_http_processes": "passed",
             "simultaneous_duplicate_payout": "passed",
             "request_payload_conflict": "passed",
             "private_history": "passed",
             "restart_and_retry": "passed" if restart else "not run",
-            "two_worker_computer_turn": "passed",
         }
     finally:
         for client in clients:

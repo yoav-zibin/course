@@ -83,7 +83,7 @@ def test_query_store_caches_actor_and_preserves_it_on_metadata_only_updates():
         with patch.object(restarted, "_read_moves", side_effect=AssertionError("history was read")):
             match = restarted.get_match(match_id)
             assert MatchOut.of(match).last_move_player_index == 0
-            restarted.put_match(replace(match, private=True))
+            restarted.put_match(replace(match, hidden_for_user_ids=frozenset({bob})))
             assert MatchOut.of(restarted.get_match(match_id)).last_move_player_index == 0
         # An appended move updates the same authoritative metadata.
         assert _move(api, match_id, as_user=bob, add=1).status_code == 201

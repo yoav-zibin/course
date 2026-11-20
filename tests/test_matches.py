@@ -3,14 +3,14 @@ import httpx
 from game_platform.tests.helpers import Api, TEST_GAME_SECRET, error
 
 
-def test_create_a_match_with_computer_opponents(api: Api) -> None:
+def test_create_a_human_match(api: Api) -> None:
     alice = api.new_user("alice")
     game_id = api.new_game(owner=alice)
     response = api.request(
         "POST",
         "/matches",
         as_user=alice,
-        json={"game_id": game_id, "num_computer_opponents": 1},
+        json={"game_id": game_id},
     )
     assert response.status_code == 201
     match = response.json()
@@ -23,8 +23,6 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "end_reason": None,
         "players": [
             {"player_index": 0, "kind": "human", "user_id": alice, "id": alice, "active": True},
-            {"player_index": 1, "kind": "computer", "user_id": None,
-             "id": "computer-1", "active": True},
         ],
         "turn_of_player_indices": None,
         "state": None,
@@ -40,8 +38,6 @@ def test_create_a_match_with_computer_opponents(api: Api) -> None:
         "rematch_match_id": None,
         "created_at": "2026-01-01T00:03:00Z",
         "updated_at": "2026-01-01T00:03:00Z",
-        "private": False,
-        "matchmaking_player_count": None,
         "turn_seconds": None,
         "turn_deadline": None,
         "timeouts": [],
@@ -78,7 +74,7 @@ def test_rematch_reuses_game_version_and_accepting_players_join_open_lobby(
     assert rematch["status"] == "waiting_for_players"
     assert [player["user_id"] for player in rematch["players"]] == [alice]
     assert api.ok("GET", f"/matches/{match_id}")["rematch_match_id"] == rematch_id
-    assert rematch_id in [item["id"] for item in api.ok("GET", "/matches/open")]
+    assert api.ok("GET", f"/matches/{rematch_id}")["id"] == rematch_id
 
     # Original players accept into the same lobby. Players who don't accept leave
     # seats open for other users to join.
@@ -114,29 +110,19 @@ def test_rematch_requires_a_finished_match_and_an_original_player(api: Api) -> N
     ) == (403, "you are not a player in this match")
 
 
-def test_rematch_against_computers_restarts_immediately_with_same_bot_count(
-    api: Api,
-) -> None:
+def test_legacy_computer_match_rematch_is_a_human_lobby(api: Api) -> None:
     alice = api.new_user("alice")
     game_id = api.new_game(owner=alice, allowed_player_counts=[2, 3])
     match_id = api.new_match(
         owner=alice, game_id=game_id, num_computer_opponents=2, start=True
     )
     api.move(match_id, as_user=alice, next_turn=None, state={"winner": 0})
-
     rematch = api.ok("POST", f"/matches/{match_id}/rematch", as_user=alice)
-    assert rematch["status"] == "ongoing"
-    assert rematch["game_id"] == game_id
-    assert rematch["game_version"] == 1
-    assert [player["user_id"] for player in rematch["players"]] == [alice, None, None]
-    assert [player["kind"] for player in rematch["players"]] == [
-        "human",
-        "computer",
-        "computer",
-    ]
-    assert rematch["turn_of_player_indices"] == [0]
-    assert rematch["state"] == {"pot": 0}
-    assert api.ok("GET", f"/matches/{match_id}")["rematch_match_id"] == rematch["id"]
+    assert rematch["status"] == "waiting_for_players"
+    assert rematch["game_id"] == game_id and rematch["game_version"] == 1
+    assert [p["user_id"] for p in rematch["players"]] == [alice]
+    assert all(p["kind"] == "human" for p in rematch["players"])
+    assert rematch["state"] is None
     assert api.ok("POST", f"/matches/{match_id}/rematch", as_user=alice)["id"] == rematch["id"]
 
 
@@ -153,20 +139,7 @@ def test_create_match_checks_the_game(api: Api) -> None:
         json={"game_id": game_id, "num_computer_opponents": 3},
     )
     assert error(unknown_game) == (404, "game not found")
-    assert error(too_many_computers) == (
-        400,
-        "4 players is more than the game's maximum of 3",
-    )
-
-
-def test_remove_solo_computers_before_joining_human_opponents(api: Api) -> None:
-    alice, bob = api.new_user("alice"), api.new_user("bob")
-    game = api.new_game(owner=alice, allowed_player_counts=[2, 3])
-    mid = api.new_match(owner=alice, game_id=game, num_computer_opponents=1)
-    assert api.request("POST", f"/matches/{mid}/join", as_user=bob).status_code == 409
-    api.ok("PATCH", f"/matches/{mid}", as_user=alice, json={"num_computer_opponents": 0})
-    api.ok("POST", f"/matches/{mid}/join", as_user=bob)
-    assert api.match_summary(mid)["players"] == ["alice", "bob"]
+    assert too_many_computers.status_code == 422
 
 
 def test_cannot_join_twice_or_join_a_full_match(api: Api) -> None:
@@ -184,36 +157,6 @@ def test_cannot_join_twice_or_join_a_full_match(api: Api) -> None:
     assert error(again) == (409, "you are already a player in this match")
     assert error(full) == (409, "the match is full")
 
-
-def test_owner_configures_computer_opponents_while_waiting(api: Api) -> None:
-    alice, bob = api.new_user("alice"), api.new_user("bob")
-    game_id = api.new_game(owner=alice, allowed_player_counts=[2, 3])
-    match_id = api.new_match(owner=alice, game_id=game_id, num_computer_opponents=0)
-
-    def set_computers(count: int, *, as_user: str = alice) -> httpx.Response:
-        return api.request(
-            "PATCH",
-            f"/matches/{match_id}",
-            as_user=as_user,
-            json={"num_computer_opponents": count},
-        )
-
-    assert set_computers(1).status_code == 200
-    assert api.match_summary(match_id)["players"] == ["alice", "computer"]
-    assert error(set_computers(3)) == (
-        400,
-        "4 players is more than the game's maximum of 3",
-    )
-    assert error(set_computers(0, as_user=bob)) == (
-        403,
-        "only the match's owner can do this",
-    )
-
-    api.ok("POST", f"/matches/{match_id}/start", as_user=alice)
-    assert error(set_computers(0)) == (
-        409,
-        "computer opponents can only be changed before the match starts",
-    )
 
 
 def test_start_a_match(api: Api) -> None:

@@ -71,9 +71,6 @@ def build(operations: Iterable[Mapping[str, Any]]) -> Snapshot:
         new_seed=lambda: 0x5EED,
         new_password=passwords,
         new_referral_code=lambda: next(codes),
-        # Computer opponents move synchronously, so the generated file is
-        # the same on every run (no timers racing the operations).
-        computer_move_delay_seconds=0,
     )
     for number, operation in enumerate(operations, start=1):
         try:
@@ -130,16 +127,9 @@ def _apply(
         platform.create_match(
             caller_id=operation["as"],
             game_id=operation["game"],
-            num_computer_opponents=operation["num_computer_opponents"],
         )
     elif kind == "join":
         platform.join_match(caller_id=operation["as"], match_id=operation["match"])
-    elif kind == "set_num_computer_opponents":
-        platform.set_num_computer_opponents(
-            caller_id=operation["as"],
-            match_id=operation["match"],
-            num_computer_opponents=operation["num_computer_opponents"],
-        )
     elif kind == "start":
         platform.start_match(
             caller_id=operation["as"],

@@ -1,6 +1,7 @@
 """Declarative matches replay deterministically, including secret random state."""
+from game_platform.tests.helpers import legacy_computer_match
+
 import json
-import random
 import random
 from pathlib import Path
 import pytest
@@ -18,7 +19,8 @@ def play(kind):
     game = platform.create_game( name=body.name, description=body.description,
         rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
         game_schemas=body.game_schemas(), import_package={"declarative_ui":body.declarative_ui})
-    match = platform.create_match(caller_id=owner.id, game_id=game.id, num_computer_opponents=1)
+    match = platform.create_match(caller_id=owner.id, game_id=game.id)
+    match = legacy_computer_match(platform, match, 1)
     platform.start_match(caller_id=owner.id, match_id=match.id)
     snapshots=[]
     for _ in range(500):

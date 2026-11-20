@@ -50,18 +50,18 @@ def test_preview_reports_unreachable_backend():
 
 
 def test_preview_forwards_every_api_area_the_pages_call():
-    # Regression (bug 13): languages, push, invites and matchmaking answered 404.
+    # Regression (bug 13): languages, push and invites answered 404.
     seen = []
     def backend(request):
         seen.append(request.url.path)
         return httpx.Response(200, json={})
     with TestClient(preview.create_preview('https://buildplay.fun', transport=httpx.MockTransport(backend))) as client:
         for path in ['/games', '/i18n/locales', '/i18n/catalogs/es', '/push/config', '/invites/x',
-                     '/matchmaking/quick-match', '/storage/capabilities', '/v2/games',
+                     '/storage/capabilities', '/v2/games',
                      '/batch?requests=%5B%5D']:
-            method = client.post if path.startswith('/matchmaking') else client.get
-            assert method(path).status_code == 200, path
+            assert client.get(path).status_code == 200, path
         assert client.get('/admin/stats').status_code == 404
+        assert client.post('/matchmaking/quick-match').status_code == 404
     assert '/push/config' in seen and '/invites/x' in seen
 
 

@@ -3,7 +3,8 @@
 This is the in-repo reference for the server-side Game API, adapted from the
 professor's spec ("Game Platform: server-side Game API"). **Other teams:
 code against this document.** November 6 changes: playerLeft shares the move
-result contract; bots are single-player only.
+result contract. Online matches are public and human-only; computers are
+available in local practice and validation walks.
 
 ## How it works
 
@@ -14,7 +15,7 @@ result contract; bots are single-player only.
 | Initial state | The server calls `newMatch` at start |
 | A move | Client sends a small game-defined `move`; the server calls `applyMove` |
 | Validation | `applyMove` rejects illegal moves with `InvalidMove` (HTTP 400) |
-| Computer opponents | Played on the server by `computerMove`, with or without humans online |
+| Computer opponents | `computerMove` supplies moves in local practice and validation walks |
 | What clients see | `viewFor(state, playerId)` — hidden information stays on the server |
 | Randomness | Seeded by the server per call (`ctx.random`), so reproducible |
 | Tokens | Each human stakes up to `max_loss`; server code pays out the pot |
@@ -176,7 +177,7 @@ viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
 |---|---|
 | `POST /games` | Creates and publishes a complete game: `declarative_ui`, `server_code`, schemas (in `unit_tests`), translations and images are supplied; all creation gates must pass. `/games/declarative` is a creation alias. |
 | `PATCH /games/{id}` | The single content update API. Include the game secret or master password in `game_addition_request_id_and_secret`; all content fields are optional. Server-code, unit-test or mechanical-rule changes run server checks; presentation changes require recorded tests for the merged payload; metadata changes use lightweight checks. |
-| `POST /matches` | `{game_id, num_computer_opponents, private?, max_loss}` |
+| `POST /matches` | `{game_id, max_loss?, turn_seconds?}` — creates a public match with human players |
 | `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat and deduct the stake (409 if the balance is too low); mid-match the server calls `playerJoined` |
 | `POST /matches/{id}/leave` | Before the start, a refund; mid-match, `playerLeft` |
 | `POST /matches/{id}/maybeLeave`, `POST /matches/{id}/playerLeft` | Leave preview + confirm |
@@ -186,20 +187,17 @@ viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
 | `GET /matches/{id}/moves` | Each move's player id, move and time, with the caller's view of the resulting state (the spectator view for a caller without a seat) |
 | `GET /auth/me` | Your profile, including your token balance |
 
-## Computer opponents: single-player only
+## Human-only online matches
 
-Computer matches contain exactly one human. A second human cannot join a bot
-match through the API or an invite; remove all computers in the waiting room
-first. Multiplayer lobbies and random matchmaking cannot add bots. Bot matches
-are excluded from open-match listings. Random walks cover either all humans or one human against computers.
+Online matches contain human players. Computer opponent selection, random
+matchmaking and open-match discovery have been removed. All matches are public;
+`viewFor` still controls each player's and spectator's view of hidden information.
+Local practice and random walks continue to exercise `computerMove`.
 
 Timeouts end a match — a server timer fires at the deadline, and reads and
 moves check too — and pay its outstanding pot to the players who did not hold
 the turn, split evenly (refunded evenly to everyone only when every player
 held the turn); they never create bots.
-Ongoing mixed rosters saved before this change end on their next read, move, or
-worker call with `end_reason: "solo_computers_only"`, refunding the remaining
-pot to active humans once. Waiting lobbies can remove their bots.
 
 ## Game JSON Schemas
 
@@ -247,10 +245,11 @@ python export_game_schema_inventory.py --config C:\path\to\config.json --output 
 
 Use the optional `--refs` text file only when exporting a specific subset.
 
-## Computer opponents on the server (Phase 3)
+## Legacy computer matches (Phase 3)
 
-After every change (start, a move, a player joining or leaving), while
-`turn` includes a computer and no human, the server calls `computerMove`
+Persisted computer matches from earlier releases retain their worker support.
+For those matches, after every change, while `turn` includes a computer and no
+human, the server calls `computerMove`
 (first computer in join order) and applies it with `applyMove`, waiting
 `computer_move_delay_seconds` (default 0.6) between moves in a background
 task. Computers move whether or not any human is online. If `computerMove`
@@ -361,12 +360,8 @@ against a server computer, a poker hand) on a fresh platform with the
 same ids — hence the same match seed — and asserts every intermediate
 state is identical, and failed test seeds stored for a game are replayed
 first when the game is next submitted, so a fix is verified against the
-exact walk that found the bug. One platform fix landed with this
-phase: when a speed-match timeout hands a seat to a computer, the
-takeover now schedules the computer's moves like every other path —
-the takeover path originally never scheduled them (a human's browser
-used to submit computer moves), so a match stalled on the computer's
-turn (found by the Playwright speed test).
+exact walk that found the bug. Speed-match timeouts now end the match and
+settle its pot; they never convert a human seat to a computer.
 
 ### Privacy of history and randomness
 

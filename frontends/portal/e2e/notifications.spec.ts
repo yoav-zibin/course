@@ -3,7 +3,7 @@ import {createGame,createUser,loginAs,uniqueName} from './helpers';
 
 const headers=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
 async function createMatch(request:APIRequestContext,user:any,gameId:string) {
-  const response=await request.post('/matches',{headers:headers(user),data:{game_id:gameId,num_computer_opponents:0,private:true}});
+  const response=await request.post('/matches',{headers:headers(user),data:{game_id:gameId}});
   expect(response.ok(),await response.text()).toBeTruthy();return response.json();
 }
 async function joinAndStart(request:APIRequestContext,alice:any,bob:any,matchId:string) {
@@ -44,7 +44,7 @@ async function fakeWebPush(page:Page) {
 
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Notification acceptance uses only a disposable loopback server.');});
 
-test('a direct invite appears in-app with push disabled and opens its private match invitation',async({page,browser,request})=>{
+test('a direct invite appears in-app with push disabled and opens its match invitation',async({page,browser,request})=>{
   const alice=await createUser(request,uniqueName('Invite host')),bob=await createUser(request,uniqueName('Invite recipient'));
   await request.patch(`/users/${bob.id}`,{headers:headers(bob),data:{notifications_enabled:false}});
   const match=await createMatch(request,alice,await createGame(request,uniqueName('Invitation game')));
@@ -68,7 +68,7 @@ test('a direct invite appears in-app with push disabled and opens its private ma
   }finally{await senderContext.close();}
 });
 
-test('a rematch request lets the reserved opponent join a private rematch from the inbox',async({page,request})=>{
+test('a rematch request lets the reserved opponent join a rematch from the inbox',async({page,request})=>{
   const alice=await createUser(request,uniqueName('Rematch host')),bob=await createUser(request,uniqueName('Rematch recipient'));
   const match=await createMatch(request,alice,await createGame(request,uniqueName('Rematch game')));await joinAndStart(request,alice,bob,match.id);
   for(const [index,cell]of [0,3,1,4,2].entries()){
