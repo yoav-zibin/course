@@ -16,6 +16,15 @@ test('canonical invite URLs work for browser history, universal links and custom
   assert.deepEqual(playerLink(`${base}/i/legacy-token`,base),{kind:'invite',id:'legacy-token'});
 });
 
+test('retired Portal fragments return to games without overriding cold resume or URL validation',()=>{
+  for(const fragment of ['settings','invites','removed-screen'])assert.deepEqual(playerLink(`${base}/portal#${fragment}`,base),{kind:'screen',id:'games'},fragment);
+  for(const screen of ['games','matches','local'])assert.deepEqual(playerLink(`${base}/portal#${screen}`,base),{kind:'screen',id:screen},screen);
+  for(const raw of [base,`${base}/portal`,`${base}/portal#`,`${base}/portal?utm_source=saved`])assert.equal(playerLink(raw,base),null,raw);
+  for(const raw of [`${base}/admin#settings`,`${base}/invite/ABCd#settings`,'https://other.test/portal#settings','https://user:password@buildplay.fun/portal#settings','javascript:alert(1)#settings'])assert.equal(playerLink(raw,base),null,raw);
+  assert.deepEqual(playerLink(`${base}/portal?invite=abcd#settings`,base),{kind:'invite',id:'abcd'});
+  assert.deepEqual(playerLink(`${base}/portal#match=match-id`,base),{kind:'match',id:'match-id'});
+});
+
 test('short invite attribution survives navigation and supports notification taps',async()=>{
   const values=new Map<string,string>(),storage={async getItem(key:string){return values.get(key)??null;},async setItem(key:string,value:string){values.set(key,value);},async removeItem(key:string){values.delete(key);}};
   await rememberUrlAttribution(`${base}/invite/abcd`,base,[],storage);

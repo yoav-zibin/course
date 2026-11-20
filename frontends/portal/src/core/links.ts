@@ -17,7 +17,10 @@ export function playerLink(raw: string, baseUrl: string): PlayerLink | null {
       if (id && /^[A-Za-z0-9_-]{1,128}$/.test(id)) return {kind, id};
     }
     const screen = url.hash.slice(1);
-    return ['games', 'matches', 'local'].includes(screen) ? {kind: 'screen', id: screen as 'games' | 'matches' | 'local'} : null;
+    if (['games', 'matches', 'local'].includes(screen)) return {kind: 'screen', id: screen as 'games' | 'matches' | 'local'};
+    // Retired Portal destinations return to the catalog. An empty fragment
+    // leaves cold-start restoration of a saved match undisturbed.
+    return screen ? {kind: 'screen', id: 'games'} : null;
   } catch { return null; }
 }
 
