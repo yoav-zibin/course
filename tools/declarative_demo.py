@@ -30,7 +30,7 @@ KINDS = ('tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domine
          'mau_mau','dos','kisolo','thirty_one','gobblet','chutes_ladders',
          'six_mens_morris','connect6','ataxx','whist','scopa',
          'sim','paper_soccer','hackenbush','cartographers','dots_boxes','catan')
-DEMO_KINDS = (*KINDS, 'backgammon', 'twistfive')
+DEMO_KINDS = (*KINDS, 'backgammon', 'twistfive', 'lanterntrails')
 
 
 @contextmanager
