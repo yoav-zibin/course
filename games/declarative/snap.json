@@ -1,0 +1,1052 @@
+{
+  "name": "Snap",
+  "description": "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.",
+  "allowed_player_counts": [
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "server_code": "const rank = card => card % 13;\nfunction nextSeat(hands, seat) {\n  for (let offset = 1; offset <= hands.length; offset++) {\n    const next = (seat + offset) % hands.length;\n    if (hands[next].length) return next;\n  }\n  return seat;\n}\nconst game = {\n  newMatch(ctx) {\n    const deck = Array.from({length:52}, (_, i) => i);\n    let seed = 2166136261;\n    for (const player of ctx.players) {\n      for (const letter of player.id) seed = Math.imul(seed ^ letter.charCodeAt(0), 16777619);\n    }\n    for (let i=deck.length-1;i>0;i--) {\n      seed=(Math.imul(seed,1664525)+1013904223)>>>0;\n      const j=seed%(i+1);\n      [deck[i],deck[j]]=[deck[j],deck[i]];\n    }\n    const hands=ctx.players.map((_,i)=>deck.filter((_,j)=>j%ctx.players.length===i));\n    return {state:{hands,pile:[],seat:0,flips:0,winners:[]},turn:[ctx.players[0].id]};\n  },\n  applyMove(s,id,move,ctx) {\n    const match=s.pile.length>=2&&rank(s.pile[s.pile.length-1])===rank(s.pile[s.pile.length-2]);\n    if (!move || Object.keys(move).length!==1 || s.winners.length || s.flips>=160 ||\n        ctx.players[s.seat].id!==id || ![\"flip\",\"snap\"].includes(move.action) ||\n        (move.action===\"snap\"&&!match)) throw new InvalidMove(\"Choose a legal move on your turn.\");\n    const hands=s.hands.map(hand=>[...hand]);\n    let pile=[...s.pile],flips=s.flips;\n    if(move.action===\"snap\"){\n      hands[s.seat].push(...pile);\n      pile=[];\n    }else{\n      pile.push(hands[s.seat].shift());\n      flips++;\n    }\n    const live=hands.filter(hand=>hand.length).length;\n    const terminal=live===1||flips===160;\n    const high=Math.max(...hands.map(hand=>hand.length));\n    const winners=terminal?hands.flatMap((hand,i)=>hand.length===high?[i]:[]):[];\n    const seat=nextSeat(hands,s.seat);\n    const state={hands,pile,seat,flips,winners};\n    if(!terminal)return {state,turn:[ctx.players[seat].id]};\n    const humans=ctx.players.filter(player=>player.kind===\"human\"&&player.active!==false);\n    const winning=humans.filter(player=>winners.includes(ctx.players.indexOf(player)));\n    const paid=winning.length?winning:humans;\n    return {state,turn:null,payouts:Object.fromEntries(paid.map((player,i)=>[player.id,\n      Math.floor(ctx.pot/paid.length)+(i<ctx.pot%paid.length?1:0)]))};\n  },\n  viewFor(s){\n    return {counts:s.hands.map(hand=>hand.length),top:s.pile.slice(-2),pileCount:s.pile.length,\n      seat:s.seat,flips:s.flips,winners:s.winners};\n  },\n  computerMove(s){\n    return {action:s.pile.length>=2&&rank(s.pile[s.pile.length-1])===rank(s.pile[s.pile.length-2])?\"snap\":\"flip\"};\n  },\n  randomMove(s){return this.computerMove(s);}\n};\n",
+  "rules": "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.",
+  "ui_instructions": "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.",
+  "tutorial": {
+    "text": "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width\"><p>On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.</p>"
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/></svg>"
+    },
+    {
+      "caption": "Opening",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Turn",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Result",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "properties": {
+        "seat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "flips": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 160
+        },
+        "winners": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "maxItems": 6
+        },
+        "hands": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 51
+            },
+            "maxItems": 52
+          },
+          "maxItems": 6
+        },
+        "pile": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 51
+          },
+          "maxItems": 52
+        }
+      },
+      "required": [
+        "seat",
+        "flips",
+        "winners",
+        "hands",
+        "pile"
+      ],
+      "additionalProperties": false
+    },
+    "view_schema": {
+      "type": "object",
+      "properties": {
+        "seat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "flips": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 160
+        },
+        "winners": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "maxItems": 6
+        },
+        "counts": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 52
+          },
+          "maxItems": 6
+        },
+        "pileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 52
+        },
+        "top": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 51
+          },
+          "maxItems": 2
+        }
+      },
+      "required": [
+        "seat",
+        "flips",
+        "winners",
+        "counts",
+        "pileCount",
+        "top"
+      ],
+      "additionalProperties": false
+    },
+    "move_schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "enum": [
+            "flip",
+            "snap"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "cases": [
+      {
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "display_name": "Alice",
+              "kind": "human",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "display_name": "Bob",
+              "kind": "human",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 1
+        },
+        "state": {
+          "hands": [
+            [
+              36,
+              44,
+              8,
+              6,
+              14,
+              42,
+              28,
+              46,
+              32,
+              20,
+              26,
+              0,
+              43,
+              12,
+              38,
+              5,
+              16,
+              15,
+              10,
+              2,
+              48,
+              22,
+              1,
+              50,
+              37,
+              18
+            ],
+            [
+              4,
+              33,
+              25,
+              34,
+              7,
+              31,
+              21,
+              24,
+              40,
+              45,
+              9,
+              47,
+              30,
+              27,
+              29,
+              35,
+              13,
+              19,
+              17,
+              11,
+              49,
+              23,
+              41,
+              51,
+              39,
+              3
+            ]
+          ],
+          "pile": [],
+          "seat": 0,
+          "flips": 0,
+          "winners": []
+        },
+        "move": {
+          "action": "flip"
+        },
+        "player_id": "u1",
+        "other_player_id": "u2",
+        "view_of_mover": {
+          "counts": [
+            26,
+            26
+          ],
+          "top": [],
+          "pileCount": 0,
+          "seat": 0,
+          "flips": 0,
+          "winners": []
+        },
+        "view_of_other": {
+          "counts": [
+            26,
+            26
+          ],
+          "top": [],
+          "pileCount": 0,
+          "seat": 0,
+          "flips": 0,
+          "winners": []
+        },
+        "expected_state": {
+          "hands": [
+            [
+              44,
+              8,
+              6,
+              14,
+              42,
+              28,
+              46,
+              32,
+              20,
+              26,
+              0,
+              43,
+              12,
+              38,
+              5,
+              16,
+              15,
+              10,
+              2,
+              48,
+              22,
+              1,
+              50,
+              37,
+              18
+            ],
+            [
+              4,
+              33,
+              25,
+              34,
+              7,
+              31,
+              21,
+              24,
+              40,
+              45,
+              9,
+              47,
+              30,
+              27,
+              29,
+              35,
+              13,
+              19,
+              17,
+              11,
+              49,
+              23,
+              41,
+              51,
+              39,
+              3
+            ]
+          ],
+          "pile": [
+            36
+          ],
+          "seat": 1,
+          "flips": 1,
+          "winners": []
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "counts": [
+            25,
+            26
+          ],
+          "top": [
+            36
+          ],
+          "pileCount": 1,
+          "seat": 1,
+          "flips": 1,
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "counts": [
+            25,
+            26
+          ],
+          "top": [
+            36
+          ],
+          "pileCount": 1,
+          "seat": 1,
+          "flips": 1,
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "initial",
+        "name": "initial move",
+        "description": "Apply the selected legal card move."
+      },
+      {
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "display_name": "Alice",
+              "kind": "human",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "display_name": "Bob",
+              "kind": "human",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 26,
+          "seed": 1
+        },
+        "state": {
+          "hands": [
+            [
+              12,
+              38,
+              5,
+              16,
+              15,
+              10,
+              2,
+              48,
+              22,
+              1,
+              50,
+              37,
+              18
+            ],
+            [
+              27,
+              29,
+              35,
+              13,
+              19,
+              17,
+              11,
+              49,
+              23,
+              41,
+              51,
+              39,
+              3
+            ]
+          ],
+          "pile": [
+            36,
+            4,
+            44,
+            33,
+            8,
+            25,
+            6,
+            34,
+            14,
+            7,
+            42,
+            31,
+            28,
+            21,
+            46,
+            24,
+            32,
+            40,
+            20,
+            45,
+            26,
+            9,
+            0,
+            47,
+            43,
+            30
+          ],
+          "seat": 0,
+          "flips": 26,
+          "winners": []
+        },
+        "move": {
+          "action": "snap"
+        },
+        "player_id": "u1",
+        "other_player_id": "u2",
+        "view_of_mover": {
+          "counts": [
+            13,
+            13
+          ],
+          "top": [
+            43,
+            30
+          ],
+          "pileCount": 26,
+          "seat": 0,
+          "flips": 26,
+          "winners": []
+        },
+        "view_of_other": {
+          "counts": [
+            13,
+            13
+          ],
+          "top": [
+            43,
+            30
+          ],
+          "pileCount": 26,
+          "seat": 0,
+          "flips": 26,
+          "winners": []
+        },
+        "expected_state": {
+          "hands": [
+            [
+              12,
+              38,
+              5,
+              16,
+              15,
+              10,
+              2,
+              48,
+              22,
+              1,
+              50,
+              37,
+              18,
+              36,
+              4,
+              44,
+              33,
+              8,
+              25,
+              6,
+              34,
+              14,
+              7,
+              42,
+              31,
+              28,
+              21,
+              46,
+              24,
+              32,
+              40,
+              20,
+              45,
+              26,
+              9,
+              0,
+              47,
+              43,
+              30
+            ],
+            [
+              27,
+              29,
+              35,
+              13,
+              19,
+              17,
+              11,
+              49,
+              23,
+              41,
+              51,
+              39,
+              3
+            ]
+          ],
+          "pile": [],
+          "seat": 1,
+          "flips": 26,
+          "winners": []
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "counts": [
+            39,
+            13
+          ],
+          "top": [],
+          "pileCount": 0,
+          "seat": 1,
+          "flips": 26,
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "counts": [
+            39,
+            13
+          ],
+          "top": [],
+          "pileCount": 0,
+          "seat": 1,
+          "flips": 26,
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "intermediate",
+        "name": "intermediate move",
+        "description": "Apply the selected legal card move."
+      },
+      {
+        "ctx": {
+          "players": [
+            {
+              "id": "u1",
+              "display_name": "Alice",
+              "kind": "human",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "u2",
+              "display_name": "Bob",
+              "kind": "human",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 51,
+          "seed": 1
+        },
+        "state": {
+          "hands": [
+            [
+              18,
+              36,
+              4,
+              44,
+              33,
+              8,
+              25,
+              6,
+              34,
+              14,
+              7,
+              42,
+              31,
+              28,
+              21,
+              46,
+              24,
+              32,
+              40,
+              20,
+              45,
+              26,
+              9,
+              0,
+              47,
+              43,
+              30
+            ],
+            [
+              3
+            ]
+          ],
+          "pile": [
+            27,
+            12,
+            29,
+            38,
+            35,
+            5,
+            13,
+            16,
+            19,
+            15,
+            17,
+            10,
+            11,
+            2,
+            49,
+            48,
+            23,
+            22,
+            41,
+            1,
+            51,
+            50,
+            39,
+            37
+          ],
+          "seat": 1,
+          "flips": 50,
+          "winners": []
+        },
+        "move": {
+          "action": "flip"
+        },
+        "player_id": "u2",
+        "other_player_id": "u1",
+        "view_of_mover": {
+          "counts": [
+            27,
+            1
+          ],
+          "top": [
+            39,
+            37
+          ],
+          "pileCount": 24,
+          "seat": 1,
+          "flips": 50,
+          "winners": []
+        },
+        "view_of_other": {
+          "counts": [
+            27,
+            1
+          ],
+          "top": [
+            39,
+            37
+          ],
+          "pileCount": 24,
+          "seat": 1,
+          "flips": 50,
+          "winners": []
+        },
+        "expected_state": {
+          "hands": [
+            [
+              18,
+              36,
+              4,
+              44,
+              33,
+              8,
+              25,
+              6,
+              34,
+              14,
+              7,
+              42,
+              31,
+              28,
+              21,
+              46,
+              24,
+              32,
+              40,
+              20,
+              45,
+              26,
+              9,
+              0,
+              47,
+              43,
+              30
+            ],
+            []
+          ],
+          "pile": [
+            27,
+            12,
+            29,
+            38,
+            35,
+            5,
+            13,
+            16,
+            19,
+            15,
+            17,
+            10,
+            11,
+            2,
+            49,
+            48,
+            23,
+            22,
+            41,
+            1,
+            51,
+            50,
+            39,
+            37,
+            3
+          ],
+          "seat": 0,
+          "flips": 51,
+          "winners": [
+            0
+          ]
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "counts": [
+            27,
+            0
+          ],
+          "top": [
+            37,
+            3
+          ],
+          "pileCount": 25,
+          "seat": 0,
+          "flips": 51,
+          "winners": [
+            0
+          ]
+        },
+        "expected_view_of_other": {
+          "counts": [
+            27,
+            0
+          ],
+          "top": [
+            37,
+            3
+          ],
+          "pileCount": 25,
+          "seat": 0,
+          "flips": 51,
+          "winners": [
+            0
+          ]
+        },
+        "expected_payouts": {
+          "u1": 0
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "terminal",
+        "name": "terminal move",
+        "description": "Apply the selected legal card move."
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Snap",
+      "short_description": "Voltea una carta. Si coinciden los dos valores superiores, puedes tomar la pila. Gana el último con cartas o quien tenga más tras 160 volteos.",
+      "game_logic_rules": "Voltea una carta. Si coinciden los dos valores superiores, puedes tomar la pila. Gana el último con cartas o quien tenga más tras 160 volteos.",
+      "game_ui_rules": "Voltea una carta. Si coinciden los dos valores superiores, puedes tomar la pila. Gana el último con cartas o quien tenga más tras 160 volteos.",
+      "tutorial_strings": {
+        "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.": "Voltea una carta. Si coinciden los dos valores superiores, puedes tomar la pila. Gana el último con cartas o quien tenga más tras 160 volteos."
+      },
+      "client_strings": {
+        "title": "Snap",
+        "flip": "Voltear",
+        "snap": "Snap",
+        "cards": "Cartas: {cards}",
+        "pile": "Pila: {cards}",
+        "turn": "Turno de {name}",
+        "winners": "Gana: {names}",
+        "server_illegal": "Elige una jugada válida en tu turno."
+      }
+    },
+    "fr": {
+      "display_name": "Snap",
+      "short_description": "Retournez une carte. Si les deux cartes du dessus ont le même rang, prenez la pile. Le dernier avec des cartes gagne, ou celui qui en a le plus après 160 retournements.",
+      "game_logic_rules": "Retournez une carte. Si les deux cartes du dessus ont le même rang, prenez la pile. Le dernier avec des cartes gagne, ou celui qui en a le plus après 160 retournements.",
+      "game_ui_rules": "Retournez une carte. Si les deux cartes du dessus ont le même rang, prenez la pile. Le dernier avec des cartes gagne, ou celui qui en a le plus après 160 retournements.",
+      "tutorial_strings": {
+        "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.": "Retournez une carte. Si les deux cartes du dessus ont le même rang, prenez la pile. Le dernier avec des cartes gagne, ou celui qui en a le plus après 160 retournements."
+      },
+      "client_strings": {
+        "title": "Snap",
+        "flip": "Retourner",
+        "snap": "Snap",
+        "cards": "Cartes : {cards}",
+        "pile": "Pile : {cards}",
+        "turn": "Tour de {name}",
+        "winners": "Victoire : {names}",
+        "server_illegal": "Choisissez un coup légal à votre tour."
+      }
+    },
+    "de": {
+      "display_name": "Snap",
+      "short_description": "Decke eine Karte auf. Haben die beiden obersten Karten denselben Rang, darfst du den Stapel nehmen. Der letzte Spieler mit Karten gewinnt, sonst nach 160 Karten der mit den meisten.",
+      "game_logic_rules": "Decke eine Karte auf. Haben die beiden obersten Karten denselben Rang, darfst du den Stapel nehmen. Der letzte Spieler mit Karten gewinnt, sonst nach 160 Karten der mit den meisten.",
+      "game_ui_rules": "Decke eine Karte auf. Haben die beiden obersten Karten denselben Rang, darfst du den Stapel nehmen. Der letzte Spieler mit Karten gewinnt, sonst nach 160 Karten der mit den meisten.",
+      "tutorial_strings": {
+        "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.": "Decke eine Karte auf. Haben die beiden obersten Karten denselben Rang, darfst du den Stapel nehmen. Der letzte Spieler mit Karten gewinnt, sonst nach 160 Karten der mit den meisten."
+      },
+      "client_strings": {
+        "title": "Snap",
+        "flip": "Aufdecken",
+        "snap": "Snap",
+        "cards": "Karten: {cards}",
+        "pile": "Stapel: {cards}",
+        "turn": "{name} ist am Zug",
+        "winners": "Gewonnen: {names}",
+        "server_illegal": "Wähle einen gültigen Zug, wenn du an der Reihe bist."
+      }
+    },
+    "pt": {
+      "display_name": "Snap",
+      "short_description": "Vira uma carta. Se as duas de cima tiverem o mesmo valor, podes recolher a pilha. Vence o último com cartas ou quem tiver mais após 160 viradas.",
+      "game_logic_rules": "Vira uma carta. Se as duas de cima tiverem o mesmo valor, podes recolher a pilha. Vence o último com cartas ou quem tiver mais após 160 viradas.",
+      "game_ui_rules": "Vira uma carta. Se as duas de cima tiverem o mesmo valor, podes recolher a pilha. Vence o último com cartas ou quem tiver mais após 160 viradas.",
+      "tutorial_strings": {
+        "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.": "Vira uma carta. Se as duas de cima tiverem o mesmo valor, podes recolher a pilha. Vence o último com cartas ou quem tiver mais após 160 viradas."
+      },
+      "client_strings": {
+        "title": "Snap",
+        "flip": "Virar",
+        "snap": "Snap",
+        "cards": "Cartas: {cards}",
+        "pile": "Pilha: {cards}",
+        "turn": "Vez de {name}",
+        "winners": "Vitória: {names}",
+        "server_illegal": "Escolhe uma jogada válida na tua vez."
+      }
+    },
+    "zh": {
+      "display_name": "Snap",
+      "short_description": "轮到你时翻牌，或在顶端两张同点时收走牌堆。最后仍有牌的人获胜，翻满 160 次时牌最多的人获胜。",
+      "game_logic_rules": "轮到你时翻牌，或在顶端两张同点时收走牌堆。最后仍有牌的人获胜，翻满 160 次时牌最多的人获胜。",
+      "game_ui_rules": "轮到你时翻牌，或在顶端两张同点时收走牌堆。最后仍有牌的人获胜，翻满 160 次时牌最多的人获胜。",
+      "tutorial_strings": {
+        "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.": "轮到你时翻牌，或在顶端两张同点时收走牌堆。最后仍有牌的人获胜，翻满 160 次时牌最多的人获胜。"
+      },
+      "client_strings": {
+        "title": "Snap",
+        "flip": "翻牌",
+        "snap": "抢牌",
+        "cards": "手牌：{cards}",
+        "pile": "牌堆：{cards}",
+        "turn": "轮到 {name}",
+        "winners": "获胜：{names}",
+        "server_illegal": "请在自己的回合选择合法走法。"
+      }
+    },
+    "hi": {
+      "display_name": "Snap",
+      "short_description": "एक पत्ता पलटें। ऊपर के दोनों पत्तों का अंक समान हो तो ढेर लें। आखिरी बचे खिलाड़ी या 160 पलटों के बाद सबसे अधिक पत्तों वाला खिलाड़ी जीतता है।",
+      "game_logic_rules": "एक पत्ता पलटें। ऊपर के दोनों पत्तों का अंक समान हो तो ढेर लें। आखिरी बचे खिलाड़ी या 160 पलटों के बाद सबसे अधिक पत्तों वाला खिलाड़ी जीतता है।",
+      "game_ui_rules": "एक पत्ता पलटें। ऊपर के दोनों पत्तों का अंक समान हो तो ढेर लें। आखिरी बचे खिलाड़ी या 160 पलटों के बाद सबसे अधिक पत्तों वाला खिलाड़ी जीतता है।",
+      "tutorial_strings": {
+        "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.": "एक पत्ता पलटें। ऊपर के दोनों पत्तों का अंक समान हो तो ढेर लें। आखिरी बचे खिलाड़ी या 160 पलटों के बाद सबसे अधिक पत्तों वाला खिलाड़ी जीतता है।"
+      },
+      "client_strings": {
+        "title": "Snap",
+        "flip": "पलटें",
+        "snap": "स्नैप",
+        "cards": "पत्ते: {cards}",
+        "pile": "ढेर: {cards}",
+        "turn": "{name} की बारी",
+        "winners": "विजेता: {names}",
+        "server_illegal": "अपनी बारी में वैध चाल चुनें।"
+      }
+    },
+    "ar": {
+      "display_name": "Snap",
+      "short_description": "اقلب بطاقة. إذا تساوت رتبتا أعلى بطاقتين يمكنك أخذ الكومة. يفوز آخر لاعب يملك بطاقات أو من يملك أكثرها بعد 160 قلباً.",
+      "game_logic_rules": "اقلب بطاقة. إذا تساوت رتبتا أعلى بطاقتين يمكنك أخذ الكومة. يفوز آخر لاعب يملك بطاقات أو من يملك أكثرها بعد 160 قلباً.",
+      "game_ui_rules": "اقلب بطاقة. إذا تساوت رتبتا أعلى بطاقتين يمكنك أخذ الكومة. يفوز آخر لاعب يملك بطاقات أو من يملك أكثرها بعد 160 قلباً.",
+      "tutorial_strings": {
+        "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.": "اقلب بطاقة. إذا تساوت رتبتا أعلى بطاقتين يمكنك أخذ الكومة. يفوز آخر لاعب يملك بطاقات أو من يملك أكثرها بعد 160 قلباً."
+      },
+      "client_strings": {
+        "title": "Snap",
+        "flip": "اقلب",
+        "snap": "سناب",
+        "cards": "البطاقات: {cards}",
+        "pile": "الكومة: {cards}",
+        "turn": "دور {name}",
+        "winners": "الفائز: {names}",
+        "server_illegal": "اختر حركة قانونية في دورك."
+      }
+    }
+  },
+  "all_state_public": false,
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 480,
+      "height": 345,
+      "camera_enabled": false
+    },
+    "boards": [
+      {
+        "id": "pile",
+        "kind": "free",
+        "x": 20,
+        "y": 145,
+        "width": 440,
+        "height": 180,
+        "color": "#f8f0dd",
+        "line_color": "#2445ac"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "rect",
+        "width": 96,
+        "height": 132,
+        "color": "#fffaf0"
+      }
+    },
+    "assets": {},
+    "strings": {
+      "title": "Snap",
+      "flip": "Flip",
+      "cards": "Cards: {cards}",
+      "pile": "Pile: {cards}",
+      "turn": "Player {name}'s turn",
+      "winners": "{names} wins",
+      "server_illegal": "Choose a legal move on your turn.",
+      "snap": "Snap"
+    },
+    "ui_code": "const KIND=\"snap\";\nconst SOURCE_STRINGS={\"title\": \"Snap\", \"flip\": \"Flip\", \"cards\": \"Cards: {cards}\", \"pile\": \"Pile: {cards}\", \"turn\": \"Player {name}'s turn\", \"winners\": \"{names} wins\", \"server_illegal\": \"Choose a legal move on your turn.\", \"snap\": \"Snap\"};\nconst gameUI = {\n reduce(message, previous) {\n  const m=message.type==='ui_event'?message.state_changed:message;\n  const v=m.view||m.state||{}, strings={...SOURCE_STRINGS,...m.strings};\n  const t=(key,values={})=>String(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String(values[k]??''));\n  const who=i=>m.players?.[i]?.name||String(i+1);\n  const over=m.status==='over', active=!over&&!m.replay&&Number.isInteger(m.acting_for_player_index);\n  const scene={labels:[],pieces:[],controls:[]};\n  scene.labels.push({id:'title',text:t('title'),x:20,y:15,font_size:26});\n  scene.labels.push({id:'turn',text:over?t('winners',{names:(v.winners||[]).map(who).join(', ')}):t('turn',{name:who(v.seat)}),x:20,y:53,font_size:19});\n  scene.labels.push({id:'counts',text:t('cards',{cards:(v.counts||[]).map((n,i)=>who(i)+': '+n).join(' · ')}),x:20,y:84,font_size:15});\n  scene.labels.push({id:'pile_count',text:t('pile',{cards:v.pileCount||0}),x:20,y:112,font_size:17});\n  const top=KIND==='snap'?(v.top||[]):v.top===null||v.top===undefined?[]:[v.top];\n  const face=c=>['2','3','4','5','6','7','8','9','10','J','Q','K','A'][c%13]+['♣','♦','♥','♠'][Math.floor(c/13)];\n  top.forEach((card,i)=>scene.pieces.push({id:'public_'+i,type:'card',board:'pile',position:{x:90+i*125,y:82},text:face(card),actions:[]}));\n  const moves={};\n  const button=(id)=>{scene.controls.push({id,kind:'button',label:t(id)});moves[id]={action:id};};\n  if(active){\n   button('flip');\n   if(KIND==='slapjack')button('slap');\n   else if(top.length===2&&top[0]%13===top[1]%13)button('snap');\n  }\n  const result={scene,local_state:null};\n  if(message.type==='ui_event'&&message.event?.type==='tap'&&moves[message.event.id])result.make_move=moves[message.event.id];\n  return result;\n }\n};\n"
+  }
+}
