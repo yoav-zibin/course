@@ -88,9 +88,14 @@ def test_bots_cannot_be_added_to_multiplayer_or_joined_via_invite(api):
     assert api.request("PATCH", f"/matches/{multi}", as_user=alice,
                        json={"num_computer_opponents": 1}).status_code == 405
     solo = api.new_match(owner=alice, game_id=game, num_computer_opponents=1)
-    assert api.request("POST", f"/matches/{solo}/join", as_user=bob).status_code == 409
-    invitation = api.ok("POST", f"/matches/{solo}/invites", as_user=alice, json={})
-    assert api.request("POST", f"/invites/{invitation['token']}/accept", as_user=bob).status_code == 409
+    assert api.request("POST", f"/matches/{solo}/join", as_user=bob).status_code == 403
+    assert api.request("POST", f"/matches/{solo}/invites", as_user=alice, json={}).status_code == 403
+    # A stale capability retained by a pre-migration computer record must not
+    # expose or seat anyone in this account-private match.
+    obsolete_code = api.platform._store.get_match(solo).invite_code
+    assert obsolete_code
+    assert api.request("GET", f"/invites/{obsolete_code}").status_code == 404
+    assert api.request("POST", f"/invites/{obsolete_code}/accept", as_user=bob).status_code == 404
 
 
 def test_legacy_mixed_match_ends_and_refunds_once(api):

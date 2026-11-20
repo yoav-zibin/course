@@ -107,7 +107,10 @@ def generate(store, *, run_id, users, games, matches, max_writes):
             new_id=lambda: mid,
             new_invite_token=lambda: "".join(invite_rng.choices("abcdefghijklmnopqrstuvwxyz", k=4)),
         )
-        people = rng.sample(range(users), rng.randint(1, 4))
+        # This workload exercises authoritative, shared human multiplayer.
+        # Single-account modes use portable private saves, never a one-person
+        # multiplayer lobby that bypasses the match-kind/start contract.
+        people = rng.sample(range(users), rng.randint(2, 4))
         # A complete service operation and checkpoint are one commit, so a
         # lost response or interrupted process cannot duplicate payouts.
         with store.atomic():

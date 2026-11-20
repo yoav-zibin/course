@@ -1081,6 +1081,8 @@ def test_historical_activity_runs_quickjs_and_resumes_without_duplicates(store):
     page = store.page("matches", limit=100)
     assert all(match.created_at.month == 9 for match in page.items)
     for match in page.items:
+        assert match.match_kind == "multiplayer"
+        assert len(match.seats) >= 2 and all(seat.kind == "human" for seat in match.seats)
         if match.moves:
             assert all(move.move is not None for move in match.moves)
             assert match.moves[-1].new_state == match.state
