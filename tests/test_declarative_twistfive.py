@@ -50,11 +50,12 @@ def test_seeded_random_walks_always_reach_a_legal_end():
     report = run_random_walks(BODY.server_code, game_schemas=BODY.game_schemas(),
                               rules=GameRules(allowed_player_counts=(2,), allows_leave_mid_match=False,
                                               allows_join_mid_match=False),
-                              run_seed=31, max_walks=200, budget_seconds=60, max_moves_per_walk=40,
+                              run_seed=31, max_walks=100, budget_seconds=math.inf, max_moves_per_walk=40,
                               contract=BODY.unit_tests)
     assert report.passed, report.failures
-    # Each walk also fuzzes malformed moves; every completed walk must end the game.
-    assert report.walks_completed >= 100 and report.terminal_states == report.walks_completed
+    # Fix coverage by count rather than CI throughput; per-call limits remain enforced.
+    # Each walk also fuzzes malformed moves and must reach a legal terminal state.
+    assert report.walks_completed == 100 and report.terminal_states == 100
 
 
 def test_five_by_placement_wins_at_once_and_a_twist_is_then_refused():
