@@ -1,6 +1,9 @@
 // A compound gesture follows one checker through canonical legal single moves.
 // Only destinations whose legal orders all produce the same complete outcome
 // are offered. Ordinary single moves always retain their original behavior.
+// Presentation provenance is recorded only for an accepted public command;
+// exploratory branches never change it or participate in outcome signatures.
+let bgAcceptedMoveSteps = null;
 (() => {
   const singleApplyMove = game.applyMove;
   const ordinaryViewFor = game.viewFor;
@@ -61,7 +64,9 @@
 
   game.applyMove = function (state, playerId, move, ctx) {
     try {
-      return singleApplyMove.call(game, state, playerId, move, ctx);
+      const result = singleApplyMove.call(game, state, playerId, move, ctx);
+      bgAcceptedMoveSteps = move && move.action === 'move' ? [{from: move.from, to: move.to}] : [];
+      return result;
     } catch (error) {
       // Preserve canonical turn, input and endcap validation. Only an otherwise
       // illegal single destination can be interpreted as a compound gesture.
@@ -70,6 +75,7 @@
       if (!combined) throw error;
       let result = {state};
       for (const leg of combined.steps) result = singleApplyMove.call(game, result.state, playerId, leg, ctx);
+      bgAcceptedMoveSteps = combined.steps.map(leg => ({from: leg.from, to: leg.to}));
       return result;
     }
   };

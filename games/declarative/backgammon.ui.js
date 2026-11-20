@@ -1,5 +1,32 @@
 // Presentation only. legalMoves and optional combinedMoves come from authority.
 // Native hosts select a movable checker, then emit drop(piece_id,target_id).
+const checkerLocations = Array.from({length:24}, (_, i) => String(i)).concat(['bar', 'off']);
+const checkerCount = (view, seat, at) => at === 'bar' ? view.bar[seat] : at === 'off' ? view.off[seat] :
+  view.owner[Number(at)] === seat ? view.cnt[Number(at)] : 0;
+const checkerPoint = (seat, at, index, count) => {
+  if (at === 'off') return {board:'off', position:{x:32,y:(seat === 0 ? 404 : 36) + (seat === 0 ? -10 : 10) * index}};
+  const bar = at === 'bar', n = Number(at), col = n < 12 ? 11 - n : n - 12;
+  const lower = bar ? seat === 1 : n < 12;
+  return {board:'main', position:{x:bar ? 336 : 36 + col * 52 + (col >= 6 ? 28 : 0),
+    y:(lower ? 410 : 30) + (lower ? -1 : 1) * index * Math.min(42, (bar ? 46.3 : 126.6) / Math.max(1, count - 1))}};
+};
+const sameCheckerPoint = (a, b) => a.board === b.board &&
+  Math.abs(a.position.x - b.position.x) < .001 && Math.abs(a.position.y - b.position.y) < .001;
+const copyCheckerStacks = stacks => stacks.map(seat => Object.fromEntries(checkerLocations.map(at => [at, seat[at].slice()])));
+const checkerHits = last => {
+  const board = JSON.parse(JSON.stringify(last.before));
+  return last.steps.map(step => {
+    const hit = step.to !== 'off' && board.owner[step.to] === 1 - last.seat && board.cnt[step.to] === 1;
+    if (step.from === 'bar') board.bar[last.seat]--;
+    else if (--board.cnt[step.from] === 0) board.owner[step.from] = -1;
+    if (step.to === 'off') board.off[last.seat]++;
+    else {
+      if (hit) {board.bar[1-last.seat]++; board.cnt[step.to] = 0;}
+      board.owner[step.to] = last.seat; board.cnt[step.to]++;
+    }
+    return hit;
+  });
+};
 const gameUI = {
   reduce(message, localState) {
     const m = message.type === 'ui_event' ? message.state_changed : message;
@@ -52,7 +79,7 @@ const gameUI = {
     // scene so a moved, captured or borne-off checker keeps its ID for animation.
     // This never determines a move or edits the authoritative game state.
     const locations = Array.from({length: 24}, (_, i) => String(i)).concat(['bar', 'off']);
-    const stacks = [{}, {}];
+    let stacks = [{}, {}];
     for (let seat = 0; seat < 2; seat++) {
       const previous = localState && localState.stacks && localState.stacks[seat] || {};
       const used = new Set(), displaced = [];
@@ -73,6 +100,20 @@ const gameUI = {
       }
       for (const at of locations) while (stacks[seat][at].length < desired(at))
         stacks[seat][at].push(displaced.shift());
+    }
+    // An adjacent accepted command names its exact route. Move those IDs in
+    // that order, including captured blots, instead of pairing count changes.
+    const lastMove = s.last_move;
+    if (lastMove && lastMove.before && lastMove.steps.length && localState && localState.stacks &&
+        localState.move_count === lastMove.move_count - 1 && checkerLocations.every(at => [0,1].every(seat =>
+          (localState.stacks[seat][at] || []).length === checkerCount(lastMove.before, seat, at)))) {
+      stacks = copyCheckerStacks(localState.stacks);
+      const hits = checkerHits(lastMove), seat = lastMove.seat;
+      lastMove.steps.forEach((step, i) => {
+        const id = stacks[seat][step.from].pop();
+        if (hits[i]) stacks[1-seat].bar.push(stacks[1-seat][step.to].pop());
+        stacks[seat][step.to].push(id);
+      });
     }
     const pointX = n => {
       const col = n < 12 ? 11 - n : n - 12;
@@ -337,7 +378,7 @@ const gameUI = {
     if (!setup && !help) for (const notice of notices) pieces.push({id:notice.id,type:'notice',board:'main',
       position:{x:336,y:220},text:t(notice.text,{name:name(notice.seat)}),actions:[],z:1300,
       animation:{kind:'notice',key:notice.id+':'+m.move_count,duration_ms:notice.duration,delay_ms:notice.delay}});
-    const out = {scene: {pieces, targets, controls, labels}, local_state: {stacks, roll, help, hint, options, motion_events: motionEvents, motion_move_count: m.move_count,
+    const out = {scene: {pieces, targets, controls, labels}, local_state: {stacks, move_count:m.move_count, roll, help, hint, options, motion_events: motionEvents, motion_move_count: m.move_count,
       opening_events: openingEvents, opening_faces: openingFaces, opening: !!s.opening, notices, notice_count:m.move_count}};
     if (message.type === 'ui_event' && active && setup && message.event.type === 'tap' && message.event.id === 'start_game')
       out.make_move = {action:'configure',difficulty:options.difficulty,goal:options.goal,cube_enabled:options.cube_enabled};
@@ -358,5 +399,57 @@ const gameUI = {
       }
     }
     return out;
+  },
+  getLastMoveAnimations(view, scene) {
+    const last = view.last_move;
+    if (!last || !Array.isArray(last.steps)) return null; // Older pinned rules.
+    if (!last.steps.length) return [];
+    if (!last.before) return null;
+    // Recover IDs from the complete final scene, so a reload or spectator can
+    // describe the same route without earlier local presentation memory.
+    const stacks = [{}, {}], pieces = (scene.pieces || []).filter(piece => /^checker_[01]_/.test(piece.id));
+    for (let seat = 0; seat < 2; seat++) for (const at of checkerLocations) {
+      const count = checkerCount(view, seat, at);
+      stacks[seat][at] = [];
+      for (let i = 0; i < count; i++) {
+        const point = checkerPoint(seat, at, i, count);
+        const piece = pieces.find(piece => piece.id.startsWith('checker_' + seat + '_') && sameCheckerPoint(piece, point));
+        if (!piece) return null;
+        stacks[seat][at].push(piece.id);
+      }
+    }
+    const hits = checkerHits(last), seat = last.seat;
+    for (let i = last.steps.length - 1; i >= 0; i--) {
+      const step = last.steps[i], id = stacks[seat][step.to].pop();
+      if (!id) return null;
+      stacks[seat][step.from].push(id);
+      if (hits[i]) {
+        const captured = stacks[1-seat].bar.pop();
+        if (!captured) return null;
+        stacks[1-seat][step.to].push(captured);
+      }
+    }
+    const current = {};
+    for (let player = 0; player < 2; player++) for (const at of checkerLocations)
+      stacks[player][at].forEach((id, i, ids) => { current[id] = checkerPoint(player, at, i, ids.length); });
+    const animations = [];
+    const movePiece = (id, to, duration) => {
+      const from = current[id];
+      if (!sameCheckerPoint(from, to)) animations.push({piece_id:id,path:[from,to],duration_ms:duration});
+      current[id] = to;
+    };
+    last.steps.forEach((step, i) => {
+      const id = stacks[seat][step.from].pop();
+      const captured = hits[i] ? stacks[1-seat][step.to].pop() : null;
+      stacks[seat][step.to].push(id);
+      movePiece(id, checkerPoint(seat, String(step.to), stacks[seat][step.to].length - 1, stacks[seat][step.to].length), step.to === 'off' ? 400 : 800);
+      if (captured) {
+        stacks[1-seat].bar.push(captured);
+        movePiece(captured, checkerPoint(1-seat, 'bar', stacks[1-seat].bar.length - 1, stacks[1-seat].bar.length), 400);
+      }
+    });
+    // Compressed stacks settle explicitly after the moving and hit checkers.
+    for (const piece of pieces) movePiece(piece.id, {board:piece.board,position:piece.position}, 120);
+    return animations;
   }
 };

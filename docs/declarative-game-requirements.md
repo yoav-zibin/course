@@ -129,15 +129,23 @@ a valid move; they do not have to reveal the best strategy.
 
 | Context | Required behavior |
 | --- | --- |
-| Your move during live play | Apply it immediately by default, including affected objects. A game that explicitly declares physical timing may animate local and pass-and-play moves at that timing. |
+| Your move during live play | Apply it immediately, including affected objects. This also applies to pass-and-play moves; `motion.animate_own` is accepted for compatibility and ignored during live play. |
 | Another human's or a computer's move during live play | Animate the affected objects so you can see what that player did. This includes your piece being captured or displaced by their action. |
 | Match history review | Animate each recorded move when stepping or playing through history, including the reviewer's own recorded moves. Backward steps should visibly reverse the recorded changes. |
 
 Use the recorded actor and move history, not whose turn comes next, to decide
 what happened. A combined update containing your move and computer replies
-must preserve the accepted order. Default games place your move immediately
-before animating the computer changes; games with a physical timing policy
-play each accepted action in sequence.
+must preserve the accepted order. Place your move immediately before animating
+each accepted computer action in sequence.
+
+Games with `gameUI.getLastMoveAnimations(view, scene)` describe their movement
+explicitly using [ordered paths](declarative-games.md#describe-the-last-moves-paths).
+For this API, only known opponent moves animate; the viewer's own moves always
+settle immediately. Forward adjacent history may play an opponent's declared
+path; backward history and jumps settle immediately. The table's full history
+behavior applies to legacy inferred motion.
+Keep last-move details in authoritative state and the safe filtered view so
+animation can be reconstructed without guessing from scene differences.
 
 Animations must make the source, destination and effects understandable.
 Preserve object identity through moves, captures, dealing, stacking, rotation
@@ -189,7 +197,7 @@ Before accepting a game or host update, verify:
 - Phone, tablet and laptop layouts work in both orientations; rendered object
   and control sizes meet the minimum. Zoom, pan and orientation changes retain
   a usable view and never accidentally make a move.
-- Live own moves are immediate by default; games may explicitly opt into physical movement timing; human/computer opponent moves remain visible
+- Live own moves are immediate, including pass-and-play; human/computer opponent moves remain visible
   long enough to follow, including captures and combined updates.
 - Read-only history steps and playback animate all actors, explain what
   changed, and respect reduced motion. Live state and results remain intact.

@@ -496,7 +496,7 @@ export class PortalStore {
     await this.rememberMatchGame(game);
     if (!cached) await this.cache(`/games/${game.id}/versions/${game.version}`, game);
     let presentation = game.declarative_ui;
-    if (game.id === '5f5293c3-2a3a-4eec-b631-9debf59be0ca') { try { presentation = await (await import('../game/presentation')).presentationForGame(game); } catch { /* preserve pinned original on unavailable digest */ } }
+    if (['5f5293c3-2a3a-4eec-b631-9debf59be0ca','e299b14e-480d-44f3-8132-74282a46cebc'].includes(game.id)) { try { presentation = await (await import('../game/presentation')).presentationForGame(game); } catch { /* preserve pinned original on unavailable digest */ } }
     // Display repair never mutates the persisted package or its version/rules.
     return localizeGame({ ...game, declarative_ui: presentation });
   }

@@ -102,6 +102,11 @@ def schemas(kind):
     }
     size={'tictactoe':9,'connect4':42,'reversi':64,'nim':1,'mancala':14,'gomoku':81,'connect6':361,'ataxx':49,'hex':49,'domineering':36,'memory':16,'pig':0}[kind]
     properties['board'].update(minItems=size,maxItems=size)
+    if kind=='connect4':
+        properties['last_move']={'anyOf':[{'type':'null'},{'type':'object',
+            'required':['seat','column','cell'],'additionalProperties':False,'properties':{
+                'seat':{'enum':[0,1]},'column':{'type':'integer','minimum':0,'maximum':6},
+                'cell':{'type':'integer','minimum':0,'maximum':41}}}]}
     if kind=='connect6':
         properties.update({'opening':{'type':'boolean'},'pending':{'enum':[0,1]}})
     state={'type':'object','required':list(properties),'additionalProperties':False,'properties':properties}

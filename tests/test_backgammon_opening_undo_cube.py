@@ -133,7 +133,8 @@ def test_undo_restores_capture_dice_and_roll_without_randomness(code, rules):
     assert view['can_undo'] and 'undo_stack' not in view
     observed = apply_with_counted_random(code, moved['state'], ctx, {'action': 'undo'})
     assert observed['count'] == 0
-    assert observed['result'] == {'state': before, 'turn': ['a']}
+    expected = {**before, 'last_move': {'seat': 0, 'move_count': 1, 'steps': []}}
+    assert observed['result'] == {'state': expected, 'turn': ['a']}
     with pytest.raises(InvalidMoveError):
         rules.call('applyMove', moved['state'], 'b', {'action': 'undo'}, ctx=ctx, seed=7)
     with pytest.raises(InvalidMoveError):
@@ -166,7 +167,8 @@ def test_capture_and_undo_survive_canonical_state_storage(rules):
     assert moved['state']['bar'] == [0, 1] and moved['state']['moves'] == [2]
     restored = rules.call('applyMove', json.loads(canonical_json(moved['state'])),
                           'a', {'action': 'undo'}, ctx={**ctx, 'move_count': 1}, seed=7)
-    assert restored == {'state': before, 'turn': ['a']}
+    expected = {**before, 'last_move': {'seat': 0, 'move_count': 2, 'steps': []}}
+    assert restored == {'state': expected, 'turn': ['a']}
     assert state == before
 
 
@@ -176,7 +178,7 @@ def test_combined_drag_is_one_undo_choice_and_finished_turn_cannot_be_undone(rul
     moved = rules.call('applyMove', state, 'a', {'action': 'move', 'from': 9, 'to': 7}, ctx=ctx, seed=7)
     assert moved['state']['moves'] == [1, 1] and len(moved['state']['undo_stack']) == 1
     undone = rules.call('applyMove', moved['state'], 'a', {'action': 'undo'}, ctx=ctx, seed=7)
-    assert undone['state'] == state
+    assert undone['state'] == {**state, 'last_move': {'seat': 0, 'move_count': 1, 'steps': []}}
     finished = rules.call('applyMove', state, 'a', {'action': 'move', 'from': 9, 'to': 5}, ctx=ctx, seed=7)
     assert finished['state']['needRoll'] and finished['state']['cur'] == 1
     assert finished['state']['undo_stack'] == []

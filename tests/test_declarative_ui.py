@@ -308,3 +308,83 @@ def test_declarative_game_requires_full_query_store_trace_flow_and_retests_chang
     changed["declarative_ui"]["piece_types"]["token"]["color"] = "#abcdef"
     with pytest.raises(InvalidRequestError, match="does not match"):
         traces.assert_complete(Platform(), GameImport.model_validate(changed))
+
+
+def test_last_move_animation_hook_receives_filtered_view_and_final_scene_only_on_state_change():
+    code = """
+      const gameUI={
+        reduce(m){return {scene:{pieces:[{id:'token0',type:'token',board:'board',position:{cell:'0'}}]}};},
+        getLastMoveAnimations(view,scene){
+          if(view.n!==1 || scene.pieces[0].id!=='token0') throw new Error('wrong inputs');
+          return [{piece_id:'token0',path:[{board:'board',position:{x:100,y:-50}},
+            {board:'board',position:{cell:'0'}}],duration_ms:500}];
+        }
+      };
+    """
+    logic = DeclarativeLogic(spec(code))
+    result = logic.reduce(state_changed())
+    assert result['last_move_animations'][0]['piece_id'] == 'token0'
+    assert result == logic.reduce(state_changed())
+    event = {'type':'ui_event', 'event':{'type':'tap','id':'token0'},
+             'state_changed':state_changed(view={'n':2})}
+    assert 'last_move_animations' not in logic.reduce(event)
+
+
+@pytest.mark.parametrize('value', ['null', 'undefined', '[]'])
+def test_last_move_animation_hook_allows_legacy_fallback_and_empty_opt_out(value):
+    ui = spec('const gameUI={reduce(){return {scene:{}};},getLastMoveAnimations(){return '+value+';}};')
+    result = DeclarativeLogic(ui).reduce(state_changed())
+    if value == 'undefined':
+        assert 'last_move_animations' not in result
+    else:
+        assert result['last_move_animations'] == json.loads(value)
+
+
+def test_last_move_paths_support_repeated_pieces_and_board_relative_coordinates():
+    from game_platform.declarative_ui import validate_response
+    ui = spec()
+    ui['boards'].append({'id':'tray','kind':'zone','x':600,'y':0,'width':100,'height':600})
+    scene = {'pieces':[{'id':'token0','type':'token','board':'tray','position':{'x':50,'y':100}}]}
+    def waypoint(board, at):
+        return {'board':board,'position':at}
+    animations = [
+        {'piece_id':'token0','path':[waypoint('board',{'cell':'0'}), waypoint('board',{'cell':'1'})]},
+        {'piece_id':'token0','path':[waypoint('board',{'x':300,'y':100}), waypoint('tray',{'x':50,'y':100})]}
+    ]
+    assert validate_response(ui,{'scene':scene,'last_move_animations':animations})
+    animations[1]['path'][0]['position']['x'] += 1
+    with pytest.raises(DeclarativeUIError,match='must join'):
+        validate_response(ui,{'scene':scene,'last_move_animations':animations})
+
+
+@pytest.mark.parametrize('animation', [
+    {'piece_id':'missing','path':[{'board':'board','position':{'cell':'1'}},{'board':'board','position':{'cell':'0'}}]},
+    {'piece_id':'token0','path':[{'board':'missing','position':{'cell':'1'}},{'board':'board','position':{'cell':'0'}}]},
+    {'piece_id':'token0','path':[{'board':'board','position':{'cell':'9'}},{'board':'board','position':{'cell':'0'}}]},
+    {'piece_id':'token0','path':[{'board':'board','position':{'cell':'1'}}]},
+    {'piece_id':'token0','path':[{'board':'board','position':{'cell':'1'}},{'board':'board','position':{'cell':'2'}}]},
+    {'piece_id':'token0','path':[{'board':'board','position':{'cell':'1'}},{'board':'board','position':{'cell':'0'}}],'duration_ms':5001},
+])
+def test_last_move_paths_reject_invalid_references_endpoints_and_timing(animation):
+    from game_platform.declarative_ui import validate_response
+    scene = {'pieces':[{'id':'token0','type':'token','board':'board','position':{'cell':'0'}}]}
+    with pytest.raises(DeclarativeUIError):
+        validate_response(spec(),{'scene':scene,'last_move_animations':[animation]})
+
+
+def test_last_move_paths_reject_hidden_pieces_and_excessive_sequence_duration():
+    from game_platform.declarative_ui import validate_response
+    scene = {'pieces':[{'id':'token0','type':'token','board':'board','position':{'cell':'0'},'hidden':True}]}
+    animation = {'piece_id':'token0','path':[{'board':'board','position':{'cell':'0'}},{'board':'board','position':{'cell':'0'}}]}
+    with pytest.raises(DeclarativeUIError,match='visible'):
+        validate_response(spec(),{'scene':scene,'last_move_animations':[animation]})
+    scene['pieces'][0].pop('hidden')
+    with pytest.raises(DeclarativeUIError,match='30000ms'):
+        validate_response(spec(),{'scene':scene,'last_move_animations':[animation]*21})
+
+
+def test_last_move_animation_hook_remains_inside_bounded_presentation_vm():
+    for body in ['while(true){}', 'return Math.random()', 'return fetch("https://example.com")']:
+        ui = spec('const gameUI={reduce(){return {scene:{}};},getLastMoveAnimations(){'+body+'}};')
+        with pytest.raises(DeclarativeUIError):
+            DeclarativeLogic(ui).reduce(state_changed())

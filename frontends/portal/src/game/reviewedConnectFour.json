@@ -1,0 +1,118 @@
+{
+  "assets": {
+    "column0": {
+      "media_type": "image/svg+xml",
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0MCI+PHBhdGggZD0iTTQgMkg0NEwyNCAzNloiIGZpbGw9IiNmZmRjNDUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+"
+    },
+    "column1": {
+      "media_type": "image/svg+xml",
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0MCI+PHBhdGggZD0iTTQgMkg0NEwyNCAzNloiIGZpbGw9IiNmMDQ4NWIiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+"
+    },
+    "disc0": {
+      "media_type": "image/svg+xml",
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMjMiIGZpbGw9IiNmZmRjNDUiIHN0cm9rZT0iIzhmNjUxMSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTExIDE3UTI0IDUgMzcgMTciIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41IiBzdHJva2Utd2lkdGg9IjMiLz48L3N2Zz4="
+    },
+    "disc1": {
+      "media_type": "image/svg+xml",
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMjMiIGZpbGw9IiNmMDQ4NWIiIHN0cm9rZT0iIzhlMTYzMCIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTExIDE3UTI0IDUgMzcgMTciIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii41IiBzdHJva2Utd2lkdGg9IjMiLz48L3N2Zz4="
+    },
+    "rack": {
+      "media_type": "image/svg+xml",
+      "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzNzQgMzI4Ij48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9InJhY2siIHgyPSIwIiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzI3NzVlZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzEwNDRiMSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIzNjgiIGhlaWdodD0iMzA2IiByeD0iMTIiIGZpbGw9InVybCgjcmFjaykiIHN0cm9rZT0iIzA3MWU1MCIgc3Ryb2tlLXdpZHRoPSI1Ii8+PHBhdGggZD0iTTEyIDMwOUwyIDMyNUg2NEw3NiAzMDlNMjk4IDMwOUwzMTAgMzI1SDM3MkwzNjIgMzA5IiBmaWxsPSIjMTc1OGNjIiBzdHJva2U9IiMwNjFjNDkiIHN0cm9rZS13aWR0aD0iMyIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9Ijg3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9Ijg3IiBjeT0iMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMzciIGN5PSIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTg3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyODciIGN5PSIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzM3IiBjeT0iMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzNyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzNyIgY3k9Ijg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9Ijg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMzciIGN5PSI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjIzNyIgY3k9Ijg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyODciIGN5PSI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9Ijg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIxMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMTM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjEzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIxMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjEzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMTM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIxMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjEzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMTM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIxMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjEzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMTM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIxMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjEzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIxODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMTg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjE4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIxODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjE4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMTg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIxODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjE4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMTg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIxODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjE4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMTg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIxODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjE4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIyMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIyMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIyMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMjM0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIyMzQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjIzNCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMjM0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIyMzQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjIzNCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMzciIGN5PSIyODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjM3IiBjeT0iMjg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSI4NyIgY3k9IjI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iODciIGN5PSIyODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjEzNyIgY3k9IjI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMTM3IiBjeT0iMjg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxODciIGN5PSIyODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE4NyIgY3k9IjI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjM3IiBjeT0iMjg0IiByPSIyMyIgZmlsbD0iIzBiMWYzOSIgc3Ryb2tlPSIjODBiNWZjIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIyMzciIGN5PSIyODQiIHI9IjIwIiBmaWxsPSIjMTAyYzQ5IiBzdHJva2U9IiMxNTNlNzUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjI4NyIgY3k9IjI4NCIgcj0iMjMiIGZpbGw9IiMwYjFmMzkiIHN0cm9rZT0iIzgwYjVmYyIgc3Ryb2tlLXdpZHRoPSIyIi8+PGNpcmNsZSBjeD0iMjg3IiBjeT0iMjg0IiByPSIyMCIgZmlsbD0iIzEwMmM0OSIgc3Ryb2tlPSIjMTUzZTc1IiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIzMzciIGN5PSIyODQiIHI9IjIzIiBmaWxsPSIjMGIxZjM5IiBzdHJva2U9IiM4MGI1ZmMiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjMzNyIgY3k9IjI4NCIgcj0iMjAiIGZpbGw9IiMxMDJjNDkiIHN0cm9rZT0iIzE1M2U3NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTE3IDhIMzU3IiBzdHJva2U9IiM5NmM5ZmYiIHN0cm9rZS13aWR0aD0iMyIvPjwvc3ZnPg=="
+    }
+  },
+  "boards": [
+    {
+      "background_asset": "rack",
+      "color": "#102c49",
+      "height": 328,
+      "id": "rack",
+      "kind": "zone",
+      "line_color": "#102c49",
+      "width": 374,
+      "x": 12,
+      "y": 90
+    },
+    {
+      "alternate_color": "#00000000",
+      "color": "#00000000",
+      "columns": 7,
+      "height": 328,
+      "id": "main",
+      "kind": "grid",
+      "line_color": "#00000000",
+      "rows": 1,
+      "width": 350,
+      "x": 24,
+      "y": 90
+    },
+    {
+      "color": "#102039",
+      "height": 70,
+      "id": "reserve",
+      "kind": "zone",
+      "line_color": "#365274",
+      "width": 374,
+      "x": 12,
+      "y": 12
+    }
+  ],
+  "format": "buildplay-ui",
+  "motion": {
+    "animate_own": true,
+    "easing": "ease-out",
+    "move_ms": 1440
+  },
+  "piece_types": {
+    "arrow0": {
+      "asset": "column0",
+      "height": 40,
+      "shape": "image",
+      "width": 44
+    },
+    "arrow1": {
+      "asset": "column1",
+      "height": 40,
+      "shape": "image",
+      "width": 44
+    },
+    "p0": {
+      "action_outline": "ellipse",
+      "asset": "disc0",
+      "font_size": 22,
+      "height": 44,
+      "shape": "image",
+      "text_color": "#102039",
+      "width": 44
+    },
+    "p1": {
+      "action_outline": "ellipse",
+      "asset": "disc1",
+      "font_size": 22,
+      "height": 44,
+      "shape": "image",
+      "text_color": "#102039",
+      "width": 44
+    }
+  },
+  "strings": {
+    "disc_at": "Player {n} disc, row {r}, column {c}",
+    "draw": "Draw: no four in a row",
+    "drop_column": "Drop player {n} disc in column {c}",
+    "early": "Match ended early",
+    "goal": "Connect four in a row. Drag the disc to a column, or tap a column.",
+    "history": "History: read only",
+    "reserve": "Player {n} reserve disc",
+    "server_invalid": "Illegal move",
+    "title": "Connect Four",
+    "turn": "Turn: {n}",
+    "waiting": "Waiting: {n}",
+    "wins": "Player {n} wins"
+  },
+  "ui_code": "// Original native presentation inspired by the reference's physical rack and column interaction.\nconst SOURCE_STRINGS={\"server_invalid\":\"Illegal move\",\"title\":\"Connect Four\",\"turn\":\"Turn: {n}\",\"waiting\":\"Waiting: {n}\",\"wins\":\"Player {n} wins\",\"draw\":\"Draw: no four in a row\",\"early\":\"Match ended early\",\"history\":\"History: read only\",\"goal\":\"Connect four in a row. Drag the disc to a column, or tap a column.\",\"reserve\":\"Player {n} reserve disc\",\"disc_at\":\"Player {n} disc, row {r}, column {c}\",\"drop_column\":\"Drop player {n} disc in column {c}\"};\nconst gameUI={reduce(message,localState){\n const m=message.type==='ui_event'?message.state_changed:message,s=m.view||m.state;\n const dict=Object.assign({},SOURCE_STRINGS,m.strings||{}),t=(k,a={})=>dict[k].replace(/\\{(\\w+)\\}/g,(_,x)=>String(a[x]??''));\n const active=m.status==='ongoing'&&!s.over&&!m.replay&&Number.isInteger(m.my_player_index)&&m.my_player_index===m.acting_for_player_index&&(m.turn_of_player_indices||[]).includes(m.my_player_index);\n const legal=active?(s.legal||[]):[],pieces=[],targets=[],labels=[],paths=[],labelX=m.direction==='rtl'?370:88;\n let status=m.status==='over'&&!s.over?t('early'):s.over?s.winner===-1?t('draw'):t('wins',{n:s.winner+1}):m.replay?t('history'):t(active?'turn':'waiting',{n:s.turn+1});\n // Keep source identity and instructional content available without shortening player names.\n labels.push({id:'title',text:t('title'),x:labelX,y:20,font_size:20,color:'#ffffff'});\n // Status wraps across two lines in all source dictionaries; independent aria names carry full descriptions.\n const clusters=text=>{const a=[];for(const ch of Array.from(text)){const prior=a[a.length-1]||'';if(a.length&&(/\\p{Mark}/u.test(ch)||ch==='\\u200d'||prior.endsWith('\\u200d')||prior.endsWith('\\u094d')))a[a.length-1]+=ch;else a.push(ch);}return a;};\n let chars=clusters(status),line=0;while(chars.length){labels.push({id:'status_'+line,text:chars.splice(0,22).join(''),x:labelX,y:45+line*20,font_size:16,color:'#ffffff'});line++;}\n labels.push({id:'goal',text:t('goal'),x:12,y:425,font_size:18,color:'#ffffff'});\n s.board.forEach((seat,cell)=>{if(seat!==-1)pieces.push({id:'disc_'+s.disc_ids[cell],type:'p'+seat,board:'main',position:{x:25+50*(cell%7),y:34+50*Math.floor(cell/7)},text:String(seat+1),aria_label:t('disc_at',{n:seat+1,r:Math.floor(cell/7)+1,c:cell%7+1}),actions:[]});});\n if(!s.over&&m.status==='ongoing')pieces.push({id:'disc_'+s.turns,type:'p'+s.turn,board:'reserve',position:{x:37,y:38},text:String(s.turn+1),aria_label:t('reserve',{n:s.turn+1}),actions:legal.length?['move']:[],...(legal.length?{move_targets:legal.map(x=>'column_'+x.column)}:{})});\n for(const option of legal){const aria=t('drop_column',{n:s.turn+1,c:option.column+1});targets.push({id:'column_'+option.column,board:'main',position:{x:25+50*option.column,y:144},color:s.turn===0?'#ffdc4508':'#f0485b08',aria_label:aria,hit_area:{x:-25,y:-164,width:50,height:328}});pieces.push({id:'hint_'+option.column,type:'arrow'+s.turn,board:'main',position:{x:25+50*option.column,y:6},aria_label:aria,actions:[]});}\n // Highlight every winning disc; lines are derived only from the public terminal board.\n if(s.over&&s.winner>=0)for(let cell=0;cell<42;cell++)for(const[dr,dc]of[[0,1],[1,0],[1,1],[1,-1]]){const r=Math.floor(cell/7),c=cell%7,rr=r+3*dr,cc=c+3*dc;if(rr<6&&cc>=0&&cc<7&&[0,1,2,3].every(i=>s.board[(r+i*dr)*7+c+i*dc]===s.winner))paths.push({id:'win_'+cell+'_'+dr+'_'+(dc+1),points:[{x:12+37+50*c,y:90+34+50*r},{x:12+37+50*cc,y:90+34+50*rr}],width:5,color:'#ffffff'});}\n const out={scene:{pieces,targets,labels,paths,controls:[]},local_state:{}};\n if(message.type==='ui_event'&&active){const e=message.event;let id=null;if(e.type==='tap'&&e.id.startsWith('column_'))id=e.id;if(e.type==='drop'&&e.piece_id==='disc_'+s.turns&&e.id===e.piece_id)id=e.target_id;const option=legal.find(x=>'column_'+x.column===id);if(option){out.make_move={column:option.column};const reserve=pieces.find(x=>x.id==='disc_'+s.turns);if(reserve){reserve.board='main';reserve.position={x:25+50*option.column,y:6};}}}\n return out;\n}};\n\n// Append to Connect Four's native rack presentation. The last move is public\n// presentation data; old pinned rules retain equivalent provenance in disc_ids.\ngameUI.getLastMoveAnimations = function(view, scene) {\n  if (!Array.isArray(view.disc_ids)) return null;\n  if (view.last_move === null || view.turns === 0) return [];\n  const cell = view.last_move && Number.isInteger(view.last_move.cell)\n    ? view.last_move.cell\n    : Number.isInteger(view.turns) ? view.disc_ids.indexOf(view.turns - 1) : -1;\n  if (cell < 0 || cell >= 42 || !Number.isInteger(view.disc_ids[cell]) || view.disc_ids[cell] < 0) return null;\n  const piece = (scene.pieces || []).find(piece => piece.id === 'disc_' + view.disc_ids[cell]);\n  if (!piece || !Number.isFinite(piece.position.x) || !Number.isFinite(piece.position.y)) return null;\n  return [{piece_id:piece.id,duration_ms:600,path:[\n    {board:piece.board,position:{x:piece.position.x,y:-28}},\n    {board:piece.board,position:piece.position}\n  ]}];\n};\n",
+  "version": 1,
+  "viewport": {
+    "height": 432,
+    "width": 400
+  }
+}

@@ -37,7 +37,7 @@ def context():
 def setup_board(logic, ctx, own, enemy, dice, bar=0):
     state = logic.call('newMatch', ctx=ctx, seed=7)['state']
     # These vectors exercise the unchanged canonical rules, outside the opening.
-    for field in ('opening', 'opening_roll', 'undo_stack', 'cube', 'configured', 'difficulty', 'cube_enabled', 'goal', 'scores', 'round_winner'):
+    for field in ('opening', 'opening_roll', 'undo_stack', 'cube', 'configured', 'difficulty', 'cube_enabled', 'goal', 'scores', 'round_winner', 'last_move'):
         state.pop(field, None)
     state.update(owner=[-1] * 24, cnt=[0] * 24, bar=[bar, 0],
                  off=[15 - sum(own.values()) - bar, 15 - sum(enemy.values())],
@@ -370,7 +370,7 @@ def test_same_full_match_through_regular_rules_and_declarative_events(body, seed
     result = rules.call('newMatch', ctx=ctx, seed=seed)
     # The differential test covers the retained canonical turn rules. Standard
     # opening initiative and modern turn metadata have their own authority tests.
-    for field in ('opening', 'opening_roll', 'undo_stack', 'cube', 'configured', 'difficulty', 'cube_enabled', 'goal', 'scores', 'round_winner'):
+    for field in ('opening', 'opening_roll', 'undo_stack', 'cube', 'configured', 'difficulty', 'cube_enabled', 'goal', 'scores', 'round_winner', 'last_move'):
         result['state'].pop(field, None)
     regular = ordinary.call('newMatch', ctx=ctx, seed=seed)
     result['state']['cur'] = regular['state']['cur']

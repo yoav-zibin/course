@@ -1,6 +1,21 @@
 // Prefix with KIND and SOURCE_STRINGS when packaging. Same script runs in
 // QuickJS on native hosts and in the portal's isolated presentation worker.
 const gameUI = {
+  getLastMoveAnimations(view, scene) {
+    // Old pinned rules did not retain a move. Let their host keep its fallback.
+    if(KIND!=='connect4'||!Object.prototype.hasOwnProperty.call(view,'last_move'))return null;
+    const move=view.last_move;
+    if(!move)return [];
+    const piece=scene.pieces.find(piece=>piece.id==='piece_'+move.cell);
+    if(!piece)return [];
+    // The board has six rows in 400 logical pixels. Start directly above the
+    // chosen column, even when the preceding disc landed in another column.
+    const unit=400/6;
+    return [{piece_id:piece.id,duration_ms:600,path:[
+      {board:'main',position:{x:(move.column+.5)*unit,y:-unit/2}},
+      {board:piece.board,position:piece.position}
+    ]}];
+  },
   reduce(message, localState) {
     const m=message.type==='ui_event'?message.state_changed:message;
     const s=m.view||m.state;

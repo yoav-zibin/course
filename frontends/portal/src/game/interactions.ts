@@ -73,7 +73,7 @@ export function validEvent(scene: Scene, event: UIEvent): boolean {
   return typeof event.value === 'string' && event.value.length <= 2000;
 }
 
-export function animateUpdate(previous: StateMessage | null, next: StateMessage, animateOwn = false): boolean {
+export function animateUpdate(previous: StateMessage | null, next: StateMessage): boolean {
   if (!previous || previous.move_count === undefined || next.move_count === undefined) return false;
   if ((previous.my_player_index??null)!==(next.my_player_index??null))return false;
   if (next.replay) return Math.abs(previous.move_count-next.move_count)===1;
@@ -83,7 +83,7 @@ export function animateUpdate(previous: StateMessage | null, next: StateMessage,
   const after=(next.view||next.state) as Record<string,unknown> | null;
   if(before?.round_winner!=null&&after?.round_winner===null)return false;
   const actor = next.last_move_player_index;
-  return animateOwn || Number.isInteger(actor) && (next.my_player_index === null || actor !== next.my_player_index);
+  return Number.isInteger(actor) && (next.my_player_index === null || actor !== next.my_player_index);
 }
 
 export function historyChanges(previous: Scene, next: Scene) {

@@ -45,6 +45,10 @@ export type Scene = {
   labels?: (Point & { id: string; text: string; color?: string; font_size?: number })[];
   paths?: { id: string; points: Point[]; color?: string; width?: number }[];
 };
+export type MoveAnimationPoint = { board: string; position: Position };
+export type MoveAnimation = {
+  piece_id: string; path: MoveAnimationPoint[]; duration_ms?: number;
+};
 export type StateMessage = {
   type: 'state_changed'; status: string; move_count?: number; my_player_index?: number | null;
   acting_for_player_index?: number | null; last_move_player_index?: number | null;
@@ -54,4 +58,7 @@ export type UIEvent = {
   type: 'tap' | 'drop' | 'rotate' | 'flip' | 'scale' | 'change'; id: string;
   piece_id?: string; target_id?: string; delta?: number; factor?: number; value?: string | number | boolean;
 };
-export type PresentationResult = { scene: Scene; local_state?: Json; make_move?: Json };
+export type PresentationResult = {
+  scene: Scene; local_state?: Json; make_move?: Json;
+  last_move_animations?: MoveAnimation[] | null;
+};

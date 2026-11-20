@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://buildplay.fun/games/declarative/schema",
   "title": "BuildPlay Declarative UI v1",
-  "description": "Portable JSON scene contract. The reducer is pure ES2020 JavaScript defining gameUI.reduce(message, localState). No game HTML or browser APIs are required. Geometry uses viewport logical units; positions are relative to a board. Grid cell IDs are row-major decimal strings. Hex, graph and track boards provide explicit cells. Reference and size checks also apply at submission/runtime.",
+  "description": "Portable JSON scene contract. The reducer is pure ES2020 JavaScript defining gameUI.reduce(message, localState). No game HTML or browser APIs are required. Geometry uses viewport logical units; positions are relative to a board. Grid cell IDs are row-major decimal strings. Hex, graph and track boards provide explicit cells. Reference and size checks also apply at submission/runtime. Optional gameUI.getLastMoveAnimations(view, scene) supplies ordered piece paths from the last accepted move in the filtered view.",
   "type": "object",
   "properties": {
     "format": {
@@ -38,7 +38,7 @@
     },
     "motion": {
       "type": "object",
-      "description": "Optional host animation policy in milliseconds. Defaults preserve ordinary immediate own moves. Timings never authorize or compute moves.",
+      "description": "Optional host animation policy in milliseconds for opponent moves. Live own moves always update immediately. Timings never authorize or compute moves.",
       "properties": {
         "move_ms": {
           "type": "integer",
@@ -61,7 +61,8 @@
           "maximum": 5000
         },
         "animate_own": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Accepted for compatibility only; ignored during live play. The viewer's own moves always update immediately."
         },
         "easing": {
           "enum": [
@@ -985,7 +986,22 @@
           "$ref": "#/$defs/scene"
         },
         "local_state": {},
-        "make_move": {}
+        "make_move": {},
+        "last_move_animations": {
+          "description": "Optional result of getLastMoveAnimations(view, scene). Ordered, sequential piece paths ending in the final scene. Null or omission uses legacy inference; [] suppresses positional animation. Hosts animate known opponent moves only. Total duration is at most 30000ms.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/moveAnimation"
+              },
+              "maxItems": 128
+            }
+          ]
+        }
       },
       "required": [
         "scene"
@@ -1149,7 +1165,7 @@
           "minimum": 0
         },
         "last_move_player_index": {
-          "description": "Actor of the last accepted move, independent of whose turn is next. Unknown or no move is null. During live play, hosts animate only known opponent actors and the viewer's own moves update immediately. History review requirements call for animating recorded moves from every actor.",
+          "description": "Actor of the last accepted move, independent of whose turn is next. Unknown or no move is null. During live play, hosts animate only known opponent actors and the viewer's own moves update immediately. Legacy inferred history animations may show every actor; game-declared paths animate only forward adjacent opponent moves.",
           "type": [
             "integer",
             "null"
@@ -1261,6 +1277,54 @@
           "$ref": "#/$defs/ui_event"
         }
       ]
+    },
+    "moveAnimationPoint": {
+      "type": "object",
+      "properties": {
+        "board": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "position": {
+          "$ref": "#/$defs/position"
+        }
+      },
+      "required": [
+        "board",
+        "position"
+      ],
+      "additionalProperties": false
+    },
+    "moveAnimation": {
+      "type": "object",
+      "properties": {
+        "piece_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/moveAnimationPoint"
+          },
+          "minItems": 2,
+          "maxItems": 64
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        }
+      },
+      "required": [
+        "piece_id",
+        "path"
+      ],
+      "additionalProperties": false
     }
   }
 }

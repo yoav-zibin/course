@@ -151,8 +151,25 @@ def source_schemas():
                            'values': {'type': 'array', 'minItems': 2, 'maxItems': 2,
                                       'items': {'type': 'integer', 'minimum': 1, 'maximum': 6}},
                            'move_count': {'type': 'integer', 'minimum': 1}}}
+    def board_array(length, minimum, maximum):
+        return {'type': 'array', 'minItems': length, 'maxItems': length,
+                'items': {'type': 'integer', 'minimum': minimum, 'maximum': maximum}}
+
     for name in ('state', 'view'):
         schemas[name]['properties']['last_roll'] = copy.deepcopy(roll)
+        schemas[name]['properties']['last_move'] = {
+            'type': ['object', 'null'], 'additionalProperties': False,
+            'required': ['seat', 'move_count', 'steps'],
+            'properties': {
+                'seat': {'enum': [0, 1]}, 'move_count': {'type': 'integer', 'minimum': 1},
+                'steps': {'type': 'array', 'maxItems': 4, 'items': {
+                    'type': 'object', 'additionalProperties': False, 'required': ['from', 'to'],
+                    'properties': {'from': {'anyOf': [coordinate, {'const': 'bar'}]},
+                                   'to': {'anyOf': [coordinate, {'const': 'off'}]}}}},
+                'before': {'type': 'object', 'additionalProperties': False,
+                           'required': ['owner', 'cnt', 'bar', 'off'], 'properties': {
+                               'owner': board_array(24, -1, 1), 'cnt': board_array(24, 0, 15),
+                               'bar': board_array(2, 0, 15), 'off': board_array(2, 0, 15)}}}}
         schemas[name]['properties']['opening'] = {'type': 'boolean'}
         schemas[name]['properties']['opening_roll'] = {
             'type': ['array', 'null'], 'minItems': 2, 'maxItems': 2,

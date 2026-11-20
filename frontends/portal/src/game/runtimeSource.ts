@@ -14,7 +14,7 @@ function json(value: unknown): string {
 // opaque browser worker, never in the application's JavaScript runtime.
 export function presentationSource(code: string, message: unknown, localState: Json): string {
   if (code.length > 200_000) throw new Error('Presentation source exceeds its size limit');
-  return `Math.random=()=>{throw new Error('Presentation cannot use randomness')};Date=undefined;\n${code}\n;JSON.stringify(gameUI.reduce(${json(message)},${json(localState)}))`;
+  return `Math.random=()=>{throw new Error('Presentation cannot use randomness')};Date=undefined;\n${code}\n;(()=>{const message=${json(message)};const result=gameUI.reduce(message,${json(localState)});if(message.type==='state_changed'&&typeof gameUI.getLastMoveAnimations==='function')result.last_move_animations=gameUI.getLastMoveAnimations(message.view||message.state,result.scene);return JSON.stringify(result);})()`;
 }
 
 export function rulesSource(game: {server_code: string; game_schemas?: unknown}, name: string,

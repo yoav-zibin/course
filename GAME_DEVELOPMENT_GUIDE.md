@@ -10,6 +10,12 @@ game, follow the partial-update instructions below.
 1. Write deterministic rules implementing the [server game API](docs/server-side-game-api.md).
 2. Define state, move and view schemas and complete initial, intermediate and terminal examples.
 3. Build a `declarative_ui` package conforming to [the schema](schemas/declarative-ui.schema.json).
+   Keep the last accepted move in authoritative state and its filtered view,
+   including the source, intermediate stops and destination needed for replay.
+   Implement optional `gameUI.getLastMoveAnimations(view, scene)` to return
+   ordered piece paths; see [the move-animation contract](docs/declarative-games.md#describe-the-last-moves-paths).
+   The portal animates opponent moves and applies your own moves immediately.
+   Games without this function keep the existing default animations.
 4. Review scenes in `/static/declarative-test.html`; validate them with
    `POST /games/declarative/validate`. Include phone/tablet, spectators, covered
    pieces, available actions and complete matches in the review.

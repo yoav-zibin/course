@@ -1,0 +1,727 @@
+{
+  "description": "Accepted public combined move: four ones from point 10 to point 6, hitting blots at points 9 and 7.",
+  "before": {
+    "type": "state_changed",
+    "state": {
+      "owner": [
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        1,
+        -1,
+        1,
+        0,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        1
+      ],
+      "cnt": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        13
+      ],
+      "bar": [
+        0,
+        0
+      ],
+      "off": [
+        14,
+        0
+      ],
+      "cur": 0,
+      "dice": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "moves": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "needRoll": false,
+      "winner": null,
+      "n": 0,
+      "last_roll": null,
+      "legalMoves": [],
+      "combinedMoves": [],
+      "last_move": null,
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 1,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
+    },
+    "view": {
+      "owner": [
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        1,
+        -1,
+        1,
+        0,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        1
+      ],
+      "cnt": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        13
+      ],
+      "bar": [
+        0,
+        0
+      ],
+      "off": [
+        14,
+        0
+      ],
+      "cur": 0,
+      "dice": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "moves": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "needRoll": false,
+      "winner": null,
+      "n": 0,
+      "last_roll": null,
+      "legalMoves": [],
+      "combinedMoves": [],
+      "last_move": null,
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 1,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": false
+    },
+    "players": [
+      {
+        "player_index": 0,
+        "player_id": "a",
+        "kind": "human",
+        "name": "Alice"
+      },
+      {
+        "player_index": 1,
+        "player_id": "b",
+        "kind": "human",
+        "name": "Bob"
+      }
+    ],
+    "acting_for_player_index": null,
+    "my_player_index": 1,
+    "turn_of_player_indices": [
+      0
+    ],
+    "status": "ongoing",
+    "move_count": 0,
+    "strings": {},
+    "locale": "en",
+    "direction": "ltr",
+    "last_move_player_index": null
+  },
+  "after": {
+    "type": "state_changed",
+    "state": {
+      "owner": [
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        0,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        1
+      ],
+      "cnt": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        13
+      ],
+      "bar": [
+        0,
+        2
+      ],
+      "off": [
+        14,
+        0
+      ],
+      "cur": 1,
+      "dice": [],
+      "moves": [],
+      "needRoll": true,
+      "winner": null,
+      "n": 1,
+      "legalMoves": [],
+      "last_roll": null,
+      "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 1,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 7
+          },
+          {
+            "from": 7,
+            "to": 6
+          },
+          {
+            "from": 6,
+            "to": 5
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1,
+            -1,
+            1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            13
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 1,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": true
+    },
+    "view": {
+      "owner": [
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        0,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        1
+      ],
+      "cnt": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        13
+      ],
+      "bar": [
+        0,
+        2
+      ],
+      "off": [
+        14,
+        0
+      ],
+      "cur": 1,
+      "dice": [],
+      "moves": [],
+      "needRoll": true,
+      "winner": null,
+      "n": 1,
+      "legalMoves": [],
+      "last_roll": null,
+      "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 1,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 7
+          },
+          {
+            "from": 7,
+            "to": 6
+          },
+          {
+            "from": 6,
+            "to": 5
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1,
+            -1,
+            1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            13
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
+      "opening": false,
+      "opening_roll": null,
+      "cube": {
+        "value": 1,
+        "owner": null,
+        "offer": null
+      },
+      "configured": true,
+      "difficulty": 1,
+      "cube_enabled": true,
+      "goal": 1,
+      "scores": [
+        0,
+        0
+      ],
+      "round_winner": null,
+      "can_undo": false,
+      "can_double": true
+    },
+    "players": [
+      {
+        "player_index": 0,
+        "player_id": "a",
+        "kind": "human",
+        "name": "Alice"
+      },
+      {
+        "player_index": 1,
+        "player_id": "b",
+        "kind": "human",
+        "name": "Bob"
+      }
+    ],
+    "acting_for_player_index": 1,
+    "my_player_index": 1,
+    "turn_of_player_indices": [
+      1
+    ],
+    "status": "ongoing",
+    "move_count": 1,
+    "strings": {},
+    "locale": "en",
+    "direction": "ltr",
+    "last_move_player_index": 0
+  },
+  "animations": [
+    {
+      "piece_id": "checker_0_0",
+      "path": [
+        {
+          "board": "main",
+          "position": {
+            "x": 140,
+            "y": 410
+          }
+        },
+        {
+          "board": "main",
+          "position": {
+            "x": 192,
+            "y": 410
+          }
+        }
+      ],
+      "duration_ms": 800
+    },
+    {
+      "piece_id": "checker_1_1",
+      "path": [
+        {
+          "board": "main",
+          "position": {
+            "x": 192,
+            "y": 410
+          }
+        },
+        {
+          "board": "main",
+          "position": {
+            "x": 336,
+            "y": 410
+          }
+        }
+      ],
+      "duration_ms": 400
+    },
+    {
+      "piece_id": "checker_0_0",
+      "path": [
+        {
+          "board": "main",
+          "position": {
+            "x": 192,
+            "y": 410
+          }
+        },
+        {
+          "board": "main",
+          "position": {
+            "x": 244,
+            "y": 410
+          }
+        }
+      ],
+      "duration_ms": 800
+    },
+    {
+      "piece_id": "checker_0_0",
+      "path": [
+        {
+          "board": "main",
+          "position": {
+            "x": 244,
+            "y": 410
+          }
+        },
+        {
+          "board": "main",
+          "position": {
+            "x": 296,
+            "y": 410
+          }
+        }
+      ],
+      "duration_ms": 800
+    },
+    {
+      "piece_id": "checker_1_0",
+      "path": [
+        {
+          "board": "main",
+          "position": {
+            "x": 296,
+            "y": 410
+          }
+        },
+        {
+          "board": "main",
+          "position": {
+            "x": 336,
+            "y": 368
+          }
+        }
+      ],
+      "duration_ms": 400
+    },
+    {
+      "piece_id": "checker_0_0",
+      "path": [
+        {
+          "board": "main",
+          "position": {
+            "x": 296,
+            "y": 410
+          }
+        },
+        {
+          "board": "main",
+          "position": {
+            "x": 376,
+            "y": 410
+          }
+        }
+      ],
+      "duration_ms": 800
+    }
+  ]
+}

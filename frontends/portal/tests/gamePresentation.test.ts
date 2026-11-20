@@ -3,8 +3,12 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
+import {runInNewContext} from 'node:vm';
 import {canonical,reviewedPresentation} from '../src/game/presentationCore';
+import {presentationSource} from '../src/game/runtimeSource';
+import {validateMoveAnimations,validateScene,validateSpec} from '../src/game/validation';
 import replacement from '../src/game/reviewedBackgammon.json';
+import connectFourReplacement from '../src/game/reviewedConnectFour.json';
 
 const root=resolve(import.meta.dirname,'../../..');
 const read=(name:string)=>JSON.parse(readFileSync(resolve(root,name),'utf8'));
@@ -27,10 +31,44 @@ test('presentation repair is scoped by game identity, authoritative rule hash an
   }
 });
 test('bundled repair hash, independent result copies and fail-safe cryptography behavior remain stable',async()=>{
-  assert.equal(await digest(canonical(replacement)),'34094a02eb9678b6ce612034f4ccd407eb02b577081e8cda9ec9634a8a1a3c24');
+  assert.equal(await digest(canonical(replacement)),'a1bdcb5339cfc42f8eb1be318aa3e96bd223f41b336f3534cb078131fb4a66da');
   const input=game(),first=await reviewedPresentation(input,digest),second=await reviewedPresentation(input,digest);
   assert.notEqual(first,second);assert.deepEqual(first,second);
   assert.equal(await reviewedPresentation(input,async()=>{throw new Error('unavailable');}),input.declarative_ui);
   assert.equal(await reviewedPresentation(null,digest),undefined);
   assert.equal(canonical({'9':'nine','10':'ten'}),'{"10":"ten","9":"nine"}');
+});
+
+test('exact rich Connect Four presentation adds game-authored falling paths while preserving pinned packages',async()=>{
+  const fixture=read('tests/fixtures/declarative/connect4-native-package.json').game;
+  for(const version of [3,4]){
+    const input={...fixture,version},before=JSON.stringify(input);
+    const result=await reviewedPresentation(input,digest);
+    assert.deepEqual(result,connectFourReplacement);assert.notEqual(result,connectFourReplacement);
+    assert.equal(JSON.stringify(input),before);
+  }
+  const original=fixture.declarative_ui;
+  const helper=readFileSync(resolve(root,'games/declarative/connect4-move-animations.js'),'utf8');
+  assert.deepEqual(connectFourReplacement,{...original,ui_code:original.ui_code+'\n'+helper});
+  assert.equal(await digest(canonical(connectFourReplacement)),'1450713baa36d87bdd7b6aa23fba1263c0db48912bbc3bfec9b55f35a9da4d75');
+  const board=Array(42).fill(-1),disc_ids=Array(42).fill(-1);board[35]=0;disc_ids[35]=0;
+  const message={type:'state_changed',status:'ongoing',my_player_index:0,acting_for_player_index:null,
+    view:{board,disc_ids,turns:1,turn:1,over:false,winner:-1}};
+  const result=JSON.parse(runInNewContext(presentationSource(connectFourReplacement.ui_code,message,null)));
+  const spec=validateSpec(connectFourReplacement),scene=validateScene(spec,result.scene);
+  const animations=validateMoveAnimations(spec,scene,result.last_move_animations)!;
+  assert.deepEqual(animations,[{piece_id:'disc_0',duration_ms:600,path:[
+    {board:'main',position:{x:25,y:-28}},{board:'main',position:{x:25,y:284}}]}]);
+});
+
+test('Connect Four repair fails safely for changes to identity, rules, presentation or digest',async()=>{
+  for(const change of [(game:any)=>{game.id='other';},(game:any)=>{game.server_code+='\n// changed';},
+    (game:any)=>{game.declarative_ui.viewport.width++;},(game:any)=>{game.declarative_ui.ui_code+='\n// changed';}]){
+    const input=read('tests/fixtures/declarative/connect4-native-package.json').game;change(input);
+    assert.equal(await reviewedPresentation(input,digest),input.declarative_ui);
+  }
+  const input=read('tests/fixtures/declarative/connect4-native-package.json').game;
+  assert.equal(await reviewedPresentation(input,async()=>{throw new Error('unavailable');}),input.declarative_ui);
+  const first=await reviewedPresentation(input,digest),second=await reviewedPresentation(input,digest);
+  assert.notEqual(first,second);assert.deepEqual(first,second);
 });

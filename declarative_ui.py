@@ -187,7 +187,56 @@ def validate_response(spec, response):
             raise DeclarativeUIError("Choice controls require nonempty options")
         if "min" in control and "max" in control and control["min"] > control["max"]:
             raise DeclarativeUIError("Control min must not exceed max")
+    validate_move_animations(spec, scene, response.get("last_move_animations"))
     return response
+
+
+def validate_move_animations(spec, scene, animations):
+    """Check references, sequential continuity and final positions after schema validation."""
+    if animations is None:
+        return
+    boards = {board["id"]: board for board in spec["boards"]}
+    pieces = {piece["id"]: piece for piece in scene.get("pieces", []) if not piece.get("hidden")}
+
+    def point(item):
+        board = boards.get(item["board"])
+        if board is None:
+            raise DeclarativeUIError("Move animation references an unknown board")
+        at = item["position"]
+        if "cell" in at:
+            cell = at["cell"]
+            if board.get("cells"):
+                at = next((other for other in board["cells"] if other["id"] == cell), None)
+                if at is None:
+                    raise DeclarativeUIError("Move animation references an unknown cell")
+            elif (board["kind"] == "grid" and cell.isascii() and cell.isdigit()
+                  and str(int(cell)) == cell and int(cell) < board["rows"] * board["columns"]):
+                index = int(cell)
+                at = {"x": (index % board["columns"] + .5) * board["width"] / board["columns"],
+                      "y": (index // board["columns"] + .5) * board["height"] / board["rows"]}
+            else:
+                raise DeclarativeUIError("Move animation references an unknown cell")
+        return at["x"] + board.get("x", 0), at["y"] + board.get("y", 0)
+
+    def same(first, second):
+        return all(abs(a - b) < .000001 for a, b in zip(first, second))
+
+    ends = {}
+    duration = 0
+    for animation in animations:
+        piece_id = animation["piece_id"]
+        if piece_id not in pieces:
+            raise DeclarativeUIError("Move animation must reference a visible final scene piece")
+        duration += animation.get("duration_ms", spec.get("motion", {}).get("move_ms", 1440))
+        if duration > 30000:
+            raise DeclarativeUIError("Move animations must finish within 30000ms")
+        points = [point(item) for item in animation["path"]]
+        if piece_id in ends and not same(ends[piece_id], points[0]):
+            raise DeclarativeUIError("Successive paths for a piece must join")
+        ends[piece_id] = points[-1]
+    for piece_id, end in ends.items():
+        if not same(end, point(pieces[piece_id])):
+            raise DeclarativeUIError("Move animations must end at the final scene position")
 
 
 class DeclarativeLogic:
@@ -210,7 +259,12 @@ class DeclarativeLogic:
             context.eval("Math.random = function(){throw new Error('randomness is unavailable in presentation')}; Date = undefined;")
             context.eval(self.spec["ui_code"])
             result = context.eval(
-                "JSON.stringify(gameUI.reduce(JSON.parse(" + json.dumps(message_json) + "),JSON.parse(" + json.dumps(local_json) + ")))"
+                "(() => {const message=JSON.parse(" + json.dumps(message_json) + ");"
+                "const result=gameUI.reduce(message,JSON.parse(" + json.dumps(local_json) + "));"
+                "if(message.type==='state_changed'&&typeof gameUI.getLastMoveAnimations==='function'){"
+                "const animations=gameUI.getLastMoveAnimations(message.view||message.state,result.scene);"
+                "if(animations!==undefined)result.last_move_animations=animations;}"
+                "return JSON.stringify(result);})()"
             )
             if not isinstance(result, str) or len(result.encode("utf-8")) > MAX_RESULT_BYTES:
                 raise DeclarativeUIError("Reducer must return a JSON response under 256000 bytes")

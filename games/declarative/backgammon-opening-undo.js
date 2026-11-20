@@ -52,6 +52,7 @@
       cur: 0, opening: true, opening_roll: [null, null], undo_stack: [],
       cube: {value: 1, owner: null, offer: null}, configured: false,
       difficulty: 1, cube_enabled: true, goal: 5, scores: [0, 0], round_winner: null,
+      last_move: null,
     });
     result.turn = bgTurnFor(ctx, 0);
     return result;
@@ -166,6 +167,21 @@
     return finishRound(result, state, ctx);
   };
 
+  const acceptedApplyMove = game.applyMove;
+  game.applyMove = function (state, playerId, move, ctx) {
+    const result = acceptedApplyMove.call(game, state, playerId, move, ctx);
+    if (modern(state)) {
+      const steps = move && move.action === 'move' && Array.isArray(bgAcceptedMoveSteps)
+        ? clone(bgAcceptedMoveSteps) : [];
+      // This is public board provenance, not an undo snapshot. Keep exactly the
+      // accepted command so reloads never need to guess a multi-die route.
+      result.state.last_move = {seat: state.cur, move_count: (ctx.move_count || 0) + 1, steps,
+        ...(steps.length ? {before: {owner: state.owner.slice(), cnt: state.cnt.slice(),
+          bar: state.bar.slice(), off: state.off.slice()}} : {})};
+    }
+    return result;
+  };
+
   game.viewFor = function (state, playerId, ctx) {
     if (!modern(state)) return ordinaryViewFor.call(game, state, playerId, ctx);
     const actingPlayer = ctx.players[state.cur] && ctx.players[state.cur].id;
@@ -180,6 +196,7 @@
       playerId, Object.assign({}, ctx, {move_count: 0}));
     if (modern(state)) {
       view.n = state.n || 0;
+      view.last_move = state.last_move ? clone(state.last_move) : null;
       Object.assign(view, metadata(state), {can_undo: canUndo(state), can_double: canDouble(state)});
       if (!state.configured || state.round_winner !== null || state.cube.offer !== null) {
         view.legalMoves = []; view.combinedMoves = [];

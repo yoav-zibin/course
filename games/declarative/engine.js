@@ -4,6 +4,7 @@ function fresh() {
   const sizes = {tictactoe:9, connect4:42, reversi:64, gomoku:81, hex:49, ataxx:49, domineering:36, memory:16};
   const s = {board:Array(sizes[KIND] || 0).fill(-1), turn:0, scores:[0,0],
     selected:[], matched:[], roll:0, total:0, winner:-1, turns:0, over:false};
+  if (KIND === 'connect4') s.last_move=null;
   if (KIND === 'connect6') {s.board=Array(361).fill(-1);s.opening=true;s.pending=0;}
   if (KIND === 'ataxx') {s.board[0]=0;s.board[6]=1;s.board[42]=1;s.board[48]=0;}
   if (KIND === 'reversi') {s.board[27]=1;s.board[28]=0;s.board[35]=0;s.board[36]=1;}
@@ -144,6 +145,7 @@ function apply(s,move,ctx) {
     let cell=move.cell;
     if(KIND==='connect4'){cell=move.column;while(cell+7<42&&s.board[cell+7]===-1)cell+=7;}
     s.board[cell]=seat;
+    if(KIND==='connect4')s.last_move={seat,column:move.column,cell};
     if(KIND==='connect6') {
       if(lineWon(s,cell,19,6))finish(s,seat);
       else if(s.board.every(v=>v!==-1))finish(s,-1);

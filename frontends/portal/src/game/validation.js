@@ -151,6 +151,35 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     for (const piece of scene.pieces || []) for (const target of piece.move_targets || []) if (!targets.has(target)) throw new Error(t("ui.declarative.error.unknown_move_target", {}, "Unknown move target"));
     return scene;
   }
+  function validateMoveAnimations(spec, scene, animations) {
+    if(animations===undefined||animations===null)return null;
+    finiteJSON(animations);
+    const fail=()=>{throw new Error('Invalid last move animations');};
+    if(!Array.isArray(animations)||animations.length>128)fail();
+    const pieces=new Map((scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>[piece.id,piece]));
+    const ends=new Map();
+    let duration=0;
+    const same=(a,b)=>Math.abs(a.x-b.x)<.000001&&Math.abs(a.y-b.y)<.000001;
+    for(const animation of animations){
+      knownObject(animation,['piece_id','path','duration_ms'],['piece_id','path']);
+      if(!isId(animation.piece_id)||!pieces.has(animation.piece_id)||!Array.isArray(animation.path)||animation.path.length<2||animation.path.length>64)fail();
+      if('duration_ms' in animation&&(!Number.isInteger(animation.duration_ms)||animation.duration_ms<0||animation.duration_ms>5000))fail();
+      duration+=animation.duration_ms??spec.motion?.move_ms??1440;
+      if(duration>30000)fail();
+      const points=animation.path.map(point=>{
+        knownObject(point,['board','position'],['board','position']);
+        if(!isId(point.board))fail();
+        const at=point.position;knownObject(at,['cell','x','y']);
+        if('cell' in at){if(!isId(at.cell)||'x' in at||'y' in at)fail();}
+        else checkPoint(at);
+        return position(spec,point);
+      });
+      if(ends.has(animation.piece_id)&&!same(ends.get(animation.piece_id),points[0]))fail();
+      ends.set(animation.piece_id,points[points.length-1]);
+    }
+    for(const [id,end] of ends)if(!same(end,position(spec,pieces.get(id))))fail();
+    return animations;
+  }
   // Older v1 packages treated every piece as tappable. An explicit empty list
   // lets new packages mark decoration precisely; destinations also declare move.
   function pieceActions(piece) {
@@ -200,4 +229,4 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
       minY:top-marginY,maxY:Math.max(top,bounds.y+bounds.height-height)+marginY};
   }
 
-module.exports={finiteJSON,validateSpec,validateScene,knownObject,assetURI,boardCell,position,pieceActions,contentBounds,cameraLimits};
+module.exports={finiteJSON,validateSpec,validateScene,validateMoveAnimations,knownObject,assetURI,boardCell,position,pieceActions,contentBounds,cameraLimits};

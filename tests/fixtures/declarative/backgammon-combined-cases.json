@@ -120,7 +120,8 @@
         0,
         0
       ],
-      "round_winner": null
+      "round_winner": null,
+      "last_move": null
     },
     "view_of_mover": {
       "owner": [
@@ -222,6 +223,7 @@
           "to": 5
         }
       ],
+      "last_move": null,
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -321,6 +323,7 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": null,
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -431,7 +434,91 @@
         0
       ],
       "round_winner": null,
-      "undo_stack": []
+      "undo_stack": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 7
+          },
+          {
+            "from": 7,
+            "to": 6
+          },
+          {
+            "from": 6,
+            "to": 5
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      }
     },
     "expected_turn": [
       "u2"
@@ -506,6 +593,90 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 7
+          },
+          {
+            "from": 7,
+            "to": 6
+          },
+          {
+            "from": 6,
+            "to": 5
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -595,6 +766,90 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 7
+          },
+          {
+            "from": 7,
+            "to": 6
+          },
+          {
+            "from": 6,
+            "to": 5
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -750,7 +1005,8 @@
         0,
         0
       ],
-      "round_winner": null
+      "round_winner": null,
+      "last_move": null
     },
     "view_of_mover": {
       "owner": [
@@ -846,6 +1102,7 @@
           "to": 4
         }
       ],
+      "last_move": null,
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -941,6 +1198,7 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": null,
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -1051,7 +1309,83 @@
         0
       ],
       "round_winner": null,
-      "undo_stack": []
+      "undo_stack": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 4
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      }
     },
     "expected_turn": [
       "u2"
@@ -1126,6 +1460,82 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 4
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -1215,6 +1625,82 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 4
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -1370,7 +1856,8 @@
         0,
         0
       ],
-      "round_winner": null
+      "round_winner": null,
+      "last_move": null
     },
     "view_of_mover": {
       "owner": [
@@ -1460,6 +1947,7 @@
           "to": 4
         }
       ],
+      "last_move": null,
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -1555,6 +2043,7 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": null,
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -1665,7 +2154,83 @@
         0
       ],
       "round_winner": null,
-      "undo_stack": []
+      "undo_stack": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 4
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1,
+            -1,
+            -1,
+            1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            12
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      }
     },
     "expected_turn": [
       "u2"
@@ -1740,6 +2305,82 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 4
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1,
+            -1,
+            -1,
+            1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            12
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -1829,6 +2470,82 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 9,
+            "to": 8
+          },
+          {
+            "from": 8,
+            "to": 4
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1,
+            -1,
+            -1,
+            1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            12
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -1984,7 +2701,8 @@
         0,
         0
       ],
-      "round_winner": null
+      "round_winner": null,
+      "last_move": null
     },
     "view_of_mover": {
       "owner": [
@@ -2075,6 +2793,7 @@
       ],
       "last_roll": null,
       "combinedMoves": [],
+      "last_move": null,
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -2170,6 +2889,7 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": null,
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -2286,7 +3006,79 @@
       "round_winner": null,
       "undo_stack": [
         "{\"bar\":[0,0],\"cnt\":[0,0,0,0,0,0,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,13],\"configured\":true,\"cube\":{\"offer\":null,\"owner\":null,\"value\":1},\"cube_enabled\":true,\"cur\":0,\"dice\":[1,4],\"difficulty\":1,\"goal\":5,\"last_roll\":null,\"moves\":[1,4],\"n\":0,\"needRoll\":false,\"off\":[14,0],\"opening\":false,\"opening_roll\":null,\"owner\":[-1,-1,-1,-1,-1,-1,1,-1,-1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,1],\"round_winner\":null,\"scores\":[0,0],\"winner\":null}"
-      ]
+      ],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 10,
+            "to": 9
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1,
+            -1,
+            -1,
+            1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            13
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      }
     },
     "expected_turn": [
       "u1"
@@ -2372,6 +3164,78 @@
       ],
       "last_roll": null,
       "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 10,
+            "to": 9
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1,
+            -1,
+            -1,
+            1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            13
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
       "opening": false,
       "opening_roll": null,
       "cube": {
@@ -2465,6 +3329,78 @@
       "last_roll": null,
       "legalMoves": [],
       "combinedMoves": [],
+      "last_move": {
+        "seat": 0,
+        "move_count": 11,
+        "steps": [
+          {
+            "from": 10,
+            "to": 9
+          }
+        ],
+        "before": {
+          "owner": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1,
+            -1,
+            -1,
+            1,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1
+          ],
+          "cnt": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            13
+          ],
+          "bar": [
+            0,
+            0
+          ],
+          "off": [
+            14,
+            0
+          ]
+        }
+      },
       "opening": false,
       "opening_roll": null,
       "cube": {

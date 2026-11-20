@@ -44,10 +44,15 @@ Multitouch cancels an unfinished checker gesture. Other declarative games retain
 the default camera behavior.
 
 `motion` declares 800ms quadratic checker slides, 500ms dice effects, 1000ms roll
-readability and 500ms between turns. Per-piece metadata makes bearing off 400ms,
-captures and remaining-stack adjustment 400ms after a 400ms delay, and opening/
-no-moves announcements readable before the next action. Both computer and
-Pass & Play use the same physical timing. Reduced-motion preferences and
+readability and 500ms between turns. The authority retains the last accepted
+command's exact single-die stops and starting public board in `last_move`.
+`gameUI.getLastMoveAnimations(view, scene)` returns sequential checker paths,
+interleaving each hit to the bar before continuing the moving checker. Bearing
+off crosses to the off tray, and compressed stacks settle to their final
+positions. The host plays these paths only for opponents; own moves update
+immediately. Older pinned rules without this metadata retain the previous
+per-piece animation behavior. Opening/no-moves announcements remain readable
+before the next action. Reduced-motion preferences and
 initial/reconnect snapshots bypass animation. Polls retain running animation
 clocks, and coalesced computer updates play accepted states in order.
 

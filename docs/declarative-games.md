@@ -85,6 +85,9 @@ source hash, preserved variant rules and native event examples.
 var gameUI = {
   reduce: function (message, localState) {
     // Return { scene, local_state?, make_move? } using only JSON data.
+  },
+  getLastMoveAnimations: function (view, scene) {
+    // Optional: return ordered paths for the last accepted move, or null.
   }
 };
 ```
@@ -154,7 +157,7 @@ The package has these top-level fields:
 | --- | --- |
 | `format`, `version` | Exactly `"buildplay-ui"` and `1`. Reject unsupported versions rather than guessing. |
 | `viewport` | Positive logical `width` and `height`; renderers scale this coordinate system to available space. Optional boolean `camera_enabled` defaults to `true`. Set it to `false` to keep the fitted board fixed. |
-| `motion` | Optional bounded movement/roll/announcement timing policy; may opt into physical own and pass-and-play moves. |
+| `motion` | Optional bounded opponent movement/roll/announcement timing policy. |
 | `boards` | One or more positioned surfaces: `grid`, `hex`, `graph`, `track`, `free` or `zone`. |
 | `piece_types` | Named reusable appearances: `circle`, `rect`, `card`, `dice`, `image` or `text`; dimensions, colors and optional front/back artwork. |
 | `assets` | Optional map of asset IDs to image descriptors. |
@@ -176,9 +179,8 @@ combines an own move with computer replies, the portal first applies the last
 own position immediately using viewer-filtered history, then animates the
 opponent changes. Missing history or large gaps update immediately. Initial
 rendering and reduced-motion preferences use immediate updates. Pass-and-play
-also updates immediately by default. A game with `motion.animate_own:true`
-uses its declared physical timings for local moves in both modes. For a game
-with a motion policy, coalesced accepted updates play individually in order
+also updates immediately. `motion.animate_own` is accepted for compatibility
+and ignored during live play. Coalesced accepted updates play individually in order
 instead of combining checker movement into one scene.
 Adjacent history snapshots animate read-only changes, including recorded own
 moves. Nonadjacent jumps settle immediately. A scene is
@@ -186,6 +188,65 @@ still a complete snapshot; animation timing and transforms belong to the host.
 For games whose server stores counts rather than individual pieces,
 presentation `local_state` can reconcile identities, as Backgammon does for
 moves, captures, bar entry and bearing off.
+
+### Describe the last move's paths
+
+For game-specific movement, implement the optional pure function
+`gameUI.getLastMoveAnimations(view, scene)`. Store the last accepted move in
+authoritative state and include its safe, viewer-visible details in
+`game.viewFor`'s returned view. Keep enough information to reconstruct the
+source, intermediate stops and destination from that view alone, including
+captures and stack positions when relevant. Replace or clear this record on
+every accepted action, including rolls, undo and round resets, so an old move
+cannot play again. Filter any private details using the same rules as the rest
+of the view. Presentation `local_state` alone is insufficient after a reload.
+
+The host calls the function after `reduce` for a `state_changed`, passing only
+the filtered view and the complete final scene. It attaches the returned JSON
+as `last_move_animations` in the presentation response. Local UI events do not
+call this function. Do not update match state or emit `make_move` from it.
+
+Return an array of entries `{piece_id, path, duration_ms?}`. Entries run in
+order; each path visits its waypoints in order. Each waypoint is
+`{board, position}`, using the same board-relative `{x,y}` or `{cell}` positions
+as pieces. A duration applies to the whole entry, divided equally among its
+path segments. It defaults to `motion.move_ms` or 1,440 ms. For example:
+
+```js
+getLastMoveAnimations(view, scene) {
+  if (!Object.prototype.hasOwnProperty.call(view, 'last_move')) return null;
+  const move = view.last_move;
+  if (!move || move.kind !== 'checker') return [];
+  return [
+    {piece_id: move.first_piece, duration_ms: 800,
+      path: [move.first_source, move.first_destination]},
+    {piece_id: move.second_piece, duration_ms: 1200,
+      path: [move.second_source, move.via_a, move.via_b, move.second_destination]}
+  ];
+}
+```
+
+Connect Four records the dropped column and landing cell, then returns a path
+from above that column straight down to the final piece. Backgammon records the
+authority's chosen checker hops and captures, then translates those into ordered
+paths. The host draws the final scene and temporarily places each animated
+piece at its declared source until its path runs. This also supports a newly
+placed piece absent from the previous scene.
+
+Each referenced piece must exist and be visible in the final scene. Paths have
+2–64 waypoints, the array has at most 128 entries, each duration is an integer
+from 0–5,000 ms, and the complete sequence must finish within 30,000 ms. Paths
+for the same piece must join, and its last path must end at its final scene
+position. All boards and cells must exist.
+
+Omit the function or return `null`/`undefined` to keep the host's existing
+position-difference animations, including for older pinned rules that do not
+retain last-move data. Return `[]` to explicitly request no positional motion
+for an action. With declared paths the host animates only a known opponent's
+forward, adjacent move. Your own moves update immediately, even with
+`motion.animate_own:true`; initial/reconnect snapshots, skipped history,
+backward history and reduced-motion settings also settle immediately. Legacy
+games retain the behavior described above.
 
 The shared React Native host fits the complete declared viewport, boards,
 visible piece bodies and legal destinations at **100%**. Its canvas uses the
@@ -289,9 +350,9 @@ controls authoritative randomness. It carries no executable code.
 
 Packages may set `motion:{move_ms,roll_ms,roll_settle_ms,turn_pause_ms,animate_own,easing}`.
 Each timing is an integer from 0 to 5000 milliseconds; `easing` is `ease-out` or
-`ease-in-out-quad`. Omitted timings retain host defaults. `animate_own:true`
-opts into physical animation for moves made on this device, including pass and
-play; ordinary games keep immediate own moves. `roll_settle_ms` keeps the roll
+`ease-in-out-quad`. Omitted timings retain host defaults. `animate_own` remains
+accepted for compatibility and is ignored during live play: moves made on this
+device, including pass and play, update immediately. `roll_settle_ms` keeps an opponent's roll
 readable before accepting another action. `turn_pause_ms` adds a pause after a
 turn change. Reduced motion and initial/reconnect snapshots bypass these delays.
 Hosts preserve each viewer-filtered accepted action when a computer finishes
@@ -621,6 +682,9 @@ See [the partial-update contract](agent-game-import.md#updating-a-game).
    JSON. Keep match rules on the authoritative server for online play.
 3. On `state_changed`, call `gameUI.reduce(message, localState)` and render its
    complete scene with native views/layers. Save only the returned local state.
+   If present, call `gameUI.getLastMoveAnimations(view, scene)` in the same
+   bounded context and validate its ordered paths against the final scene.
+   Animate declared paths only for known opponent moves, as described above.
 4. Translate taps, destination selections, drags, control changes and the
    rotate/flip tools (R, Shift+R and F on the keyboard) to the event shapes
    above. Draw target `preview` cells while a destination is hovered, focused
