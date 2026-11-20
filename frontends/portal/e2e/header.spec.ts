@@ -119,7 +119,7 @@ test('Games and Matches share one header row and replace the redundant game retu
     expect(Math.abs(games.y-matches.y)).toBeLessThan(1);
     expect((await header.boundingBox())!.height).toBeLessThanOrEqual(65);
     await page.getByTestId('header-games').click();
-    await expect(page).toHaveURL(/#games$/);await expect(page.getByRole('textbox',{name:'Search games',exact:true})).toBeVisible();
+    await expect(page).toHaveURL(/#games$/);await expect(page.getByRole('combobox',{name:'Search games',exact:true})).toBeVisible();
     await page.goBack();await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
     await page.getByTestId('header-matches').click();
     await expect(page).toHaveURL(/#matches$/);await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();

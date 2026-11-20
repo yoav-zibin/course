@@ -1,5 +1,5 @@
 import {copyText,playerText} from '../platform/i18n';
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Image, Pressable, ScrollView, StyleSheet, View} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import type {Game, Match} from '../core/types';
@@ -8,35 +8,28 @@ import {text, useApp} from './context';
 import {MatchOutcome} from './MatchOutcome';
 import {GameInstructions} from './GameInstructions';
 import {matchGameName} from './match-game';
+import {GameSearch} from './GameSearch';
 
 function useText() {const {p} = useApp(); return (key: string, fallback: string) => text(p,key,fallback);}
 function GameCard({game}: {game: Game}) {
   const {p,openGame,run} = useApp();
-  const saved = p.savedGames.some(item=>item.id===game.id);
   return <Card style={s.gameCard}><Pressable accessibilityRole="link" accessibilityLabel={copyText("Play {v0}",{v0:game.name})} onPress={()=>run(()=>openGame(game.id))} style={{gap:12}}>
     {game.cover_url ? <Image source={{uri:new URL(game.cover_url,p.baseUrl).href}} style={s.cover} resizeMode="contain" accessibilityLabel={playerText(game.name)}/> : <View style={[s.cover,{alignItems:'center',justifyContent:'center'}]}><Copy style={{fontSize:44,color:colors.blue}}>◇</Copy></View>}
     <Title small>{game.name}</Title><Copy small muted numberOfLines={3}>{game.description}</Copy>
     <Copy small style={{color:colors.blue}}>{game.allowed_player_counts?.join(', ')} {copyText("players")}</Copy>
-  </Pressable><Row><Button compact onPress={()=>run(()=>openGame(game.id))}>{copyText("Play")}</Button>{p.account && <Button compact secondary label={`${saved?copyText("Unsave"):copyText("Save")} ${game.name}`} onPress={()=>run(()=>p.actions.saveGame(game.id,!saved))}>{saved?copyText("★ Saved"):copyText("☆ Save")}</Button>}</Row></Card>;
+  </Pressable><Row><Button compact onPress={()=>run(()=>openGame(game.id))}>{copyText("Play")}</Button></Row></Card>;
 }
 
 export function Catalog() {
   const {p,run,openAccount} = useApp(), t=useText();
-  const [query,setQuery]=useState(p.query), [filter,setFilter]=useState('all'), [proposal,setProposal]=useState(false);
+  const [proposal,setProposal]=useState(false);
   const [name,setName]=useState(''),[description,setDescription]=useState(''),[rules,setRules]=useState('');
-  useEffect(()=>{const timer=setTimeout(()=>{if(query!==p.query) void run(()=>p.actions.searchGames(query));},350); return()=>clearTimeout(timer);},[query]);
-  const games=filter==='saved'?p.savedGames:p.games;
   return <>
     <View style={{gap:10}}><Copy small style={s.eyebrow}>{copyText("YOUR NEXT GOOD GAME")}</Copy><Title>{t('ui.games.title','Let’s play.')}</Title><Copy muted>{t('ui.games.subtitle','Discover a game, invite your friends, or play on this device. Pick up the same match on web, iPhone, and Android.')}</Copy></View>
     {!p.account && <Card><Title small>{t('ui.auth.welcome','Make yourself at home')}</Title><Copy muted>{t('ui.portal.login_note','Log in or continue as a guest to create and join matches.')}</Copy><Row><Button onPress={openAccount}>{t('ui.auth.log_in','Log in / continue as guest')}</Button><Copy small muted>{copyText("Local play also works without an account.")}</Copy></Row></Card>}
-    <Field label={t('ui.games.search','Search games')} placeholder={t('ui.games.search_placeholder','Find a game…')} value={query} onChangeText={setQuery} autoCapitalize="none" autoCorrect={false} returnKeyType="search" onSubmitEditing={()=>run(()=>p.actions.searchGames(query))}/>
-    <Row><Button compact secondary selected={filter==='all'} onPress={()=>setFilter('all')}>{t('ui.library.all','All games')}</Button><Button compact secondary selected={filter==='saved'} onPress={()=>{setFilter('saved'); if(!p.account)openAccount();}}>{t('ui.library.saved','Saved games')}</Button><View style={{flex:1}}/><Button compact secondary onPress={()=>run(()=>p.actions.refresh())}>{t('ui.action.refresh','Refresh')}</Button></Row>
-    {!query && filter==='all' && p.recentGames.length>0 && <><Title small>{t('ui.games.recent','Recently played')}</Title><ScrollView horizontal contentContainerStyle={{gap:14}}>{p.recentGames.map(game=><GameCard key={game.id} game={game}/>)}</ScrollView></>}
-    {!query && filter==='all' && p.popularGames.length>0 && <><Title small>{t('ui.games.popular','Popular games')}</Title><ScrollView horizontal contentContainerStyle={{gap:14}}>{p.popularGames.map(game=><GameCard key={game.id} game={game}/>)}</ScrollView></>}
-    <Title small>{filter==='saved'?t('ui.library.saved','Saved games'):t('ui.library.all','All games')}</Title>
-    <View style={s.grid}>{games.map(game=><GameCard key={game.id} game={game}/>)}</View>
-    {!games.length && <Empty>{p.loading?t('ui.action.loading','Loading games…'):t('ui.games.empty','No games found. Try another search.')}</Empty>}
-    {p.cursors[filter==='saved'?'savedGames':'games'] && <Button secondary onPress={()=>run(()=>p.actions.loadMore(filter==='saved'?'savedGames':'games'))}>{t('ui.action.more','Load more games')}</Button>}
+    <GameSearch/>
+    {p.recentGames.length>0 && <><Title small>{t('ui.games.recent','Recently played')}</Title><ScrollView horizontal keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:14}}>{p.recentGames.map(game=><GameCard key={game.id} game={game}/>)}</ScrollView></>}
+    {p.popularGames.length>0 && <><Title small>{t('ui.games.popular','Popular games')}</Title><ScrollView horizontal keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:14}}>{p.popularGames.map(game=><GameCard key={game.id} game={game}/>)}</ScrollView></>}
     <Card><Title small>{t('ui.proposal.title','Missing a game? Propose it')}</Title><Copy muted>{t('ui.proposal.explainer','Tell us which game you would like to play here. Our AI agents will review your proposal and create the game within 24 hours.')}</Copy><Row><Button secondary onPress={()=>setProposal(true)}>{t('ui.proposal.submit','Propose a game')}</Button></Row></Card>
     <Dialog visible={proposal} title={t('ui.proposal.title','Propose a game')} onClose={()=>setProposal(false)}>
       <Field label={t('ui.proposal.name_label','Game name')} value={name} onChangeText={setName} maxLength={120}/><Field label={t('ui.proposal.description_label','Why this game?')} multiline value={description} onChangeText={setDescription} maxLength={2000}/><Field label={t('ui.proposal.rules_label','Link to the rules (optional)')} value={rules} onChangeText={setRules} autoCapitalize="none" keyboardType="url"/>
@@ -78,17 +71,50 @@ export function GameDetail() {
   </>;
 }
 
-function MatchCard({match,local=false}: {match: Match;local?: boolean}) {
+function MatchCard({match,local=false,carousel=false}: {match: Match;local?: boolean;carousel?: boolean}) {
   const {p,run,openMatch}=useApp(),t=useText();
   const name=matchGameName(match,p,copyText('Tic-tac-toe'))||t('ui.game.name_unavailable','Game name unavailable');
-  const seat=match.players.find(player=>player.user_id===p.account?.id), turn=seat&&match.turn_of_player_indices?.includes(seat.player_index);
-  return <Card style={{padding:16}}><Pressable accessibilityRole="link" onPress={()=>run(()=>openMatch(match.id))} style={{gap:7}}><Row><Title small>{name}</Title><View style={{flex:1}}/><Copy small style={{color:turn?colors.accent:colors.blue}}>{local?copyText("On this device"):turn?copyText("Your turn"):match.status==='waiting_for_players'?copyText("Waiting for players"):match.status==='over'?copyText("Finished"):copyText("Ongoing")}</Copy></Row><Copy small muted>{match.players.length} {copyText("players ·")} {match.move_count} {copyText("moves")}{match.private===true?copyText(" · Invite only"):""}{match.turn_seconds?copyText(" · {v0} min per move",{v0:match.turn_seconds/60}):''}</Copy><MatchOutcome match={match}/></Pressable><Row><Button secondary compact onPress={()=>run(()=>openMatch(match.id))}>{t('ui.action.open','Open match')}</Button><Button secondary compact disabled={!local&&Boolean(match.pending||match.conflict)} onPress={()=>run(()=>local?p.actions.deleteLocal(match.id):p.actions.archiveMatch(match.id))}>{t('ui.action.hide','Hide from list')}</Button></Row>{!local&&Boolean(match.pending||match.conflict)&&<Copy small muted>{copyText('Sync or resolve pending actions before hiding this match.')}</Copy>}</Card>;
+  const identity=(local?p.account?.id:p.profile?.id||p.account?.canonical_user_id||p.account?.id)||'visitor';
+  const seat=match.players.find(player=>player.user_id===identity), turn=seat?.active!==false&&seat&&match.turn_of_player_indices?.includes(seat.player_index);
+  const opponents=match.players.filter(player=>player.user_id!==identity).map(player=>player.name||p.profiles[player.user_id||'']?.display_name||(player.kind==='computer'?copyText('Computer {v0}',{v0:player.player_index+1}):copyText('Player {v0}',{v0:player.player_index+1})));
+  const title=opponents.length?copyText('{v0} against {v1}',{v0:name,v1:opponents.join(', ')}):name;
+  const [confirmation,setConfirmation]=useState<Match|null>(null),[preview,setPreview]=useState<Match|null>(null),[error,setError]=useState('');
+  const scope=JSON.stringify([p.baseUrl,p.account?.id]),currentScope=useRef(scope);currentScope.current=scope;
+  const intent=useRef(0);
+  useEffect(()=>{intent.current++;setConfirmation(null);setPreview(null);setError('');},[scope]);
+  useEffect(()=>()=>{intent.current++;},[]);
+  const begin=()=>run(async()=>{const epoch=++intent.current,owner=scope;setError('');setPreview(null);const latest=local?match:await p.actions.request('GET',`/matches/${encodeURIComponent(match.id)}`);if(epoch===intent.current&&owner===currentScope.current)setConfirmation(latest);});
+  const confirmAction=()=>run(async()=>{
+    const target=confirmation,epoch=intent.current,owner=scope;if(!target||owner!==currentScope.current)return;
+    try{
+      if(!local&&target.status==='ongoing'&&!preview){const value=await p.actions.request('POST',`/matches/${encodeURIComponent(target.id)}/maybeLeave`);if(epoch===intent.current&&owner===currentScope.current)setPreview(value);return;}
+      if(local)await p.actions.deleteLocal(target.id);else await p.actions.leaveMatch(target.id);
+      if(epoch===intent.current&&owner===currentScope.current){intent.current++;setConfirmation(null);setPreview(null);await p.actions.refresh();}
+    }catch(failure){if(epoch===intent.current&&owner===currentScope.current)setError(failure instanceof Error?failure.message:String(failure));throw failure;}
+  });
+  const close=()=>{intent.current++;setConfirmation(null);setPreview(null);setError('');};
+  const pending=!local&&Boolean(match.pending||match.conflict),ended=match.status==='over',canLeave=local||Boolean(seat&&seat.active!==false);
+  return <Card testID={`match-card-${match.id}`} style={{padding:16,...(carousel?{width:300,flexShrink:0}:{})}}><Pressable accessibilityRole="link" onPress={()=>run(()=>openMatch(match.id))} style={{gap:7}}><Row><Title small>{title}</Title><View style={{flex:1}}/><Copy small style={{color:turn?colors.accent:colors.blue}}>{local?copyText("On this device"):turn?copyText("Your turn"):ended?copyText("Finished"):seat?.active===false?copyText('Left'):match.status==='waiting_for_players'?copyText("Waiting for players"):copyText("Ongoing")}</Copy></Row><Copy small muted>{match.players.length} {copyText("players ·")} {match.move_count} {copyText("moves")}{match.private===true?copyText(" · Invite only"):""}{match.turn_seconds?copyText(" · {v0} min per move",{v0:match.turn_seconds/60}):''}</Copy><MatchOutcome match={match}/></Pressable><Row><Button secondary compact onPress={()=>run(()=>openMatch(match.id))}>{t('ui.action.open','Open match')}</Button>{(ended||canLeave)&&<Button secondary compact disabled={pending||!local&&!p.network} onPress={begin}>{ended?t('ui.action.delete','Delete'):t('ui.action.leave','Leave')}</Button>}</Row>{pending&&<Copy small muted>{copyText('Sync or resolve pending actions before leaving or deleting this match.')}</Copy>}
+    {confirmation&&<Dialog visible title={confirmation.status==='over'?copyText('Delete this match?'):copyText('Leave this match?')} onClose={close}>
+      <Copy>{local?copyText('This removes the saved match from this device.'):confirmation.status==='over'?copyText('This removes the match from your list. Other players can still see it.'):confirmation.status==='waiting_for_players'&&confirmation.owner_user_id===identity?copyText('Leaving closes this lobby for everyone and refunds any tokens.'):copyText('Your seat will leave the match. The server calculates any token settlement.')}</Copy>
+      {preview&&<Copy>{copyText('Your payout:')} {preview.pending_leave_payout??0} {copyText('tokens')}</Copy>}
+      {error&&<Notice error>{error}</Notice>}
+      <Button danger onPress={confirmAction}>{confirmation.status==='over'?t('ui.action.delete','Delete'):!local&&confirmation.status==='ongoing'&&!preview?copyText('Preview leaving'):copyText('Confirm leaving')}</Button>
+    </Dialog>}
+  </Card>;
+}
+
+function LocalMatchCarousels() {
+  const {p}=useApp();
+  const groups=[{id:'computer-local-matches',title:copyText('Play against the computer'),mode:'computer'},{id:'pass-local-matches',title:copyText('Pass and play'),mode:'pass'}];
+  return <>{groups.map(group=>{const matches=p.localMatches.filter(match=>match.localMode===group.mode).sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));return matches.length?<View key={group.id} testID={group.id} style={{gap:12}}><Title small>{group.title}</Title><ScrollView horizontal contentContainerStyle={{gap:14,paddingBottom:6}}>{matches.map(match=><MatchCard key={match.id} match={match} local carousel/>)}</ScrollView></View>:null;})}</>;
 }
 
 export function Matches() {
   const {p,run,openAccount}=useApp(),t=useText();
   const groups=[{title:copyText("Your turn"),matches:p.myMatches.filter(m=>m.status==='ongoing'&&m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{title:copyText("Ongoing"),matches:p.myMatches.filter(m=>m.status==='ongoing'&&!m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{title:copyText("Waiting for players"),matches:p.myMatches.filter(m=>m.status==='waiting_for_players')},{title:copyText("Finished"),matches:p.myMatches.filter(m=>m.status==='over')}];
   return <><Title>{t('ui.portal.nav_matches','Matches')}</Title><Copy muted>{copyText('Jump back into your matches.')}</Copy>
+    <LocalMatchCarousels/>
     {!p.account&&<Button onPress={openAccount}>{t('ui.auth.log_in','Log in to see your matches')}</Button>}
 
     {groups.map(group=><View key={group.title} style={{gap:12}}><Title small>{group.title} · {group.matches.length}</Title>{group.matches.map(match=><MatchCard key={match.id} match={match}/>)}{!group.matches.length&&<Empty>{copyText("No matches here yet.")}</Empty>}</View>)}
@@ -99,7 +125,7 @@ export function Matches() {
 export function LocalMatches() {
   const {p,run,openMatch}=useApp(),t=useText();
   const start=async(computers:number)=>{const match=await p.actions.startPractice('bundled-tictactoe',{humans:2-computers,computers,humanSeat:computers?Math.floor(Math.random()*2):0});await openMatch(match.id);};
-  return <><Title>{t('ui.practice.local_matches','On this device')}</Title><Copy muted>{copyText("Local games are saved here, including after you close the app. Download a game once to play without internet.")}</Copy><Card><Title small>{copyText("Tic-tac-toe")}</Title><Copy muted>{copyText("A bundled game, ready to play offline on a fresh installation.")}</Copy><Row><Button onPress={()=>run(()=>start(0))}>{copyText("Pass and play")}</Button><Button secondary onPress={()=>run(()=>start(1))}>{copyText("Practice with a computer")}</Button></Row></Card>{p.localMatches.map(match=><MatchCard key={match.id} match={match} local/>)}{!p.localMatches.length&&<Empty>{copyText("No local matches yet. Choose a game to play on this device.")}</Empty>}
+  return <><Title>{t('ui.practice.local_matches','On this device')}</Title><Copy muted>{copyText("Local games are saved here, including after you close the app. Download a game once to play without internet.")}</Copy><LocalMatchCarousels/><Card><Title small>{copyText("Tic-tac-toe")}</Title><Copy muted>{copyText("A bundled game, ready to play offline on a fresh installation.")}</Copy><Row><Button onPress={()=>run(()=>start(0))}>{copyText("Pass and play")}</Button><Button secondary onPress={()=>run(()=>start(1))}>{copyText("Practice with a computer")}</Button></Row></Card>{!p.localMatches.length&&<Empty>{copyText("No local matches yet. Choose a game to play on this device.")}</Empty>}
     {p.archived.length>0&&<Card><Title small>{copyText("Preserved previous app data")}</Title><Copy muted>{copyText("Saved games and pending branches from the previous app are preserved for review. Retired HTML moves cannot be submitted to current online matches.")}</Copy><Copy small>{p.archived.length} {copyText("saved records")}</Copy><Button secondary onPress={()=>run(async()=>{await Clipboard.setStringAsync(JSON.stringify(p.archived,null,2));})}>{copyText("Copy preserved data")}</Button></Card>}
   </>;
 }

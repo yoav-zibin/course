@@ -22,6 +22,6 @@ test('destination navigation resets scrolling after a long saved-game list witho
   await page.goto('/portal#local');
   await expect(page.getByRole('button',{name:'Open match',exact:true})).toHaveCount(3);
   await page.goto('/portal#settings');
-  await expect(page.getByRole('textbox',{name:'Search games',exact:true})).toBeVisible();
+  await expect(page.getByRole('combobox',{name:'Search games',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Preferences',exact:true})).toHaveCount(0);
 });

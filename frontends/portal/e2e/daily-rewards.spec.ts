@@ -21,9 +21,9 @@ test('a retained verified session claims a real daily reward once and retains it
   await page.goto('/portal');const response=await granted;expect(response.ok()).toBeTruthy();
   expect(await response.json()).toMatchObject({token_balance:20,free_tokens_granted:20,is_verified:true});
   await expect(page.getByTestId('header-token-balance')).toHaveAttribute('aria-label','20 tokens');
-  const refresh=page.getByRole('button',{name:'Refresh',exact:true});await refresh.click();await expect(refresh).toBeEnabled();
   await page.reload();await expect(page.getByTestId('header-token-balance')).toHaveAttribute('aria-label','20 tokens');
-  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await refresh.click();await expect(refresh).toBeEnabled();
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await page.reload();await expect(page.getByTestId('header-token-balance')).toHaveAttribute('aria-label','20 tokens');
   expect(claims).toHaveLength(1);
   expect(await profile(request,user)).toMatchObject({token_balance:20,free_tokens_granted:20,last_token_grant_day:new Date().toISOString().slice(0,10)});
 });
@@ -32,8 +32,7 @@ test('a retained guest session receives no daily reward or daily claim requests'
   const user=await createUser(request,uniqueName('Daily reward guest'));
   const claims:string[]=[];page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/auth/daily-login')claims.push(request.url());});
   await loginAs(page,user);await page.goto('/portal');await expect(page.getByTestId('header-token-balance')).toHaveAttribute('aria-label','0 tokens');
-  const refresh=page.getByRole('button',{name:'Refresh',exact:true});await refresh.click();await expect(refresh).toBeEnabled();
   await page.reload();await expect(page.getByTestId('header-token-balance')).toHaveAttribute('aria-label','0 tokens');
-  await refresh.click();await expect(refresh).toBeEnabled();expect(claims).toHaveLength(0);
+  await page.reload();await expect(page.getByTestId('header-token-balance')).toHaveAttribute('aria-label','0 tokens');expect(claims).toHaveLength(0);
   expect(await profile(request,user)).toMatchObject({token_balance:0,free_tokens_granted:0,is_verified:false});
 });

@@ -3391,5 +3391,59 @@
     "zh": "游戏名称不可用",
     "hi": "गेम का नाम उपलब्ध नहीं है",
     "ar": "اسم اللعبة غير متاح"
+  },
+  "{v0} against {v1}": {
+    "es": "{v0} contra {v1}",
+    "fr": "{v0} contre {v1}",
+    "de": "{v0} gegen {v1}",
+    "pt": "{v0} contra {v1}",
+    "zh": "{v0} 对战 {v1}",
+    "hi": "{v0} बनाम {v1}",
+    "ar": "{v0} ضد {v1}"
+  },
+  "Delete this match?": {
+    "es": "¿Eliminar esta partida?",
+    "fr": "Supprimer cette partie ?",
+    "de": "Diese Partie löschen?",
+    "pt": "Excluir esta partida?",
+    "zh": "删除此对局？",
+    "hi": "यह मैच हटाएँ?",
+    "ar": "حذف هذه المباراة؟"
+  },
+  "This removes the saved match from this device.": {
+    "es": "Esto elimina la partida guardada de este dispositivo.",
+    "fr": "Cela supprime la partie enregistrée sur cet appareil.",
+    "de": "Dadurch wird die gespeicherte Partie von diesem Gerät entfernt.",
+    "pt": "Isso remove a partida salva deste dispositivo.",
+    "zh": "这会从此设备中移除已保存的对局。",
+    "hi": "इससे सहेजा गया मैच इस डिवाइस से हट जाएगा।",
+    "ar": "يؤدي هذا إلى إزالة المباراة المحفوظة من هذا الجهاز."
+  },
+  "Sync or resolve pending actions before leaving or deleting this match.": {
+    "es": "Sincroniza o resuelve las acciones pendientes antes de salir de esta partida o eliminarla.",
+    "fr": "Synchronisez ou résolvez les actions en attente avant de quitter ou de supprimer cette partie.",
+    "de": "Synchronisiere oder kläre ausstehende Aktionen, bevor du diese Partie verlässt oder löschst.",
+    "pt": "Sincronize ou resolva as ações pendentes antes de sair desta partida ou excluí-la.",
+    "zh": "离开或删除此对局前，请同步或处理待完成的操作。",
+    "hi": "इस मैच को छोड़ने या हटाने से पहले लंबित कार्रवाइयों को सिंक करें या सुलझाएँ।",
+    "ar": "زامن الإجراءات المعلقة أو عالجها قبل مغادرة هذه المباراة أو حذفها."
+  },
+  "Game suggestions": {
+    "es": "Sugerencias de juegos",
+    "fr": "Suggestions de jeux",
+    "de": "Spielvorschläge",
+    "pt": "Sugestões de jogos",
+    "zh": "游戏建议",
+    "hi": "खेल के सुझाव",
+    "ar": "اقتراحات الألعاب"
+  },
+  "Search is unavailable. Try again.": {
+    "es": "La búsqueda no está disponible. Inténtalo de nuevo.",
+    "fr": "La recherche est indisponible. Réessayez.",
+    "de": "Die Suche ist nicht verfügbar. Versuche es erneut.",
+    "pt": "A pesquisa está indisponível. Tente novamente.",
+    "zh": "搜索暂不可用。请重试。",
+    "hi": "खोज उपलब्ध नहीं है। फिर से कोशिश करें।",
+    "ar": "البحث غير متاح. حاول مرة أخرى."
   }
 }

@@ -50,7 +50,7 @@ test('online matches use the shared navigation and retain their public game thro
     await activate(matchesNavigation(page),isMobile);
     await expect(page).toHaveURL(/#matches$/);
     await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
-    await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+    await expect(page.getByTestId(`match-card-${match.id}`).getByRole('heading',{name:`${name} against ${host.display_name}`,exact:true})).toBeVisible();
     const reopen=page.getByRole('button',{name:'Open match',exact:true});
     await expect(reopen).toHaveCount(1);await activate(reopen,isMobile);
     await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));

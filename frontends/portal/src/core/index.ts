@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import { PortalApi, ApiError,InactiveSignInError } from './api';
-import {setDiagnosticScope} from './diagnostics';
+import {recordDiagnosticEvent,setDiagnosticScope} from './diagnostics';
 import { AccountRepository, emptyAccountData, equal, requestId } from './repository';
 import {protectedResponsePaths, matchRetentionPriority} from './cache-policy';
+import {gameSearchPrefix,gameSuggestions} from './game-search';
 import {isValidDownloadedGame, presentationHistoryPath} from './offline-match-data';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
@@ -182,6 +183,44 @@ export class PortalStore {
     this.patch({ [kind]: items, cursors: { ...this.state.cursors, [kind]: preserveTail ? this.state.cursors[kind] : result.next_cursor || null } });
     // Stable aliases restore useful lists when the next launch is offline.
     await this.cache(listPaths[kind], kind === 'myMatches' ? this.matchSummaries(items) : items);
+  }
+  private async suggestGames(query: string): Promise<Game[]> {
+    const guard=this.capture(),prefix=gameSearchPrefix(query);
+    const games=[...this.state.recentGames,...this.state.popularGames,...this.state.games,...this.state.savedGames];
+    if(!prefix||this.localOnly)return gameSuggestions(games,query);
+    try{
+      if(!this.paginated){
+        const result=await this.read('/games');guard();
+        if(!Array.isArray(result))throw new Error('Invalid list response');
+        games.push(...result.map(localizeGame));
+      }else{
+        let cursor:string|null=null;
+        const seen=new Set<string>();
+        // Bound broad word-prefix matches while allowing description-only
+        // matches on an early page to yield to actual title suggestions.
+        for(let page=0;page<3;page++){
+          const params=new URLSearchParams({q:prefix,limit:'50'});if(cursor)params.set('cursor',cursor);
+          const result=await this.read(`/v2/games?${params}`);guard();
+          if(!Array.isArray(result?.items))throw new Error('Invalid list response');
+          games.push(...result.items.map(localizeGame));
+          cursor=result.next_cursor||null;
+          if(!cursor||seen.has(cursor)||gameSuggestions(games,query).length>=6)break;
+          seen.add(cursor);
+        }
+      }
+    }catch(error){
+      guard();
+      if(error instanceof ApiError&&error.status===400&&error.message==='search requires one word prefix of 2 to 24 characters'){
+        // Browser and server Unicode versions can recognize different word
+        // characters. Keep ordinary typing free of index validation copy.
+        recordDiagnosticEvent('game_search_prefix_fallback',{reason:'unsupported_index_prefix'});
+        return gameSuggestions(games,query);
+      }
+      if(error instanceof ApiError&&error.status<500||this.state.network)throw error;
+      // Offline typing can still find downloaded/recent games. Suggestions
+      // never replace the stable catalog or saved-library cache aliases.
+    }
+    return gameSuggestions(games,query);
   }
   private matchSummaries(matches: Match[]) {
     return matches.map(({state: _state, pending: _pending, conflict: _conflict, ...summary}) => summary);
@@ -617,7 +656,8 @@ export class PortalStore {
     } finally {try {guard(); this.patch({deletionUpdating: false});} catch { /* The selected account owns its state. */ }}
   }
   async createMatch(options: any) { const match = await this.request('POST', '/matches', options); await this.cache(`/matches/${match.id}`, match); await this.selectMatch(match.id); return match; }
-  async matchAction(action: string, body?: any) { const match = this.state.selectedMatch; if (!match) throw new Error('Choose a match first'); const token = this.selection; const path=action==='join'&&this.selectedInvite?.matchId===match.id?`/invites/${encodeURIComponent(this.selectedInvite.token)}/accept`:`/matches/${encodeURIComponent(match.id)}/${action}`; const result = await this.request('POST', path, body); if (result?.id) { await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); } await this.refreshProfile().catch(() => {}); return result; }
+  private async requestMatchAction(match: Match, action: string, body?: any) { const token = this.selection; const path=action==='join'&&this.selectedInvite?.matchId===match.id?`/invites/${encodeURIComponent(this.selectedInvite.token)}/accept`:`/matches/${encodeURIComponent(match.id)}/${action}`; const result = await this.request('POST', path, body); if (result?.id) { await this.cache(`/matches/${result.id}`, result); if (token === this.selection && this.state.selectedMatch?.id === match.id) this.patch({ selectedMatch: this.decorate(result) }); } await this.refreshProfile().catch(() => {}); return result; }
+  async matchAction(action: string, body?: any) { const match = this.state.selectedMatch; if (!match) throw new Error('Choose a match first'); return this.requestMatchAction(match,action,body); }
   async removePlayer(userId: string) { const match = this.state.selectedMatch; if (!match) return; const token = this.selection; const result = await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}/players/${encodeURIComponent(userId)}`); await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); }
   async archiveMatch(id: string, { deleted = false, hidePermanently = true }: { deleted?: boolean; hidePermanently?: boolean } = {}) {
     const guard = this.capture(), owner = this.identity(), token = this.selection;
@@ -633,9 +673,13 @@ export class PortalStore {
     guard(); if (token === this.selection && this.state.selectedMatch?.id === id) this.clearMatch();
     await this.reloadData(); guard(); this.patch({ myMatches: this.state.myMatches.filter(m => m.id !== id) });
   }
-  async leaveMatch() {
-    const match = this.state.selectedMatch; if (!match) return;
-    const guard = this.capture(), waiting = match.status === 'waiting_for_players', over = match.status === 'over';
+  async leaveMatch(id?: string) {
+    const guard = this.capture();
+    if (id && (this.data.queues[id]?.length || this.data.conflicts[id])) throw new Error(copyText('Sync or resolve pending actions before leaving or deleting this match.'));
+    const match = id ? await this.request('GET', `/matches/${encodeURIComponent(id)}`) as Match : this.state.selectedMatch;
+    guard(); if (!match) return;
+    if (id && (this.data.queues[id]?.length || this.data.conflicts[id])) throw new Error(copyText('Sync or resolve pending actions before leaving or deleting this match.'));
+    const waiting = match.status === 'waiting_for_players', over = match.status === 'over';
     if (over || waiting && match.owner_user_id === this.state.account?.id) {
       // The existing endpoint hides a finished match for this player, or
       // cancels a waiting lobby and refunds its players when the host leaves.
@@ -643,10 +687,11 @@ export class PortalStore {
       await this.archiveMatch(match.id, { deleted: true });
       return;
     }
-    const result = await this.matchAction(waiting ? 'leave' : 'playerLeft'); guard();
+    const result = await this.requestMatchAction(match,waiting ? 'leave' : 'playerLeft'); guard();
     // A guest can rejoin this lobby later, so the server's membership list
     // should decide its visibility instead of a permanent local hide record.
     if (waiting) await this.archiveMatch(match.id, { deleted: true, hidePermanently: false });
+    else if (id) {await this.reloadData();guard();}
     return result;
   }
   private async sync(freshRequestId?: string, matchId?: string) {
@@ -796,6 +841,7 @@ export class PortalStore {
     rememberAttribution:(url:string)=>rememberUrlAttribution(url,this.state.baseUrl,this.state.accounts),
     request: (method: string, path: string, body?: any) => this.perform(() => this.request(method, path, body), false),
     searchGames: (query: string) => this.perform(async () => { this.patch({ query, games: [], cursors: { ...this.state.cursors, games: null } }); await this.list('games'); }),
+    suggestGames: (query: string) => this.suggestGames(query),
     loadMore: (kind: ListKind) => this.perform(() => this.list(kind, true)),
     selectGame: (id: string) => this.perform(() => this.selectGame(id)), selectMatch: (id: string) => this.perform(() => this.selectMatch(id)), clearMatch: () => this.clearMatch(), clearGame: () => this.clearGame(), importLogin: (response: any) => this.perform(() => this.saveLogin(response)),
     guest: (name: string,intentGuard?:()=>void) => this.perform(() => this.guest(name,intentGuard)), requestCode: (method: 'email' | 'phone', value: string, delivery?: string) => this.perform(() => this.requestCode(method, value, delivery)),
@@ -805,7 +851,7 @@ export class PortalStore {
     switchAccount: (id: string,intentGuard?:()=>void) => this.perform(() => this.switchAccount(id,intentGuard)), logout: (id?: string) => this.perform(() => this.logout(id)), updateProfile: (patch: any) => this.perform(() => this.updateProfile(patch)),
     createMatch: (options: any) => this.perform(() => this.createMatch(options)),
     matchAction: (action: 'join' | 'start' | 'leave' | 'rematch' | 'maybeLeave' | 'playerLeft', body?: any) => this.perform(() => this.matchAction(action, body)), removePlayer: (id: string) => this.perform(() => this.removePlayer(id)),
-    leaveMatch: () => this.perform(() => this.leaveMatch()), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),
+    leaveMatch: (id?: string) => this.perform(() => this.leaveMatch(id)), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),
     startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.archiveMatch(id)),
     loadHistory: () => this.perform(() => this.loadHistory()), replay: (index: number | null) => this.perform(() => this.replay(index), false), presentationMessage: () => this.presentationMessage(), presentationHistory: () => this.presentationHistory(),
     saveGame: (id: string, saved: boolean) => this.perform(async () => { await this.request(saved ? 'PUT' : 'DELETE', `${this.paginated ? '/v2' : ''}/users/me/saved-games/${encodeURIComponent(id)}`); await this.list('savedGames'); }),

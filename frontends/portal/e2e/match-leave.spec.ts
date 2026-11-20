@@ -50,13 +50,13 @@ for(const ending of ['played','left'] as const)test(`a guest can leave a finishe
   await expect(page.getByRole('button',{name:'Preview leaving',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Confirm leaving',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
+  await expect(page.getByTestId(`match-card-${match.id}`)).toHaveCount(0);
   expect((await listedMatches(request,guest)).some((item:any)=>item.id===match.id)).toBe(false);
   expect((await listedMatches(request,host)).some((item:any)=>item.id===match.id)).toBe(true);
   const preserved=await request.get(`/matches/${match.id}`,{headers:headers(host)});
   expect(preserved.ok()).toBeTruthy();expect((await preserved.json()).status).toBe('over');
   await page.reload();await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
+  await expect(page.getByTestId(`match-card-${match.id}`)).toHaveCount(0);
 });
 
 test('the host uses Leave match to close a waiting lobby',async({page,request})=>{
@@ -68,7 +68,7 @@ test('the host uses Leave match to close a waiting lobby',async({page,request})=
   await expect(page.getByText('Leaving closes this lobby for everyone and refunds any tokens.',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Confirm leaving',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
+  await expect(page.getByTestId(`match-card-${match.id}`)).toHaveCount(0);
   for(const user of [host,guest])expect((await listedMatches(request,user)).some((item:any)=>item.id===match.id)).toBe(false);
   expect((await request.get(`/matches/${match.id}`,{headers:headers(guest)})).status()).toBe(404);
 });
