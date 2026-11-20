@@ -62,6 +62,13 @@ when the board fills, a side is eliminated, neither side can move, or after 300
 moves, with the piece majority winning. Select it for publication with
 `--kinds ataxx`. See the [Ataxx rules reference](https://playabstractgames.com/en/ataxx/rules/).
 
+Whist is a four-player partnership game played as one thirteen-trick hand.
+Scopa is a two-player, single-deal variant using a 40-card deck; the final
+score includes sweeps, cards, diamonds, the seven of diamonds and primiera.
+Build their packages with `python -m game_platform.tools.build_whist` and
+`python -m game_platform.tools.build_scopa`, respectively. They can be selected
+for publication as `--kinds whist` and `--kinds scopa`.
+
 The Backgammon package keeps the regular audited game's rules as its base,
 with reviewed wrappers for retained rolls and unambiguous moves that use several
 dice with one checker. Its strict move schema describes roll, pass and moves

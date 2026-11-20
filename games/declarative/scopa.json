@@ -1,0 +1,1516 @@
+{
+  "name": "Scopa (Declarative)",
+  "description": "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.",
+  "allowed_player_counts": [
+    2
+  ],
+  "all_state_public": false,
+  "server_code": "// Two-player Scopa, scored as a single deal.\nconst game = {\n  newMatch(ctx) {\n    const deck = [];\n    for (const suit of ['S','H','D','C'])\n      for (let rank = 1; rank <= 10; rank++) deck.push(`${rank}${suit}`);\n    for (let i = deck.length - 1; i > 0; i--) {\n      const j = Math.floor(ctx.random() * (i + 1));\n      [deck[i],deck[j]] = [deck[j],deck[i]];\n    }\n    const table = deck.splice(0,4);\n    const hands = [deck.splice(0,3),deck.splice(0,3)];\n    return {state:{deck,table,hands,captured:[[],[]],sweeps:[0,0],turn:0,\n      last_capture:-1,over:false,winner:-1,scores:[0,0]},turn:[ctx.players[0].id]};\n  },\n  applyMove(state, playerId, move, ctx) {\n    const seat = ctx.players.findIndex(player => player.id === playerId);\n    if (state.over) throw new InvalidMove('game over');\n    if (seat < 0 || seat !== state.turn) throw new InvalidMove('not your turn');\n    if (!move || typeof move !== 'object' || Array.isArray(move) ||\n        Object.keys(move).sort().join(',') !== 'capture,card' ||\n        typeof move.card !== 'string' || !Array.isArray(move.capture))\n      throw new InvalidMove('choose a card and capture');\n    const possible = legalMoves(state,seat);\n    const selected = possible.find(option => option.card === move.card &&\n      option.capture.length === move.capture.length &&\n      option.capture.every(card => move.capture.includes(card)));\n    if (!selected || new Set(move.capture).size !== move.capture.length)\n      throw new InvalidMove('invalid capture');\n    const next = JSON.parse(JSON.stringify(state));\n    next.hands[seat].splice(next.hands[seat].indexOf(move.card),1);\n    if (selected.capture.length) {\n      next.table = next.table.filter(card => !selected.capture.includes(card));\n      next.captured[seat].push(move.card,...selected.capture);\n      next.last_capture = seat;\n      const finalPlay = !next.deck.length && next.hands.every(hand => !hand.length);\n      if (!next.table.length && !finalPlay) next.sweeps[seat]++;\n    } else next.table.push(move.card);\n    if (next.hands.every(hand => !hand.length)) {\n      if (next.deck.length) {\n        next.hands[0] = next.deck.splice(0,3);\n        next.hands[1] = next.deck.splice(0,3);\n      } else {\n        if (next.last_capture < 0) throw new Error('No player captured a card');\n        next.captured[next.last_capture].push(...next.table);\n        next.table = [];\n        next.scores = score(next);\n        next.over = true;\n        next.winner = next.scores[0] === next.scores[1] ? -1 :\n          next.scores[0] > next.scores[1] ? 0 : 1;\n        return {state:next,turn:null,payouts:payouts(next.winner,ctx)};\n      }\n    }\n    next.turn = 1 - seat;\n    return {state:next,turn:[ctx.players[next.turn].id]};\n  },\n  viewFor(state, playerId, ctx) {\n    const seat = playerId == null ? -1 : ctx.players.findIndex(p => p.id === playerId);\n    return {hand:seat < 0 ? [] : state.hands[seat].slice(),table:state.table.slice(),\n      counts:state.hands.map(hand => hand.length),deck_count:state.deck.length,\n      captured_counts:state.captured.map(cards => cards.length),sweeps:state.sweeps,\n      turn:state.turn,over:state.over,winner:state.winner,scores:state.scores,\n      legal:seat === state.turn && !state.over ? legalMoves(state,seat) : []};\n  },\n  computerMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(player => player.id === playerId);\n    const choices = legalMoves(state,seat);\n    return choices[Math.floor(ctx.random()*choices.length)];\n  },\n  randomMove(state, playerId, ctx) { return this.computerMove(state,playerId,ctx); }\n};\n\nfunction rank(card) { return Number(card.slice(0,-1)); }\n\nfunction captures(table, value) {\n  const equal = table.filter(card => rank(card) === value);\n  if (equal.length) return equal.map(card => [card]);\n  const found = [];\n  function search(index, remaining, chosen) {\n    if (remaining === 0) { found.push(chosen); return; }\n    for (let i = index; i < table.length; i++) {\n      const n = rank(table[i]);\n      if (n <= remaining) search(i+1,remaining-n,[...chosen,table[i]]);\n    }\n  }\n  search(0,value,[]);\n  return found.length ? found : [[]];\n}\n\nfunction legalMoves(state, seat) {\n  return state.hands[seat].flatMap(card =>\n    captures(state.table,rank(card)).map(capture => ({card,capture})));\n}\n\nfunction score(state) {\n  const scores = state.sweeps.slice(), piles = state.captured;\n  const award = (a,b) => { if (a !== b) scores[a > b ? 0 : 1]++; };\n  award(piles[0].length,piles[1].length);\n  award(piles[0].filter(c => c.endsWith('D')).length,piles[1].filter(c => c.endsWith('D')).length);\n  const seven = piles.findIndex(cards => cards.includes('7D'));\n  if (seven >= 0) scores[seven]++;\n  const weights = {1:16,2:12,3:13,4:14,5:15,6:18,7:21,8:10,9:10,10:10};\n  const primiera = cards => {\n    const best = ['S','H','D','C'].map(suit =>\n      Math.max(0,...cards.filter(card => card.endsWith(suit)).map(card => weights[rank(card)])));\n    return best.includes(0) ? 0 : best.reduce((a,b) => a+b,0);\n  };\n  award(primiera(piles[0]),primiera(piles[1]));\n  return scores;\n}\n\nfunction payouts(winner,ctx) {\n  const humans = ctx.players.filter(player => player.kind === 'human' && player.active !== false);\n  if (!humans.length) return {};\n  const winningPlayer = winner < 0 ? null : ctx.players[winner];\n  const recipients = winningPlayer && humans.includes(winningPlayer) ? [winningPlayer] : humans;\n  const pot = ctx.pot || 0, share = Math.floor(pot/recipients.length), rem = pot%recipients.length;\n  const result = Object.fromEntries(humans.map(player => [player.id,0]));\n  recipients.forEach((player,i) => { result[player.id] = share + (i < rem ? 1 : 0); });\n  return result;\n}\n",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 640,
+      "height": 590
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 640,
+        "height": 590,
+        "color": "#174d42",
+        "line_color": "#e2c47a"
+      }
+    ],
+    "piece_types": {
+      "red": {
+        "shape": "card",
+        "width": 76,
+        "height": 96,
+        "color": "#fffdf6",
+        "text_color": "#b02e35",
+        "border_color": "#d5c6a9"
+      },
+      "black": {
+        "shape": "card",
+        "width": 76,
+        "height": 96,
+        "color": "#fffdf6",
+        "text_color": "#1c2b31",
+        "border_color": "#d5c6a9"
+      }
+    },
+    "strings": {
+      "title": "Scopa",
+      "sweeps": "Sweeps  {a} : {b}",
+      "final": "Final  {a} : {b}",
+      "stock": "Deck {n}",
+      "player": "Player {n}",
+      "choose_card": "Choose a card",
+      "choose_capture": "Choose table cards",
+      "play": "Play {card}",
+      "capture": "Take {card}",
+      "tie": "Draw",
+      "winner": "{name} wins",
+      "server_game_over": "game over",
+      "server_not_your_turn": "not your turn",
+      "server_choose": "choose a card and capture",
+      "server_invalid_capture": "invalid capture"
+    },
+    "ui_code": "const SOURCE_STRINGS={\"title\": \"Scopa\", \"sweeps\": \"Sweeps  {a} : {b}\", \"final\": \"Final  {a} : {b}\", \"stock\": \"Deck {n}\", \"player\": \"Player {n}\", \"choose_card\": \"Choose a card\", \"choose_capture\": \"Choose table cards\", \"play\": \"Play {card}\", \"capture\": \"Take {card}\", \"tie\": \"Draw\", \"winner\": \"{name} wins\", \"server_game_over\": \"game over\", \"server_not_your_turn\": \"not your turn\", \"server_choose\": \"choose a card and capture\", \"server_invalid_capture\": \"invalid capture\"};\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const strings = Object.assign({},SOURCE_STRINGS,m.strings || {});\n    const text = (key,values={}) => String(strings[key]).replace(/\\{(\\w+)\\}/g,\n      (_,name) => String(values[name] ?? ''));\n    const symbols = {S:'♠',H:'♥',D:'♦',C:'♣'};\n    const cardText = card => {\n      const n = Number(card.slice(0,-1));\n      return `${({1:'A',8:'J',9:'Q',10:'K'})[n] || n}${symbols[card.slice(-1)]}`;\n    };\n    const type = card => /[HD]$/.test(card) ? 'red' : 'black';\n    const valid = localState && localState.move_count === m.move_count &&\n      localState.viewer === m.my_player_index;\n    let selected = valid ? localState.selected : null;\n    let taken = valid && Array.isArray(localState.taken) ? localState.taken.slice() : [];\n    const legal = active ? s.legal : [];\n    if (!legal.some(move => move.card === selected)) { selected = null; taken = []; }\n    const event = message.type === 'ui_event' && message.event?.type === 'tap'\n      ? String(message.event.id || '') : '';\n    let emitted = null;\n    if (active && event.startsWith('hand_')) {\n      const card = event.slice(5);\n      if (legal.some(move => move.card === card)) {\n        selected = selected === card ? null : card;\n        taken = [];\n        const trail = legal.find(move => move.card === selected && !move.capture.length);\n        if (trail) emitted = trail;\n      }\n    }\n    if (active && selected && event.startsWith('take_')) {\n      const card = event.slice(5);\n      const candidates = legal.filter(move => move.card === selected);\n      if (taken.includes(card)) taken = taken.filter(value => value !== card);\n      else if (candidates.some(move => move.capture.includes(card) &&\n          taken.every(value => move.capture.includes(value)))) taken.push(card);\n      emitted = candidates.find(move => move.capture.length === taken.length &&\n        taken.every(value => move.capture.includes(value))) || null;\n    }\n    const scene = {pieces:[],targets:[],controls:[],labels:[]};\n    const label = (id,value,x,y,font_size) => scene.labels.push({id,text:String(value),x,y,font_size});\n    const piece = (id,card,position,scale=1) => scene.pieces.push({id,type:type(card),board:'table',\n      position,text:cardText(card),scale,actions:[]});\n    const target = (id,position,name) => scene.targets.push({id,board:'table',position,\n      color:'#00000000',hit_area:{x:-38,y:-48,width:76,height:96},aria_label:name});\n    label('title',strings.title,275,12,27);\n    label('score',s.over ? text('final',{a:s.scores[0],b:s.scores[1]}) :\n      text('sweeps',{a:s.sweeps[0],b:s.sweeps[1]}),195,52,19);\n    label('stock',text('stock',{n:s.deck_count}),260,85,16);\n    if (s.over) label('result',s.winner < 0 ? strings.tie :\n      text('winner',{name:m.players?.[s.winner]?.name || text('player',{n:s.winner+1})}),240,405,18);\n    else label('hint',selected ? strings.choose_capture : strings.choose_card,220,405,16);\n    s.table.forEach((card,i) => {\n      const row = Math.floor(i/7);\n      const count = Math.min(7,s.table.length-row*7);\n      const position = {x:320-(count-1)*40+(i%7)*80,y:205+row*105};\n      piece(`table_${i}`,card,position,taken.includes(card) ? 1.08 : 1);\n      if (active && selected && legal.some(move => move.card === selected &&\n          move.capture.includes(card) && taken.every(value => move.capture.includes(value))))\n        target(`take_${card}`,position,text('capture',{card:cardText(card)}));\n    });\n    (s.hand || []).forEach((card,i) => {\n      const position = {x:320-(s.hand.length-1)*60+i*120,y:500};\n      piece(`card_${i}`,card,position,selected === card ? 1.08 : 1);\n      if (active && legal.some(move => move.card === card))\n        target(`hand_${card}`,position,text('play',{card:cardText(card)}));\n    });\n    return {scene,local_state:{move_count:m.move_count,viewer:m.my_player_index,selected,taken},\n      ...(emitted ? {make_move:emitted} : {})};\n  }\n};\n"
+  },
+  "rules": "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.",
+  "ui_instructions": "Tap a card in your hand, then tap the table cards you want to capture.",
+  "tutorial": {
+    "text": "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><p>Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.</p>"
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+    },
+    {
+      "caption": "Table",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+    },
+    {
+      "caption": "Capture",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+    },
+    {
+      "caption": "Hand",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[1-9]|10)[SHDC]$"
+          },
+          "maxItems": 40,
+          "uniqueItems": true
+        },
+        "sweeps": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "turn": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "over": {
+          "type": "boolean"
+        },
+        "winner": {
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        },
+        "scores": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "deck": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[1-9]|10)[SHDC]$"
+          },
+          "maxItems": 40,
+          "uniqueItems": true
+        },
+        "hands": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:[1-9]|10)[SHDC]$"
+            },
+            "maxItems": 40,
+            "uniqueItems": true
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "captured": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:[1-9]|10)[SHDC]$"
+            },
+            "maxItems": 40,
+            "uniqueItems": true
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "last_capture": {
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        }
+      },
+      "required": [
+        "table",
+        "sweeps",
+        "turn",
+        "over",
+        "winner",
+        "scores",
+        "deck",
+        "hands",
+        "captured",
+        "last_capture"
+      ],
+      "additionalProperties": false
+    },
+    "view_schema": {
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[1-9]|10)[SHDC]$"
+          },
+          "maxItems": 40,
+          "uniqueItems": true
+        },
+        "sweeps": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "turn": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "over": {
+          "type": "boolean"
+        },
+        "winner": {
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        },
+        "scores": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "hand": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[1-9]|10)[SHDC]$"
+          },
+          "maxItems": 40,
+          "uniqueItems": true
+        },
+        "counts": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "deck_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40
+        },
+        "captured_counts": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "legal": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "card": {
+                "type": "string",
+                "pattern": "^(?:[1-9]|10)[SHDC]$"
+              },
+              "capture": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:[1-9]|10)[SHDC]$"
+                },
+                "maxItems": 40,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "card",
+              "capture"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4096
+        }
+      },
+      "required": [
+        "table",
+        "sweeps",
+        "turn",
+        "over",
+        "winner",
+        "scores",
+        "hand",
+        "counts",
+        "deck_count",
+        "captured_counts",
+        "legal"
+      ],
+      "additionalProperties": false
+    },
+    "move_schema": {
+      "type": "object",
+      "properties": {
+        "card": {
+          "type": "string",
+          "pattern": "^(?:[1-9]|10)[SHDC]$"
+        },
+        "capture": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[1-9]|10)[SHDC]$"
+          },
+          "maxItems": 40,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "card",
+        "capture"
+      ],
+      "additionalProperties": false
+    },
+    "cases": [
+      {
+        "name": "Initial play",
+        "description": "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "deck": [
+            "1H",
+            "10C",
+            "5D",
+            "4D",
+            "10H",
+            "6C",
+            "9C",
+            "4S",
+            "7H",
+            "9D",
+            "1D",
+            "7S",
+            "3H",
+            "10D",
+            "10S",
+            "6S",
+            "4H",
+            "2D",
+            "5S",
+            "3C",
+            "3D",
+            "8H",
+            "8S",
+            "6H",
+            "5H",
+            "9H",
+            "6D",
+            "8C",
+            "3S",
+            "1S"
+          ],
+          "table": [
+            "2S",
+            "4C",
+            "2H",
+            "7D"
+          ],
+          "hands": [
+            [
+              "5C",
+              "2C",
+              "8D"
+            ],
+            [
+              "9S",
+              "1C",
+              "7C"
+            ]
+          ],
+          "captured": [
+            [],
+            []
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 0,
+          "last_capture": -1,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ]
+        },
+        "view_of_mover": {
+          "hand": [
+            "5C",
+            "2C",
+            "8D"
+          ],
+          "table": [
+            "2S",
+            "4C",
+            "2H",
+            "7D"
+          ],
+          "counts": [
+            3,
+            3
+          ],
+          "deck_count": 30,
+          "captured_counts": [
+            0,
+            0
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": [
+            {
+              "card": "5C",
+              "capture": []
+            },
+            {
+              "card": "2C",
+              "capture": [
+                "2S"
+              ]
+            },
+            {
+              "card": "2C",
+              "capture": [
+                "2H"
+              ]
+            },
+            {
+              "card": "8D",
+              "capture": [
+                "2S",
+                "4C",
+                "2H"
+              ]
+            }
+          ]
+        },
+        "view_of_other": {
+          "hand": [],
+          "table": [
+            "2S",
+            "4C",
+            "2H",
+            "7D"
+          ],
+          "counts": [
+            3,
+            3
+          ],
+          "deck_count": 30,
+          "captured_counts": [
+            0,
+            0
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": []
+        },
+        "player_id": "p0",
+        "other_player_id": null,
+        "move": {
+          "card": "2C",
+          "capture": [
+            "2H"
+          ]
+        },
+        "expected_state": {
+          "deck": [
+            "1H",
+            "10C",
+            "5D",
+            "4D",
+            "10H",
+            "6C",
+            "9C",
+            "4S",
+            "7H",
+            "9D",
+            "1D",
+            "7S",
+            "3H",
+            "10D",
+            "10S",
+            "6S",
+            "4H",
+            "2D",
+            "5S",
+            "3C",
+            "3D",
+            "8H",
+            "8S",
+            "6H",
+            "5H",
+            "9H",
+            "6D",
+            "8C",
+            "3S",
+            "1S"
+          ],
+          "table": [
+            "2S",
+            "4C",
+            "7D"
+          ],
+          "hands": [
+            [
+              "5C",
+              "8D"
+            ],
+            [
+              "9S",
+              "1C",
+              "7C"
+            ]
+          ],
+          "captured": [
+            [
+              "2C",
+              "2H"
+            ],
+            []
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "last_capture": 0,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ]
+        },
+        "expected_turn": [
+          "p1"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            "5C",
+            "8D"
+          ],
+          "table": [
+            "2S",
+            "4C",
+            "7D"
+          ],
+          "counts": [
+            2,
+            3
+          ],
+          "deck_count": 30,
+          "captured_counts": [
+            2,
+            0
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "table": [
+            "2S",
+            "4C",
+            "7D"
+          ],
+          "counts": [
+            2,
+            3
+          ],
+          "deck_count": 30,
+          "captured_counts": [
+            2,
+            0
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Intermediate play",
+        "description": "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 12,
+          "seed": 23
+        },
+        "state": {
+          "deck": [
+            "3H",
+            "10D",
+            "10S",
+            "6S",
+            "4H",
+            "2D",
+            "5S",
+            "3C",
+            "3D",
+            "8H",
+            "8S",
+            "6H",
+            "5H",
+            "9H",
+            "6D",
+            "8C",
+            "3S",
+            "1S"
+          ],
+          "table": [
+            "8D",
+            "7C",
+            "4D"
+          ],
+          "hands": [
+            [
+              "9C",
+              "4S",
+              "7H"
+            ],
+            [
+              "9D",
+              "1D",
+              "7S"
+            ]
+          ],
+          "captured": [
+            [
+              "2C",
+              "2H",
+              "5C",
+              "4C",
+              "1C",
+              "10C",
+              "10H"
+            ],
+            [
+              "9S",
+              "2S",
+              "7D",
+              "6C",
+              "5D",
+              "1H"
+            ]
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 0,
+          "last_capture": 0,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ]
+        },
+        "view_of_mover": {
+          "hand": [
+            "9C",
+            "4S",
+            "7H"
+          ],
+          "table": [
+            "8D",
+            "7C",
+            "4D"
+          ],
+          "counts": [
+            3,
+            3
+          ],
+          "deck_count": 18,
+          "captured_counts": [
+            7,
+            6
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": [
+            {
+              "card": "9C",
+              "capture": []
+            },
+            {
+              "card": "4S",
+              "capture": [
+                "4D"
+              ]
+            },
+            {
+              "card": "7H",
+              "capture": [
+                "7C"
+              ]
+            }
+          ]
+        },
+        "view_of_other": {
+          "hand": [],
+          "table": [
+            "8D",
+            "7C",
+            "4D"
+          ],
+          "counts": [
+            3,
+            3
+          ],
+          "deck_count": 18,
+          "captured_counts": [
+            7,
+            6
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": []
+        },
+        "player_id": "p0",
+        "other_player_id": null,
+        "move": {
+          "card": "9C",
+          "capture": []
+        },
+        "expected_state": {
+          "deck": [
+            "3H",
+            "10D",
+            "10S",
+            "6S",
+            "4H",
+            "2D",
+            "5S",
+            "3C",
+            "3D",
+            "8H",
+            "8S",
+            "6H",
+            "5H",
+            "9H",
+            "6D",
+            "8C",
+            "3S",
+            "1S"
+          ],
+          "table": [
+            "8D",
+            "7C",
+            "4D",
+            "9C"
+          ],
+          "hands": [
+            [
+              "4S",
+              "7H"
+            ],
+            [
+              "9D",
+              "1D",
+              "7S"
+            ]
+          ],
+          "captured": [
+            [
+              "2C",
+              "2H",
+              "5C",
+              "4C",
+              "1C",
+              "10C",
+              "10H"
+            ],
+            [
+              "9S",
+              "2S",
+              "7D",
+              "6C",
+              "5D",
+              "1H"
+            ]
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "last_capture": 0,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ]
+        },
+        "expected_turn": [
+          "p1"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            "4S",
+            "7H"
+          ],
+          "table": [
+            "8D",
+            "7C",
+            "4D",
+            "9C"
+          ],
+          "counts": [
+            2,
+            3
+          ],
+          "deck_count": 18,
+          "captured_counts": [
+            7,
+            6
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "table": [
+            "8D",
+            "7C",
+            "4D",
+            "9C"
+          ],
+          "counts": [
+            2,
+            3
+          ],
+          "deck_count": 18,
+          "captured_counts": [
+            7,
+            6
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Terminal play",
+        "description": "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 35,
+          "seed": 46
+        },
+        "state": {
+          "deck": [],
+          "table": [
+            "10D"
+          ],
+          "hands": [
+            [],
+            [
+              "8C"
+            ]
+          ],
+          "captured": [
+            [
+              "2C",
+              "2H",
+              "5C",
+              "4C",
+              "1C",
+              "10C",
+              "10H",
+              "7H",
+              "7C",
+              "4S",
+              "4D",
+              "10S",
+              "7S",
+              "1D",
+              "2D",
+              "3D",
+              "3H",
+              "9H",
+              "6D",
+              "3S",
+              "5H",
+              "4H",
+              "1S"
+            ],
+            [
+              "9S",
+              "2S",
+              "7D",
+              "6C",
+              "5D",
+              "1H",
+              "9D",
+              "9C",
+              "6H",
+              "6S",
+              "8S",
+              "8D",
+              "8H",
+              "5S",
+              "3C"
+            ]
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "last_capture": 0,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ]
+        },
+        "view_of_mover": {
+          "hand": [
+            "8C"
+          ],
+          "table": [
+            "10D"
+          ],
+          "counts": [
+            0,
+            1
+          ],
+          "deck_count": 0,
+          "captured_counts": [
+            23,
+            15
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": [
+            {
+              "card": "8C",
+              "capture": []
+            }
+          ]
+        },
+        "view_of_other": {
+          "hand": [],
+          "table": [
+            "10D"
+          ],
+          "counts": [
+            0,
+            1
+          ],
+          "deck_count": 0,
+          "captured_counts": [
+            23,
+            15
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "scores": [
+            0,
+            0
+          ],
+          "legal": []
+        },
+        "player_id": "p1",
+        "other_player_id": null,
+        "move": {
+          "card": "8C",
+          "capture": []
+        },
+        "expected_state": {
+          "deck": [],
+          "table": [],
+          "hands": [
+            [],
+            []
+          ],
+          "captured": [
+            [
+              "2C",
+              "2H",
+              "5C",
+              "4C",
+              "1C",
+              "10C",
+              "10H",
+              "7H",
+              "7C",
+              "4S",
+              "4D",
+              "10S",
+              "7S",
+              "1D",
+              "2D",
+              "3D",
+              "3H",
+              "9H",
+              "6D",
+              "3S",
+              "5H",
+              "4H",
+              "1S",
+              "10D",
+              "8C"
+            ],
+            [
+              "9S",
+              "2S",
+              "7D",
+              "6C",
+              "5D",
+              "1H",
+              "9D",
+              "9C",
+              "6H",
+              "6S",
+              "8S",
+              "8D",
+              "8H",
+              "5S",
+              "3C"
+            ]
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "last_capture": 0,
+          "over": true,
+          "winner": 0,
+          "scores": [
+            3,
+            1
+          ]
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "hand": [],
+          "table": [],
+          "counts": [
+            0,
+            0
+          ],
+          "deck_count": 0,
+          "captured_counts": [
+            25,
+            15
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": true,
+          "winner": 0,
+          "scores": [
+            3,
+            1
+          ],
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "table": [],
+          "counts": [
+            0,
+            0
+          ],
+          "deck_count": 0,
+          "captured_counts": [
+            25,
+            15
+          ],
+          "sweeps": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": true,
+          "winner": 0,
+          "scores": [
+            3,
+            1
+          ],
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"34\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"88\" y=\"13\" width=\"38\" height=\"62\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><path d=\"M53 28l10 15-10 15-10-15z\" fill=\"#b02e35\"/><circle cx=\"107\" cy=\"43\" r=\"10\" fill=\"#1c2b31\"/></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "p0": 0,
+          "p1": 0
+        }
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Scopa (Declarative)",
+      "short_description": "Juega una mano de Scopa para dos con 40 cartas. As vale 1, sota 8, reina 9 y rey 10. Reparte tres cartas a cada jugador y cuatro a la mesa; reparte tres más cuando se agoten las manos. Juega una carta: si hay una igual, captura exactamente una; si no, captura cartas que sumen su valor o déjala en la mesa si no hay captura. Vaciar la mesa da una escoba, salvo en la última jugada. Al final quien capturó por última vez recoge las cartas restantes. Puntúa por más cartas, más diamantes, el 7 de diamantes, la mejor primiera y cada escoba. Los empates de categoría no puntúan. La primiera requiere los cuatro palos y valora 7, 6, as, 5, 4, 3, 2 y figuras en ese orden. Gana la puntuación mayor.",
+      "game_logic_rules": "Juega una mano de Scopa para dos con 40 cartas. As vale 1, sota 8, reina 9 y rey 10. Reparte tres cartas a cada jugador y cuatro a la mesa; reparte tres más cuando se agoten las manos. Juega una carta: si hay una igual, captura exactamente una; si no, captura cartas que sumen su valor o déjala en la mesa si no hay captura. Vaciar la mesa da una escoba, salvo en la última jugada. Al final quien capturó por última vez recoge las cartas restantes. Puntúa por más cartas, más diamantes, el 7 de diamantes, la mejor primiera y cada escoba. Los empates de categoría no puntúan. La primiera requiere los cuatro palos y valora 7, 6, as, 5, 4, 3, 2 y figuras en ese orden. Gana la puntuación mayor.",
+      "game_ui_rules": "Toca una carta de tu mano y después las cartas de la mesa que quieras capturar.",
+      "tutorial_strings": {
+        "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.": "Juega una mano de Scopa para dos con 40 cartas. As vale 1, sota 8, reina 9 y rey 10. Reparte tres cartas a cada jugador y cuatro a la mesa; reparte tres más cuando se agoten las manos. Juega una carta: si hay una igual, captura exactamente una; si no, captura cartas que sumen su valor o déjala en la mesa si no hay captura. Vaciar la mesa da una escoba, salvo en la última jugada. Al final quien capturó por última vez recoge las cartas restantes. Puntúa por más cartas, más diamantes, el 7 de diamantes, la mejor primiera y cada escoba. Los empates de categoría no puntúan. La primiera requiere los cuatro palos y valora 7, 6, as, 5, 4, 3, 2 y figuras en ese orden. Gana la puntuación mayor."
+      },
+      "client_strings": {
+        "title": "Scopa",
+        "sweeps": "Escobas  {a} : {b}",
+        "final": "Final  {a} : {b}",
+        "stock": "Mazo {n}",
+        "player": "Jugador {n}",
+        "choose_card": "Elige una carta",
+        "choose_capture": "Elige cartas de la mesa",
+        "play": "Jugar {card}",
+        "capture": "Tomar {card}",
+        "tie": "Empate",
+        "winner": "Gana {name}",
+        "server_game_over": "La partida ha terminado",
+        "server_not_your_turn": "No es tu turno",
+        "server_choose": "Elige una carta y captura",
+        "server_invalid_capture": "Captura inválida"
+      }
+    },
+    "fr": {
+      "display_name": "Scopa (Declarative)",
+      "short_description": "Jouez une donne de Scopa à deux avec 40 cartes. As vaut 1, valet 8, dame 9 et roi 10. Distribuez trois cartes à chacun et quatre sur la table ; redistribuez trois cartes lorsque les mains sont vides. Jouez une carte : si une carte de même valeur est sur la table, prenez-en exactement une ; sinon prenez un groupe totalisant sa valeur ou posez-la si aucune prise n’est possible. Vider la table donne une scopa, sauf au dernier coup. À la fin, le dernier à avoir pris ramasse les cartes restantes. Un point pour le plus de cartes, le plus de carreaux, le 7 de carreau et la meilleure primiera, plus un par scopa. Une égalité ne rapporte rien dans la catégorie. La primiera exige les quatre couleurs et classe 7, 6, as, 5, 4, 3, 2 puis figures. Le meilleur score gagne.",
+      "game_logic_rules": "Jouez une donne de Scopa à deux avec 40 cartes. As vaut 1, valet 8, dame 9 et roi 10. Distribuez trois cartes à chacun et quatre sur la table ; redistribuez trois cartes lorsque les mains sont vides. Jouez une carte : si une carte de même valeur est sur la table, prenez-en exactement une ; sinon prenez un groupe totalisant sa valeur ou posez-la si aucune prise n’est possible. Vider la table donne une scopa, sauf au dernier coup. À la fin, le dernier à avoir pris ramasse les cartes restantes. Un point pour le plus de cartes, le plus de carreaux, le 7 de carreau et la meilleure primiera, plus un par scopa. Une égalité ne rapporte rien dans la catégorie. La primiera exige les quatre couleurs et classe 7, 6, as, 5, 4, 3, 2 puis figures. Le meilleur score gagne.",
+      "game_ui_rules": "Touchez une carte de votre main, puis les cartes à prendre sur la table.",
+      "tutorial_strings": {
+        "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.": "Jouez une donne de Scopa à deux avec 40 cartes. As vaut 1, valet 8, dame 9 et roi 10. Distribuez trois cartes à chacun et quatre sur la table ; redistribuez trois cartes lorsque les mains sont vides. Jouez une carte : si une carte de même valeur est sur la table, prenez-en exactement une ; sinon prenez un groupe totalisant sa valeur ou posez-la si aucune prise n’est possible. Vider la table donne une scopa, sauf au dernier coup. À la fin, le dernier à avoir pris ramasse les cartes restantes. Un point pour le plus de cartes, le plus de carreaux, le 7 de carreau et la meilleure primiera, plus un par scopa. Une égalité ne rapporte rien dans la catégorie. La primiera exige les quatre couleurs et classe 7, 6, as, 5, 4, 3, 2 puis figures. Le meilleur score gagne."
+      },
+      "client_strings": {
+        "title": "Scopa",
+        "sweeps": "Scopas  {a} : {b}",
+        "final": "Final  {a} : {b}",
+        "stock": "Pioche {n}",
+        "player": "Joueur {n}",
+        "choose_card": "Choisissez une carte",
+        "choose_capture": "Choisissez les cartes",
+        "play": "Jouer {card}",
+        "capture": "Prendre {card}",
+        "tie": "Égalité",
+        "winner": "{name} gagne",
+        "server_game_over": "La partie est terminée",
+        "server_not_your_turn": "Ce n’est pas votre tour",
+        "server_choose": "Choisissez une carte et une prise",
+        "server_invalid_capture": "Prise invalide"
+      }
+    },
+    "de": {
+      "display_name": "Scopa (Declarative)",
+      "short_description": "Spielt eine Scopa-Hand zu zweit mit 40 Karten. Ass zählt 1, Bube 8, Dame 9 und König 10. Jeder erhält drei Karten, vier liegen offen; sind beide Hände leer, erhält jeder drei weitere. Spiele eine Karte: Liegt eine gleich hohe Karte aus, nimm genau eine davon. Sonst nimm eine Gruppe mit passender Summe oder lege die Karte ab, wenn keine Aufnahme möglich ist. Ein geleerter Tisch zählt als Scopa, außer beim letzten Zug. Übrige Karten erhält, wer zuletzt aufgenommen hat. Je ein Punkt für die meisten Karten, die meisten Karos, die Karo-Sieben und die beste Primiera, dazu je einer pro Scopa. Gleichstand in einer Kategorie gibt keinen Punkt. Primiera benötigt alle vier Farben und wertet 7, 6, Ass, 5, 4, 3, 2, dann Bildkarten. Die höhere Punktzahl gewinnt.",
+      "game_logic_rules": "Spielt eine Scopa-Hand zu zweit mit 40 Karten. Ass zählt 1, Bube 8, Dame 9 und König 10. Jeder erhält drei Karten, vier liegen offen; sind beide Hände leer, erhält jeder drei weitere. Spiele eine Karte: Liegt eine gleich hohe Karte aus, nimm genau eine davon. Sonst nimm eine Gruppe mit passender Summe oder lege die Karte ab, wenn keine Aufnahme möglich ist. Ein geleerter Tisch zählt als Scopa, außer beim letzten Zug. Übrige Karten erhält, wer zuletzt aufgenommen hat. Je ein Punkt für die meisten Karten, die meisten Karos, die Karo-Sieben und die beste Primiera, dazu je einer pro Scopa. Gleichstand in einer Kategorie gibt keinen Punkt. Primiera benötigt alle vier Farben und wertet 7, 6, Ass, 5, 4, 3, 2, dann Bildkarten. Die höhere Punktzahl gewinnt.",
+      "game_ui_rules": "Tippe auf eine Handkarte und dann auf die Karten, die du aufnehmen möchtest.",
+      "tutorial_strings": {
+        "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.": "Spielt eine Scopa-Hand zu zweit mit 40 Karten. Ass zählt 1, Bube 8, Dame 9 und König 10. Jeder erhält drei Karten, vier liegen offen; sind beide Hände leer, erhält jeder drei weitere. Spiele eine Karte: Liegt eine gleich hohe Karte aus, nimm genau eine davon. Sonst nimm eine Gruppe mit passender Summe oder lege die Karte ab, wenn keine Aufnahme möglich ist. Ein geleerter Tisch zählt als Scopa, außer beim letzten Zug. Übrige Karten erhält, wer zuletzt aufgenommen hat. Je ein Punkt für die meisten Karten, die meisten Karos, die Karo-Sieben und die beste Primiera, dazu je einer pro Scopa. Gleichstand in einer Kategorie gibt keinen Punkt. Primiera benötigt alle vier Farben und wertet 7, 6, Ass, 5, 4, 3, 2, dann Bildkarten. Die höhere Punktzahl gewinnt."
+      },
+      "client_strings": {
+        "title": "Scopa",
+        "sweeps": "Scopas  {a} : {b}",
+        "final": "Endstand  {a} : {b}",
+        "stock": "Stapel {n}",
+        "player": "Spieler {n}",
+        "choose_card": "Karte wählen",
+        "choose_capture": "Tischkarten wählen",
+        "play": "{card} spielen",
+        "capture": "{card} nehmen",
+        "tie": "Unentschieden",
+        "winner": "{name} gewinnt",
+        "server_game_over": "Das Spiel ist beendet",
+        "server_not_your_turn": "Du bist nicht am Zug",
+        "server_choose": "Wähle eine Karte und Aufnahme",
+        "server_invalid_capture": "Ungültige Aufnahme"
+      }
+    },
+    "pt": {
+      "display_name": "Scopa (Declarative)",
+      "short_description": "Jogue uma mão de Scopa para duas pessoas com 40 cartas. Ás vale 1, valete 8, dama 9 e rei 10. Distribua três cartas a cada jogador e quatro à mesa; dê mais três quando as mãos acabarem. Jogue uma carta: se houver uma de mesmo valor, capture exatamente uma; senão capture um grupo que some seu valor ou deixe-a na mesa se não puder capturar. Limpar a mesa vale uma escopa, exceto na última jogada. No fim, quem capturou por último leva as cartas restantes. Um ponto por mais cartas, mais ouros, 7 de ouros e melhor primiera, além de um por escopa. Empates na categoria não pontuam. A primiera exige os quatro naipes e valoriza 7, 6, ás, 5, 4, 3, 2 e figuras nessa ordem. Vence a maior pontuação.",
+      "game_logic_rules": "Jogue uma mão de Scopa para duas pessoas com 40 cartas. Ás vale 1, valete 8, dama 9 e rei 10. Distribua três cartas a cada jogador e quatro à mesa; dê mais três quando as mãos acabarem. Jogue uma carta: se houver uma de mesmo valor, capture exatamente uma; senão capture um grupo que some seu valor ou deixe-a na mesa se não puder capturar. Limpar a mesa vale uma escopa, exceto na última jogada. No fim, quem capturou por último leva as cartas restantes. Um ponto por mais cartas, mais ouros, 7 de ouros e melhor primiera, além de um por escopa. Empates na categoria não pontuam. A primiera exige os quatro naipes e valoriza 7, 6, ás, 5, 4, 3, 2 e figuras nessa ordem. Vence a maior pontuação.",
+      "game_ui_rules": "Toque em uma carta da mão e depois nas cartas da mesa que deseja capturar.",
+      "tutorial_strings": {
+        "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.": "Jogue uma mão de Scopa para duas pessoas com 40 cartas. Ás vale 1, valete 8, dama 9 e rei 10. Distribua três cartas a cada jogador e quatro à mesa; dê mais três quando as mãos acabarem. Jogue uma carta: se houver uma de mesmo valor, capture exatamente uma; senão capture um grupo que some seu valor ou deixe-a na mesa se não puder capturar. Limpar a mesa vale uma escopa, exceto na última jogada. No fim, quem capturou por último leva as cartas restantes. Um ponto por mais cartas, mais ouros, 7 de ouros e melhor primiera, além de um por escopa. Empates na categoria não pontuam. A primiera exige os quatro naipes e valoriza 7, 6, ás, 5, 4, 3, 2 e figuras nessa ordem. Vence a maior pontuação."
+      },
+      "client_strings": {
+        "title": "Scopa",
+        "sweeps": "Escopas  {a} : {b}",
+        "final": "Final  {a} : {b}",
+        "stock": "Monte {n}",
+        "player": "Jogador {n}",
+        "choose_card": "Escolha uma carta",
+        "choose_capture": "Escolha cartas da mesa",
+        "play": "Jogar {card}",
+        "capture": "Pegar {card}",
+        "tie": "Empate",
+        "winner": "{name} vence",
+        "server_game_over": "A partida terminou",
+        "server_not_your_turn": "Não é sua vez",
+        "server_choose": "Escolha uma carta e captura",
+        "server_invalid_capture": "Captura inválida"
+      }
+    },
+    "zh": {
+      "display_name": "斯科帕 (Declarative)",
+      "short_description": "两人使用40张牌进行一局斯科帕。A为1，J为8，Q为9，K为10。每人发三张，桌上放四张；双方手牌用完时再各发三张。出一张牌：桌上有同值牌时必须取其中一张；否则取点数之和等于所出牌的一组牌，没有可取的牌则将其留在桌上。清空桌面得一次扫牌，但最后一手不计。结束时剩余桌牌归最后取得牌的玩家。牌最多、方块最多、方块7和最佳普里米耶拉各得一分，每次扫牌再得一分；项目平局不得分。普里米耶拉须有四种花色，各花色按7、6、A、5、4、3、2、人物牌排序计分。得分高者获胜。",
+      "game_logic_rules": "两人使用40张牌进行一局斯科帕。A为1，J为8，Q为9，K为10。每人发三张，桌上放四张；双方手牌用完时再各发三张。出一张牌：桌上有同值牌时必须取其中一张；否则取点数之和等于所出牌的一组牌，没有可取的牌则将其留在桌上。清空桌面得一次扫牌，但最后一手不计。结束时剩余桌牌归最后取得牌的玩家。牌最多、方块最多、方块7和最佳普里米耶拉各得一分，每次扫牌再得一分；项目平局不得分。普里米耶拉须有四种花色，各花色按7、6、A、5、4、3、2、人物牌排序计分。得分高者获胜。",
+      "game_ui_rules": "点击手牌，再点击要收取的桌面牌。",
+      "tutorial_strings": {
+        "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.": "两人使用40张牌进行一局斯科帕。A为1，J为8，Q为9，K为10。每人发三张，桌上放四张；双方手牌用完时再各发三张。出一张牌：桌上有同值牌时必须取其中一张；否则取点数之和等于所出牌的一组牌，没有可取的牌则将其留在桌上。清空桌面得一次扫牌，但最后一手不计。结束时剩余桌牌归最后取得牌的玩家。牌最多、方块最多、方块7和最佳普里米耶拉各得一分，每次扫牌再得一分；项目平局不得分。普里米耶拉须有四种花色，各花色按7、6、A、5、4、3、2、人物牌排序计分。得分高者获胜。"
+      },
+      "client_strings": {
+        "title": "斯科帕",
+        "sweeps": "扫牌  {a} : {b}",
+        "final": "最终  {a} : {b}",
+        "stock": "牌堆 {n}",
+        "player": "玩家 {n}",
+        "choose_card": "选择一张牌",
+        "choose_capture": "选择桌面牌",
+        "play": "出 {card}",
+        "capture": "收取 {card}",
+        "tie": "平局",
+        "winner": "{name} 获胜",
+        "server_game_over": "游戏已结束",
+        "server_not_your_turn": "还没轮到你",
+        "server_choose": "选择出牌和收取的牌",
+        "server_invalid_capture": "无效的收取"
+      }
+    },
+    "hi": {
+      "display_name": "स्कोपा (Declarative)",
+      "short_description": "दो खिलाड़ी 40 पत्तों से स्कोपा का एक हाथ खेलते हैं। इक्का 1, गुलाम 8, बेगम 9 और बादशाह 10 है। दोनों को तीन और मेज पर चार पत्ते दें; हाथ खाली होने पर फिर तीन-तीन दें। एक पत्ता चलें: समान मूल्य का पत्ता हो तो उनमें से एक ही लें; अन्यथा उसके मूल्य के बराबर योग वाला समूह लें, या कोई मेल न हो तो पत्ता मेज पर रखें। मेज साफ करने पर स्कोपा अंक मिलता है, अंतिम चाल पर नहीं। अंत में शेष पत्ते आखिरी बार लेने वाले को मिलते हैं। सबसे अधिक पत्ते, सबसे अधिक ईंट, ईंट का 7 और सबसे अच्छी प्रिमिएरा पर एक-एक अंक, साथ ही हर स्कोपा पर एक अंक मिलता है। बराबरी पर उस श्रेणी का अंक नहीं मिलता। प्रिमिएरा के लिए चारों सूट चाहिए; क्रम 7, 6, इक्का, 5, 4, 3, 2 और चित्र पत्ते है। अधिक अंक जीतते हैं।",
+      "game_logic_rules": "दो खिलाड़ी 40 पत्तों से स्कोपा का एक हाथ खेलते हैं। इक्का 1, गुलाम 8, बेगम 9 और बादशाह 10 है। दोनों को तीन और मेज पर चार पत्ते दें; हाथ खाली होने पर फिर तीन-तीन दें। एक पत्ता चलें: समान मूल्य का पत्ता हो तो उनमें से एक ही लें; अन्यथा उसके मूल्य के बराबर योग वाला समूह लें, या कोई मेल न हो तो पत्ता मेज पर रखें। मेज साफ करने पर स्कोपा अंक मिलता है, अंतिम चाल पर नहीं। अंत में शेष पत्ते आखिरी बार लेने वाले को मिलते हैं। सबसे अधिक पत्ते, सबसे अधिक ईंट, ईंट का 7 और सबसे अच्छी प्रिमिएरा पर एक-एक अंक, साथ ही हर स्कोपा पर एक अंक मिलता है। बराबरी पर उस श्रेणी का अंक नहीं मिलता। प्रिमिएरा के लिए चारों सूट चाहिए; क्रम 7, 6, इक्का, 5, 4, 3, 2 और चित्र पत्ते है। अधिक अंक जीतते हैं।",
+      "game_ui_rules": "अपने हाथ का पत्ता दबाएँ, फिर मेज से लेने वाले पत्ते दबाएँ।",
+      "tutorial_strings": {
+        "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.": "दो खिलाड़ी 40 पत्तों से स्कोपा का एक हाथ खेलते हैं। इक्का 1, गुलाम 8, बेगम 9 और बादशाह 10 है। दोनों को तीन और मेज पर चार पत्ते दें; हाथ खाली होने पर फिर तीन-तीन दें। एक पत्ता चलें: समान मूल्य का पत्ता हो तो उनमें से एक ही लें; अन्यथा उसके मूल्य के बराबर योग वाला समूह लें, या कोई मेल न हो तो पत्ता मेज पर रखें। मेज साफ करने पर स्कोपा अंक मिलता है, अंतिम चाल पर नहीं। अंत में शेष पत्ते आखिरी बार लेने वाले को मिलते हैं। सबसे अधिक पत्ते, सबसे अधिक ईंट, ईंट का 7 और सबसे अच्छी प्रिमिएरा पर एक-एक अंक, साथ ही हर स्कोपा पर एक अंक मिलता है। बराबरी पर उस श्रेणी का अंक नहीं मिलता। प्रिमिएरा के लिए चारों सूट चाहिए; क्रम 7, 6, इक्का, 5, 4, 3, 2 और चित्र पत्ते है। अधिक अंक जीतते हैं।"
+      },
+      "client_strings": {
+        "title": "स्कोपा",
+        "sweeps": "स्कोपा  {a} : {b}",
+        "final": "अंतिम  {a} : {b}",
+        "stock": "ढेर {n}",
+        "player": "खिलाड़ी {n}",
+        "choose_card": "पत्ता चुनें",
+        "choose_capture": "मेज के पत्ते चुनें",
+        "play": "{card} चलें",
+        "capture": "{card} लें",
+        "tie": "बराबरी",
+        "winner": "{name} जीते",
+        "server_game_over": "खेल समाप्त हो गया",
+        "server_not_your_turn": "आपकी बारी नहीं है",
+        "server_choose": "पत्ता और लेने वाले पत्ते चुनें",
+        "server_invalid_capture": "अमान्य चयन"
+      }
+    },
+    "ar": {
+      "display_name": "سكوبا (Declarative)",
+      "short_description": "العب جولة سكوبا لشخصين بأربعين ورقة. الآس يساوي 1 والولد 8 والملكة 9 والملك 10. وزع ثلاث أوراق لكل لاعب وأربعًا على الطاولة، ثم ثلاثًا أخرى عند نفاد اليدين. العب ورقة: إن وُجدت ورقة مساوية فخذ واحدة منها فقط، وإلا خذ مجموعة مجموعها يساوي قيمتها أو اترك الورقة إن تعذر الأخذ. إخلاء الطاولة يمنح نقطة سكوبا إلا في اللعب الأخير. يأخذ آخر من جمع الأوراق المتبقية عند النهاية. نقطة لأكثر الأوراق، وأكثر أوراق الديناري، وسبعة الديناري، وأفضل بريميرا، ونقطة لكل سكوبا. لا نقطة للتعادل في فئة. تتطلب البريميرا الأنواع الأربعة وترتيبها 7 ثم 6 ثم الآس ثم 5 و4 و3 و2 ثم الصور. يفوز صاحب النقاط الأكثر.",
+      "game_logic_rules": "العب جولة سكوبا لشخصين بأربعين ورقة. الآس يساوي 1 والولد 8 والملكة 9 والملك 10. وزع ثلاث أوراق لكل لاعب وأربعًا على الطاولة، ثم ثلاثًا أخرى عند نفاد اليدين. العب ورقة: إن وُجدت ورقة مساوية فخذ واحدة منها فقط، وإلا خذ مجموعة مجموعها يساوي قيمتها أو اترك الورقة إن تعذر الأخذ. إخلاء الطاولة يمنح نقطة سكوبا إلا في اللعب الأخير. يأخذ آخر من جمع الأوراق المتبقية عند النهاية. نقطة لأكثر الأوراق، وأكثر أوراق الديناري، وسبعة الديناري، وأفضل بريميرا، ونقطة لكل سكوبا. لا نقطة للتعادل في فئة. تتطلب البريميرا الأنواع الأربعة وترتيبها 7 ثم 6 ثم الآس ثم 5 و4 و3 و2 ثم الصور. يفوز صاحب النقاط الأكثر.",
+      "game_ui_rules": "اضغط ورقة من يدك، ثم اضغط أوراق الطاولة التي تريد أخذها.",
+      "tutorial_strings": {
+        "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.": "العب جولة سكوبا لشخصين بأربعين ورقة. الآس يساوي 1 والولد 8 والملكة 9 والملك 10. وزع ثلاث أوراق لكل لاعب وأربعًا على الطاولة، ثم ثلاثًا أخرى عند نفاد اليدين. العب ورقة: إن وُجدت ورقة مساوية فخذ واحدة منها فقط، وإلا خذ مجموعة مجموعها يساوي قيمتها أو اترك الورقة إن تعذر الأخذ. إخلاء الطاولة يمنح نقطة سكوبا إلا في اللعب الأخير. يأخذ آخر من جمع الأوراق المتبقية عند النهاية. نقطة لأكثر الأوراق، وأكثر أوراق الديناري، وسبعة الديناري، وأفضل بريميرا، ونقطة لكل سكوبا. لا نقطة للتعادل في فئة. تتطلب البريميرا الأنواع الأربعة وترتيبها 7 ثم 6 ثم الآس ثم 5 و4 و3 و2 ثم الصور. يفوز صاحب النقاط الأكثر."
+      },
+      "client_strings": {
+        "title": "سكوبا",
+        "sweeps": "سكوبا  {a} : {b}",
+        "final": "النتيجة  {a} : {b}",
+        "stock": "الرزمة {n}",
+        "player": "اللاعب {n}",
+        "choose_card": "اختر ورقة",
+        "choose_capture": "اختر أوراق الطاولة",
+        "play": "العب {card}",
+        "capture": "خذ {card}",
+        "tie": "تعادل",
+        "winner": "فاز {name}",
+        "server_game_over": "انتهت اللعبة",
+        "server_not_your_turn": "ليس دورك",
+        "server_choose": "اختر ورقة والأوراق المأخوذة",
+        "server_invalid_capture": "أخذ غير صالح"
+      }
+    }
+  },
+  "game_addition_request_id_and_secret": "example-only-scopa-replace-before-publishing"
+}

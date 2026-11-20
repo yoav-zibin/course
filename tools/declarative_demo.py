@@ -28,7 +28,7 @@ KINDS = ('tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domine
          'battleship','checkers','chess',
          'four_player_chess','quoridor','crazy_eights','go_fish','hearts','spades','guess_who',
          'mau_mau','dos','kisolo','thirty_one','gobblet','chutes_ladders',
-         'six_mens_morris','connect6','ataxx',
+         'six_mens_morris','connect6','ataxx','whist','scopa',
          'sim','paper_soccer','hackenbush','cartographers')
 DEMO_KINDS = (*KINDS, 'backgammon')
 
