@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {PortalStore,type LocalMatch,type Match} from '../src/core';
 import {AccountRepository} from '../src/core/repository';
 import {REMOVED_SAVED_MATCH} from '../src/core/single-player';
+import bundled from '../src/core/bundled-tictactoe.json';
 
 const base='https://saved-match-removal.test',id='local-old';
 const copy=<T>(value:T):T=>JSON.parse(JSON.stringify(value));
@@ -183,4 +184,66 @@ test('old links and a stale saved selection cannot reopen a removed cloud copy a
     await assert.rejects(restarted.actions.selectMatch(id),/saved copy was removed.*recovery data/);
     const after=await f.repository.read('alice');assert.equal(after.local[id],undefined);assert.deepEqual(after.archives,archive);
   }finally{f.restore();}
+});
+
+test('another tab refresh retires its selected board and cached row without requesting a removed match',async()=>{
+  const f=await fixture();
+  try{
+    await f.repository.mutate('alice',data=>{data.local[id].game_id='bundled-tictactoe';});
+    await f.store.actions.refresh();
+    const remote:Match={...f.match,cloud_revision:1,single_player_state:f.match};f.showCloud(remote);
+    const other=new PortalStore(async()=>({}));await other.bootstrap(base);await other.actions.selectMatch(id);
+    assert.ok(other.getSnapshot().myMatches.some(match=>match.id===id));
+    const bob=await f.repository.read('bob');await f.store.actions.removeSavedMatch(id,f.expected());
+    const archive=copy((await f.repository.read('alice')).archives),before=f.calls.length;
+    await other.actions.refresh();
+    assert.equal(other.getSnapshot().selectedMatch,null);assert.equal(other.getSnapshot().history,null);assert.equal(other.getSnapshot().replayIndex,null);
+    assert.equal(other.getSnapshot().myMatches.some(match=>match.id===id),false);assert.equal(other.getSnapshot().localMatches.some(match=>match.id===id),false);
+    assert.equal(f.calls.slice(before).includes(`GET /matches/${id}`),false);
+    assert.deepEqual((await f.repository.read('alice')).archives,archive);assert.deepEqual(await f.repository.read('bob'),bob);
+    assert.deepEqual(f.calls.filter(call=>call.startsWith('DELETE /matches')),[]);
+  }finally{f.restore();}
+});
+
+test('retiring the previous board in another tab does not cancel navigation to an unrelated save',async()=>{
+  const f=await fixture();
+  try{
+    await f.repository.mutate('alice',data=>{data.local[id].game_id=data.local['keep-me'].game_id='bundled-tictactoe';});
+    await f.store.actions.refresh();const other=new PortalStore(async()=>({}));await other.bootstrap(base);await other.actions.selectMatch(id);
+    await f.store.actions.removeSavedMatch(id,f.expected());await other.actions.selectMatch('keep-me');
+    assert.equal(other.getSnapshot().selectedMatch?.id,'keep-me');assert.equal(other.getSnapshot().game?.id,'bundled-tictactoe');
+    assert.equal((await f.repository.read('alice')).selectedId,'keep-me');assert.equal(other.getSnapshot().myMatches.some(match=>match.id===id),false);
+  }finally{f.restore();}
+});
+
+test('selection waiting for the repository lock cannot reactivate a copy another tab removed',async()=>{
+  const f=await fixture(),original=AccountRepository.prototype.mutate;let release!:()=>void,entered!:()=>void,hold=false;
+  const gate=new Promise<void>(done=>{release=done;}),started=new Promise<void>(done=>{entered=done;});
+  try{
+    await f.repository.mutate('alice',data=>{data.local[id].game_id=data.local['keep-me'].game_id='bundled-tictactoe';});
+    await f.store.actions.refresh();const other=new PortalStore(async()=>({}));await other.bootstrap(base);await other.actions.selectMatch('keep-me');
+    AccountRepository.prototype.mutate=async function<T>(owner:string,update:any):Promise<T>{if(owner==='alice'&&hold){hold=false;entered();await gate;}return original.call(this,owner,update) as Promise<T>;};
+    hold=true;const selecting=assert.rejects(other.actions.selectMatch(id),/saved copy was removed.*recovery data/);await started;
+    await f.store.actions.removeSavedMatch(id,f.expected());const archive=copy((await f.repository.read('alice')).archives);release();await selecting;
+    assert.equal(other.getSnapshot().selectedMatch?.id,'keep-me');assert.equal((await f.repository.read('alice')).local[id],undefined);
+    assert.deepEqual((await f.repository.read('alice')).archives,archive);
+  }finally{release?.();AccountRepository.prototype.mutate=original;f.restore();}
+});
+
+test('a delayed game download cannot finish reopening a copy removed by another tab',async()=>{
+  const f=await fixture();let release!:()=>void,entered!:()=>void;
+  const gate=new Promise<void>(done=>{release=done;}),started=new Promise<void>(done=>{entered=done;});
+  try{
+    await f.repository.mutate('alice',data=>{data.local[id].game_id='slow-game';});await f.store.actions.refresh();
+    const fetch=globalThis.fetch;
+    globalThis.fetch=(async(input:string|URL|Request,init?:RequestInit)=>{
+      if(new URL(String(input)).pathname==='/games/slow-game/versions/1'){entered();await gate;return new Response(JSON.stringify({...bundled,id:'slow-game',version:1}),{status:200});}
+      return fetch(input,init);
+    }) as typeof fetch;
+    const other=new PortalStore(async()=>({}));await other.bootstrap(base);
+    const selecting=other.actions.selectMatch(id);await started;await f.store.actions.removeSavedMatch(id,f.expected());
+    const archive=copy((await f.repository.read('alice')).archives);release();await selecting;
+    assert.equal(other.getSnapshot().selectedMatch,null);assert.equal(other.getSnapshot().localMatches.some(match=>match.id===id),false);
+    assert.deepEqual((await f.repository.read('alice')).archives,archive);assert.equal((await f.repository.read('alice')).local[id],undefined);
+  }finally{release?.();f.restore();}
 });

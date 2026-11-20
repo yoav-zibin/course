@@ -111,7 +111,11 @@ export class PortalStore {
   }
   private publishData(data: AccountData) {
     this.mergeVolatile(data);this.data = data; const selected = this.state.selectedMatch;
-    const next = selected ? data.local[selected.id] || data.responses[`/matches/${selected.id}`] || selected : null;
+    const retired = selected && removedSavedMatch(data,selected.id), hidden = hiddenMatchIds(data);
+    // Another tab can retire the selected device branch. Do not retain its
+    // old board, but preserve any newer navigation to an unrelated match.
+    if(retired){this.selectedInvite=null;++this.replaySelection;}
+    const next = selected && !retired ? data.local[selected.id] || data.responses[`/matches/${selected.id}`] || selected : null;
     // Restore an absent profile, without replacing confirmed edits with older cached data.
     const ownProfile = this.state.account ? data.responses[`/users/${encodeURIComponent(this.state.account.id)}`] : undefined;
     const profiles: Record<string, any> = {};
@@ -120,7 +124,7 @@ export class PortalStore {
       else if (path.startsWith('/users?ids=') && Array.isArray(value)) for (const profile of value) if (profile?.id) profiles[profile.id] = profile;
     }
     this.patch({matchGames:this.downloadedGameNames(),profiles:{...profiles,...this.state.profiles}});
-    this.patch({ ...(ownProfile && !this.state.profile && !this.state.deletionUpdating ? {profile: ownProfile, account: {...this.state.account!, canonical_user_id: ownProfile.id}} : {}), localMatches: Object.values(data.local).map(match => this.decorate(match) as LocalMatch), conflicts: data.conflicts, archived: [...data.archivedMatches, ...data.archives], pending: Object.values(data.queues).reduce((n, q) => n + q.length, 0) + Object.values(data.local).filter(needsCloudSave).length + Object.keys(data.creations || {}).length, selectedMatch: this.decorate(next), myMatches: this.state.myMatches.map(m => this.decorate(data.responses[`/matches/${m.id}`] || m)!) });
+    this.patch({ ...(ownProfile && !this.state.profile && !this.state.deletionUpdating ? {profile: ownProfile, account: {...this.state.account!, canonical_user_id: ownProfile.id}} : {}), ...(retired ? {history:null,replayIndex:null} : {}), localMatches: Object.values(data.local).map(match => this.decorate(match) as LocalMatch), conflicts: data.conflicts, archived: [...data.archivedMatches, ...data.archives], pending: Object.values(data.queues).reduce((n, q) => n + q.length, 0) + Object.values(data.local).filter(needsCloudSave).length + Object.keys(data.creations || {}).length, selectedMatch: this.decorate(next), myMatches: this.state.myMatches.filter(match=>!hidden.has(match.id)).map(m => this.decorate(data.responses[`/matches/${m.id}`] || m)!) });
   }
   private mergeVolatile(data: AccountData) {
     const pending=this.volatileResponses.get(this.identity());if(!pending)return;
@@ -490,9 +494,9 @@ export class PortalStore {
     let match: Match;
     if (this.data.queues[selected.id]?.length) { await this.sync().catch(() => {}); guard(); match = this.data.responses[`/matches/${selected.id}`] || selected; }
     else match = await this.read(`/matches/${encodeURIComponent(selected.id)}`);
-    guard(); if (token !== this.selection) return;
+    await this.reloadData();guard(); if (token !== this.selection || removedSavedMatch(this.data,selected.id)) return;
     this.patch({ selectedMatch: this.decorate(match) });
-    const game = await this.pinnedGame(match.game_id, match.game_version,match.localMode?undefined:match.id); guard(); if (token !== this.selection) return;
+    const game = await this.pinnedGame(match.game_id, match.game_version,match.localMode?undefined:match.id); await this.reloadData();guard(); if (token !== this.selection || removedSavedMatch(this.data,selected.id)) return;
     this.patch({ game, selectedGameId: game.id }); await this.loadProfiles().catch(() => {}); guard(); if (token !== this.selection) return;
     await this.recoverPresentation(match, selected).catch(() => {});
     if (match.status !== selected.status || match.token_pot !== selected.token_pot || !equal(match.token_payouts, selected.token_payouts)) await this.refreshProfile().catch(() => {});
@@ -572,12 +576,16 @@ export class PortalStore {
     }
     const match = this.data.local[id] || fetched;
     const packageMatches = this.state.game?.id === match.game_id && this.state.game.version === match.game_version;
-    this.patch({ selectedMatch: this.decorate(match), game: packageMatches ? this.state.game : null, selectedGameId: match.game_id, replayIndex: null, history: null });
-    try { await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) {data.selectedId = id; if(!data.local[id])data.responses[`/matches/${id}`]=match;} }); }
+    try { await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) {
+      if(removedSavedMatch(data,id))throw new Error(copyText('This saved copy was removed from this device. Its recovery data is available in Preserved previous app data.'));
+      data.selectedId = id; if(!data.local[id])data.responses[`/matches/${id}`]=match;
+    } }); }
     catch (error) { guard(); if (!isQuotaError(error)) throw error; }
     guard(); if (token !== this.selection) return;
+    this.patch({ selectedMatch: this.decorate(match), game: packageMatches ? this.state.game : null, selectedGameId: match.game_id, replayIndex: null, history: null });
     this.repository.protectGame(this.identity(),match.game_id,match.game_version);
-    const game = await this.pinnedGame(match.game_id, match.game_version,match.localMode?undefined:match.id); guard(); if (token === this.selection) this.patch({ game, selectedGameId: game.id });
+    const game = await this.pinnedGame(match.game_id, match.game_version,match.localMode?undefined:match.id); await this.reloadData();guard(); if (token !== this.selection || removedSavedMatch(this.data,id)) return;
+    this.patch({ game, selectedGameId: game.id });
     await this.loadProfiles().catch(() => {});
     if (token === this.selection) await this.recoverPresentation(match).catch(() => {});
   }
