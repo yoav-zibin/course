@@ -8,10 +8,15 @@ const gameUI = {
     const t=(key,args={})=>(strings[key]||key).replace(/\{(\w+)\}/g,(_,k)=>String(args[k]===undefined?'':args[k]));
     const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined;
     const legal=active?(s.legal||[]):[];
-    const pieces=[],targets=[],controls=[];
+    const pieces=[],targets=[],controls=[],paths=[];
     const labels=[{id:'title',text:t('title'),x:24,y:18,font_size:26},
       {id:'turn',text:m.status==='over'||s.over?t('finished'):t('turn',{n:s.turn+1}),x:24,y:54,font_size:18}];
     if(KIND==='connect6'&&s.pending)labels.push({id:'turn-progress',text:t('place_second'),x:24,y:82,font_size:14});
+    if(KIND==='connect6')for(let i=0;i<19;i++){
+      const offset=20+i*40;
+      paths.push({id:'row_'+i,points:[{x:44,y:100+offset},{x:764,y:100+offset}],color:'#624825',width:1.5});
+      paths.push({id:'column_'+i,points:[{x:24+offset,y:120},{x:24+offset,y:840}],color:'#624825',width:1.5});
+    }
     if(KIND==='pig'||KIND==='memory')labels.push({id:'score',text:t('score',{a:s.scores[0],b:s.scores[1]}),x:350,y:54,font_size:20});
     const keyOf=move=>Object.keys(move).map(k=>k+'_'+move[k]).join('_');
     let selectedFrom=KIND==='ataxx'&&localState&&localState.move_count===m.move_count&&localState.viewer===m.my_player_index
@@ -51,13 +56,15 @@ const gameUI = {
         if(KIND==='memory')pieces.push({id:'card_'+cell,type:value===-1?'back':'card',board:'main',position:{cell:String(cell)},text:value===-1?'':String(value+1),face:value===-1?'back':'front',scale:s.matched.includes(cell)?0.86:1,opacity:s.matched.includes(cell)?0.6:1,actions:legal.some(move=>move.cell===cell)?['tap']:[]});
         else if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},text:KIND==='tictactoe'?(value===0?'X':'O'):'',rotation:KIND==='domineering'&&value===1?90:0});
       });
-      legal.forEach(move=>targets.push({id:keyOf(move),board:'main',position:{cell:String(KIND==='connect4'?move.column:move.cell)},label:t('cell',{n:(KIND==='connect4'?move.column:move.cell)+1})}));
+      legal.forEach(move=>targets.push(KIND==='connect6'
+        ?{id:keyOf(move),board:'main',position:{cell:String(move.cell)},asset:'connect6_cell',aria_label:t('cell',{n:move.cell+1})}
+        :{id:keyOf(move),board:'main',position:{cell:String(KIND==='connect4'?move.column:move.cell)},label:t('cell',{n:(KIND==='connect4'?move.column:move.cell)+1})}));
       if(KIND==='domineering'&&targets.length)pieces.push({id:'domino',type:'domino',board:'tray',position:{x:60,y:70},rotation:s.turn?90:0,draggable:true,move_targets:targets.map(p=>p.id),actions:['move']});
     }
     // Appearance alone is not an interaction. Placed counters, marks and dice
     // stay passive; legal destinations and enabled buttons supply their hints.
     for(const piece of pieces)if(!piece.actions)piece.actions=[];
-    const scene={pieces,targets,controls,labels};
+    const scene={pieces,targets,controls,labels,paths};
     const out={scene,local_state:KIND==='ataxx'?{move_count:m.move_count,viewer:m.my_player_index,selectedFrom}:{}};
     if(message.type==='ui_event'&&active&&['tap','drop'].includes(message.event.type)){
       const e=message.event;

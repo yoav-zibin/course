@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from game_platform.agent_import import GameImport
+from game_platform.declarative_ui import DeclarativeLogic
 from game_platform.game_logic import GameLogic, InvalidMoveError
 
 
@@ -46,6 +47,27 @@ def test_opening_uses_one_stone_then_each_turn_requires_two():
     second = game.call('applyMove', first['state'], 'white', {'cell': 2}, ctx=ctx, seed=9)
     assert second['turn'] == ['black']
     assert second['state']['pending'] == 0
+
+
+def test_board_uses_clickable_intersections_without_text_overlays():
+    body = GameImport.model_validate(json.loads(PACKAGE.read_text(encoding='utf-8')))
+    game = logic()
+    ctx = context()
+    state = game.call('newMatch', ctx=ctx, seed=7)['state']
+    view = game.call('viewFor', state, 'black', ctx=ctx, seed=7)
+    message = {'type':'state_changed', 'view':view, 'status':'ongoing',
+               'acting_for_player_index':0, 'my_player_index':0, 'move_count':0}
+    ui = DeclarativeLogic(body.declarative_ui)
+    scene = ui.reduce(message)['scene']
+    assert len(scene['paths']) == 38
+    assert len(scene['targets']) == 361
+    assert all(target.get('asset') == 'connect6_cell' and 'label' not in target
+               for target in scene['targets'])
+    event = {'type':'ui_event', 'state_changed':message, 'event':{'type':'tap', 'id':'cell_180'}}
+    assert ui.reduce(event)['make_move'] == {'cell':180}
+    message['acting_for_player_index'] = None
+    spectator = ui.reduce(message)['scene']
+    assert not spectator['targets'] and len(spectator['paths']) == 38
 
 
 @pytest.mark.parametrize(
