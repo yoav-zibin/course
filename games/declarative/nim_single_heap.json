@@ -1,13 +1,13 @@
 {
   "name": "Nim",
-  "description": "Take the last stone to win.",
+  "description": "Classic three-pile Nim: remove stones from one pile each turn. Take the last stone to win.",
   "allowed_player_counts": [
     2
   ],
-  "all_state_public": false,
+  "all_state_public": true,
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
-  "server_code": "const game = {\n  newMatch(ctx) {\n    return {state:{n:9, seat:0}, turn:[ctx.players[0].id]};\n  },\n  applyMove(state, id, move, ctx) {\n    if (!state.n || ctx.players[state.seat].id !== id ||\n        !move || typeof move !== \"object\" || Object.keys(move).length !== 1 ||\n        !Number.isInteger(move.take) || move.take < 1 || move.take > state.n) {\n      throw new InvalidMove(\"Choose a legal move on your turn.\");\n    }\n    const n = state.n - move.take;\n    if (n > 0) {\n      const seat = 1 - state.seat;\n      return {state:{n, seat}, turn:[ctx.players[seat].id]};\n    }\n    const recipient = ctx.players.find(player => player.id === id && player.kind === \"human\" && player.active !== false)\n      || ctx.players.find(player => player.kind === \"human\" && player.active !== false);\n    return {state:{n, seat:state.seat}, turn:null,\n      payouts:recipient ? {[recipient.id]:ctx.pot} : {}};\n  },\n  viewFor(state) { return state; },\n  computerMove(state) { return {take:state.n}; },\n  randomMove(state, id, ctx) { return {take:1 + Math.floor(ctx.random() * state.n)}; }\n};",
+  "server_code": "const game = {\n  newMatch(ctx) {\n    return {state:{piles:[3,5,7],seat:0,winner:null},turn:[ctx.players[0].id]};\n  },\n  applyMove(s,id,m,ctx) {\n    if (s.winner!==null || ctx.players[s.seat].id!==id || !m ||\n        typeof m!=='object' || Array.isArray(m) || Object.keys(m).length!==2 ||\n        !Number.isInteger(m.pile) || m.pile<0 || m.pile>=3 ||\n        !Number.isInteger(m.take) || m.take<1 || m.take>s.piles[m.pile])\n      throw new InvalidMove('Choose a legal move on your turn.');\n    const piles=s.piles.slice();piles[m.pile]-=m.take;\n    if(piles.some(n=>n>0)) {\n      const seat=1-s.seat;\n      return {state:{piles,seat,winner:null},turn:[ctx.players[seat].id]};\n    }\n    const winner=s.seat;\n    const recipient=ctx.players.find(p=>p.id===id&&p.kind==='human'&&p.active!==false)\n      ||ctx.players.find(p=>p.kind==='human'&&p.active!==false);\n    return {state:{piles,seat:winner,winner},turn:null,\n      payouts:recipient?{[recipient.id]:ctx.pot}:{}};\n  },\n  viewFor(s){return s;},\n  computerMove(s){\n    const nimSum=s.piles.reduce((sum,n)=>sum^n,0);\n    for(let pile=0;pile<3;pile++){\n      const target=s.piles[pile]^nimSum;\n      if(target<s.piles[pile])return {pile,take:s.piles[pile]-target};\n    }\n    const pile=s.piles.findIndex(n=>n>0);\n    return {pile,take:1};\n  },\n  randomMove(s,id,ctx){\n    const choices=s.piles.flatMap((n,i)=>n>0?[i]:[]);\n    const pile=choices[Math.floor(ctx.random()*choices.length)];\n    return {pile,take:1+Math.floor(ctx.random()*s.piles[pile])};\n  }\n};\n",
   "declarative_ui": {
     "format": "buildplay-ui",
     "version": 1,
@@ -115,6 +115,33 @@
         "shape": "image",
         "width": 100,
         "height": 144
+      },
+      "heap": {
+        "shape": "image",
+        "asset": "primary_button",
+        "width": 400,
+        "height": 66,
+        "text_color": "#fffbec",
+        "font_size": 20,
+        "action_outline": "none"
+      },
+      "heap_selected": {
+        "shape": "image",
+        "asset": "gold_button",
+        "width": 400,
+        "height": 66,
+        "text_color": "#163d3c",
+        "font_size": 20,
+        "action_outline": "none"
+      },
+      "nim_gem": {
+        "shape": "image",
+        "asset": "gem",
+        "width": 36,
+        "height": 30,
+        "text_color": "#fffbec",
+        "font_size": 20,
+        "action_outline": "none"
       }
     },
     "assets": {
@@ -487,477 +514,634 @@
     },
     "strings": {
       "title": "Nim",
-      "count": "Stones left: {n}",
-      "take": "Take {n}",
+      "turn": "{name}'s turn",
       "winner": "{name} wins",
-      "wait": "Waiting for the next move",
-      "server_illegal": "Choose a legal move on your turn.",
-      "polish_hand": "YOUR HAND",
-      "polish_table": "TABLE",
-      "polish_finished": "ROUND COMPLETE"
+      "hint": "Take stones from one pile only. The last stone wins.",
+      "pile": "Pile {pile}",
+      "pile_count": "Pile {pile}: {n} stones",
+      "choose_pile": "Select a pile to begin",
+      "choose_amount": "Choose how many to take from pile {pile}",
+      "take": "Take {n}",
+      "take_from": "Take {n} from pile {pile}",
+      "server_illegal": "Choose a legal move on your turn."
     },
-    "ui_code": "const SOURCE_STRINGS = {\"title\": \"Nim\", \"count\": \"Stones left: {n}\", \"take\": \"Take {n}\", \"winner\": \"{name} wins\", \"wait\": \"Waiting for the next move\", \"server_illegal\": \"Choose a legal move on your turn.\"};\nconst baseGameUI = {\n  reduce(message) {\n    const match = message.type === \"ui_event\" ? message.state_changed : message;\n    const view = match.view || match.state;\n    const strings = { ...SOURCE_STRINGS, ...match.strings };\n    const translate = (key, values = {}) =>\n      strings[key].replace(/\\{(\\w+)\\}/g, (_, name) => String(values[name] ?? \"\"));\n    const player = match.players?.[view.seat];\n    const name = player?.display_name ?? player?.name ?? view.seat + 1;\n    const actingSeat = match.acting_for_player_index;\n    const active = view.n > 0 && match.status === \"ongoing\" && !match.replay &&\n      actingSeat === view.seat && match.turn_of_player_indices?.includes(actingSeat);\n    const labels = [\n      { id: \"count\", text: translate(\"count\", { n: view.n }), x: 24, y: 24, font_size: 30 },\n      { id: \"status\", text: view.n === 0 ? translate(\"winner\", { name }) :\n        active ? String(name) : translate(\"wait\"), x: 24, y: 70, font_size: 22 }\n    ];\n    const pieces = Array.from({ length: view.n }, (_, index) => ({\n      id: \"stone_\" + index, type: \"stone\", board: \"pile\",\n      position: { x: 38 + (index % 5) * 83, y: 40 + Math.floor(index / 5) * 80 },\n      actions: []\n    }));\n    const controls = active ? Array.from({ length: view.n }, (_, index) => ({\n      id: \"take_\" + (index + 1), kind: \"button\", label: translate(\"take\", { n: index + 1 })\n    })) : [];\n    const result = { scene: { labels, pieces, controls }, local_state: {} };\n    if (message.type === \"ui_event\" && message.event.type === \"tap\") {\n      const index = controls.findIndex(control => control.id === message.event.id);\n      if (index >= 0) result.make_move = { take: index + 1 };\n    }\n    return result;\n  }\n};\n\nconst POLISH_KIND=\"nim_single_heap\";\nconst POLISH_TITLE=\"Nim\";\nconst POLISH_STRINGS={\"polish_hand\": \"YOUR HAND\", \"polish_table\": \"TABLE\", \"polish_finished\": \"ROUND COMPLETE\"};\n\n// JIAYI_POLISH_BEGIN\nconst gameUI = {\n reduce(message, previous) {\n  const result=baseGameUI.reduce(message,previous), m=message.type==='ui_event'?message.state_changed:message;\n  const v=m.view||m.state||{}, old=result.scene, strings={...SOURCE_STRINGS,...m.strings};\n  const kind=POLISH_KIND, nim=kind==='nim_single_heap', snap=kind==='snap'||kind==='slapjack';\n  const scene={pieces:[],labels:[],controls:old.controls||[],targets:old.targets||[],paths:old.paths||[]};\n  const add=(id,type,x,y,extra={})=>scene.pieces.push({id,type,board:'surface',position:{x,y},actions:[],...extra});\n  const label=(id,text,x,y,size=17,color='#f4f2dd')=>scene.labels.push({id,text:String(text),x,y,font_size:size,color});\n  const text=k=>strings[k]||POLISH_STRINGS[k]||'';\n  add('polish_background','table_art',240,350,{z:-100});\n  label('polish_title',strings.title||POLISH_TITLE,26,22,28);\n  const status=(old.labels||[]).find(l=>l.id==='status'||l.id==='turn');\n  const playing=m.turn_of_player_indices||[v.seat];\n  const players=m.players||[],counts=v.counts||[],scores=v.totals||v.miles||v.scores;\n  players.forEach((p,i)=>{\n   const x=26+(i%3)*147,y=86+Math.floor(i/3)*51;\n   add('polish_seat_'+i,playing.includes(i)&&m.status==='ongoing'?'seat_active':'seat_idle',x+67,y+21,{z:-10});\n   label('polish_name_'+i,String(p.name||p.display_name||i+1).slice(0,13),x+11,y+7,14,playing.includes(i)?'#f8e3a7':'#d0dfd7');\n   const amount=scores?.[i]??counts[i];\n   label('polish_score_'+i,amount===undefined?'—':String(amount),x+11,y+25,15,'#ffffff');\n  });\n  label('polish_status',status?.text||text(m.status==='over'?'polish_finished':'polish_table'),27,407,17,'#e5d5a7');\n  const hand=v.hand||[];\n  if(!nim&&!snap)label('polish_hand_title',text('polish_hand'),37,452,15,'#a8c9bb');\n  if(nim){\n   label('polish_stones',String(v.n),208,187,48,'#f3e2b9');\n   (old.pieces||[]).forEach((p,i)=>add(p.id,'gem',160+(i%3)*80,265+Math.floor(i/3)*45,{...p,type:'gem',board:'surface',position:{x:160+(i%3)*80,y:265+Math.floor(i/3)*45}}));\n   const controls=old.controls||[];scene.controls=[];\n   controls.forEach((c,i)=>{\n    const x=98+(i%3)*142,y=508+Math.floor(i/3)*65;\n    add(c.id,'take_button',x,y,{actions:['tap'],aria_label:c.label,text:c.label});\n   });\n  }else if(snap){\n   const top=kind==='snap'?(v.top||[]):v.top===null||v.top===undefined?[]:[v.top];\n   top.forEach((c,i)=>add('polish_public_'+i,'large_card',top.length===1?240:180+i*120,286,{asset:'card_'+c,z:i,rotation:(i?6:-5),animation:{kind:'move',duration_ms:220,key:'pile_'+m.move_count+'_'+i}}));\n   if(!top.length)add('polish_deck','large_card',240,286,{asset:'card_back'});\n   label('polish_pile',String(v.pileCount||0),229,355,22,'#dbe8ce');\n   scene.controls=[];\n   (old.controls||[]).forEach((c,i)=>add(c.id,i?'gold_button':'primary_button',240,510+i*86,{actions:['tap'],aria_label:c.label,text:c.label}));\n  }else{\n   (old.pieces||[]).forEach((p,i)=>{\n    const card=hand[i],columns=hand.length>14?9:7,step=columns===9?47:60,row=Math.floor(i/columns),cols=Math.min(columns,hand.length-row*columns),x=240-(cols-1)*step/2+(i%columns)*step,y=529+row*103-(p.selected?12:0);\n    scene.pieces.push({...p,type:'hand_card',board:'surface',position:{x,y},asset:'card_'+card,aria_label:p.aria_label||p.text||String(card),text:'',z:20+i,rotation:0,opacity:p.actions?.length||p.selected?1:.78});\n   });\n   const table=v.table||v.trick?.map(p=>p.card)||((kind==='conquian'&&v.top>=0)?[v.top]:[]);\n   const shown=kind==='catch_the_ten'?[v.up,...table].filter(c=>Number.isInteger(c)):table;\n   shown.slice(-5).forEach((c,i)=>add('polish_table_'+i,'table_card',240-(Math.min(shown.length,5)-1)*38+i*76,282,{asset:'card_'+c,rotation:(i-(shown.length-1)/2)*4,z:i,animation:{kind:'move',duration_ms:180,key:'trick_'+m.move_count+'_'+i}}));\n   if(!shown.length)add('polish_deck','table_card',240,282,{asset:'card_back',opacity:.8});\n   if(Number.isInteger(v.trump)&&v.trump>=0)label('polish_trump',['♣','♦','♥','♠'][v.trump],409,204,27,'#e4c480');\n  }\n  if(m.status==='over'){\n   add('polish_result_panel','result_panel',240,281,{z:70});\n   label('polish_result',String(status?.text||text('polish_finished')).slice(0,44),55,272,24,'#f6e3ac');\n  }\n  result.scene=scene;return result;\n }\n};\n",
+    "ui_code": "const SOURCE_STRINGS={\"title\": \"Nim\", \"turn\": \"{name}'s turn\", \"winner\": \"{name} wins\", \"hint\": \"Take stones from one pile only. The last stone wins.\", \"pile\": \"Pile {pile}\", \"pile_count\": \"Pile {pile}: {n} stones\", \"choose_pile\": \"Select a pile to begin\", \"choose_amount\": \"Choose how many to take from pile {pile}\", \"take\": \"Take {n}\", \"take_from\": \"Take {n} from pile {pile}\", \"server_illegal\": \"Choose a legal move on your turn.\"};\nconst gameUI={\n reduce(message,previous){\n  const m=message.type==='ui_event'?message.state_changed:message,v=m.view||m.state;\n  const strings={...SOURCE_STRINGS,...m.strings};\n  const t=(key,values={})=>String(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String(values[k]??''));\n  const active=m.status==='ongoing'&&!m.replay&&v.winner===null&&\n    m.acting_for_player_index===v.seat&&m.turn_of_player_indices?.includes(v.seat);\n  const name=i=>m.players?.[i]?.name||m.players?.[i]?.display_name||String(i+1);\n  let selected=previous?.moveCount===m.move_count&&previous?.seat===v.seat?previous.selected:null;\n  if(!Number.isInteger(selected)||!v.piles[selected])selected=null;\n  const click=message.type==='ui_event'&&message.event?.type==='tap'?message.event.id:'';\n  if(active&&/^pile_[0-2]$/.test(click)&&v.piles[Number(click.slice(5))]>0)selected=Number(click.slice(5));\n  const scene={pieces:[],labels:[],controls:[]};\n  const piece=(id,type,x,y,extra={})=>scene.pieces.push({id,type,board:'surface',position:{x,y},actions:[],...extra});\n  const label=(id,text,x,y,size=17,color='#f5eddb')=>scene.labels.push({id,text:String(text),x,y,font_size:size,color});\n  piece('polish_background','table_art',240,350,{z:-100});\n  label('title',t('title'),26,22,28);\n  for(let i=0;i<2;i++){\n   const x=26+i*222;\n   piece('player_'+i,m.status==='ongoing'&&v.seat===i?'seat_active':'seat_idle',x+67,108);\n   label('player_name_'+i,name(i).slice(0,16),x+11,92,15,i===v.seat?'#f7dfa1':'#d0dfd7');\n  }\n  label('status',v.winner!==null?t('winner',{name:name(v.winner)}):t('turn',{name:name(v.seat)}),28,153,22,'#ead9a3');\n  label('hint',t('hint'),28,185,14,'#abcbbc');\n  for(let i=0;i<3;i++){\n   const y=246+i*78,n=v.piles[i];\n   piece('pile_'+i,selected===i?'heap_selected':'heap',240,y,{actions:active&&n>0?['tap']:[],aria_label:t('pile_count',{pile:i+1,n}),opacity:n>0?1:.4});\n   label('pile_label_'+i,t('pile',{pile:i+1}),52,y-20,16,selected===i?'#173d39':'#f4edda');\n   label('pile_count_'+i,String(n),52,y+2,19,selected===i?'#173d39':'#c8decf');\n   for(let j=0;j<n;j++)piece('stone_'+i+'_'+j,'nim_gem',184+j*34,y,{opacity:selected===i?1:.8});\n  }\n  label('quantity',selected===null?t('choose_pile'):t('choose_amount',{pile:selected+1}),35,453,17,'#bddbca');\n  if(active&&selected!==null){\n   for(let take=1;take<=v.piles[selected];take++){\n    const i=take-1;piece('take_'+take,'take_button',98+(i%3)*142,515+Math.floor(i/3)*65,\n      {actions:['tap'],text:t('take',{n:take}),aria_label:t('take_from',{n:take,pile:selected+1})});\n   }\n  }\n  const result={scene,local_state:{moveCount:m.move_count,seat:v.seat,selected}};\n  if(active&&selected!==null&&/^take_[1-7]$/.test(click)){\n   const take=Number(click.slice(5));if(take<=v.piles[selected])result.make_move={pile:selected,take};\n  }\n  return result;\n }\n};\n",
     "motion": {
       "move_ms": 180,
       "easing": "ease-out"
     }
   },
-  "rules": "Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win.",
-  "ui_instructions": "Tap the number of stones to take.",
+  "rules": "Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins.",
+  "ui_instructions": "Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.",
   "tutorial": {
-    "html": "<meta name=\"viewport\" content=\"width=device-width\"><p>Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win.</p>",
-    "text": "Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win."
+    "text": "Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins. Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>Nim</h1><p>Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins.</p><p>Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.</p></main>"
   },
   "images": [
     {
-      "caption": "Cover",
-      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#edf3ef\"/><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"180\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"210\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"240\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"270\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+      "caption": "Three starting piles",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"225\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"247\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
     },
     {
-      "caption": "Before: Alice",
-      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 9 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"180\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"210\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"240\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"270\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+      "caption": "After taking four from the third pile",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
     },
     {
-      "caption": "Before: Bob",
-      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 9 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"180\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"210\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"240\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"270\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+      "caption": "Three equal piles",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
     },
     {
-      "caption": "After: Alice",
-      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 5 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+      "caption": "The last stone wins",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/></svg>"
     }
   ],
   "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "properties": {
+        "piles": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          }
+        },
+        "seat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "winner": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "piles",
+        "seat",
+        "winner"
+      ],
+      "additionalProperties": false
+    },
+    "view_schema": {
+      "type": "object",
+      "properties": {
+        "piles": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          }
+        },
+        "seat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "winner": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "piles",
+        "seat",
+        "winner"
+      ],
+      "additionalProperties": false
+    },
+    "move_schema": {
+      "type": "object",
+      "properties": {
+        "pile": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "take": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        }
+      },
+      "required": [
+        "pile",
+        "take"
+      ],
+      "additionalProperties": false
+    },
     "cases": [
       {
+        "kind": "initial",
+        "name": "initial move",
+        "description": "Remove 4 from pile 3.",
         "ctx": {
-          "move_count": 0,
           "players": [
             {
-              "active": true,
-              "display_name": "Alice",
               "id": "u1",
+              "display_name": "Alice",
               "kind": "human",
-              "max_loss": 0,
-              "picture_url": ""
+              "active": true,
+              "picture_url": "",
+              "max_loss": 0
             },
             {
-              "active": true,
-              "display_name": "Bob",
               "id": "u2",
+              "display_name": "Bob",
               "kind": "human",
-              "max_loss": 0,
-              "picture_url": ""
+              "active": true,
+              "picture_url": "",
+              "max_loss": 0
             }
           ],
-          "pot": 0,
+          "move_count": 0,
+          "pot": 20,
           "seed": 1
         },
-        "description": "Take 4 from 9 stones.",
+        "player_id": "u1",
+        "other_player_id": "u2",
+        "state": {
+          "piles": [
+            3,
+            5,
+            7
+          ],
+          "seat": 0,
+          "winner": null
+        },
+        "move": {
+          "pile": 2,
+          "take": 4
+        },
         "expected_state": {
-          "n": 5,
-          "seat": 1
+          "piles": [
+            3,
+            5,
+            3
+          ],
+          "seat": 1,
+          "winner": null
         },
         "expected_turn": [
           "u2"
         ],
+        "view_of_mover": {
+          "piles": [
+            3,
+            5,
+            7
+          ],
+          "seat": 0,
+          "winner": null
+        },
+        "view_of_other": {
+          "piles": [
+            3,
+            5,
+            7
+          ],
+          "seat": 0,
+          "winner": null
+        },
         "expected_view_of_mover": {
-          "n": 5,
-          "seat": 1
+          "piles": [
+            3,
+            5,
+            3
+          ],
+          "seat": 1,
+          "winner": null
         },
         "expected_view_of_other": {
-          "n": 5,
-          "seat": 1
+          "piles": [
+            3,
+            5,
+            3
+          ],
+          "seat": 1,
+          "winner": null
         },
         "images": [
           {
-            "caption": "Before: Alice",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 9 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"180\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"210\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"240\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"270\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "Before mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"225\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"247\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           },
           {
-            "caption": "Before: Bob",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 9 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"180\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"210\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"240\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"270\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "Before opponent",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"225\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"247\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           },
           {
-            "caption": "After: Alice",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 5 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "After mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           },
           {
-            "caption": "After: Bob",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 5 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "After opponent",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           }
-        ],
-        "kind": "initial",
-        "move": {
-          "take": 4
-        },
-        "name": "initial move",
-        "other_player_id": "u2",
-        "player_id": "u1",
-        "state": {
-          "n": 9,
-          "seat": 0
-        },
-        "view_of_mover": {
-          "n": 9,
-          "seat": 0
-        },
-        "view_of_other": {
-          "n": 9,
-          "seat": 0
-        }
+        ]
       },
       {
+        "kind": "intermediate",
+        "name": "intermediate move",
+        "description": "Remove 2 from pile 2.",
         "ctx": {
-          "move_count": 1,
           "players": [
             {
-              "active": true,
-              "display_name": "Alice",
               "id": "u1",
+              "display_name": "Alice",
               "kind": "human",
-              "max_loss": 0,
-              "picture_url": ""
+              "active": true,
+              "picture_url": "",
+              "max_loss": 0
             },
             {
-              "active": true,
-              "display_name": "Bob",
               "id": "u2",
+              "display_name": "Bob",
               "kind": "human",
-              "max_loss": 0,
-              "picture_url": ""
+              "active": true,
+              "picture_url": "",
+              "max_loss": 0
             }
           ],
-          "pot": 0,
+          "move_count": 1,
+          "pot": 20,
           "seed": 1
         },
-        "description": "Take 2 from 5 stones.",
+        "player_id": "u2",
+        "other_player_id": "u1",
+        "state": {
+          "piles": [
+            3,
+            5,
+            3
+          ],
+          "seat": 1,
+          "winner": null
+        },
+        "move": {
+          "pile": 1,
+          "take": 2
+        },
         "expected_state": {
-          "n": 3,
-          "seat": 0
+          "piles": [
+            3,
+            3,
+            3
+          ],
+          "seat": 0,
+          "winner": null
         },
         "expected_turn": [
           "u1"
         ],
+        "view_of_mover": {
+          "piles": [
+            3,
+            5,
+            3
+          ],
+          "seat": 1,
+          "winner": null
+        },
+        "view_of_other": {
+          "piles": [
+            3,
+            5,
+            3
+          ],
+          "seat": 1,
+          "winner": null
+        },
         "expected_view_of_mover": {
-          "n": 3,
-          "seat": 0
+          "piles": [
+            3,
+            3,
+            3
+          ],
+          "seat": 0,
+          "winner": null
         },
         "expected_view_of_other": {
-          "n": 3,
-          "seat": 0
+          "piles": [
+            3,
+            3,
+            3
+          ],
+          "seat": 0,
+          "winner": null
         },
         "images": [
           {
-            "caption": "Before: Alice",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 5 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "Before mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           },
           {
-            "caption": "Before: Bob",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 5 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"120\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"150\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "Before opponent",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"181\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"203\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           },
           {
-            "caption": "After: Alice",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 3 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "After mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           },
           {
-            "caption": "After: Bob",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 3 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "After opponent",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"55\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"95\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"137\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/><circle cx=\"159\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           }
-        ],
-        "kind": "intermediate",
-        "move": {
-          "take": 2
-        },
-        "name": "intermediate move",
-        "other_player_id": "u1",
-        "player_id": "u2",
-        "state": {
-          "n": 5,
-          "seat": 1
-        },
-        "view_of_mover": {
-          "n": 5,
-          "seat": 1
-        },
-        "view_of_other": {
-          "n": 5,
-          "seat": 1
-        }
+        ]
       },
       {
+        "kind": "terminal",
+        "name": "terminal move",
+        "description": "Remove 1 from pile 3.",
         "ctx": {
-          "move_count": 2,
           "players": [
             {
-              "active": true,
-              "display_name": "Alice",
               "id": "u1",
+              "display_name": "Alice",
               "kind": "human",
-              "max_loss": 0,
-              "picture_url": ""
+              "active": true,
+              "picture_url": "",
+              "max_loss": 0
             },
             {
-              "active": true,
-              "display_name": "Bob",
               "id": "u2",
+              "display_name": "Bob",
               "kind": "human",
-              "max_loss": 0,
-              "picture_url": ""
+              "active": true,
+              "picture_url": "",
+              "max_loss": 0
             }
           ],
-          "pot": 0,
+          "move_count": 4,
+          "pot": 20,
           "seed": 1
         },
-        "description": "Take 3 from 3 stones.",
-        "expected_payouts": {
-          "u1": 0
+        "player_id": "u1",
+        "other_player_id": "u2",
+        "state": {
+          "piles": [
+            0,
+            0,
+            1
+          ],
+          "seat": 0,
+          "winner": null
+        },
+        "move": {
+          "pile": 2,
+          "take": 1
         },
         "expected_state": {
-          "n": 0,
-          "seat": 0
+          "piles": [
+            0,
+            0,
+            0
+          ],
+          "seat": 0,
+          "winner": 0
         },
         "expected_turn": null,
+        "view_of_mover": {
+          "piles": [
+            0,
+            0,
+            1
+          ],
+          "seat": 0,
+          "winner": null
+        },
+        "view_of_other": {
+          "piles": [
+            0,
+            0,
+            1
+          ],
+          "seat": 0,
+          "winner": null
+        },
         "expected_view_of_mover": {
-          "n": 0,
-          "seat": 0
+          "piles": [
+            0,
+            0,
+            0
+          ],
+          "seat": 0,
+          "winner": 0
         },
         "expected_view_of_other": {
-          "n": 0,
-          "seat": 0
+          "piles": [
+            0,
+            0,
+            0
+          ],
+          "seat": 0,
+          "winner": 0
         },
         "images": [
           {
-            "caption": "Before: Alice",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 3 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "Before mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           },
           {
-            "caption": "Before: Bob",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 3 stones</text><circle cx=\"30\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"60\" cy=\"90\" r=\"10\" fill=\"#437766\"/><circle cx=\"90\" cy=\"90\" r=\"10\" fill=\"#437766\"/></svg>"
+            "caption": "Before opponent",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/><circle cx=\"115\" cy=\"135\" r=\"8\" fill=\"#71b59b\"/></svg>"
           },
           {
-            "caption": "After: Alice",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 0 stones</text></svg>"
+            "caption": "After mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/></svg>"
           },
           {
-            "caption": "After: Bob",
-            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 160\"><rect width=\"320\" height=\"160\" fill=\"#edf3ef\"/><text x=\"24\" y=\"42\" font-size=\"24\" fill=\"#17342d\">Nim · 0 stones</text></svg>"
+            "caption": "After opponent",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#123d3b\"/></svg>"
           }
         ],
-        "kind": "terminal",
-        "move": {
-          "take": 3
-        },
-        "name": "terminal move",
-        "other_player_id": "u2",
-        "player_id": "u1",
-        "state": {
-          "n": 3,
-          "seat": 0
-        },
-        "view_of_mover": {
-          "n": 3,
-          "seat": 0
-        },
-        "view_of_other": {
-          "n": 3,
-          "seat": 0
+        "expected_payouts": {
+          "u1": 20
         }
       }
-    ],
-    "move_schema": {
-      "additionalProperties": false,
-      "properties": {
-        "take": {
-          "maximum": 9,
-          "minimum": 1,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "take"
-      ],
-      "type": "object"
-    },
-    "state_schema": {
-      "additionalProperties": false,
-      "properties": {
-        "n": {
-          "maximum": 9,
-          "minimum": 0,
-          "type": "integer"
-        },
-        "seat": {
-          "maximum": 1,
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "n",
-        "seat"
-      ],
-      "type": "object"
-    },
-    "view_schema": {
-      "additionalProperties": false,
-      "properties": {
-        "n": {
-          "maximum": 9,
-          "minimum": 0,
-          "type": "integer"
-        },
-        "seat": {
-          "maximum": 1,
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "n",
-        "seat"
-      ],
-      "type": "object"
-    }
+    ]
   },
   "translations": {
     "ar": {
       "display_name": "Nim",
-      "short_description": "ابدأ بتسعة أحجار. خذ حجرًا أو أكثر في دورك. يفوز من يأخذ الحجر الأخير.",
-      "game_logic_rules": "ابدأ بتسعة أحجار. خذ حجرًا أو أكثر في دورك. يفوز من يأخذ الحجر الأخير.",
-      "game_ui_rules": "اضغط على عدد الأحجار التي تريد أخذها.",
+      "short_description": "ابدأ بثلاث كومات من 3 و5 و7 أحجار. في كل دور خذ حجراً واحداً أو أكثر من كومة واحدة فقط. يمكنك إفراغها. يفوز من يأخذ آخر حجر.",
+      "game_logic_rules": "ابدأ بثلاث كومات من 3 و5 و7 أحجار. في كل دور خذ حجراً واحداً أو أكثر من كومة واحدة فقط. يمكنك إفراغها. يفوز من يأخذ آخر حجر.",
+      "game_ui_rules": "اختر كومة غير فارغة ثم عدد الأحجار. يتم تمييز الكومة المختارة.",
       "tutorial_strings": {
-        "Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win.": "ابدأ بتسعة أحجار. خذ حجرًا أو أكثر في دورك. يفوز من يأخذ الحجر الأخير."
+        "Nim": "Nim",
+        "Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins.": "ابدأ بثلاث كومات من 3 و5 و7 أحجار. في كل دور خذ حجراً واحداً أو أكثر من كومة واحدة فقط. يمكنك إفراغها. يفوز من يأخذ آخر حجر.",
+        "Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.": "اختر كومة غير فارغة ثم عدد الأحجار. يتم تمييز الكومة المختارة."
       },
       "client_strings": {
-        "count": "الأحجار المتبقية: {n}",
-        "server_illegal": "اختر حركة قانونية في دورك.",
-        "take": "خذ {n}",
         "title": "Nim",
-        "wait": "في انتظار الحركة التالية",
+        "turn": "دور {name}",
         "winner": "فاز {name}",
-        "polish_hand": "أوراقك",
-        "polish_table": "الطاولة",
-        "polish_finished": "انتهت الجولة"
+        "hint": "خذ من كومة واحدة. آخر حجر يحقق الفوز.",
+        "pile": "الكومة {pile}",
+        "pile_count": "الكومة {pile}: {n} أحجار",
+        "choose_pile": "اختر كومة",
+        "choose_amount": "كم تأخذ من الكومة {pile}؟",
+        "take": "خذ {n}",
+        "take_from": "خذ {n} من الكومة {pile}",
+        "server_illegal": "اختر حركة قانونية في دورك."
       }
     },
     "de": {
       "display_name": "Nim",
-      "short_description": "Beginnt mit neun Steinen. Nimm pro Zug mindestens einen Stein. Wer den letzten nimmt, gewinnt.",
-      "game_logic_rules": "Beginnt mit neun Steinen. Nimm pro Zug mindestens einen Stein. Wer den letzten nimmt, gewinnt.",
-      "game_ui_rules": "Tippe auf die Anzahl der Steine, die du nehmen willst.",
+      "short_description": "Beginne mit drei Haufen mit 3, 5 und 7 Steinen. Nimm pro Zug mindestens einen Stein aus genau einem Haufen. Du darfst ihn leeren. Wer den letzten Stein nimmt, gewinnt.",
+      "game_logic_rules": "Beginne mit drei Haufen mit 3, 5 und 7 Steinen. Nimm pro Zug mindestens einen Stein aus genau einem Haufen. Du darfst ihn leeren. Wer den letzten Stein nimmt, gewinnt.",
+      "game_ui_rules": "Wähle einen nicht leeren Haufen und dann die Anzahl der Steine. Der gewählte Haufen wird hervorgehoben.",
       "tutorial_strings": {
-        "Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win.": "Beginnt mit neun Steinen. Nimm pro Zug mindestens einen Stein. Wer den letzten nimmt, gewinnt."
+        "Nim": "Nim",
+        "Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins.": "Beginne mit drei Haufen mit 3, 5 und 7 Steinen. Nimm pro Zug mindestens einen Stein aus genau einem Haufen. Du darfst ihn leeren. Wer den letzten Stein nimmt, gewinnt.",
+        "Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.": "Wähle einen nicht leeren Haufen und dann die Anzahl der Steine. Der gewählte Haufen wird hervorgehoben."
       },
       "client_strings": {
-        "count": "Verbleibende Steine: {n}",
-        "server_illegal": "Wähle einen gültigen Zug, wenn du an der Reihe bist.",
-        "take": "{n} nehmen",
         "title": "Nim",
-        "wait": "Warte auf den nächsten Zug",
+        "turn": "{name} ist am Zug",
         "winner": "{name} gewinnt",
-        "polish_hand": "DEINE HAND",
-        "polish_table": "TISCH",
-        "polish_finished": "RUNDE BEENDET"
+        "hint": "Nur einen Haufen wählen. Der letzte Stein gewinnt.",
+        "pile": "Haufen {pile}",
+        "pile_count": "Haufen {pile}: {n} Steine",
+        "choose_pile": "Wähle einen Haufen",
+        "choose_amount": "Anzahl aus Haufen {pile} wählen",
+        "take": "{n} nehmen",
+        "take_from": "{n} aus Haufen {pile} nehmen",
+        "server_illegal": "Wähle einen gültigen Zug, wenn du an der Reihe bist."
       }
     },
     "es": {
       "display_name": "Nim",
-      "short_description": "Empieza con nueve piedras. Retira una o más en tu turno. Gana quien retire la última.",
-      "game_logic_rules": "Empieza con nueve piedras. Retira una o más en tu turno. Gana quien retire la última.",
-      "game_ui_rules": "Pulsa el número de piedras que quieres retirar.",
+      "short_description": "Empieza con tres pilas de 3, 5 y 7 piedras. En cada turno retira una o más piedras de una sola pila. Puedes vaciarla, pero no tocar otra pila. Gana quien toma la última piedra.",
+      "game_logic_rules": "Empieza con tres pilas de 3, 5 y 7 piedras. En cada turno retira una o más piedras de una sola pila. Puedes vaciarla, pero no tocar otra pila. Gana quien toma la última piedra.",
+      "game_ui_rules": "Selecciona una pila con piedras y después la cantidad que quieres retirar. La pila seleccionada queda resaltada.",
       "tutorial_strings": {
-        "Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win.": "Empieza con nueve piedras. Retira una o más en tu turno. Gana quien retire la última."
+        "Nim": "Nim",
+        "Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins.": "Empieza con tres pilas de 3, 5 y 7 piedras. En cada turno retira una o más piedras de una sola pila. Puedes vaciarla, pero no tocar otra pila. Gana quien toma la última piedra.",
+        "Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.": "Selecciona una pila con piedras y después la cantidad que quieres retirar. La pila seleccionada queda resaltada."
       },
       "client_strings": {
-        "count": "Piedras restantes: {n}",
-        "server_illegal": "Elige una jugada válida en tu turno.",
-        "take": "Retirar {n}",
         "title": "Nim",
-        "wait": "Esperando la próxima jugada",
+        "turn": "Turno de {name}",
         "winner": "Gana {name}",
-        "polish_hand": "TU MANO",
-        "polish_table": "MESA",
-        "polish_finished": "RONDA TERMINADA"
+        "hint": "Retira de una sola pila. La última piedra gana.",
+        "pile": "Pila {pile}",
+        "pile_count": "Pila {pile}: {n} piedras",
+        "choose_pile": "Selecciona una pila",
+        "choose_amount": "Cantidad de la pila {pile}",
+        "take": "Retirar {n}",
+        "take_from": "Retirar {n} de la pila {pile}",
+        "server_illegal": "Elige una jugada válida en tu turno."
       }
     },
     "fr": {
       "display_name": "Nim",
-      "short_description": "Commencez avec neuf pierres. Retirez-en une ou plusieurs à votre tour. Prenez la dernière pour gagner.",
-      "game_logic_rules": "Commencez avec neuf pierres. Retirez-en une ou plusieurs à votre tour. Prenez la dernière pour gagner.",
-      "game_ui_rules": "Touchez le nombre de pierres à retirer.",
+      "short_description": "Commencez avec trois piles de 3, 5 et 7 pierres. À chaque tour, retirez au moins une pierre d’une seule pile. Vous pouvez la vider. La personne qui prend la dernière pierre gagne.",
+      "game_logic_rules": "Commencez avec trois piles de 3, 5 et 7 pierres. À chaque tour, retirez au moins une pierre d’une seule pile. Vous pouvez la vider. La personne qui prend la dernière pierre gagne.",
+      "game_ui_rules": "Choisissez une pile non vide, puis le nombre de pierres à retirer. La pile choisie est mise en évidence.",
       "tutorial_strings": {
-        "Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win.": "Commencez avec neuf pierres. Retirez-en une ou plusieurs à votre tour. Prenez la dernière pour gagner."
+        "Nim": "Nim",
+        "Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins.": "Commencez avec trois piles de 3, 5 et 7 pierres. À chaque tour, retirez au moins une pierre d’une seule pile. Vous pouvez la vider. La personne qui prend la dernière pierre gagne.",
+        "Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.": "Choisissez une pile non vide, puis le nombre de pierres à retirer. La pile choisie est mise en évidence."
       },
       "client_strings": {
-        "count": "Pierres restantes : {n}",
-        "server_illegal": "Choisissez un coup légal à votre tour.",
-        "take": "Retirer {n}",
         "title": "Nim",
-        "wait": "En attente du prochain coup",
+        "turn": "Tour de {name}",
         "winner": "{name} gagne",
-        "polish_hand": "VOTRE MAIN",
-        "polish_table": "TABLE",
-        "polish_finished": "MANCHE TERMINÉE"
+        "hint": "Une seule pile par tour. La dernière pierre gagne.",
+        "pile": "Pile {pile}",
+        "pile_count": "Pile {pile} : {n} pierres",
+        "choose_pile": "Choisissez une pile",
+        "choose_amount": "Combien retirer de la pile {pile} ?",
+        "take": "Retirer {n}",
+        "take_from": "Retirer {n} de la pile {pile}",
+        "server_illegal": "Choisissez un coup légal à votre tour."
       }
     },
     "hi": {
       "display_name": "Nim",
-      "short_description": "नौ पत्थरों से शुरू करें। अपनी बारी पर एक या अधिक पत्थर लें। आखिरी पत्थर लेने वाला जीतता है।",
-      "game_logic_rules": "नौ पत्थरों से शुरू करें। अपनी बारी पर एक या अधिक पत्थर लें। आखिरी पत्थर लेने वाला जीतता है।",
-      "game_ui_rules": "जितने पत्थर लेने हैं उस संख्या पर टैप करें।",
+      "short_description": "शुरू में 3, 5 और 7 पत्थरों के तीन ढेर हैं। हर बारी में केवल एक ढेर से एक या अधिक पत्थर लें। पूरा ढेर ले सकते हैं। आखिरी पत्थर लेने वाला जीतता है।",
+      "game_logic_rules": "शुरू में 3, 5 और 7 पत्थरों के तीन ढेर हैं। हर बारी में केवल एक ढेर से एक या अधिक पत्थर लें। पूरा ढेर ले सकते हैं। आखिरी पत्थर लेने वाला जीतता है।",
+      "game_ui_rules": "पहले भरा हुआ ढेर चुनें, फिर पत्थरों की संख्या चुनें। चुना हुआ ढेर हाइलाइट होता है।",
       "tutorial_strings": {
-        "Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win.": "नौ पत्थरों से शुरू करें। अपनी बारी पर एक या अधिक पत्थर लें। आखिरी पत्थर लेने वाला जीतता है।"
+        "Nim": "Nim",
+        "Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins.": "शुरू में 3, 5 और 7 पत्थरों के तीन ढेर हैं। हर बारी में केवल एक ढेर से एक या अधिक पत्थर लें। पूरा ढेर ले सकते हैं। आखिरी पत्थर लेने वाला जीतता है।",
+        "Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.": "पहले भरा हुआ ढेर चुनें, फिर पत्थरों की संख्या चुनें। चुना हुआ ढेर हाइलाइट होता है।"
       },
       "client_strings": {
-        "count": "बाकी पत्थर: {n}",
-        "server_illegal": "अपनी बारी में वैध चाल चुनें।",
-        "take": "{n} लें",
         "title": "Nim",
-        "wait": "अगली चाल की प्रतीक्षा",
+        "turn": "{name} की बारी",
         "winner": "{name} जीते",
-        "polish_hand": "आपके पत्ते",
-        "polish_table": "मेज़",
-        "polish_finished": "दौर समाप्त"
+        "hint": "एक ही ढेर से लें। आखिरी पत्थर लेने वाला जीतेगा।",
+        "pile": "ढेर {pile}",
+        "pile_count": "ढेर {pile}: {n} पत्थर",
+        "choose_pile": "एक ढेर चुनें",
+        "choose_amount": "ढेर {pile} से कितने लें?",
+        "take": "{n} लें",
+        "take_from": "ढेर {pile} से {n} लें",
+        "server_illegal": "अपनी बारी में वैध चाल चुनें।"
       }
     },
     "pt": {
       "display_name": "Nim",
-      "short_description": "Comece com nove pedras. Retire uma ou mais na sua vez. Quem retirar a última ganha.",
-      "game_logic_rules": "Comece com nove pedras. Retire uma ou mais na sua vez. Quem retirar a última ganha.",
-      "game_ui_rules": "Toque no número de pedras que deseja retirar.",
+      "short_description": "Comece com três pilhas de 3, 5 e 7 pedras. Em cada turno retire uma ou mais pedras de uma única pilha. Pode esvaziá-la. Quem retirar a última pedra vence.",
+      "game_logic_rules": "Comece com três pilhas de 3, 5 e 7 pedras. Em cada turno retire uma ou mais pedras de uma única pilha. Pode esvaziá-la. Quem retirar a última pedra vence.",
+      "game_ui_rules": "Selecione uma pilha com pedras e depois a quantidade a retirar. A pilha selecionada fica destacada.",
       "tutorial_strings": {
-        "Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win.": "Comece com nove pedras. Retire uma ou mais na sua vez. Quem retirar a última ganha."
+        "Nim": "Nim",
+        "Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins.": "Comece com três pilhas de 3, 5 e 7 pedras. Em cada turno retire uma ou mais pedras de uma única pilha. Pode esvaziá-la. Quem retirar a última pedra vence.",
+        "Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.": "Selecione uma pilha com pedras e depois a quantidade a retirar. A pilha selecionada fica destacada."
       },
       "client_strings": {
-        "count": "Pedras restantes: {n}",
-        "server_illegal": "Escolha uma jogada válida na sua vez.",
-        "take": "Retirar {n}",
         "title": "Nim",
-        "wait": "A aguardar a próxima jogada",
+        "turn": "Vez de {name}",
         "winner": "{name} vence",
-        "polish_hand": "SUA MÃO",
-        "polish_table": "MESA",
-        "polish_finished": "RODADA CONCLUÍDA"
+        "hint": "Retire de uma pilha. A última pedra vence.",
+        "pile": "Pilha {pile}",
+        "pile_count": "Pilha {pile}: {n} pedras",
+        "choose_pile": "Selecione uma pilha",
+        "choose_amount": "Quantidade da pilha {pile}",
+        "take": "Retirar {n}",
+        "take_from": "Retirar {n} da pilha {pile}",
+        "server_illegal": "Escolha uma jogada válida na sua vez."
       }
     },
     "zh": {
       "display_name": "Nim",
-      "short_description": "从九颗石子开始。每回合从同一堆取走至少一颗。拿走最后一颗的人获胜。",
-      "game_logic_rules": "从九颗石子开始。每回合从同一堆取走至少一颗。拿走最后一颗的人获胜。",
-      "game_ui_rules": "点击要取走的石子数量。",
+      "short_description": "开局有三堆石子，分别为 3、5、7 颗。每回合只能从一堆取走至少一颗石子，可以取空该堆，但不能同时取其他堆。取走最后一颗石子的人获胜。",
+      "game_logic_rules": "开局有三堆石子，分别为 3、5、7 颗。每回合只能从一堆取走至少一颗石子，可以取空该堆，但不能同时取其他堆。取走最后一颗石子的人获胜。",
+      "game_ui_rules": "选择一堆非空石子，再选择取走数量。高亮表示当前选中的石子堆。",
       "tutorial_strings": {
-        "Start with nine stones. On your turn take one or more stones from the pile. Take the last stone to win.": "从九颗石子开始。每回合从同一堆取走至少一颗。拿走最后一颗的人获胜。"
+        "Nim": "Nim",
+        "Start with three piles of 3, 5, and 7 stones. On your turn remove one or more stones from exactly one pile. You may empty that pile, but cannot take from another pile in the same turn. The player who takes the last stone wins.": "开局有三堆石子，分别为 3、5、7 颗。每回合只能从一堆取走至少一颗石子，可以取空该堆，但不能同时取其他堆。取走最后一颗石子的人获胜。",
+        "Select a nonempty pile, then choose how many stones to remove. The highlighted pile is your selection. Take the last stone to win.": "选择一堆非空石子，再选择取走数量。高亮表示当前选中的石子堆。"
       },
       "client_strings": {
-        "count": "剩余石子：{n}",
-        "server_illegal": "请在自己的回合选择合法走法。",
-        "take": "取走 {n} 颗",
         "title": "Nim",
-        "wait": "等待下一步",
+        "turn": "{name} 的回合",
         "winner": "{name} 获胜",
-        "polish_hand": "你的手牌",
-        "polish_table": "牌桌",
-        "polish_finished": "本局结束"
+        "hint": "每回合只能从一堆取走石子，取走最后一颗获胜。",
+        "pile": "第 {pile} 堆",
+        "pile_count": "第 {pile} 堆：{n} 颗",
+        "choose_pile": "先选择一堆石子",
+        "choose_amount": "从第 {pile} 堆取走多少颗？",
+        "take": "取走 {n} 颗",
+        "take_from": "从第 {pile} 堆取走 {n} 颗",
+        "server_illegal": "请在自己的回合选择合法走法。"
       }
     }
   }

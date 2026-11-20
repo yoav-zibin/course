@@ -89,6 +89,7 @@ LANGS={'en':['YOUR HAND','TABLE','ROUND COMPLETE'],'es':['TU MANO','MESA','RONDA
 def build():
  for kind in KINDS:
   path=ROOT/'games/declarative'/f'{kind}.json';a=json.loads(path.read_text());spec=a['declarative_ui'];code=spec['ui_code']
+  if kind=='nim_single_heap' and 'piles' in a['unit_tests']['state_schema']['properties']:continue
   if '// JIAYI_POLISH_BEGIN' in code:code=code.split('// JIAYI_POLISH_BEGIN')[0].rstrip()
   code=code.replace('const gameUI =','const baseGameUI =').replace('const gameUI=','const baseGameUI=')
   # Remove earlier decoration constants when regenerating.
