@@ -1,6 +1,7 @@
 """Crownfields (based on Kingdomino): rules, data, computer player, presentation and translations."""
 import copy
 import json
+import math
 import re
 import time
 from pathlib import Path
@@ -228,18 +229,19 @@ def test_winners_follow_the_official_tie_breaks():
             assert s['winners'] == [i for i, k in enumerate(keys) if k == best]
 
 
+WALKS = {2: 15, 3: 12, 4: 10}
+
+
 @pytest.mark.parametrize('count', [2, 3, 4])
 def test_seeded_random_walks_always_reach_a_legal_end(count):
-    # Four-player walks use all 48 tiles. Allow slower runners enough bounded
-    # time to reach the same eight-game minimum; do not lower rule coverage.
-    budget_seconds = 90 if count == 4 else 45
     report = run_random_walks(BODY.server_code, game_schemas=BODY.game_schemas(),
                               rules=GameRules(allowed_player_counts=(count,), allows_leave_mid_match=False,
                                               allows_join_mid_match=False),
-                              run_seed=60 + count, max_walks=40, budget_seconds=budget_seconds, max_moves_per_walk=200,
+                              run_seed=60 + count, max_walks=WALKS[count], budget_seconds=math.inf, max_moves_per_walk=200,
                               contract=BODY.unit_tests)
     assert report.passed, report.failures
-    assert report.walks_completed >= 8 and report.terminal_states == report.walks_completed
+    # Fixed coverage by count, independent of CI speed; per-call limits still apply.
+    assert report.walks_completed == WALKS[count] and report.terminal_states == WALKS[count]
 
 
 def test_out_of_turn_bad_picks_and_moves_after_the_end_are_refused():
