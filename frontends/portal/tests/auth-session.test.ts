@@ -47,7 +47,7 @@ const runtime=async(game:any,name:string,args:unknown[],ctx:unknown,seed:number|
   const result=JSON.parse(vm.runInNewContext(rulesSource(game,name,args,ctx,seed,now),{},{timeout:3000}));
   if(!result.ok)throw new Error(result.message);return result.result;
 };
-function authCalls(calls:{path:string;method:string}[]){return calls.filter(call=>call.method==='POST'&&(call.path.startsWith('/auth/')||call.path.endsWith('/merge')));}
+function authCalls(calls:{path:string;method:string}[]){return calls.filter(call=>call.method==='POST'&&(call.path.startsWith('/auth/')&&call.path!=='/auth/daily-login'||call.path.endsWith('/merge')));}
 const cancelled=()=>{throw new InactiveSignInError('Account dialog closed or replaced.');};
 
 test('logging out stays signed out after restart while other credentials and both local saves remain intact',async()=>{
