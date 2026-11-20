@@ -6,7 +6,7 @@
   "allowed_player_counts": [
     2
   ],
-  "server_code": "\nconst LINES=[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15],[0,4,8,12],[1,5,9,13],[2,6,10,14],[3,7,11,15],[0,5,10,15],[3,6,9,12]];\nfunction winsWith(board,cell,piece){\n  const b=board.slice(); b[cell]=piece;\n  for(const line of LINES){\n    if(line.indexOf(cell)===-1) continue;\n    const ps=line.map(c=>b[c]);\n    if(ps.some(p=>p===-1)) continue;\n    for(let bit=0;bit<4;bit++){\n      const v=(ps[0]>>bit)&1;\n      if(ps.every(p=>((p>>bit)&1)===v)) return true;\n    }\n  }\n  return false;\n}\nfunction boardWon(board){\n  for(const line of LINES){\n    const ps=line.map(c=>board[c]);\n    if(ps.some(p=>p===-1)) continue;\n    for(let bit=0;bit<4;bit++){\n      const v=(ps[0]>>bit)&1;\n      if(ps.every(p=>((p>>bit)&1)===v)) return true;\n    }\n  }\n  return false;\n}\nfunction fresh(){\n  return {board:Array(16).fill(-1),hand:-1,pool:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],turn:0,phase:'give',winner:-1,over:false,turns:0};\n}\nfunction legalMoves(s){\n  if(s.over) return [];\n  if(s.phase==='give') return s.pool.map(p=>({type:'give',piece:p}));\n  const out=[];\n  for(let cell=0;cell<16;cell++){\n    if(s.board[cell]!==-1) continue;\n    if(winsWith(s.board,cell,s.hand)||!s.pool.length) out.push({type:'turn',cell:cell,give:null});\n    else for(const p of s.pool) out.push({type:'turn',cell:cell,give:p});\n  }\n  return out;\n}\nfunction payoutFor(s,ctx){\n  const humans=ctx.players.filter(p=>p.kind==='human'&&p.active!==false);\n  const winner=s.winner>=0?ctx.players[s.winner]:null;\n  const recipients=winner&&winner.kind==='human'&&winner.active!==false?[winner]:humans;\n  const out={}; if(!recipients.length) return out;\n  recipients.forEach((p,i)=>{out[p.id]=Math.floor(ctx.pot/recipients.length)+(i<ctx.pot%recipients.length?1:0);});\n  return out;\n}\nfunction threatens(board,piece){\n  // True when `piece` placed on some empty cell completes a line on `board`.\n  for(let cell=0;cell<16;cell++) if(board[cell]===-1&&winsWith(board,cell,piece)) return true;\n  return false;\n}\nconst game={\n  newMatch(ctx){ return {state:fresh(),turn:[ctx.players[0].id]}; },\n  applyMove(state,id,move,ctx){\n    if(state.over) throw new InvalidMove('Illegal move');\n    if(ctx.players[state.turn].id!==id) throw new InvalidMove('Illegal move');\n    if(!move||typeof move!=='object'||Array.isArray(move)) throw new InvalidMove('Illegal move');\n    const s=JSON.parse(JSON.stringify(state));\n    if(state.phase==='give'){\n      if(move.type!=='give'||Object.keys(move).length!==2||!Number.isInteger(move.piece)||s.pool.indexOf(move.piece)===-1)\n        throw new InvalidMove('Illegal move');\n      s.pool=s.pool.filter(p=>p!==move.piece);\n      s.hand=move.piece; s.phase='place'; s.turn=1-s.turn; s.turns++;\n      return {state:s,turn:[ctx.players[s.turn].id]};\n    }\n    // phase 'place': one combined move places the hand piece and gives the next.\n    if(move.type!=='turn'||Object.keys(move).length!==3||!Number.isInteger(move.cell)||move.cell<0||move.cell>15)\n      throw new InvalidMove('Illegal move');\n    if(s.board[move.cell]!==-1) throw new InvalidMove('Illegal move');\n    if(!Object.prototype.hasOwnProperty.call(move,'give')) throw new InvalidMove('Illegal move');\n    s.board[move.cell]=s.hand; s.hand=-1; s.turns++;\n    const won=boardWon(s.board);\n    const full=s.board.every(v=>v!==-1);\n    if(won||full){\n      if(move.give!==null) throw new InvalidMove('Illegal move');\n      s.over=true; s.winner=won?state.turn:-1;\n      return {state:s,turn:null,payouts:payoutFor(s,ctx)};\n    }\n    if(!Number.isInteger(move.give)||s.pool.indexOf(move.give)===-1) throw new InvalidMove('Illegal move');\n    s.pool=s.pool.filter(p=>p!==move.give);\n    s.hand=move.give; s.turn=1-s.turn;\n    return {state:s,turn:[ctx.players[s.turn].id]};\n  },\n  viewFor(state,id,ctx){\n    const s=JSON.parse(JSON.stringify(state));\n    s.legal=(!state.over&&id===ctx.players[state.turn].id)?legalMoves(state):[];\n    return s;\n  },\n  randomMove(s,id,ctx){\n    const options=legalMoves(s);\n    return options[Math.floor(ctx.random()*options.length)];\n  },\n  computerMove(s,id,ctx){\n    const options=legalMoves(s);\n    if(s.phase==='give'){\n      const safe=options.filter(m=>!threatens(s.board,m.piece));\n      const pool2=safe.length?safe:options;\n      return pool2[Math.floor(ctx.random()*pool2.length)];\n    }\n    const winning=options.filter(m=>winsWith(s.board,m.cell,s.hand));\n    if(winning.length) return winning[0];\n    // Prefer moves whose handed-over piece gives the opponent no immediate win.\n    const safe=options.filter(m=>{\n      if(m.give===null) return true;\n      const b=s.board.slice(); b[m.cell]=s.hand;\n      return !threatens(b,m.give);\n    });\n    const pool2=safe.length?safe:options;\n    return pool2[Math.floor(ctx.random()*pool2.length)];\n  }\n};\n",
+  "server_code": "\nconst LINES=[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15],[0,4,8,12],[1,5,9,13],[2,6,10,14],[3,7,11,15],[0,5,10,15],[3,6,9,12]];\nfunction winsWith(board,cell,piece){\n  const b=board.slice(); b[cell]=piece;\n  for(const line of LINES){\n    if(line.indexOf(cell)===-1) continue;\n    const ps=line.map(c=>b[c]);\n    if(ps.some(p=>p===-1)) continue;\n    for(let bit=0;bit<4;bit++){\n      const v=(ps[0]>>bit)&1;\n      if(ps.every(p=>((p>>bit)&1)===v)) return true;\n    }\n  }\n  return false;\n}\nfunction boardWon(board){\n  for(const line of LINES){\n    const ps=line.map(c=>board[c]);\n    if(ps.some(p=>p===-1)) continue;\n    for(let bit=0;bit<4;bit++){\n      const v=(ps[0]>>bit)&1;\n      if(ps.every(p=>((p>>bit)&1)===v)) return true;\n    }\n  }\n  return false;\n}\nfunction fresh(){\n  return {board:Array(16).fill(-1),hand:-1,pool:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],turn:0,phase:'give',winner:-1,over:false,turns:0,last_move:null};\n}\nfunction legalMoves(s){\n  if(s.over) return [];\n  if(s.phase==='give') return s.pool.map(p=>({type:'give',piece:p}));\n  const out=[];\n  for(let cell=0;cell<16;cell++){\n    if(s.board[cell]!==-1) continue;\n    if(winsWith(s.board,cell,s.hand)||!s.pool.length) out.push({type:'turn',cell:cell,give:null});\n    else for(const p of s.pool) out.push({type:'turn',cell:cell,give:p});\n  }\n  return out;\n}\nfunction payoutFor(s,ctx){\n  const humans=ctx.players.filter(p=>p.kind==='human'&&p.active!==false);\n  const winner=s.winner>=0?ctx.players[s.winner]:null;\n  const recipients=winner&&winner.kind==='human'&&winner.active!==false?[winner]:humans;\n  const out={}; if(!recipients.length) return out;\n  recipients.forEach((p,i)=>{out[p.id]=Math.floor(ctx.pot/recipients.length)+(i<ctx.pot%recipients.length?1:0);});\n  return out;\n}\nfunction threatens(board,piece){\n  // True when `piece` placed on some empty cell completes a line on `board`.\n  for(let cell=0;cell<16;cell++) if(board[cell]===-1&&winsWith(board,cell,piece)) return true;\n  return false;\n}\nconst game={\n  newMatch(ctx){ return {state:fresh(),turn:[ctx.players[0].id]}; },\n  applyMove(state,id,move,ctx){\n    if(state.over) throw new InvalidMove('Illegal move');\n    if(ctx.players[state.turn].id!==id) throw new InvalidMove('Illegal move');\n    if(!move||typeof move!=='object'||Array.isArray(move)) throw new InvalidMove('Illegal move');\n    const s=JSON.parse(JSON.stringify(state));\n    if(state.phase==='give'){\n      if(move.type!=='give'||Object.keys(move).length!==2||!Number.isInteger(move.piece)||s.pool.indexOf(move.piece)===-1)\n        throw new InvalidMove('Illegal move');\n      s.pool=s.pool.filter(p=>p!==move.piece);\n      s.hand=move.piece; s.phase='place'; s.turn=1-s.turn; s.turns++; s.last_move={kind:'give'};\n      return {state:s,turn:[ctx.players[s.turn].id]};\n    }\n    // phase 'place': one combined move places the hand piece and gives the next.\n    if(move.type!=='turn'||Object.keys(move).length!==3||!Number.isInteger(move.cell)||move.cell<0||move.cell>15)\n      throw new InvalidMove('Illegal move');\n    if(s.board[move.cell]!==-1) throw new InvalidMove('Illegal move');\n    if(!Object.prototype.hasOwnProperty.call(move,'give')) throw new InvalidMove('Illegal move');\n    const placed=s.hand;\n    s.board[move.cell]=placed; s.hand=-1; s.turns++;\n    s.last_move={kind:'place',piece_id:'piece_'+placed,from:{board:'tray',position:{x:70,y:90}},to:{board:'main',position:{cell:String(move.cell)}}};\n    const won=boardWon(s.board);\n    const full=s.board.every(v=>v!==-1);\n    if(won||full){\n      if(move.give!==null) throw new InvalidMove('Illegal move');\n      s.over=true; s.winner=won?state.turn:-1;\n      return {state:s,turn:null,payouts:payoutFor(s,ctx)};\n    }\n    if(!Number.isInteger(move.give)||s.pool.indexOf(move.give)===-1) throw new InvalidMove('Illegal move');\n    s.pool=s.pool.filter(p=>p!==move.give);\n    s.hand=move.give; s.turn=1-s.turn;\n    return {state:s,turn:[ctx.players[s.turn].id]};\n  },\n  viewFor(state,id,ctx){\n    const s=JSON.parse(JSON.stringify(state));\n    s.legal=(!state.over&&id===ctx.players[state.turn].id)?legalMoves(state):[];\n    return s;\n  },\n  randomMove(s,id,ctx){\n    const options=legalMoves(s);\n    return options[Math.floor(ctx.random()*options.length)];\n  },\n  computerMove(s,id,ctx){\n    const options=legalMoves(s);\n    if(s.phase==='give'){\n      const safe=options.filter(m=>!threatens(s.board,m.piece));\n      const pool2=safe.length?safe:options;\n      return pool2[Math.floor(ctx.random()*pool2.length)];\n    }\n    const winning=options.filter(m=>winsWith(s.board,m.cell,s.hand));\n    if(winning.length) return winning[0];\n    // Prefer moves whose handed-over piece gives the opponent no immediate win.\n    const safe=options.filter(m=>{\n      if(m.give===null) return true;\n      const b=s.board.slice(); b[m.cell]=s.hand;\n      return !threatens(b,m.give);\n    });\n    const pool2=safe.length?safe:options;\n    return pool2[Math.floor(ctx.random()*pool2.length)];\n  }\n};\n",
   "declarative_ui": {
     "format": "buildplay-ui",
     "version": 1,
@@ -175,7 +175,7 @@
       "piece": "Piece {n}",
       "server_invalid": "Illegal move"
     },
-    "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Quarto\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"draw\": \"Draw - pot split\", \"winner\": \"Player {n} wins\", \"hand\": \"In hand\", \"pool\": \"Pool - tap a piece to give\", \"hint_give\": \"Choose a piece for your opponent\", \"hint_cell\": \"Tap a cell to place your piece\", \"hint_next\": \"Now tap a pool piece to hand over\", \"finish\": \"Place and finish\", \"cell\": \"Cell {n}\", \"piece\": \"Piece {n}\", \"server_invalid\": \"Illegal move\"};\nconst LINES=[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15],[0,4,8,12],[1,5,9,13],[2,6,10,14],[3,7,11,15],[0,5,10,15],[3,6,9,12]];\nfunction uiWins(board,cell,piece){\n  const b=board.slice(); b[cell]=piece;\n  for(const line of LINES){\n    if(line.indexOf(cell)===-1) continue;\n    const ps=line.map(c=>b[c]);\n    if(ps.some(p=>p===-1)) continue;\n    for(let bit=0;bit<4;bit++){\n      const v=(ps[0]>>bit)&1;\n      if(ps.every(p=>((p>>bit)&1)===v)) return true;\n    }\n  }\n  return false;\n}\nfunction pieceLabel(p){\n  return ((p&1)?'T':'s')+((p&8)?'\\u25cb':'\\u25cf');\n}\nconst gameUI={\n  reduce(message,localState){\n    const m=message.type==='ui_event'?message.state_changed:message;\n    const s=m.view||m.state;\n    const strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    const t=(key,args)=>(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String((args||{})[k]===undefined?'':(args||{})[k]));\n    const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined&&!s.over;\n    let staged=null;\n    if(localState&&localState.mc===m.move_count&&Number.isInteger(localState.cell)) staged=localState.cell;\n    if(message.type!=='ui_event') staged=null;\n    // Apply a tap to the staged selection BEFORE building the scene, so the\n    // scene returned for a cell tap already offers the follow-up choices:\n    // give targets for the hand-over, or the finish control when the staged\n    // placement ends the game. Pieces themselves never declare actions;\n    // every interaction is a target or a control.\n    let makeMove=null;\n    if(message.type==='ui_event'&&active&&message.event&&message.event.type==='tap'){\n      let eid=message.event.id||'';\n      if(eid.indexOf('cell_')===0) eid='cell-'+eid.slice(5);\n      if(eid.indexOf('pool_')===0) eid='give-'+eid.slice(5);\n      if(s.phase==='give'&&eid.indexOf('give-')===0){\n        const p=parseInt(eid.slice(5),10);\n        if(s.pool.indexOf(p)!==-1) makeMove={type:'give',piece:p};\n      } else if(s.phase==='place'&&eid.indexOf('cell-')===0){\n        const c=parseInt(eid.slice(5),10);\n        if(c>=0&&c<16&&s.board[c]===-1) staged=staged===c?null:c;\n      } else if(s.phase==='place'&&eid.indexOf('give-')===0&&staged!==null){\n        const p=parseInt(eid.slice(5),10);\n        if(s.pool.indexOf(p)!==-1&&s.pool.length>0&&!uiWins(s.board,staged,s.hand)) makeMove={type:'turn',cell:staged,give:p};\n      } else if(s.phase==='place'&&eid==='finish'&&staged!==null&&(s.pool.length===0||uiWins(s.board,staged,s.hand))){\n        makeMove={type:'turn',cell:staged,give:null};\n      }\n    }\n    const endsGame=staged!==null&&(s.pool.length===0||uiWins(s.board,staged,s.hand));\n    const pieces=[],targets=[],controls=[];\n    let statusText;\n    if(s.over) statusText=s.winner>=0?t('winner',{n:s.winner+1}):t('draw');\n    else statusText=t('turn',{n:s.turn+1});\n    const labels=[\n      {id:'title',text:t('title'),x:24,y:16,font_size:26},\n      {id:'turn',text:statusText,x:24,y:50,font_size:18},\n      {id:'handlabel',text:t('hand'),x:24,y:436,font_size:16},\n      {id:'poollabel',text:t('pool'),x:170,y:436,font_size:16}\n    ];\n    if(active&&!s.over){\n      labels.push({id:'hint',text:s.phase==='give'?t('hint_give'):(staged===null?t('hint_cell'):t('hint_next')),x:330,y:50,font_size:15});\n    }\n    // Board pieces (passive).\n    s.board.forEach((p,cell)=>{\n      if(p!==-1) pieces.push({id:'bp_'+cell,type:'q'+p,board:'main',position:{cell:String(cell)},text:pieceLabel(p),actions:[]});\n    });\n    if(staged!==null) pieces.push({id:'stage_mark',type:'mark',board:'main',position:{cell:String(staged)},text:'+',actions:[]});\n    // In-hand piece, shown large on the tray (passive).\n    if(s.hand!==-1) pieces.push({id:'hand_piece',type:'q'+s.hand,board:'tray',position:{x:70,y:90},text:pieceLabel(s.hand),scale:1.5,actions:[]});\n    // Pool pieces on the tray: two rows of eight (passive). When a piece may\n    // be handed over -- the opening give, or a staged non-final placement --\n    // a transparent target with the piece's id overlays it.\n    const canGive=active&&(s.phase==='give'||(s.phase==='place'&&staged!==null&&!endsGame));\n    s.pool.forEach((p,i)=>{\n      const pos={x:200+(i%8)*52,y:80+Math.floor(i/8)*95};\n      pieces.push({id:'pool_'+p,type:'q'+p,board:'tray',position:pos,text:pieceLabel(p),actions:[]});\n      if(canGive) targets.push({id:'give-'+p,board:'tray',position:pos,color:'#00000000',aria_label:t('piece',{n:p+1})});\n    });\n    // Placement targets only for the acting viewer.\n    if(active&&s.phase==='place'){\n      for(let cell=0;cell<16;cell++) if(s.board[cell]===-1)\n        targets.push({id:'cell-'+cell,board:'main',position:{cell:String(cell)},label:t('cell',{n:cell+1})});\n    }\n    // Finish control: only when the staged placement ends the game\n    // (a win, or the pool is empty so this is the final placement).\n    if(active&&s.phase==='place'&&endsGame)\n      controls.push({id:'finish',kind:'button',label:t('finish')});\n    const scene={pieces:pieces,targets:targets,controls:controls,labels:labels};\n    const out={scene:scene,local_state:staged===null?{}:{cell:staged,mc:m.move_count}};\n    if(makeMove) out.make_move=makeMove;\n    return out;\n  }\n};\n"
+    "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Quarto\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"draw\": \"Draw - pot split\", \"winner\": \"Player {n} wins\", \"hand\": \"In hand\", \"pool\": \"Pool - tap a piece to give\", \"hint_give\": \"Choose a piece for your opponent\", \"hint_cell\": \"Tap a cell to place your piece\", \"hint_next\": \"Now tap a pool piece to hand over\", \"finish\": \"Place and finish\", \"cell\": \"Cell {n}\", \"piece\": \"Piece {n}\", \"server_invalid\": \"Illegal move\"};\nconst LINES=[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15],[0,4,8,12],[1,5,9,13],[2,6,10,14],[3,7,11,15],[0,5,10,15],[3,6,9,12]];\nfunction uiWins(board,cell,piece){\n  const b=board.slice(); b[cell]=piece;\n  for(const line of LINES){\n    if(line.indexOf(cell)===-1) continue;\n    const ps=line.map(c=>b[c]);\n    if(ps.some(p=>p===-1)) continue;\n    for(let bit=0;bit<4;bit++){\n      const v=(ps[0]>>bit)&1;\n      if(ps.every(p=>((p>>bit)&1)===v)) return true;\n    }\n  }\n  return false;\n}\nfunction pieceLabel(p){\n  return ((p&1)?'T':'s')+((p&8)?'\\u25cb':'\\u25cf');\n}\nconst gameUI={\n  getLastMoveAnimations(view,scene){\n    if(!Object.prototype.hasOwnProperty.call(view,'last_move')) return null;\n    const move=view.last_move;\n    if(!move||move.kind!=='place') return [];\n    const piece=(scene.pieces||[]).find(pc=>pc.id===move.piece_id);\n    if(!piece||!move.from) return [];\n    return [{piece_id:move.piece_id,duration_ms:700,path:[move.from,{board:piece.board,position:piece.position}]}];\n  },\n  reduce(message,localState){\n    const m=message.type==='ui_event'?message.state_changed:message;\n    const s=m.view||m.state;\n    const strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    const t=(key,args)=>(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String((args||{})[k]===undefined?'':(args||{})[k]));\n    const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined&&!s.over;\n    let staged=null;\n    if(localState&&localState.mc===m.move_count&&Number.isInteger(localState.cell)) staged=localState.cell;\n    if(message.type!=='ui_event') staged=null;\n    // Apply a tap to the staged selection BEFORE building the scene, so the\n    // scene returned for a cell tap already offers the follow-up choices:\n    // give targets for the hand-over, or the finish control when the staged\n    // placement ends the game. Pieces themselves never declare actions;\n    // every interaction is a target or a control.\n    let makeMove=null;\n    if(message.type==='ui_event'&&active&&message.event&&message.event.type==='tap'){\n      let eid=message.event.id||'';\n      if(eid.indexOf('cell_')===0) eid='cell-'+eid.slice(5);\n      if(eid.indexOf('pool_')===0) eid='give-'+eid.slice(5);\n      if(s.phase==='give'&&eid.indexOf('give-')===0){\n        const p=parseInt(eid.slice(5),10);\n        if(s.pool.indexOf(p)!==-1) makeMove={type:'give',piece:p};\n      } else if(s.phase==='place'&&eid.indexOf('cell-')===0){\n        const c=parseInt(eid.slice(5),10);\n        if(c>=0&&c<16&&s.board[c]===-1) staged=staged===c?null:c;\n      } else if(s.phase==='place'&&eid.indexOf('give-')===0&&staged!==null){\n        const p=parseInt(eid.slice(5),10);\n        if(s.pool.indexOf(p)!==-1&&s.pool.length>0&&!uiWins(s.board,staged,s.hand)) makeMove={type:'turn',cell:staged,give:p};\n      } else if(s.phase==='place'&&eid==='finish'&&staged!==null&&(s.pool.length===0||uiWins(s.board,staged,s.hand))){\n        makeMove={type:'turn',cell:staged,give:null};\n      }\n    }\n    const endsGame=staged!==null&&(s.pool.length===0||uiWins(s.board,staged,s.hand));\n    const pieces=[],targets=[],controls=[];\n    let statusText;\n    if(s.over) statusText=s.winner>=0?t('winner',{n:s.winner+1}):t('draw');\n    else statusText=t('turn',{n:s.turn+1});\n    const labels=[\n      {id:'title',text:t('title'),x:24,y:16,font_size:26},\n      {id:'turn',text:statusText,x:24,y:50,font_size:18},\n      {id:'handlabel',text:t('hand'),x:24,y:436,font_size:16},\n      {id:'poollabel',text:t('pool'),x:170,y:436,font_size:16}\n    ];\n    if(active&&!s.over){\n      labels.push({id:'hint',text:s.phase==='give'?t('hint_give'):(staged===null?t('hint_cell'):t('hint_next')),x:330,y:50,font_size:15});\n    }\n    // Board pieces (passive).\n    s.board.forEach((p,cell)=>{\n      if(p!==-1) pieces.push({id:'piece_'+p,type:'q'+p,board:'main',position:{cell:String(cell)},text:pieceLabel(p),actions:[]});\n    });\n    if(staged!==null) pieces.push({id:'stage_mark',type:'mark',board:'main',position:{cell:String(staged)},text:'+',actions:[]});\n    // In-hand piece, shown large on the tray (passive).\n    if(s.hand!==-1) pieces.push({id:'piece_'+s.hand,type:'q'+s.hand,board:'tray',position:{x:70,y:90},text:pieceLabel(s.hand),scale:1.5,actions:[]});\n    // Pool pieces on the tray: two rows of eight (passive). When a piece may\n    // be handed over -- the opening give, or a staged non-final placement --\n    // a transparent target with the piece's id overlays it.\n    const canGive=active&&(s.phase==='give'||(s.phase==='place'&&staged!==null&&!endsGame));\n    s.pool.forEach((p,i)=>{\n      const pos={x:200+(i%8)*52,y:80+Math.floor(i/8)*95};\n      pieces.push({id:'piece_'+p,type:'q'+p,board:'tray',position:pos,text:pieceLabel(p),actions:[]});\n      if(canGive) targets.push({id:'give-'+p,board:'tray',position:pos,color:'#00000000',aria_label:t('piece',{n:p+1})});\n    });\n    // Placement targets only for the acting viewer.\n    if(active&&s.phase==='place'){\n      for(let cell=0;cell<16;cell++) if(s.board[cell]===-1)\n        targets.push({id:'cell-'+cell,board:'main',position:{cell:String(cell)},label:t('cell',{n:cell+1})});\n    }\n    // Finish control: only when the staged placement ends the game\n    // (a win, or the pool is empty so this is the final placement).\n    if(active&&s.phase==='place'&&endsGame)\n      controls.push({id:'finish',kind:'button',label:t('finish')});\n    const scene={pieces:pieces,targets:targets,controls:controls,labels:labels};\n    const out={scene:scene,local_state:staged===null?{}:{cell:staged,mc:m.move_count}};\n    if(makeMove) out.make_move=makeMove;\n    return out;\n  }\n};\n"
   },
   "rules": "Quarto for 2 players on a 4x4 board with 16 unique pieces. Each piece combines tall or short, light or dark, round or square, and solid or hollow; piece id 0-15 is the 4-bit attribute vector (bit0: 1=tall, bit1: 1=dark, bit2: 1=square, bit3: 1=hollow). You never choose your own piece: seat 0 opens with a give-only move {type:\"give\", piece} that hands a pool piece to seat 1. Every later turn is one combined move {type:\"turn\", cell, give}: place the piece in your hand on an empty cell, then choose an unplayed pool piece to hand to your opponent. give is required unless the placement ends the game or the pool is empty (the final placement), when give must be null. After a placement, any row, column or main diagonal whose four pieces share at least one attribute value (all tall, all short, all light, all dark, all round, all square, all solid or all hollow) wins immediately for the player who placed. The winner takes the pot. If all 16 pieces are placed with no winning line, the game is a draw and the pot is split equally. Illegal moves (occupied cell, giving a played or in-hand piece, giving on the final move, or acting in the wrong phase) are rejected. All state is public.",
   "ui_instructions": "4x4 board on top; below it the piece in hand (large) and the pool of unplayed pieces. Pieces are legible at a glance: round or square shape, tall pieces are larger than short ones, dark pieces are brown and light pieces cream, and each label repeats height and top - T or s for tall/short plus a filled dot for solid or an open circle for hollow (for example T with a filled dot is tall and solid). On the opening move, tap a pool piece to hand it to your opponent. On your turn, tap an empty cell, then tap a pool piece to hand over; if the placement wins or is the last piece, use the Place and finish button instead. Only the player to move sees targets and controls.",
@@ -216,7 +216,8 @@
         "phase",
         "winner",
         "over",
-        "turns"
+        "turns",
+        "last_move"
       ],
       "additionalProperties": false,
       "properties": {
@@ -271,6 +272,190 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100
+        },
+        "last_move": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "give"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind",
+                "piece_id",
+                "from",
+                "to"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "place"
+                },
+                "piece_id": {
+                  "enum": [
+                    "piece_0",
+                    "piece_1",
+                    "piece_2",
+                    "piece_3",
+                    "piece_4",
+                    "piece_5",
+                    "piece_6",
+                    "piece_7",
+                    "piece_8",
+                    "piece_9",
+                    "piece_10",
+                    "piece_11",
+                    "piece_12",
+                    "piece_13",
+                    "piece_14",
+                    "piece_15"
+                  ]
+                },
+                "from": {
+                  "type": "object",
+                  "required": [
+                    "board",
+                    "position"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "board": {
+                      "enum": [
+                        "main",
+                        "tray"
+                      ]
+                    },
+                    "position": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "x": {
+                              "type": "integer"
+                            },
+                            "y": {
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "cell"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "cell": {
+                              "enum": [
+                                "0",
+                                "1",
+                                "2",
+                                "3",
+                                "4",
+                                "5",
+                                "6",
+                                "7",
+                                "8",
+                                "9",
+                                "10",
+                                "11",
+                                "12",
+                                "13",
+                                "14",
+                                "15"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                "to": {
+                  "type": "object",
+                  "required": [
+                    "board",
+                    "position"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "board": {
+                      "enum": [
+                        "main",
+                        "tray"
+                      ]
+                    },
+                    "position": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "x": {
+                              "type": "integer"
+                            },
+                            "y": {
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "cell"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "cell": {
+                              "enum": [
+                                "0",
+                                "1",
+                                "2",
+                                "3",
+                                "4",
+                                "5",
+                                "6",
+                                "7",
+                                "8",
+                                "9",
+                                "10",
+                                "11",
+                                "12",
+                                "13",
+                                "14",
+                                "15"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
         }
       }
     },
@@ -285,7 +470,8 @@
         "winner",
         "over",
         "turns",
-        "legal"
+        "legal",
+        "last_move"
       ],
       "additionalProperties": false,
       "properties": {
@@ -393,6 +579,190 @@
               }
             ]
           }
+        },
+        "last_move": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "give"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind",
+                "piece_id",
+                "from",
+                "to"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "place"
+                },
+                "piece_id": {
+                  "enum": [
+                    "piece_0",
+                    "piece_1",
+                    "piece_2",
+                    "piece_3",
+                    "piece_4",
+                    "piece_5",
+                    "piece_6",
+                    "piece_7",
+                    "piece_8",
+                    "piece_9",
+                    "piece_10",
+                    "piece_11",
+                    "piece_12",
+                    "piece_13",
+                    "piece_14",
+                    "piece_15"
+                  ]
+                },
+                "from": {
+                  "type": "object",
+                  "required": [
+                    "board",
+                    "position"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "board": {
+                      "enum": [
+                        "main",
+                        "tray"
+                      ]
+                    },
+                    "position": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "x": {
+                              "type": "integer"
+                            },
+                            "y": {
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "cell"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "cell": {
+                              "enum": [
+                                "0",
+                                "1",
+                                "2",
+                                "3",
+                                "4",
+                                "5",
+                                "6",
+                                "7",
+                                "8",
+                                "9",
+                                "10",
+                                "11",
+                                "12",
+                                "13",
+                                "14",
+                                "15"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                "to": {
+                  "type": "object",
+                  "required": [
+                    "board",
+                    "position"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "board": {
+                      "enum": [
+                        "main",
+                        "tray"
+                      ]
+                    },
+                    "position": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "x": {
+                              "type": "integer"
+                            },
+                            "y": {
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "cell"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "cell": {
+                              "enum": [
+                                "0",
+                                "1",
+                                "2",
+                                "3",
+                                "4",
+                                "5",
+                                "6",
+                                "7",
+                                "8",
+                                "9",
+                                "10",
+                                "11",
+                                "12",
+                                "13",
+                                "14",
+                                "15"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
         }
       }
     },
@@ -515,7 +885,8 @@
           "phase": "give",
           "winner": -1,
           "over": false,
-          "turns": 0
+          "turns": 0,
+          "last_move": null
         },
         "player_id": "u1",
         "other_player_id": "u2",
@@ -584,6 +955,7 @@
           "winner": -1,
           "over": false,
           "turns": 0,
+          "last_move": null,
           "legal": [
             {
               "type": "give",
@@ -694,6 +1066,7 @@
           "winner": -1,
           "over": false,
           "turns": 0,
+          "last_move": null,
           "legal": []
         },
         "expected_state": {
@@ -737,7 +1110,10 @@
           "phase": "place",
           "winner": -1,
           "over": false,
-          "turns": 1
+          "turns": 1,
+          "last_move": {
+            "kind": "give"
+          }
         },
         "expected_turn": [
           "u2"
@@ -784,6 +1160,9 @@
           "winner": -1,
           "over": false,
           "turns": 1,
+          "last_move": {
+            "kind": "give"
+          },
           "legal": []
         },
         "expected_view_of_other": {
@@ -828,6 +1207,9 @@
           "winner": -1,
           "over": false,
           "turns": 1,
+          "last_move": {
+            "kind": "give"
+          },
           "legal": [
             {
               "type": "turn",
@@ -2100,7 +2482,10 @@
           "phase": "place",
           "winner": -1,
           "over": false,
-          "turns": 1
+          "turns": 1,
+          "last_move": {
+            "kind": "give"
+          }
         },
         "player_id": "u2",
         "other_player_id": "u1",
@@ -2169,6 +2554,9 @@
           "winner": -1,
           "over": false,
           "turns": 1,
+          "last_move": {
+            "kind": "give"
+          },
           "legal": [
             {
               "type": "turn",
@@ -3414,6 +3802,9 @@
           "winner": -1,
           "over": false,
           "turns": 1,
+          "last_move": {
+            "kind": "give"
+          },
           "legal": []
         },
         "expected_state": {
@@ -3456,7 +3847,24 @@
           "phase": "place",
           "winner": -1,
           "over": false,
-          "turns": 2
+          "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          }
         },
         "expected_turn": [
           "u1"
@@ -3502,6 +3910,23 @@
           "winner": -1,
           "over": false,
           "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          },
           "legal": []
         },
         "expected_view_of_other": {
@@ -3545,6 +3970,23 @@
           "winner": -1,
           "over": false,
           "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          },
           "legal": [
             {
               "type": "turn",
@@ -4666,7 +5108,24 @@
           "phase": "place",
           "winner": -1,
           "over": false,
-          "turns": 2
+          "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          }
         },
         "player_id": "u1",
         "other_player_id": "u2",
@@ -4734,6 +5193,23 @@
           "winner": -1,
           "over": false,
           "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          },
           "legal": [
             {
               "type": "turn",
@@ -5828,6 +6304,23 @@
           "winner": -1,
           "over": false,
           "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          },
           "legal": []
         },
         "expected_state": {
@@ -5869,7 +6362,24 @@
           "phase": "place",
           "winner": -1,
           "over": false,
-          "turns": 3
+          "turns": 3,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_9",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "5"
+              }
+            }
+          }
         },
         "expected_turn": [
           "u2"
@@ -5914,6 +6424,23 @@
           "winner": -1,
           "over": false,
           "turns": 3,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_9",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "5"
+              }
+            }
+          },
           "legal": []
         },
         "expected_view_of_other": {
@@ -5956,6 +6483,23 @@
           "winner": -1,
           "over": false,
           "turns": 3,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_9",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "5"
+              }
+            }
+          },
           "legal": [
             {
               "type": "turn",
@@ -6937,7 +7481,24 @@
           "phase": "place",
           "winner": -1,
           "over": false,
-          "turns": 2
+          "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          }
         },
         "player_id": "u1",
         "other_player_id": "u2",
@@ -6987,6 +7548,23 @@
           "winner": -1,
           "over": false,
           "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          },
           "legal": [
             {
               "type": "turn",
@@ -8081,6 +8659,23 @@
           "winner": -1,
           "over": false,
           "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          },
           "legal": []
         },
         "expected_state": {
@@ -8123,7 +8718,24 @@
           "phase": "place",
           "winner": -1,
           "over": false,
-          "turns": 2
+          "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          }
         },
         "expected_turn": [
           "u1"
@@ -8172,6 +8784,23 @@
           "winner": -1,
           "over": false,
           "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          },
           "legal": [
             {
               "type": "turn",
@@ -9266,6 +9895,23 @@
           "winner": -1,
           "over": false,
           "turns": 2,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "0"
+              }
+            }
+          },
           "legal": []
         },
         "expected_error": "InvalidMove",
@@ -9353,7 +9999,24 @@
           "phase": "place",
           "winner": -1,
           "over": false,
-          "turns": 4
+          "turns": 4,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_2",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "2"
+              }
+            }
+          }
         },
         "player_id": "u1",
         "other_player_id": "u2",
@@ -9419,6 +10082,23 @@
           "winner": -1,
           "over": false,
           "turns": 4,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_2",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "2"
+              }
+            }
+          },
           "legal": [
             {
               "type": "turn",
@@ -10186,6 +10866,23 @@
           "winner": -1,
           "over": false,
           "turns": 4,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_2",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "2"
+              }
+            }
+          },
           "legal": []
         },
         "expected_state": {
@@ -10226,7 +10923,24 @@
           "phase": "place",
           "winner": 0,
           "over": true,
-          "turns": 5
+          "turns": 5,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_3",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "3"
+              }
+            }
+          }
         },
         "expected_turn": null,
         "expected_view_of_mover": {
@@ -10268,6 +10982,23 @@
           "winner": 0,
           "over": true,
           "turns": 5,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_3",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "3"
+              }
+            }
+          },
           "legal": []
         },
         "expected_view_of_other": {
@@ -10309,6 +11040,23 @@
           "winner": 0,
           "over": true,
           "turns": 5,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_3",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "3"
+              }
+            }
+          },
           "legal": []
         },
         "expected_payouts": {
@@ -10367,7 +11115,24 @@
           "phase": "place",
           "winner": -1,
           "over": false,
-          "turns": 16
+          "turns": 16,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_14",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "14"
+              }
+            }
+          }
         },
         "player_id": "u2",
         "other_player_id": "u1",
@@ -10420,6 +11185,23 @@
           "winner": -1,
           "over": false,
           "turns": 16,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_14",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "14"
+              }
+            }
+          },
           "legal": [
             {
               "type": "turn",
@@ -10454,6 +11236,23 @@
           "winner": -1,
           "over": false,
           "turns": 16,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_14",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "14"
+              }
+            }
+          },
           "legal": []
         },
         "expected_state": {
@@ -10481,7 +11280,24 @@
           "phase": "place",
           "winner": -1,
           "over": true,
-          "turns": 17
+          "turns": 17,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "15"
+              }
+            }
+          }
         },
         "expected_turn": null,
         "expected_view_of_mover": {
@@ -10510,6 +11326,23 @@
           "winner": -1,
           "over": true,
           "turns": 17,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "15"
+              }
+            }
+          },
           "legal": []
         },
         "expected_view_of_other": {
@@ -10538,6 +11371,23 @@
           "winner": -1,
           "over": true,
           "turns": 17,
+          "last_move": {
+            "kind": "place",
+            "piece_id": "piece_5",
+            "from": {
+              "board": "tray",
+              "position": {
+                "x": 70,
+                "y": 90
+              }
+            },
+            "to": {
+              "board": "main",
+              "position": {
+                "cell": "15"
+              }
+            }
+          },
           "legal": []
         },
         "expected_payouts": {
