@@ -1,0 +1,3479 @@
+{
+ "all_state_public": true,
+ "name": "Trivial Pursuit (Declarative)",
+ "description": "Race around a 24-square track, answer trivia questions in six categories and collect all six wedges. A simplified Trivial Pursuit for 2 to 4 players (the full game allows up to 6; this package caps at 4).",
+ "game_addition_request_id_and_secret": "example-only-declarative-trivial_pursuit-replace-before-publishing",
+ "allowed_player_counts": [
+  2,
+  3,
+  4
+ ],
+ "server_code": "\nconst CATS=[\"Geography\",\"Entertainment\",\"History\",\"Arts & Literature\",\"Science & Nature\",\"Sports & Leisure\"];\nconst WEDGESQ=[0,4,8,12,16,20];\nconst BANK=[[[\"What is the capital of France?\",[\"Paris\",\"London\",\"Berlin\",\"Madrid\"],0],[\"Which is the largest ocean on Earth?\",[\"Atlantic Ocean\",\"Indian Ocean\",\"Pacific Ocean\",\"Arctic Ocean\"],2],[\"Which river flows through Egypt?\",[\"Danube\",\"Nile\",\"Amazon\",\"Rhine\"],1],[\"What is the capital of Japan?\",[\"Seoul\",\"Beijing\",\"Bangkok\",\"Tokyo\"],3],[\"Which is the largest hot desert in the world?\",[\"Gobi\",\"Mojave\",\"Sahara\",\"Kalahari\"],2],[\"The Great Wall is a landmark of which country?\",[\"China\",\"India\",\"Japan\",\"Mongolia\"],0],[\"What is the capital of Australia?\",[\"Sydney\",\"Canberra\",\"Perth\",\"Darwin\"],1],[\"Mount Everest stands on the border of Nepal and which other country?\",[\"India\",\"Bhutan\",\"Pakistan\",\"China\"],3],[\"On which continent is Brazil located?\",[\"Africa\",\"North America\",\"South America\",\"Europe\"],2],[\"What is the capital of Canada?\",[\"Toronto\",\"Ottawa\",\"Vancouver\",\"Montreal\"],1]],[[\"How many keys does a standard piano have?\",[\"76\",\"88\",\"96\",\"104\"],1],[\"The Beatles formed in which English city?\",[\"London\",\"Manchester\",\"Liverpool\",\"Leeds\"],2],[\"Who directed the 1997 film Titanic?\",[\"Steven Spielberg\",\"James Cameron\",\"Ridley Scott\",\"Peter Jackson\"],1],[\"Which animated film features the snowman Olaf?\",[\"Shrek\",\"Frozen\",\"Moana\",\"Tangled\"],1],[\"How many strings does a standard guitar have?\",[\"Four\",\"Five\",\"Six\",\"Seven\"],2],[\"Which superhero is secretly Bruce Wayne?\",[\"Batman\",\"Superman\",\"Spider-Man\",\"Iron Man\"],0],[\"What was the first name of the magician Houdini?\",[\"Harry\",\"David\",\"Jack\",\"Walter\"],0],[\"Which film series features Luke Skywalker?\",[\"Star Trek\",\"Star Wars\",\"Avatar\",\"Alien\"],1],[\"What does an orchestra conductor hold in one hand?\",[\"A baton\",\"A whistle\",\"A metronome\",\"A tuning fork\"],0],[\"Who plays Harry Potter in the Harry Potter films?\",[\"Daniel Radcliffe\",\"Rupert Grint\",\"Tom Felton\",\"Matthew Lewis\"],0]],[[\"Who was the first President of the United States?\",[\"Abraham Lincoln\",\"Thomas Jefferson\",\"George Washington\",\"John Adams\"],2],[\"In which year did the Second World War end?\",[\"1918\",\"1939\",\"1941\",\"1945\"],3],[\"The ancient pyramids of Giza were built by which civilisation?\",[\"The Romans\",\"The Egyptians\",\"The Aztecs\",\"The Greeks\"],1],[\"Which city was the capital of the Roman Empire?\",[\"Athens\",\"Constantinople\",\"Rome\",\"Alexandria\"],2],[\"Who was the first person to walk on the Moon?\",[\"Neil Armstrong\",\"Buzz Aldrin\",\"Yuri Gagarin\",\"Michael Collins\"],0],[\"In which year did the Berlin Wall fall?\",[\"1979\",\"1985\",\"1989\",\"1991\"],2],[\"Machu Picchu was built by which people?\",[\"The Maya\",\"The Inca\",\"The Romans\",\"The Vikings\"],1],[\"In which year was the United States Declaration of Independence adopted?\",[\"1776\",\"1789\",\"1801\",\"1812\"],0],[\"The Victorian era is named after a queen of which country?\",[\"France\",\"Spain\",\"Prussia\",\"Britain\"],3],[\"Who is credited with developing the movable-type printing press in Europe?\",[\"Leonardo da Vinci\",\"Johannes Gutenberg\",\"Isaac Newton\",\"Galileo Galilei\"],1]],[[\"Who painted the Mona Lisa?\",[\"Raphael\",\"Rembrandt\",\"Leonardo da Vinci\",\"Claude Monet\"],2],[\"Who wrote Romeo and Juliet?\",[\"Charles Dickens\",\"William Shakespeare\",\"Jane Austen\",\"Oscar Wilde\"],1],[\"Who painted The Starry Night?\",[\"Vincent van Gogh\",\"Pablo Picasso\",\"Salvador Dali\",\"Henri Matisse\"],0],[\"Who wrote Pride and Prejudice?\",[\"Charlotte Bronte\",\"Jane Austen\",\"Mary Shelley\",\"Virginia Woolf\"],1],[\"Which sculptor created the marble statue of David in Florence?\",[\"Donatello\",\"Bernini\",\"Rodin\",\"Michelangelo\"],3],[\"Who wrote the novel Moby-Dick?\",[\"Herman Melville\",\"Mark Twain\",\"Nathaniel Hawthorne\",\"Jack London\"],0],[\"How many lines does a sonnet have?\",[\"10\",\"12\",\"14\",\"16\"],2],[\"The Odyssey is an epic poem attributed to which author?\",[\"Virgil\",\"Homer\",\"Sophocles\",\"Plato\"],1],[\"Who composed the ballet The Nutcracker?\",[\"Igor Stravinsky\",\"Ludwig van Beethoven\",\"Pyotr Ilyich Tchaikovsky\",\"Johann Strauss\"],2],[\"Who wrote Alice's Adventures in Wonderland?\",[\"J. R. R. Tolkien\",\"Lewis Carroll\",\"Roald Dahl\",\"C. S. Lewis\"],1]],[[\"What is the chemical formula for water?\",[\"CO2\",\"O2\",\"H2O\",\"NaCl\"],2],[\"Which planet is known as the Red Planet?\",[\"Venus\",\"Mars\",\"Jupiter\",\"Mercury\"],1],[\"Which gas do plants absorb from the air for photosynthesis?\",[\"Oxygen\",\"Nitrogen\",\"Hydrogen\",\"Carbon dioxide\"],3],[\"How many legs does a spider have?\",[\"Six\",\"Eight\",\"Ten\",\"Twelve\"],1],[\"What is the chemical symbol for gold?\",[\"Ag\",\"Fe\",\"Au\",\"Pb\"],2],[\"What is the Earth's only natural satellite?\",[\"The Moon\",\"Titan\",\"Europa\",\"Phobos\"],0],[\"At sea level, at what temperature does water boil?\",[\"90 degrees Celsius\",\"95 degrees Celsius\",\"100 degrees Celsius\",\"110 degrees Celsius\"],2],[\"Which organ pumps blood around the human body?\",[\"Liver\",\"Lung\",\"Brain\",\"Heart\"],3],[\"Which is the largest mammal in the world?\",[\"African elephant\",\"Blue whale\",\"Giraffe\",\"Polar bear\"],1],[\"Which force keeps our feet on the ground?\",[\"Magnetism\",\"Friction\",\"Gravity\",\"Inertia\"],2]],[[\"How many players does a football (soccer) team field at once?\",[\"9\",\"10\",\"11\",\"12\"],2],[\"How many rings appear on the Olympic flag?\",[\"Four\",\"Five\",\"Six\",\"Seven\"],1],[\"In tennis, what is a score of zero called?\",[\"Deuce\",\"Ace\",\"Love\",\"Let\"],2],[\"How many holes are played in a standard round of golf?\",[\"12\",\"18\",\"9\",\"24\"],1],[\"About how many kilometres is a marathon?\",[\"26\",\"32\",\"42\",\"52\"],2],[\"How many feet above the floor is a basketball hoop?\",[\"9\",\"10\",\"11\",\"8\"],1],[\"Which sport uses a shuttlecock?\",[\"Squash\",\"Badminton\",\"Cricket\",\"Hockey\"],1],[\"How many pieces does each player start with in chess?\",[\"12\",\"14\",\"16\",\"20\"],2],[\"How many players from one baseball team are on the field in defence?\",[\"7\",\"8\",\"9\",\"10\"],2],[\"Which swimming stroke shares its name with an insect?\",[\"Backstroke\",\"Breaststroke\",\"Freestyle\",\"Butterfly\"],3]]];\n// Wedge (headquarters) squares 0,4,8,12,16,20 carry the six categories in\n// order; every other square takes its category from its position in the\n// six-category cycle. (A plain position%6 for the wedge squares too would\n// only ever award Geography, History and Science & Nature wedges, so no one\n// could ever collect all six.)\nfunction catOf(p){var w=WEDGESQ.indexOf(p);return w>=0?w:p%6;}\nfunction fresh(n){return {positions:Array(n).fill(0),wedges:Array.from({length:n},function(){return Array(6).fill(false);}),correct:Array(n).fill(0),turn:0,phase:\"roll\",die:0,qcat:-1,qidx:-1,asked:[[],[],[],[],[],[]],totalQ:0,streak:0,winner:-1,over:false};}\nfunction legal(s){if(s.over)return[];if(s.phase===\"roll\")return[{type:\"roll\"}];return [0,1,2,3].map(function(c){return{type:\"answer\",choice:c};});}\nfunction wcount(w){return w.filter(Boolean).length;}\nfunction capWinner(s){var best=0;for(var i=1;i<s.positions.length;i++){var a=wcount(s.wedges[i]),b=wcount(s.wedges[best]);if(a>b||(a===b&&s.correct[i]>s.correct[best]))best=i;}return best;}\nfunction finish(s,w){s.over=true;s.winner=w;}\nfunction payout(s,ctx){const humans=ctx.players.filter(p=>p.kind==='human'&&p.active!==false),winner=ctx.players[s.winner];const recipients=winner&&winner.kind==='human'&&winner.active!==false?[winner]:humans;const out={};if(!recipients.length)return out;recipients.forEach((p,i)=>out[p.id]=Math.floor(ctx.pot/recipients.length)+(i<ctx.pot%recipients.length?1:0));return out;}\nconst game={\n  newMatch(ctx){return {state:fresh(ctx.players.length),turn:[ctx.players[0].id]};},\n  applyMove(state,id,move,ctx){\n    if(state.over||ctx.players[state.turn].id!==id||!move||typeof move!==\"object\"||Array.isArray(move))throw new InvalidMove(\"Illegal move\");\n    const options=legal(state),keys=Object.keys(move);\n    if(!options.some(m=>Object.keys(m).length===keys.length&&keys.every(k=>Object.prototype.hasOwnProperty.call(m,k)&&m[k]===move[k])))throw new InvalidMove(\"Illegal move\");\n    const s=JSON.parse(JSON.stringify(state)),seat=s.turn;\n    if(move.type===\"roll\"){\n      s.die=1+Math.floor(ctx.random()*6);\n      s.positions[seat]=(s.positions[seat]+s.die)%24;\n      const cat=catOf(s.positions[seat]);\n      let avail=[];for(let i=0;i<BANK[cat].length;i++)if(s.asked[cat].indexOf(i)<0)avail.push(i);\n      if(!avail.length){s.asked[cat]=[];avail=BANK[cat].map((_,i)=>i);}\n      const pick=avail[Math.floor(ctx.random()*avail.length)];\n      s.asked[cat].push(pick);s.qcat=cat;s.qidx=pick;s.phase=\"question\";s.totalQ++;\n    }else{\n      const right=BANK[s.qcat][s.qidx][2];\n      if(move.choice===right){\n        s.correct[seat]++;s.streak++;\n        if(s.wedges[seat].every(Boolean)){finish(s,seat);}\n        else{\n          // Wedge square: earn its wedge. Otherwise every second correct\n          // answer in a row earns the question category's wedge as well.\n          if(WEDGESQ.indexOf(s.positions[seat])>=0||s.streak%2===0)s.wedges[seat][s.qcat]=true;\n          if(s.totalQ>=300)finish(s,capWinner(s));else{s.phase=\"roll\";s.qcat=-1;s.qidx=-1;}\n        }\n      }else{\n        s.streak=0;\n        if(s.totalQ>=300)finish(s,capWinner(s));else{s.turn=(seat+1)%s.positions.length;s.phase=\"roll\";s.qcat=-1;s.qidx=-1;}\n      }\n    }\n    return s.over?{state:s,turn:null,payouts:payout(s,ctx)}:{state:s,turn:[ctx.players[s.turn].id]};\n  },\n  viewFor(state,id,ctx){\n    const s=JSON.parse(JSON.stringify(state));\n    s.question=(!s.over&&s.phase===\"question\"&&s.qcat>=0)?{cat:s.qcat,category:CATS[s.qcat],q:BANK[s.qcat][s.qidx][0],options:BANK[s.qcat][s.qidx][1]}:null;\n    s.legal=(!s.over&&id===ctx.players[s.turn].id)?legal(s):[];\n    return s;\n  },\n  randomMove(s,id,ctx){const o=legal(s);return o[Math.floor(ctx.random()*o.length)];},\n  computerMove(s,id,ctx){\n    if(s.phase===\"roll\")return {type:\"roll\"};\n    const right=BANK[s.qcat][s.qidx][2];\n    if(ctx.random()<0.6)return {type:\"answer\",choice:right};\n    const wrong=[];for(let i=0;i<4;i++)if(i!==right)wrong.push(i);\n    return {type:\"answer\",choice:wrong[Math.floor(ctx.random()*wrong.length)]};\n  }\n};\n",
+ "declarative_ui": {
+  "format": "buildplay-ui",
+  "version": 1,
+  "viewport": {
+   "width": 800,
+   "height": 840,
+   "camera_enabled": false
+  },
+  "boards": [
+   {
+    "id": "track",
+    "kind": "track",
+    "x": 20,
+    "y": 64,
+    "width": 760,
+    "height": 370,
+    "color": "#172743",
+    "line_color": "#5c7190",
+    "cells": [
+     {
+      "id": "0",
+      "x": 48,
+      "y": 36,
+      "label": "GEO*",
+      "color": "#2f6fd0"
+     },
+     {
+      "id": "1",
+      "x": 142,
+      "y": 36,
+      "label": "ENT",
+      "color": "#e56aa1"
+     },
+     {
+      "id": "2",
+      "x": 236,
+      "y": 36,
+      "label": "HIS",
+      "color": "#e8c33a"
+     },
+     {
+      "id": "3",
+      "x": 330,
+      "y": 36,
+      "label": "ART",
+      "color": "#8e5aa8"
+     },
+     {
+      "id": "4",
+      "x": 424,
+      "y": 36,
+      "label": "ENT*",
+      "color": "#e56aa1"
+     },
+     {
+      "id": "5",
+      "x": 518,
+      "y": 36,
+      "label": "SPO",
+      "color": "#e07b2a"
+     },
+     {
+      "id": "6",
+      "x": 612,
+      "y": 36,
+      "label": "GEO",
+      "color": "#2f6fd0"
+     },
+     {
+      "id": "7",
+      "x": 706,
+      "y": 36,
+      "label": "ENT",
+      "color": "#e56aa1"
+     },
+     {
+      "id": "8",
+      "x": 706,
+      "y": 98,
+      "label": "HIS*",
+      "color": "#e8c33a"
+     },
+     {
+      "id": "9",
+      "x": 706,
+      "y": 160,
+      "label": "ART",
+      "color": "#8e5aa8"
+     },
+     {
+      "id": "10",
+      "x": 706,
+      "y": 222,
+      "label": "SCI",
+      "color": "#3d9e4d"
+     },
+     {
+      "id": "11",
+      "x": 706,
+      "y": 284,
+      "label": "SPO",
+      "color": "#e07b2a"
+     },
+     {
+      "id": "12",
+      "x": 706,
+      "y": 346,
+      "label": "ART*",
+      "color": "#8e5aa8"
+     },
+     {
+      "id": "13",
+      "x": 612,
+      "y": 346,
+      "label": "ENT",
+      "color": "#e56aa1"
+     },
+     {
+      "id": "14",
+      "x": 518,
+      "y": 346,
+      "label": "HIS",
+      "color": "#e8c33a"
+     },
+     {
+      "id": "15",
+      "x": 424,
+      "y": 346,
+      "label": "ART",
+      "color": "#8e5aa8"
+     },
+     {
+      "id": "16",
+      "x": 330,
+      "y": 346,
+      "label": "SCI*",
+      "color": "#3d9e4d"
+     },
+     {
+      "id": "17",
+      "x": 236,
+      "y": 346,
+      "label": "SPO",
+      "color": "#e07b2a"
+     },
+     {
+      "id": "18",
+      "x": 142,
+      "y": 346,
+      "label": "GEO",
+      "color": "#2f6fd0"
+     },
+     {
+      "id": "19",
+      "x": 48,
+      "y": 346,
+      "label": "ENT",
+      "color": "#e56aa1"
+     },
+     {
+      "id": "20",
+      "x": 48,
+      "y": 222,
+      "label": "SPO*",
+      "color": "#e07b2a"
+     },
+     {
+      "id": "21",
+      "x": 48,
+      "y": 160,
+      "label": "ART",
+      "color": "#8e5aa8"
+     },
+     {
+      "id": "22",
+      "x": 48,
+      "y": 98,
+      "label": "SCI",
+      "color": "#3d9e4d"
+     },
+     {
+      "id": "23",
+      "x": 48,
+      "y": 36,
+      "label": "SPO",
+      "color": "#e07b2a"
+     }
+    ],
+    "links": [
+     {
+      "from": "0",
+      "to": "1"
+     },
+     {
+      "from": "1",
+      "to": "2"
+     },
+     {
+      "from": "2",
+      "to": "3"
+     },
+     {
+      "from": "3",
+      "to": "4"
+     },
+     {
+      "from": "4",
+      "to": "5"
+     },
+     {
+      "from": "5",
+      "to": "6"
+     },
+     {
+      "from": "6",
+      "to": "7"
+     },
+     {
+      "from": "7",
+      "to": "8"
+     },
+     {
+      "from": "8",
+      "to": "9"
+     },
+     {
+      "from": "9",
+      "to": "10"
+     },
+     {
+      "from": "10",
+      "to": "11"
+     },
+     {
+      "from": "11",
+      "to": "12"
+     },
+     {
+      "from": "12",
+      "to": "13"
+     },
+     {
+      "from": "13",
+      "to": "14"
+     },
+     {
+      "from": "14",
+      "to": "15"
+     },
+     {
+      "from": "15",
+      "to": "16"
+     },
+     {
+      "from": "16",
+      "to": "17"
+     },
+     {
+      "from": "17",
+      "to": "18"
+     },
+     {
+      "from": "18",
+      "to": "19"
+     },
+     {
+      "from": "19",
+      "to": "20"
+     },
+     {
+      "from": "20",
+      "to": "21"
+     },
+     {
+      "from": "21",
+      "to": "22"
+     },
+     {
+      "from": "22",
+      "to": "23"
+     },
+     {
+      "from": "23",
+      "to": "0"
+     }
+    ]
+   },
+   {
+    "id": "panel",
+    "kind": "zone",
+    "x": 20,
+    "y": 446,
+    "width": 760,
+    "height": 168,
+    "color": "#1e3352",
+    "line_color": "#5c7190"
+   }
+  ],
+  "piece_types": {
+   "tok0": {
+    "shape": "circle",
+    "width": 30,
+    "height": 30,
+    "color": "#ffffff",
+    "text_color": "#102039"
+   },
+   "tok1": {
+    "shape": "circle",
+    "width": 30,
+    "height": 30,
+    "color": "#ffd23f",
+    "text_color": "#102039"
+   },
+   "tok2": {
+    "shape": "circle",
+    "width": 30,
+    "height": 30,
+    "color": "#4fc3f7",
+    "text_color": "#102039"
+   },
+   "tok3": {
+    "shape": "circle",
+    "width": 30,
+    "height": 30,
+    "color": "#ff8a65",
+    "text_color": "#102039"
+   },
+   "die": {
+    "shape": "dice",
+    "width": 44,
+    "height": 44,
+    "color": "#fff7df",
+    "text_color": "#172743"
+   },
+   "pip_empty": {
+    "shape": "circle",
+    "width": 26,
+    "height": 26,
+    "color": "#3a4658",
+    "text_color": "#9fb0c3",
+    "font_size": 9
+   },
+   "pip0": {
+    "shape": "circle",
+    "width": 26,
+    "height": 26,
+    "color": "#2f6fd0",
+    "font_size": 9,
+    "text_color": "#ffffff"
+   },
+   "pip1": {
+    "shape": "circle",
+    "width": 26,
+    "height": 26,
+    "color": "#e56aa1",
+    "font_size": 9,
+    "text_color": "#ffffff"
+   },
+   "pip2": {
+    "shape": "circle",
+    "width": 26,
+    "height": 26,
+    "color": "#e8c33a",
+    "font_size": 9,
+    "text_color": "#172743"
+   },
+   "pip3": {
+    "shape": "circle",
+    "width": 26,
+    "height": 26,
+    "color": "#8e5aa8",
+    "font_size": 9,
+    "text_color": "#ffffff"
+   },
+   "pip4": {
+    "shape": "circle",
+    "width": 26,
+    "height": 26,
+    "color": "#3d9e4d",
+    "font_size": 9,
+    "text_color": "#ffffff"
+   },
+   "pip5": {
+    "shape": "circle",
+    "width": 26,
+    "height": 26,
+    "color": "#e07b2a",
+    "font_size": 9,
+    "text_color": "#ffffff"
+   }
+  },
+  "strings": {
+   "title": "Trivial Pursuit",
+   "turn": "Player {n} to move",
+   "finished": "Finished",
+   "winner": "Player {n} wins",
+   "roll": "Roll die",
+   "phase_roll": "Roll the die to move your token",
+   "phase_question": "{cat} question - choose an answer",
+   "player_score": "Player {n}: {c} correct",
+   "die": "Die: {n}",
+   "server_invalid": "Illegal move"
+  },
+  "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Trivial Pursuit\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"winner\": \"Player {n} wins\", \"roll\": \"Roll die\", \"phase_roll\": \"Roll the die to move your token\", \"phase_question\": \"{cat} question - choose an answer\", \"player_score\": \"Player {n}: {c} correct\", \"die\": \"Die: {n}\", \"server_invalid\": \"Illegal move\"};\nconst CELLS=[[48, 36], [142, 36], [236, 36], [330, 36], [424, 36], [518, 36], [612, 36], [706, 36], [706, 98], [706, 160], [706, 222], [706, 284], [706, 346], [612, 346], [518, 346], [424, 346], [330, 346], [236, 346], [142, 346], [48, 346], [48, 222], [48, 160], [48, 98], [48, 36]];\nconst SHORT=[\"GEO\",\"ENT\",\"HIS\",\"ART\",\"SCI\",\"SPO\"];\nvar gameUI={\n  reduce:function(message,localState){\n    var m=message.type===\"ui_event\"?message.state_changed:message;\n    var s=m.view||m.state;\n    var strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    var t=function(k,a){a=a||{};return (strings[k]||k).replace(/\\{(\\w+)\\}/g,function(_,x){return String(a[x]===undefined?\"\":a[x]);});};\n    var active=m.status===\"ongoing\"&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined;\n    var legal=active?(s.legal||[]):[];\n    var pieces=[],controls=[],labels=[];\n    labels.push({id:\"title\",text:t(\"title\"),x:20,y:10,font_size:26});\n    labels.push({id:\"status\",text:s.over?t(\"winner\",{n:s.winner+1}):t(\"turn\",{n:s.turn+1}),x:20,y:40,font_size:18});\n    s.positions.forEach(function(pos,seat){\n      var c=CELLS[pos],dx=(seat%2===0?-14:14),dy=(seat<2?-14:14);\n      pieces.push({id:\"tok_\"+seat,type:\"tok\"+seat,board:\"track\",position:{x:c[0]+dx,y:c[1]+dy},text:String(seat+1),actions:[]});\n    });\n    pieces.push({id:\"die\",type:\"die\",board:\"panel\",position:{x:706,y:30},text:s.die?String(s.die):\"-\",actions:[]});\n    labels.push({id:\"die_label\",text:t(\"die\",{n:s.die||\"-\"}),x:636,y:446+62,font_size:15});\n    s.wedges.forEach(function(w,seat){\n      w.forEach(function(owned,cat){\n        pieces.push({id:\"pip_\"+seat+\"_\"+cat,type:owned?\"pip\"+cat:\"pip_empty\",board:\"panel\",position:{x:262+cat*42,y:30+seat*38},text:owned?SHORT[cat]:\"\",actions:[]});\n      });\n      labels.push({id:\"prow_\"+seat,text:t(\"player_score\",{n:seat+1,c:s.correct[seat]}),x:36,y:446+30+seat*38-9,font_size:16});\n    });\n    if(s.question){\n      labels.push({id:\"qcat\",text:t(\"phase_question\",{cat:s.question.category}),x:20,y:628,font_size:18});\n      labels.push({id:\"qtext\",text:s.question.q,x:20,y:656,font_size:20});\n    }else if(!s.over){\n      labels.push({id:\"qcat\",text:t(\"phase_roll\"),x:20,y:628,font_size:18});\n    }\n    if(s.over)labels.push({id:\"fin\",text:t(\"finished\"),x:20,y:656,font_size:20});\n    var keyOf=function(mv){return Object.keys(mv).map(function(k){return k+\"_\"+mv[k];}).join(\"_\");};\n    legal.forEach(function(mv){\n      if(mv.type===\"roll\")controls.push({id:keyOf(mv),kind:\"button\",label:t(\"roll\")});\n      else controls.push({id:keyOf(mv),kind:\"button\",label:s.question?s.question.options[mv.choice]:\"\"});\n    });\n    var out={scene:{pieces:pieces,targets:[],controls:controls,labels:labels},local_state:{}};\n    if(message.type===\"ui_event\"&&active&&message.event.type===\"tap\"){\n      var mv=legal.find(function(o){return keyOf(o)===message.event.id;});\n      if(mv)out.make_move=mv;\n    }\n    return out;\n  }\n};\n"
+ },
+ "rules": "Trivial Pursuit for 2 to 4 players on a loop of 24 squares. All tokens start on square 0 and seat 0 moves first. On your turn, roll the die and move that many squares around the loop, then answer a multiple-choice question in the category of the square you landed on. The six categories, in order, are Geography, Entertainment, History, Arts and Literature, Science and Nature, and Sports and Leisure, and the squares cycle through them. Squares 0, 4, 8, 12, 16 and 20 are wedge (headquarters) squares, one for each category in that order, and a wedge square's category is its headquarters category. A correct answer on a wedge square earns that category's wedge. Every second correct answer in a row also earns the wedge of that question's category, even on a plain square. A correct answer lets you roll again; a wrong answer passes the turn to the next player. Once you hold all six wedges, your next correct answer is the final question and wins the game immediately. The winner takes the pot. Questions do not repeat within a category until its bank is exhausted. If 300 questions are asked with no winner, the player with the most wedges wins, breaking ties by most correct answers, then by earliest seat.",
+ "ui_instructions": "The coloured 24-square track is at the top; each square's colour shows its category and a star marks the six wedge squares. Player tokens sit on the track, and each player's wedges and correct-answer count are shown below it. On your turn, tap Roll die, then tap one of the four answer buttons for the question shown. Only the player whose turn it is sees the Roll and answer controls.",
+ "tutorial": {
+  "text": "Roll the die, move around the track and answer the question for the square you land on. Answer correctly on a wedge square to earn that wedge, and answer correctly to roll again. Collect all six wedges, then answer one more question correctly to win.",
+  "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><p>Roll the die, move around the track and answer the question for the square you land on. Answer correctly on a wedge square to earn that wedge, and answer correctly to roll again. Collect all six wedges, then answer one more question correctly to win.</p>"
+ },
+ "images": [
+  {
+   "caption": "Cover",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" fill=\"#102039\"/><rect x=\"10\" y=\"9\" width=\"14\" height=\"10\" fill=\"#2f6fd0\"/><rect x=\"28\" y=\"9\" width=\"14\" height=\"10\" fill=\"#e56aa1\"/><rect x=\"47\" y=\"9\" width=\"14\" height=\"10\" fill=\"#e8c33a\"/><rect x=\"66\" y=\"9\" width=\"14\" height=\"10\" fill=\"#8e5aa8\"/><rect x=\"85\" y=\"9\" width=\"14\" height=\"10\" fill=\"#e56aa1\"/><rect x=\"104\" y=\"9\" width=\"14\" height=\"10\" fill=\"#e07b2a\"/><rect x=\"122\" y=\"9\" width=\"14\" height=\"10\" fill=\"#2f6fd0\"/><rect x=\"141\" y=\"9\" width=\"14\" height=\"10\" fill=\"#e56aa1\"/><rect x=\"141\" y=\"24\" width=\"14\" height=\"10\" fill=\"#e8c33a\"/><rect x=\"141\" y=\"39\" width=\"14\" height=\"10\" fill=\"#8e5aa8\"/><rect x=\"141\" y=\"54\" width=\"14\" height=\"10\" fill=\"#3d9e4d\"/><rect x=\"141\" y=\"69\" width=\"14\" height=\"10\" fill=\"#e07b2a\"/><rect x=\"141\" y=\"84\" width=\"14\" height=\"10\" fill=\"#8e5aa8\"/><rect x=\"122\" y=\"84\" width=\"14\" height=\"10\" fill=\"#e56aa1\"/><rect x=\"104\" y=\"84\" width=\"14\" height=\"10\" fill=\"#e8c33a\"/><rect x=\"85\" y=\"84\" width=\"14\" height=\"10\" fill=\"#8e5aa8\"/><rect x=\"66\" y=\"84\" width=\"14\" height=\"10\" fill=\"#3d9e4d\"/><rect x=\"47\" y=\"84\" width=\"14\" height=\"10\" fill=\"#e07b2a\"/><rect x=\"28\" y=\"84\" width=\"14\" height=\"10\" fill=\"#2f6fd0\"/><rect x=\"10\" y=\"84\" width=\"14\" height=\"10\" fill=\"#e56aa1\"/><rect x=\"10\" y=\"54\" width=\"14\" height=\"10\" fill=\"#e07b2a\"/><rect x=\"10\" y=\"39\" width=\"14\" height=\"10\" fill=\"#8e5aa8\"/><rect x=\"10\" y=\"24\" width=\"14\" height=\"10\" fill=\"#3d9e4d\"/><rect x=\"10\" y=\"9\" width=\"14\" height=\"10\" fill=\"#e07b2a\"/><circle cx=\"60\" cy=\"45\" r=\"10\" fill=\"#ffffff\"/><circle cx=\"100\" cy=\"45\" r=\"10\" fill=\"#ffd23f\"/></svg>"
+  },
+  {
+   "caption": "The 24-square track",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">The track</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+  },
+  {
+   "caption": "Wedge squares",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Wedge squares</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+  },
+  {
+   "caption": "Question and answers",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Question</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+  },
+  {
+   "caption": "Wedges display",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Wedges</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+  }
+ ],
+ "unit_tests": {
+  "state_schema": {
+   "type": "object",
+   "required": [
+    "positions",
+    "wedges",
+    "correct",
+    "turn",
+    "phase",
+    "die",
+    "qcat",
+    "qidx",
+    "asked",
+    "totalQ",
+    "streak",
+    "winner",
+    "over"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "positions": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     }
+    },
+    "wedges": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "boolean"
+      }
+     }
+    },
+    "correct": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     }
+    },
+    "turn": {
+     "type": "integer"
+    },
+    "phase": {
+     "enum": [
+      "roll",
+      "question"
+     ]
+    },
+    "die": {
+     "type": "integer"
+    },
+    "qcat": {
+     "type": "integer"
+    },
+    "qidx": {
+     "type": "integer"
+    },
+    "asked": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     }
+    },
+    "totalQ": {
+     "type": "integer"
+    },
+    "streak": {
+     "type": "integer"
+    },
+    "winner": {
+     "type": "integer"
+    },
+    "over": {
+     "type": "boolean"
+    }
+   }
+  },
+  "view_schema": {
+   "type": "object",
+   "required": [
+    "positions",
+    "wedges",
+    "correct",
+    "turn",
+    "phase",
+    "die",
+    "qcat",
+    "qidx",
+    "asked",
+    "totalQ",
+    "streak",
+    "winner",
+    "over",
+    "question",
+    "legal"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "positions": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     }
+    },
+    "wedges": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "boolean"
+      }
+     }
+    },
+    "correct": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     }
+    },
+    "turn": {
+     "type": "integer"
+    },
+    "phase": {
+     "enum": [
+      "roll",
+      "question"
+     ]
+    },
+    "die": {
+     "type": "integer"
+    },
+    "qcat": {
+     "type": "integer"
+    },
+    "qidx": {
+     "type": "integer"
+    },
+    "asked": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     }
+    },
+    "totalQ": {
+     "type": "integer"
+    },
+    "streak": {
+     "type": "integer"
+    },
+    "winner": {
+     "type": "integer"
+    },
+    "over": {
+     "type": "boolean"
+    },
+    "question": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "required": [
+      "cat",
+      "category",
+      "q",
+      "options"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "cat": {
+       "type": "integer"
+      },
+      "category": {
+       "type": "string"
+      },
+      "q": {
+       "type": "string"
+      },
+      "options": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "legal": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "type": {
+        "enum": [
+         "roll",
+         "answer"
+        ]
+       },
+       "choice": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "type"
+      ],
+      "additionalProperties": false
+     }
+    }
+   }
+  },
+  "move_schema": {
+   "type": "object",
+   "properties": {
+    "type": {
+     "enum": [
+      "roll",
+      "answer"
+     ]
+    },
+    "choice": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "type"
+   ],
+   "additionalProperties": false
+  },
+  "cases": [
+   {
+    "name": "First roll",
+    "description": "Trivial Pursuit for 2 to 4 players on a loop of 24 squares. All tokens start on square 0 and seat 0 moves first. On your turn, roll the die and move that many squares around the loop, then answer a multiple-choice question in the category of the square you landed on. The six categories, in order, are Geography, Entertainment, History, Arts and Literature, Science and Nature, and Sports and Leisure, and the squares cycle through them. Squares 0, 4, 8, 12, 16 and 20 are wedge (headquarters) squares, one for each category in that order, and a wedge square's category is its headquarters category. A correct answer on a wedge square earns that category's wedge. Every second correct answer in a row also earns the wedge of that question's category, even on a plain square. A correct answer lets you roll again; a wrong answer passes the turn to the next player. Once you hold all six wedges, your next correct answer is the final question and wins the game immediately. The winner takes the pot. Questions do not repeat within a category until its bank is exhausted. If 300 questions are asked with no winner, the player with the most wedges wins, breaking ties by most correct answers, then by earliest seat.",
+    "kind": "initial",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 30,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "positions": [
+      0,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 0,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 0,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "roll"
+    },
+    "view_of_mover": {
+     "positions": [
+      0,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 0,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 0,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": [
+      {
+       "type": "roll"
+      }
+     ]
+    },
+    "view_of_other": {
+     "positions": [
+      0,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 0,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 0,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     }
+    ],
+    "expected_state": {
+     "positions": [
+      4,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 4,
+     "qcat": 1,
+     "qidx": 5,
+     "asked": [
+      [],
+      [
+       5
+      ],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "expected_view_of_mover": {
+     "positions": [
+      4,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 4,
+     "qcat": 1,
+     "qidx": 5,
+     "asked": [
+      [],
+      [
+       5
+      ],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 1,
+      "category": "Entertainment",
+      "q": "Which superhero is secretly Bruce Wayne?",
+      "options": [
+       "Batman",
+       "Superman",
+       "Spider-Man",
+       "Iron Man"
+      ]
+     },
+     "legal": [
+      {
+       "type": "answer",
+       "choice": 0
+      },
+      {
+       "type": "answer",
+       "choice": 1
+      },
+      {
+       "type": "answer",
+       "choice": 2
+      },
+      {
+       "type": "answer",
+       "choice": 3
+      }
+     ]
+    },
+    "expected_view_of_other": {
+     "positions": [
+      4,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 4,
+     "qcat": 1,
+     "qidx": 5,
+     "asked": [
+      [],
+      [
+       5
+      ],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 1,
+      "category": "Entertainment",
+      "q": "Which superhero is secretly Bruce Wayne?",
+      "options": [
+       "Batman",
+       "Superman",
+       "Spider-Man",
+       "Iron Man"
+      ]
+     },
+     "legal": []
+    }
+   },
+   {
+    "name": "Answer before rolling is illegal",
+    "description": "Trivial Pursuit for 2 to 4 players on a loop of 24 squares. All tokens start on square 0 and seat 0 moves first. On your turn, roll the die and move that many squares around the loop, then answer a multiple-choice question in the category of the square you landed on. The six categories, in order, are Geography, Entertainment, History, Arts and Literature, Science and Nature, and Sports and Leisure, and the squares cycle through them. Squares 0, 4, 8, 12, 16 and 20 are wedge (headquarters) squares, one for each category in that order, and a wedge square's category is its headquarters category. A correct answer on a wedge square earns that category's wedge. Every second correct answer in a row also earns the wedge of that question's category, even on a plain square. A correct answer lets you roll again; a wrong answer passes the turn to the next player. Once you hold all six wedges, your next correct answer is the final question and wins the game immediately. The winner takes the pot. Questions do not repeat within a category until its bank is exhausted. If 300 questions are asked with no winner, the player with the most wedges wins, breaking ties by most correct answers, then by earliest seat.",
+    "kind": "initial",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 30,
+     "move_count": 0,
+     "seed": 12
+    },
+    "state": {
+     "positions": [
+      0,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 0,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 0,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "answer",
+     "choice": 0
+    },
+    "view_of_mover": {
+     "positions": [
+      0,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 0,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 0,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": [
+      {
+       "type": "roll"
+      }
+     ]
+    },
+    "view_of_other": {
+     "positions": [
+      0,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 0,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 0,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     }
+    ],
+    "expected_error": "InvalidMove",
+    "turn": [
+     "u1"
+    ],
+    "expected_state": {
+     "positions": [
+      0,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 0,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 0,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "expected_view_of_mover": {
+     "positions": [
+      0,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 0,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 0,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": [
+      {
+       "type": "roll"
+      }
+     ]
+    },
+    "expected_view_of_other": {
+     "positions": [
+      0,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 0,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 0,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": []
+    }
+   },
+   {
+    "name": "Correct answer on a wedge square earns the wedge",
+    "description": "Trivial Pursuit for 2 to 4 players on a loop of 24 squares. All tokens start on square 0 and seat 0 moves first. On your turn, roll the die and move that many squares around the loop, then answer a multiple-choice question in the category of the square you landed on. The six categories, in order, are Geography, Entertainment, History, Arts and Literature, Science and Nature, and Sports and Leisure, and the squares cycle through them. Squares 0, 4, 8, 12, 16 and 20 are wedge (headquarters) squares, one for each category in that order, and a wedge square's category is its headquarters category. A correct answer on a wedge square earns that category's wedge. Every second correct answer in a row also earns the wedge of that question's category, even on a plain square. A correct answer lets you roll again; a wrong answer passes the turn to the next player. Once you hold all six wedges, your next correct answer is the final question and wins the game immediately. The winner takes the pot. Questions do not repeat within a category until its bank is exhausted. If 300 questions are asked with no winner, the player with the most wedges wins, breaking ties by most correct answers, then by earliest seat.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 30,
+     "move_count": 5,
+     "seed": 13
+    },
+    "state": {
+     "positions": [
+      4,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 4,
+     "qcat": 1,
+     "qidx": 0,
+     "asked": [
+      [],
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 3,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "answer",
+     "choice": 1
+    },
+    "view_of_mover": {
+     "positions": [
+      4,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 4,
+     "qcat": 1,
+     "qidx": 0,
+     "asked": [
+      [],
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 3,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 1,
+      "category": "Entertainment",
+      "q": "How many keys does a standard piano have?",
+      "options": [
+       "76",
+       "88",
+       "96",
+       "104"
+      ]
+     },
+     "legal": [
+      {
+       "type": "answer",
+       "choice": 0
+      },
+      {
+       "type": "answer",
+       "choice": 1
+      },
+      {
+       "type": "answer",
+       "choice": 2
+      },
+      {
+       "type": "answer",
+       "choice": 3
+      }
+     ]
+    },
+    "view_of_other": {
+     "positions": [
+      4,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 4,
+     "qcat": 1,
+     "qidx": 0,
+     "asked": [
+      [],
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 3,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 1,
+      "category": "Entertainment",
+      "q": "How many keys does a standard piano have?",
+      "options": [
+       "76",
+       "88",
+       "96",
+       "104"
+      ]
+     },
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     }
+    ],
+    "expected_state": {
+     "positions": [
+      4,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       true,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      1,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 4,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 3,
+     "streak": 1,
+     "winner": -1,
+     "over": false
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "expected_view_of_mover": {
+     "positions": [
+      4,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       true,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      1,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 4,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 3,
+     "streak": 1,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": [
+      {
+       "type": "roll"
+      }
+     ]
+    },
+    "expected_view_of_other": {
+     "positions": [
+      4,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       true,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      1,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 4,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [],
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 3,
+     "streak": 1,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": []
+    }
+   },
+   {
+    "name": "Wrong answer passes the turn",
+    "description": "Trivial Pursuit for 2 to 4 players on a loop of 24 squares. All tokens start on square 0 and seat 0 moves first. On your turn, roll the die and move that many squares around the loop, then answer a multiple-choice question in the category of the square you landed on. The six categories, in order, are Geography, Entertainment, History, Arts and Literature, Science and Nature, and Sports and Leisure, and the squares cycle through them. Squares 0, 4, 8, 12, 16 and 20 are wedge (headquarters) squares, one for each category in that order, and a wedge square's category is its headquarters category. A correct answer on a wedge square earns that category's wedge. Every second correct answer in a row also earns the wedge of that question's category, even on a plain square. A correct answer lets you roll again; a wrong answer passes the turn to the next player. Once you hold all six wedges, your next correct answer is the final question and wins the game immediately. The winner takes the pot. Questions do not repeat within a category until its bank is exhausted. If 300 questions are asked with no winner, the player with the most wedges wins, breaking ties by most correct answers, then by earliest seat.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 30,
+     "move_count": 2,
+     "seed": 14
+    },
+    "state": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 0,
+     "asked": [
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "answer",
+     "choice": 1
+    },
+    "view_of_mover": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 0,
+     "asked": [
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 0,
+      "category": "Geography",
+      "q": "What is the capital of France?",
+      "options": [
+       "Paris",
+       "London",
+       "Berlin",
+       "Madrid"
+      ]
+     },
+     "legal": [
+      {
+       "type": "answer",
+       "choice": 0
+      },
+      {
+       "type": "answer",
+       "choice": 1
+      },
+      {
+       "type": "answer",
+       "choice": 2
+      },
+      {
+       "type": "answer",
+       "choice": 3
+      }
+     ]
+    },
+    "view_of_other": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 0,
+     "asked": [
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 0,
+      "category": "Geography",
+      "q": "What is the capital of France?",
+      "options": [
+       "Paris",
+       "London",
+       "Berlin",
+       "Madrid"
+      ]
+     },
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     }
+    ],
+    "expected_state": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 1,
+     "phase": "roll",
+     "die": 6,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 1,
+     "phase": "roll",
+     "die": 6,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 1,
+     "phase": "roll",
+     "die": 6,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [
+       0
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": [
+      {
+       "type": "roll"
+      }
+     ]
+    }
+   },
+   {
+    "name": "Correct answer rolls again",
+    "description": "Trivial Pursuit for 2 to 4 players on a loop of 24 squares. All tokens start on square 0 and seat 0 moves first. On your turn, roll the die and move that many squares around the loop, then answer a multiple-choice question in the category of the square you landed on. The six categories, in order, are Geography, Entertainment, History, Arts and Literature, Science and Nature, and Sports and Leisure, and the squares cycle through them. Squares 0, 4, 8, 12, 16 and 20 are wedge (headquarters) squares, one for each category in that order, and a wedge square's category is its headquarters category. A correct answer on a wedge square earns that category's wedge. Every second correct answer in a row also earns the wedge of that question's category, even on a plain square. A correct answer lets you roll again; a wrong answer passes the turn to the next player. Once you hold all six wedges, your next correct answer is the final question and wins the game immediately. The winner takes the pot. Questions do not repeat within a category until its bank is exhausted. If 300 questions are asked with no winner, the player with the most wedges wins, breaking ties by most correct answers, then by earliest seat.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 30,
+     "move_count": 2,
+     "seed": 15
+    },
+    "state": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 1,
+     "asked": [
+      [
+       1
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "answer",
+     "choice": 2
+    },
+    "view_of_mover": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 1,
+     "asked": [
+      [
+       1
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 0,
+      "category": "Geography",
+      "q": "Which is the largest ocean on Earth?",
+      "options": [
+       "Atlantic Ocean",
+       "Indian Ocean",
+       "Pacific Ocean",
+       "Arctic Ocean"
+      ]
+     },
+     "legal": [
+      {
+       "type": "answer",
+       "choice": 0
+      },
+      {
+       "type": "answer",
+       "choice": 1
+      },
+      {
+       "type": "answer",
+       "choice": 2
+      },
+      {
+       "type": "answer",
+       "choice": 3
+      }
+     ]
+    },
+    "view_of_other": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 1,
+     "asked": [
+      [
+       1
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 0,
+      "category": "Geography",
+      "q": "Which is the largest ocean on Earth?",
+      "options": [
+       "Atlantic Ocean",
+       "Indian Ocean",
+       "Pacific Ocean",
+       "Arctic Ocean"
+      ]
+     },
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     }
+    ],
+    "expected_state": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      1,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 6,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [
+       1
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 1,
+     "winner": -1,
+     "over": false
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "expected_view_of_mover": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      1,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 6,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [
+       1
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 1,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": [
+      {
+       "type": "roll"
+      }
+     ]
+    },
+    "expected_view_of_other": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      1,
+      0
+     ],
+     "turn": 0,
+     "phase": "roll",
+     "die": 6,
+     "qcat": -1,
+     "qidx": -1,
+     "asked": [
+      [
+       1
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 1,
+     "streak": 1,
+     "winner": -1,
+     "over": false,
+     "question": null,
+     "legal": []
+    }
+   },
+   {
+    "name": "Final question win",
+    "description": "Trivial Pursuit for 2 to 4 players on a loop of 24 squares. All tokens start on square 0 and seat 0 moves first. On your turn, roll the die and move that many squares around the loop, then answer a multiple-choice question in the category of the square you landed on. The six categories, in order, are Geography, Entertainment, History, Arts and Literature, Science and Nature, and Sports and Leisure, and the squares cycle through them. Squares 0, 4, 8, 12, 16 and 20 are wedge (headquarters) squares, one for each category in that order, and a wedge square's category is its headquarters category. A correct answer on a wedge square earns that category's wedge. Every second correct answer in a row also earns the wedge of that question's category, even on a plain square. A correct answer lets you roll again; a wrong answer passes the turn to the next player. Once you hold all six wedges, your next correct answer is the final question and wins the game immediately. The winner takes the pot. Questions do not repeat within a category until its bank is exhausted. If 300 questions are asked with no winner, the player with the most wedges wins, breaking ties by most correct answers, then by earliest seat.",
+    "kind": "terminal",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 30,
+     "move_count": 60,
+     "seed": 16
+    },
+    "state": {
+     "positions": [
+      10,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       true,
+       true,
+       true,
+       true
+      ],
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      12,
+      4
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 3,
+     "qcat": 4,
+     "qidx": 1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [
+       1
+      ],
+      []
+     ],
+     "totalQ": 40,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "answer",
+     "choice": 1
+    },
+    "view_of_mover": {
+     "positions": [
+      10,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       true,
+       true,
+       true,
+       true
+      ],
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      12,
+      4
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 3,
+     "qcat": 4,
+     "qidx": 1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [
+       1
+      ],
+      []
+     ],
+     "totalQ": 40,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 4,
+      "category": "Science & Nature",
+      "q": "Which planet is known as the Red Planet?",
+      "options": [
+       "Venus",
+       "Mars",
+       "Jupiter",
+       "Mercury"
+      ]
+     },
+     "legal": [
+      {
+       "type": "answer",
+       "choice": 0
+      },
+      {
+       "type": "answer",
+       "choice": 1
+      },
+      {
+       "type": "answer",
+       "choice": 2
+      },
+      {
+       "type": "answer",
+       "choice": 3
+      }
+     ]
+    },
+    "view_of_other": {
+     "positions": [
+      10,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       true,
+       true,
+       true,
+       true
+      ],
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      12,
+      4
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 3,
+     "qcat": 4,
+     "qidx": 1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [
+       1
+      ],
+      []
+     ],
+     "totalQ": 40,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 4,
+      "category": "Science & Nature",
+      "q": "Which planet is known as the Red Planet?",
+      "options": [
+       "Venus",
+       "Mars",
+       "Jupiter",
+       "Mercury"
+      ]
+     },
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     }
+    ],
+    "expected_state": {
+     "positions": [
+      10,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       true,
+       true,
+       true,
+       true
+      ],
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      13,
+      4
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 3,
+     "qcat": 4,
+     "qidx": 1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [
+       1
+      ],
+      []
+     ],
+     "totalQ": 40,
+     "streak": 1,
+     "winner": 0,
+     "over": true
+    },
+    "expected_turn": null,
+    "expected_payouts": {
+     "u1": 30
+    },
+    "expected_view_of_mover": {
+     "positions": [
+      10,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       true,
+       true,
+       true,
+       true
+      ],
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      13,
+      4
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 3,
+     "qcat": 4,
+     "qidx": 1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [
+       1
+      ],
+      []
+     ],
+     "totalQ": 40,
+     "streak": 1,
+     "winner": 0,
+     "over": true,
+     "question": null,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "positions": [
+      10,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       true,
+       true,
+       true,
+       true
+      ],
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      13,
+      4
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 3,
+     "qcat": 4,
+     "qidx": 1,
+     "asked": [
+      [],
+      [],
+      [],
+      [],
+      [
+       1
+      ],
+      []
+     ],
+     "totalQ": 40,
+     "streak": 1,
+     "winner": 0,
+     "over": true,
+     "question": null,
+     "legal": []
+    }
+   },
+   {
+    "name": "Safety cap decides after 300 questions",
+    "description": "Trivial Pursuit for 2 to 4 players on a loop of 24 squares. All tokens start on square 0 and seat 0 moves first. On your turn, roll the die and move that many squares around the loop, then answer a multiple-choice question in the category of the square you landed on. The six categories, in order, are Geography, Entertainment, History, Arts and Literature, Science and Nature, and Sports and Leisure, and the squares cycle through them. Squares 0, 4, 8, 12, 16 and 20 are wedge (headquarters) squares, one for each category in that order, and a wedge square's category is its headquarters category. A correct answer on a wedge square earns that category's wedge. Every second correct answer in a row also earns the wedge of that question's category, even on a plain square. A correct answer lets you roll again; a wrong answer passes the turn to the next player. Once you hold all six wedges, your next correct answer is the final question and wins the game immediately. The winner takes the pot. Questions do not repeat within a category until its bank is exhausted. If 300 questions are asked with no winner, the player with the most wedges wins, breaking ties by most correct answers, then by earliest seat.",
+    "kind": "terminal",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 30,
+     "move_count": 400,
+     "seed": 17
+    },
+    "state": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       true,
+       true,
+       true,
+       true,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      5,
+      9
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 2,
+     "asked": [
+      [
+       2
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 300,
+     "streak": 0,
+     "winner": -1,
+     "over": false
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "answer",
+     "choice": 0
+    },
+    "view_of_mover": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       true,
+       true,
+       true,
+       true,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      5,
+      9
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 2,
+     "asked": [
+      [
+       2
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 300,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 0,
+      "category": "Geography",
+      "q": "Which river flows through Egypt?",
+      "options": [
+       "Danube",
+       "Nile",
+       "Amazon",
+       "Rhine"
+      ]
+     },
+     "legal": [
+      {
+       "type": "answer",
+       "choice": 0
+      },
+      {
+       "type": "answer",
+       "choice": 1
+      },
+      {
+       "type": "answer",
+       "choice": 2
+      },
+      {
+       "type": "answer",
+       "choice": 3
+      }
+     ]
+    },
+    "view_of_other": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       true,
+       true,
+       true,
+       true,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      5,
+      9
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 2,
+     "asked": [
+      [
+       2
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 300,
+     "streak": 0,
+     "winner": -1,
+     "over": false,
+     "question": {
+      "cat": 0,
+      "category": "Geography",
+      "q": "Which river flows through Egypt?",
+      "options": [
+       "Danube",
+       "Nile",
+       "Amazon",
+       "Rhine"
+      ]
+     },
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">Before</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\"><rect width=\"400\" height=\"300\" fill=\"#102039\"/><text x=\"25\" y=\"40\" fill=\"#ffffff\" font-size=\"20\">Trivial Pursuit</text><text x=\"25\" y=\"75\" fill=\"#a7f070\" font-size=\"15\">After</text><rect x=\"30\" y=\"110\" width=\"60\" height=\"44\" fill=\"#2f6fd0\"/><rect x=\"100\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e56aa1\"/><rect x=\"170\" y=\"110\" width=\"60\" height=\"44\" fill=\"#e8c33a\"/><rect x=\"240\" y=\"110\" width=\"60\" height=\"44\" fill=\"#8e5aa8\"/><rect x=\"310\" y=\"110\" width=\"60\" height=\"44\" fill=\"#3d9e4d\"/><circle cx=\"70\" cy=\"220\" r=\"22\" fill=\"#ffffff\"/><circle cx=\"150\" cy=\"220\" r=\"22\" fill=\"#ffd23f\"/></svg>"
+     }
+    ],
+    "expected_state": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       true,
+       true,
+       true,
+       true,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      5,
+      9
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 2,
+     "asked": [
+      [
+       2
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 300,
+     "streak": 0,
+     "winner": 1,
+     "over": true
+    },
+    "expected_turn": null,
+    "expected_payouts": {
+     "u2": 30
+    },
+    "expected_view_of_mover": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       true,
+       true,
+       true,
+       true,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      5,
+      9
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 2,
+     "asked": [
+      [
+       2
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 300,
+     "streak": 0,
+     "winner": 1,
+     "over": true,
+     "question": null,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "positions": [
+      6,
+      0
+     ],
+     "wedges": [
+      [
+       true,
+       true,
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       true,
+       true,
+       true,
+       true,
+       false,
+       false
+      ]
+     ],
+     "correct": [
+      5,
+      9
+     ],
+     "turn": 0,
+     "phase": "question",
+     "die": 6,
+     "qcat": 0,
+     "qidx": 2,
+     "asked": [
+      [
+       2
+      ],
+      [],
+      [],
+      [],
+      [],
+      []
+     ],
+     "totalQ": 300,
+     "streak": 0,
+     "winner": 1,
+     "over": true,
+     "question": null,
+     "legal": []
+    }
+   }
+  ]
+ },
+ "translations": {
+  "es": {
+   "display_name": "Trivial Pursuit (Declarativo)",
+   "short_description": "Recorre un circuito de 24 casillas, responde preguntas de cultura general en seis categorías y consigue las seis porciones. Una versión simplificada de Trivial Pursuit para 2 a 4 jugadores (el juego completo permite hasta 6; este paquete se limita a 4).",
+   "game_logic_rules": "Trivial Pursuit para 2 a 4 jugadores en un circuito de 24 casillas. Todas las fichas empiezan en la casilla 0 y el asiento 0 mueve primero. En tu turno, tira el dado, avanza ese número de casillas por el circuito y responde una pregunta de opción múltiple de la categoría de la casilla en la que caes. Las seis categorías, en orden, son Geografía, Entretenimiento, Historia, Arte y Literatura, Ciencia y Naturaleza, y Deportes y Ocio, y las casillas las recorren en ciclo. Las casillas 0, 4, 8, 12, 16 y 20 son casillas de porción (sede), una para cada categoría en ese orden, y la categoría de una casilla de porción es su categoría de sede. Una respuesta correcta en una casilla de porción gana la porción de esa categoría. Además, cada segunda respuesta correcta seguida gana también la porción de la categoría de esa pregunta, incluso en una casilla normal. Una respuesta correcta te permite tirar de nuevo; una incorrecta pasa el turno al siguiente jugador. Cuando tengas las seis porciones, tu siguiente respuesta correcta es la pregunta final y gana la partida de inmediato. El ganador se lleva el bote. Las preguntas no se repiten dentro de una categoría hasta agotar su banco. Si se hacen 300 preguntas sin ganador, gana el jugador con más porciones, desempatando por más respuestas correctas y luego por el asiento más temprano.",
+   "game_ui_rules": "El circuito coloreado de 24 casillas está arriba; el color de cada casilla muestra su categoría y una estrella marca las seis casillas de porción. Las fichas están en el circuito y las porciones y el número de aciertos de cada jugador se muestran debajo. En tu turno, toca Tirar el dado y luego uno de los cuatro botones de respuesta de la pregunta mostrada. Solo el jugador al que le toca ve los controles de tirada y respuesta.",
+   "tutorial_strings": {
+    "Roll the die, move around the track and answer the question for the square you land on. Answer correctly on a wedge square to earn that wedge, and answer correctly to roll again. Collect all six wedges, then answer one more question correctly to win.": "Tira el dado, avanza por el circuito y responde la pregunta de la casilla en la que caes. Responde correctamente en una casilla de porción para ganar esa porción, y responde correctamente para tirar de nuevo. Consigue las seis porciones y luego responde correctamente una pregunta más para ganar."
+   },
+   "client_strings": {
+    "title": "Trivial Pursuit",
+    "turn": "Turno del jugador {n}",
+    "finished": "Terminado",
+    "winner": "Gana el jugador {n}",
+    "roll": "Tirar el dado",
+    "phase_roll": "Tira el dado para mover tu ficha",
+    "phase_question": "Pregunta de {cat} - elige una respuesta",
+    "player_score": "Jugador {n}: {c} correctas",
+    "die": "Dado: {n}",
+    "server_invalid": "Jugada ilegal"
+   }
+  },
+  "fr": {
+   "display_name": "Trivial Pursuit (Déclaratif)",
+   "short_description": "Parcourez un circuit de 24 cases, répondez à des questions de culture générale dans six catégories et collectez les six camemberts. Une version simplifiée de Trivial Pursuit pour 2 à 4 joueurs (le jeu complet permet jusqu'à 6 joueurs ; ce paquet est limité à 4).",
+   "game_logic_rules": "Trivial Pursuit pour 2 à 4 joueurs sur un circuit de 24 cases. Tous les pions commencent sur la case 0 et le siège 0 joue en premier. À votre tour, lancez le dé, avancez d'autant de cases sur le circuit, puis répondez à une question à choix multiple de la catégorie de la case atteinte. Les six catégories, dans l'ordre, sont Géographie, Divertissement, Histoire, Arts et Littérature, Sciences et Nature, et Sports et Loisirs, et les cases les parcourent en cycle. Les cases 0, 4, 8, 12, 16 et 20 sont des cases camembert (quartiers généraux), une pour chaque catégorie dans cet ordre, et la catégorie d'une case camembert est sa catégorie de quartier général. Une bonne réponse sur une case camembert rapporte le camembert de cette catégorie. De plus, chaque deuxième bonne réponse d'affilée rapporte aussi le camembert de la catégorie de cette question, même sur une case ordinaire. Une bonne réponse vous permet de relancer le dé ; une mauvaise réponse passe le tour au joueur suivant. Une fois les six camemberts obtenus, votre prochaine bonne réponse est la question finale et remporte la partie immédiatement. Le gagnant remporte le pot. Les questions ne se répètent pas dans une catégorie avant l'épuisement de sa banque. Si 300 questions sont posées sans gagnant, le joueur avec le plus de camemberts gagne, départagé par le plus de bonnes réponses, puis par le siège le plus précoce.",
+   "game_ui_rules": "Le circuit coloré de 24 cases est en haut ; la couleur de chaque case indique sa catégorie et une étoile marque les six cases camembert. Les pions sont sur le circuit, et les camemberts et le nombre de bonnes réponses de chaque joueur sont affichés en dessous. À votre tour, touchez Lancer le dé, puis l'un des quatre boutons de réponse de la question affichée. Seul le joueur dont c'est le tour voit les contrôles de lancer et de réponse.",
+   "tutorial_strings": {
+    "Roll the die, move around the track and answer the question for the square you land on. Answer correctly on a wedge square to earn that wedge, and answer correctly to roll again. Collect all six wedges, then answer one more question correctly to win.": "Lancez le dé, avancez sur le circuit et répondez à la question de la case atteinte. Répondez correctement sur une case camembert pour gagner ce camembert, et répondez correctement pour relancer le dé. Collectez les six camemberts, puis répondez correctement à une question de plus pour gagner."
+   },
+   "client_strings": {
+    "title": "Trivial Pursuit",
+    "turn": "Au joueur {n} de jouer",
+    "finished": "Terminé",
+    "winner": "Le joueur {n} gagne",
+    "roll": "Lancer le dé",
+    "phase_roll": "Lancez le dé pour déplacer votre pion",
+    "phase_question": "Question {cat} - choisissez une réponse",
+    "player_score": "Joueur {n} : {c} bonnes réponses",
+    "die": "Dé : {n}",
+    "server_invalid": "Coup illégal"
+   }
+  },
+  "de": {
+   "display_name": "Trivial Pursuit (Deklarativ)",
+   "short_description": "Laufe über eine Bahn mit 24 Feldern, beantworte Wissensfragen in sechs Kategorien und sammle alle sechs Tortenstücke. Eine vereinfachte Trivial-Pursuit-Version für 2 bis 4 Spieler (das volle Spiel erlaubt bis zu 6; dieses Paket ist auf 4 begrenzt).",
+   "game_logic_rules": "Trivial Pursuit für 2 bis 4 Spieler auf einer Schleife aus 24 Feldern. Alle Spielfiguren starten auf Feld 0 und Sitz 0 beginnt. Würfle in deinem Zug, ziehe so viele Felder um die Schleife und beantworte dann eine Multiple-Choice-Frage zur Kategorie des Feldes, auf dem du landest. Die sechs Kategorien sind der Reihe nach Geografie, Unterhaltung, Geschichte, Kunst und Literatur, Wissenschaft und Natur sowie Sport und Freizeit, und die Felder durchlaufen sie im Zyklus. Die Felder 0, 4, 8, 12, 16 und 20 sind Tortenstück-Felder (Hauptquartiere), je eines für jede Kategorie in dieser Reihenfolge, und die Kategorie eines solchen Feldes ist seine Hauptquartier-Kategorie. Eine richtige Antwort auf einem Tortenstück-Feld bringt das Tortenstück dieser Kategorie. Zudem bringt jede zweite richtige Antwort in Folge auch das Tortenstück der Kategorie dieser Frage, selbst auf einem gewöhnlichen Feld. Eine richtige Antwort lässt dich erneut würfeln; eine falsche Antwort gibt den Zug an den nächsten Spieler weiter. Hast du alle sechs Tortenstücke, ist deine nächste richtige Antwort die Finalfrage und gewinnt das Spiel sofort. Der Gewinner erhält den Pot. Fragen wiederholen sich innerhalb einer Kategorie erst, wenn ihre Bank erschöpft ist. Werden 300 Fragen ohne Gewinner gestellt, gewinnt der Spieler mit den meisten Tortenstücken, bei Gleichstand mit den meisten richtigen Antworten, dann mit dem frühesten Sitz.",
+   "game_ui_rules": "Die farbige Bahn mit 24 Feldern ist oben; die Farbe jedes Feldes zeigt seine Kategorie und ein Stern markiert die sechs Tortenstück-Felder. Die Spielfiguren stehen auf der Bahn, und darunter sind die Tortenstücke und die Zahl richtiger Antworten jedes Spielers zu sehen. Tippe in deinem Zug auf Würfeln und dann auf eine der vier Antwortschaltflächen zur gezeigten Frage. Nur der Spieler, der am Zug ist, sieht die Würfel- und Antwortsteuerung.",
+   "tutorial_strings": {
+    "Roll the die, move around the track and answer the question for the square you land on. Answer correctly on a wedge square to earn that wedge, and answer correctly to roll again. Collect all six wedges, then answer one more question correctly to win.": "Würfle, ziehe um die Bahn und beantworte die Frage zu dem Feld, auf dem du landest. Beantworte eine Frage auf einem Tortenstück-Feld richtig, um dieses Tortenstück zu erhalten, und antworte richtig, um erneut zu würfeln. Sammle alle sechs Tortenstücke und beantworte dann eine weitere Frage richtig, um zu gewinnen."
+   },
+   "client_strings": {
+    "title": "Trivial Pursuit",
+    "turn": "Spieler {n} ist am Zug",
+    "finished": "Beendet",
+    "winner": "Spieler {n} gewinnt",
+    "roll": "Würfeln",
+    "phase_roll": "Würfle, um deine Figur zu bewegen",
+    "phase_question": "{cat}-Frage - wähle eine Antwort",
+    "player_score": "Spieler {n}: {c} richtig",
+    "die": "Würfel: {n}",
+    "server_invalid": "Ungültiger Zug"
+   }
+  },
+  "pt": {
+   "display_name": "Trivial Pursuit (Declarativo)",
+   "short_description": "Percorra um percurso de 24 casas, responda a perguntas de conhecimentos gerais em seis categorias e colete todas as seis fatias. Uma versão simplificada de Trivial Pursuit para 2 a 4 jogadores (o jogo completo permite até 6; este pacote limita a 4).",
+   "game_logic_rules": "Trivial Pursuit para 2 a 4 jogadores num percurso de 24 casas. Todos os peões começam na casa 0 e o assento 0 joga primeiro. Na sua vez, lance o dado, avance esse número de casas pelo percurso e responda a uma pergunta de escolha múltipla da categoria da casa onde parou. As seis categorias, por ordem, são Geografia, Entretenimento, História, Artes e Literatura, Ciência e Natureza, e Desporto e Lazer, e as casas percorrem-nas em ciclo. As casas 0, 4, 8, 12, 16 e 20 são casas de fatia (sede), uma para cada categoria nessa ordem, e a categoria de uma casa de fatia é a sua categoria de sede. Uma resposta correta numa casa de fatia ganha a fatia dessa categoria. Além disso, cada segunda resposta correta seguida ganha também a fatia da categoria dessa pergunta, mesmo numa casa normal. Uma resposta correta permite lançar de novo; uma resposta errada passa a vez ao jogador seguinte. Quando tiver as seis fatias, a sua próxima resposta correta é a pergunta final e vence o jogo de imediato. O vencedor leva o pote. As perguntas não se repetem dentro de uma categoria até o seu banco se esgotar. Se forem feitas 300 perguntas sem vencedor, ganha o jogador com mais fatias, desempatando por mais respostas corretas e depois pelo assento mais cedo.",
+   "game_ui_rules": "O percurso colorido de 24 casas está no topo; a cor de cada casa mostra a sua categoria e uma estrela marca as seis casas de fatia. Os peões estão no percurso e as fatias e o número de respostas corretas de cada jogador são mostrados abaixo. Na sua vez, toque em Lançar o dado e depois num dos quatro botões de resposta da pergunta mostrada. Só o jogador da vez vê os controlos de lançamento e resposta.",
+   "tutorial_strings": {
+    "Roll the die, move around the track and answer the question for the square you land on. Answer correctly on a wedge square to earn that wedge, and answer correctly to roll again. Collect all six wedges, then answer one more question correctly to win.": "Lance o dado, avance pelo percurso e responda à pergunta da casa onde parar. Responda corretamente numa casa de fatia para ganhar essa fatia, e responda corretamente para lançar de novo. Colete as seis fatias e depois responda corretamente a mais uma pergunta para vencer."
+   },
+   "client_strings": {
+    "title": "Trivial Pursuit",
+    "turn": "Vez do jogador {n}",
+    "finished": "Terminado",
+    "winner": "O jogador {n} vence",
+    "roll": "Lançar o dado",
+    "phase_roll": "Lance o dado para mover o seu peão",
+    "phase_question": "Pergunta de {cat} - escolha uma resposta",
+    "player_score": "Jogador {n}: {c} corretas",
+    "die": "Dado: {n}",
+    "server_invalid": "Jogada ilegal"
+   }
+  },
+  "zh": {
+   "display_name": "Trivial Pursuit（声明式）",
+   "short_description": "绕着24格的环形棋盘前进，回答六个类别的知识问答，收集全部六块楔子。这是简化版 Trivial Pursuit，供2至4名玩家游玩（完整版最多6人；本包上限为4人）。",
+   "game_logic_rules": "供2至4名玩家游玩的 Trivial Pursuit，在24格的环形棋盘上进行。所有棋子从第0格出发，由0号座位先行。在你的回合，掷骰子并沿环形棋盘前进相应格数，然后回答所落格子类别的一道多项选择题。六个类别依次为地理、娱乐、历史、艺术与文学、科学与自然、体育与休闲，格子按此循环。第0、4、8、12、16、20格是楔子格（总部格），按顺序各对应一个类别，楔子格的类别即其总部类别。在楔子格上答对可获得该类别的楔子。 此外，连续答对两题也可获得第二题类别的楔子，即使落在普通格上。答对可再掷一次；答错则轮到下一位玩家。集齐六块楔子后，你的下一次答对即为最终题，并立即赢得游戏。赢家获得全部奖池。同一类别的题目在题库用完之前不会重复。若共问了300道题仍无赢家，则楔子最多的玩家获胜，依次以答对题数和座位次序打破平局。",
+   "game_ui_rules": "彩色的24格棋盘位于顶部；每格的颜色表示其类别，星号标出六个楔子格。玩家棋子位于棋盘上，每位玩家的楔子和答对题数显示在下方。在你的回合，点击掷骰子，然后点击所示题目的四个答案按钮之一。只有轮到的玩家能看到掷骰子和答案控件。",
+   "tutorial_strings": {
+    "Roll the die, move around the track and answer the question for the square you land on. Answer correctly on a wedge square to earn that wedge, and answer correctly to roll again. Collect all six wedges, then answer one more question correctly to win.": "掷骰子，沿棋盘前进，并回答所落格子的题目。在楔子格上答对即可获得该楔子，答对即可再掷一次。集齐六块楔子，再答对一道题即可获胜。"
+   },
+   "client_strings": {
+    "title": "Trivial Pursuit",
+    "turn": "轮到玩家 {n}",
+    "finished": "已结束",
+    "winner": "玩家 {n} 获胜",
+    "roll": "掷骰子",
+    "phase_roll": "掷骰子移动你的棋子",
+    "phase_question": "{cat}题 - 请选择一个答案",
+    "player_score": "玩家 {n}：答对 {c} 题",
+    "die": "骰子：{n}",
+    "server_invalid": "非法移动"
+   }
+  },
+  "hi": {
+   "display_name": "Trivial Pursuit (घोषणात्मक)",
+   "short_description": "24 खानों वाले ट्रैक पर आगे बढ़ें, छह श्रेणियों में सामान्य ज्ञान के प्रश्नों के उत्तर दें और सभी छह वेज इकट्ठा करें। यह Trivial Pursuit का सरलीकृत संस्करण है, 2 से 4 खिलाड़ियों के लिए (पूरा खेल 6 तक की अनुमति देता है; यह पैकेज 4 तक सीमित है)।",
+   "game_logic_rules": "2 से 4 खिलाड़ियों के लिए Trivial Pursuit, 24 खानों के लूप पर। सभी गोटियाँ खाने 0 से शुरू होती हैं और सीट 0 पहले चलती है। अपनी बारी में पासा फेंकें, लूप पर उतने खाने आगे बढ़ें, फिर जिस खाने पर पहुँचे उसकी श्रेणी का बहुविकल्पीय प्रश्न उत्तर दें। छह श्रेणियाँ क्रम से हैं: भूगोल, मनोरंजन, इतिहास, कला और साहित्य, विज्ञान और प्रकृति, तथा खेल और अवकाश, और खाने इन्हें चक्र में दोहराते हैं। खाने 0, 4, 8, 12, 16 और 20 वेज (मुख्यालय) खाने हैं, उस क्रम में प्रत्येक श्रेणी के लिए एक, और वेज खाने की श्रेणी उसकी मुख्यालय श्रेणी होती है। वेज खाने पर सही उत्तर उस श्रेणी का वेज दिलाता है। इसके अलावा, लगातार हर दूसरा सही उत्तर उस प्रश्न की श्रेणी का वेज भी दिलाता है, भले ही वह सामान्य खाने पर हो। सही उत्तर पर आप फिर पासा फेंक सकते हैं; गलत उत्तर पर बारी अगले खिलाड़ी को जाती है। जब आपके पास सभी छह वेज हों, तो आपका अगला सही उत्तर अंतिम प्रश्न होता है और तुरंत खेल जिताता है। विजेता पॉट लेता है। किसी श्रेणी के प्रश्न उसके बैंक के समाप्त होने तक दोहराए नहीं जाते। यदि 300 प्रश्न पूछे जाने पर भी कोई विजेता न हो, तो सबसे अधिक वेज वाला खिलाड़ी जीतता है, बराबरी पर सबसे अधिक सही उत्तर, फिर सबसे पहली सीट देखी जाती है।",
+   "game_ui_rules": "24 खानों वाला रंगीन ट्रैक ऊपर है; प्रत्येक खाने का रंग उसकी श्रेणी दिखाता है और तारा छह वेज खानों को चिह्नित करता है। खिलाड़ियों की गोटियाँ ट्रैक पर हैं, और प्रत्येक खिलाड़ी के वेज और सही उत्तरों की संख्या नीचे दिखाई गई है। अपनी बारी में पासा फेंकें पर टैप करें, फिर दिखाए गए प्रश्न के चार उत्तर बटनों में से एक पर टैप करें। पासा और उत्तर नियंत्रण केवल उसी खिलाड़ी को दिखते हैं जिसकी बारी है।",
+   "tutorial_strings": {
+    "Roll the die, move around the track and answer the question for the square you land on. Answer correctly on a wedge square to earn that wedge, and answer correctly to roll again. Collect all six wedges, then answer one more question correctly to win.": "पासा फेंकें, ट्रैक पर आगे बढ़ें और जिस खाने पर पहुँचें उसके प्रश्न का उत्तर दें। वेज खाने पर सही उत्तर देकर वह वेज पाएँ, और सही उत्तर देकर फिर पासा फेंकें। सभी छह वेज इकट्ठा करें, फिर एक और प्रश्न का सही उत्तर देकर जीतें।"
+   },
+   "client_strings": {
+    "title": "Trivial Pursuit",
+    "turn": "खिलाड़ी {n} की बारी",
+    "finished": "समाप्त",
+    "winner": "खिलाड़ी {n} जीतता है",
+    "roll": "पासा फेंकें",
+    "phase_roll": "अपनी गोटी चलाने के लिए पासा फेंकें",
+    "phase_question": "{cat} प्रश्न - एक उत्तर चुनें",
+    "player_score": "खिलाड़ी {n}: {c} सही",
+    "die": "पासा: {n}",
+    "server_invalid": "अवैध चाल"
+   }
+  },
+  "ar": {
+   "display_name": "Trivial Pursuit (تصريحي)",
+   "short_description": "تقدّم حول مسار من 24 خانة، وأجب عن أسئلة معلومات عامة في ست فئات، واجمع الأوتاد الستة كلها. نسخة مبسطة من Trivial Pursuit لعدد 2 إلى 4 لاعبين (تسمح اللعبة الكاملة بما يصل إلى 6؛ هذا الحزمة محدودة بـ 4).",
+   "game_logic_rules": "لعبة Trivial Pursuit لعدد 2 إلى 4 لاعبين على حلقة من 24 خانة. تبدأ كل القطع من الخانة 0 ويبدأ المقعد 0 أولا. في دورك، ارمِ النرد وتقدّم ذلك العدد من الخانات حول الحلقة، ثم أجب عن سؤال متعدد الخيارات من فئة الخانة التي وصلت إليها. الفئات الست، بالترتيب، هي الجغرافيا والترفيه والتاريخ والفنون والأدب والعلوم والطبيعة والرياضة والترفيه، وتتنقل الخانات بينها في دورة. الخانات 0 و4 و8 و12 و16 و20 هي خانات الوتد (المقر)، واحدة لكل فئة بذلك الترتيب، وفئة خانة الوتد هي فئة مقرها. الإجابة الصحيحة على خانة وتد تمنح وتد تلك الفئة. وبالإضافة إلى ذلك، تمنح كل إجابة صحيحة ثانية على التوالي أيضا وتد فئة ذلك السؤال، حتى على خانة عادية. الإجابة الصحيحة تتيح لك الرمي من جديد؛ والإجابة الخاطئة تنقل الدور إلى اللاعب التالي. بمجرد امتلاكك الأوتاد الستة كلها، تكون إجابتك الصحيحة التالية هي السؤال النهائي وتفوز باللعبة فورا. يأخذ الفائز الجائزة. لا تتكرر الأسئلة داخل الفئة حتى ينفد بنكها. إذا طُرحت 300 سؤال دون فائز، يفوز اللاعب صاحب أكبر عدد من الأوتاد، مع كسر التعادل بأكثر الإجابات الصحيحة، ثم بأقدم مقعد.",
+   "game_ui_rules": "المسار الملون من 24 خانة في الأعلى؛ يوضح لون كل خانة فئتها وتشير نجمة إلى خانات الوتد الست. تقع قطع اللاعبين على المسار، وتظهر أوتاد كل لاعب وعدد إجاباته الصحيحة أسفله. في دورك، اضغط ارمِ النرد، ثم اضغط أحد أزرار الإجابة الأربعة للسؤال المعروض. لا يرى عناصر الرمي والإجابة إلا اللاعب صاحب الدور.",
+   "tutorial_strings": {
+    "Roll the die, move around the track and answer the question for the square you land on. Answer correctly on a wedge square to earn that wedge, and answer correctly to roll again. Collect all six wedges, then answer one more question correctly to win.": "ارمِ النرد وتقدّم حول المسار وأجب عن سؤال الخانة التي تصل إليها. أجب بشكل صحيح على خانة وتد لتحصل على ذلك الوتد، وأجب بشكل صحيح لترمي من جديد. اجمع الأوتاد الستة كلها، ثم أجب عن سؤال آخر بشكل صحيح لتفوز."
+   },
+   "client_strings": {
+    "title": "Trivial Pursuit",
+    "turn": "دور اللاعب {n}",
+    "finished": "انتهت",
+    "winner": "يفوز اللاعب {n}",
+    "roll": "ارمِ النرد",
+    "phase_roll": "ارمِ النرد لتحريك قطعتك",
+    "phase_question": "سؤال {cat} - اختر إجابة",
+    "player_score": "اللاعب {n}: {c} صحيحة",
+    "die": "النرد: {n}",
+    "server_invalid": "حركة غير قانونية"
+   }
+  }
+ }
+}

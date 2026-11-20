@@ -125,6 +125,21 @@ square, wins the pot; 500 moves without a win is a draw with the pot split.
 All state is public, so the package declares `all_state_public: true`.
 Select it for publication with `--kinds onitama`.
 
+Trivial Pursuit is a two- to four-player trivia game on a loop of 24
+squares (the full game allows up to six players; this package caps at
+four): roll the die, answer a question in the category of the square you
+land on, and earn that category's wedge by answering correctly on one of
+the six wedge (headquarters) squares 0, 4, 8, 12, 16 and 20, which carry
+the six categories in order — Geography, Entertainment, History, Arts and
+Literature, Science and Nature, Sports and Leisure. A correct answer rolls
+again and a wrong answer passes the turn; every second correct answer in a
+row also earns the wedge of that question's category, even on a plain
+square. A player holding all six wedges wins by answering one more question
+correctly, and after 300 questions with no winner the player with the most
+wedges (then most correct answers, then earliest seat) wins. Its bank holds
+60 original questions, ten per category. Select it for publication with
+`--kinds trivial_pursuit`.
+
 Quarto is a two-player game on a 4-by-4 board with sixteen unique pieces:
 every combination of tall/short, light/dark, round/square and solid/hollow
 (piece id 0–15 is the 4-bit attribute vector: bit0 tall, bit1 dark, bit2
