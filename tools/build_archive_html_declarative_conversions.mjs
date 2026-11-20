@@ -37,7 +37,16 @@ const EXTRA_STRINGS = {
   'Next center cards':['Más cartas centrales','Cartes centrales suivantes','Weitere Mittelkarten','Próximas cartas centrais','下一组中央牌','अगले बीच के पत्ते','أوراق الوسط التالية'],
   'Choose a card for the center':['Elige una carta para el centro','Choisissez une carte pour le centre','Karte für die Mitte wählen','Escolha uma carta para o centro','选择一张牌放到中央','बीच के लिए एक पत्ता चुनें','اختر ورقة للوسط'],
   Cancel:['Cancelar','Annuler','Abbrechen','Cancelar','取消','रद्द करें','إلغاء'],
-  '{name} · size {n}':['{name} · tamaño {n}','{name} · taille {n}','{name} · Größe {n}','{name} · tamanho {n}','{name} · 大小 {n}','{name} · आकार {n}','{name} · الحجم {n}']
+  '{name} · size {n}':['{name} · tamaño {n}','{name} · taille {n}','{name} · Größe {n}','{name} · tamanho {n}','{name} · 大小 {n}','{name} · आकार {n}','{name} · الحجم {n}'],
+  Draw:['Empate','Match nul','Unentschieden','Empate','平局','बराबरी','تعادل'],
+  'Spin to decide who goes first':['Gira para decidir quién empieza','Tournez pour déterminer qui commence','Drehe, um den Start zu bestimmen','Gire para decidir quem começa','转动以决定谁先开始','पहली बारी तय करने के लिए घुमाएँ','أدر لتحديد من يبدأ'],
+  'Choose your piece':['Elige tu ficha','Choisissez votre pion','Wähle deine Figur','Escolha sua peça','选择你的棋子','अपनी गोटी चुनें','اختر قطعتك'],
+  'Last spin: {n}':['Último giro: {n}','Dernier tour : {n}','Letzte Drehung: {n}','Último giro: {n}','上次转出：{n}','पिछला स्पिन: {n}','آخر تدوير: {n}'],
+  'Red {value}':['Rojo {value}','Rouge {value}','Rot {value}','Vermelho {value}','红色 {value}','लाल {value}','أحمر {value}'],
+  'Blue {value}':['Azul {value}','Bleu {value}','Blau {value}','Azul {value}','蓝色 {value}','नीला {value}','أزرق {value}'],
+  'Green {value}':['Verde {value}','Vert {value}','Grün {value}','Verde {value}','绿色 {value}','हरा {value}','أخضر {value}'],
+  'Yellow {value}':['Amarillo {value}','Jaune {value}','Gelb {value}','Amarelo {value}','黄色 {value}','पीला {value}','أصفر {value}'],
+  'Last spin: {n} · {from} → {to}':['Último giro: {n} · {from} → {to}','Dernier tour : {n} · {from} → {to}','Letzte Drehung: {n} · {from} → {to}','Último giro: {n} · {from} → {to}','上次转出：{n} · {from} → {to}','पिछला स्पिन: {n} · {from} → {to}','آخر تدوير: {n} · {from} → {to}']
 };
 const ALL_STRINGS={...COPY.strings,...EXTRA_STRINGS};
 const STRING_KEYS = Object.fromEntries(Object.keys(ALL_STRINGS).map((text,index) => [text,`text_${index}`]));
@@ -293,7 +302,7 @@ function board(kind) {
   if (kind === 'gobblet') return {viewport:{width:600,height:785},boards:[
     {id:'main',kind:'grid',x:40,y:100,width:520,height:520,rows:4,columns:4,color:'#f3dfc5',alternate_color:'#e8c9ae',line_color:'#b68b73'},
     {id:'tray',kind:'free',x:40,y:650,width:520,height:110,color:'#936d60',line_color:'#725246'}]};
-  if (kind === 'chutes_ladders') return {viewport:{width:620,height:720},boards:[
+  if (kind === 'chutes_ladders') return {viewport:{width:620,height:720,camera_controls:true},boards:[
     {id:'main',kind:'grid',x:30,y:112,width:560,height:560,rows:10,columns:10,color:'#fff1df',alternate_color:'#dceee4',line_color:'#adc7b7'}]};
   if (kind === 'dots_boxes') return {viewport:{width:620,height:710},boards:[{id:'main',...free}]};
   if (kind === 'mastermind') return {viewport:{width:620,height:780},boards:[{id:'main',...free}]};
@@ -380,13 +389,19 @@ function gobbletAssets() {
 
 function dosAssets() {
   const colors = {R:'#bd3846',B:'#2863a6',G:'#23825f',Y:'#f0c84d',W:'#f9f4e8',deck:'#253b59'};
+  const marks = {
+    R:'<circle cx="13" cy="13" r="4"/>',
+    B:'<rect x="9" y="9" width="8" height="8" rx="1"/>',
+    G:'<path d="M13 8L18 13L13 18L8 13Z"/>',
+    Y:'<path d="M13 8L18 17H8Z"/>'
+  };
   return Object.fromEntries(Object.entries(colors).map(([key,color]) => {
     const body = `<svg xmlns="http://www.w3.org/2000/svg" width="76" height="96" viewBox="0 0 76 96">
       <rect x="2" y="3" width="72" height="91" rx="9" fill="#061c22" opacity=".32"/>
       <rect x="1" y="1" width="72" height="91" rx="9" fill="${color}" stroke="#f4e3b2" stroke-width="2"/>
       <path d="M7 17Q21 5 38 7T67 17M7 76Q21 88 38 86T67 76" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="2"/>
       <ellipse cx="37" cy="47" rx="27" ry="33" fill="#fff" fill-opacity=".12" stroke="#fff" stroke-opacity=".5" stroke-width="1.5"/>
-      <circle cx="12" cy="12" r="2" fill="#fff" fill-opacity=".7"/><circle cx="62" cy="81" r="2" fill="#fff" fill-opacity=".7"/>
+      <g fill="${key === 'Y' ? '#26313a' : '#fff'}">${marks[key] || ''}</g>
     </svg>`;
     return [`dos_${key}`,{media_type:'image/svg+xml',width:76,height:96,
       uri:`data:image/svg+xml;base64,${Buffer.from(body).toString('base64')}`}];

@@ -85,6 +85,16 @@ def test_viewport_camera_preference_requires_a_boolean(camera_enabled):
         validate_spec(original)
 
 
+def test_visible_camera_controls_are_optional_and_require_a_boolean():
+    original = spec()
+    assert "camera_controls" not in validate_spec(original)["viewport"]
+    original["viewport"]["camera_controls"] = True
+    assert validate_spec(original)["viewport"]["camera_controls"] is True
+    original["viewport"]["camera_controls"] = "true"
+    with pytest.raises(DeclarativeUIError, match="viewport.camera_controls"):
+        validate_spec(original)
+
+
 def test_reducer_globals_cannot_retain_secret_or_interaction_state():
     ui = spec("let count=0; const gameUI={reduce(m,s){count++;return {scene:{},local_state:{count,previous:s}}}}")
     logic = DeclarativeLogic(ui)

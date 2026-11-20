@@ -57,6 +57,12 @@ COMMON = {
     'server_invalid': ['Illegal move', 'Jugada ilegal', 'Coup interdit', 'Ungültiger Zug', 'Jogada ilegal', '非法着法', 'अवैध चाल', 'حركة غير قانونية'],
     'score': ['{a} : {b}']*8,
     'place_second': ['Place one more stone', 'Coloca una piedra más', 'Placez encore une pierre', 'Setze noch einen Stein', 'Coloque mais uma pedra', '再放置一枚棋子', 'एक और गोटी रखें', 'ضع حجرًا آخر'],
+    'winner': ['Winner: {name}', 'Ganador: {name}', 'Gagnant : {name}', 'Gewonnen: {name}', 'Vencedor: {name}', '获胜者：{name}', 'विजेता: {name}', 'الفائز: {name}'],
+    'draw': ['Draw', 'Empate', 'Match nul', 'Unentschieden', 'Empate', '平局', 'बराबरी', 'تعادل'],
+    'position': ['Row {r}, column {c}', 'Fila {r}, columna {c}', 'Rangée {r}, colonne {c}', 'Reihe {r}, Spalte {c}', 'Linha {r}, coluna {c}', '第 {r} 行，第 {c} 列', 'पंक्ति {r}, स्तंभ {c}', 'الصف {r}، العمود {c}'],
+    'piece_at': ['{name} · row {r}, column {c}', '{name} · fila {r}, columna {c}', '{name} · rangée {r}, colonne {c}', '{name} · Reihe {r}, Spalte {c}', '{name} · linha {r}, coluna {c}', '{name} · 第 {r} 行，第 {c} 列', '{name} · पंक्ति {r}, स्तंभ {c}', '{name} · الصف {r}، العمود {c}'],
+    'select_piece': ['Select piece at row {r}, column {c}', 'Seleccionar ficha en fila {r}, columna {c}', 'Sélectionner le pion rangée {r}, colonne {c}', 'Stein in Reihe {r}, Spalte {c} auswählen', 'Selecionar peça na linha {r}, coluna {c}', '选择第 {r} 行第 {c} 列的棋子', 'पंक्ति {r}, स्तंभ {c} की गोटी चुनें', 'اختر قطعة الصف {r}، العمود {c}'],
+    'move_to': ['Move to row {r}, column {c}', 'Mover a fila {r}, columna {c}', 'Déplacer rangée {r}, colonne {c}', 'Zu Reihe {r}, Spalte {c} ziehen', 'Mover para linha {r}, coluna {c}', '移动到第 {r} 行第 {c} 列', 'पंक्ति {r}, स्तंभ {c} पर जाएँ', 'انتقل إلى الصف {r}، العمود {c}'],
 }
 UI_RULES = ['Tap a highlighted legal target or use an action button. The board scales to the screen. Only your turn is interactive.', 'Toca un destino legal resaltado o usa un botón. El tablero se adapta a la pantalla. Solo tu turno es interactivo.', 'Touchez une cible légale surlignée ou un bouton. Le plateau s’adapte à l’écran. Seul votre tour est interactif.', 'Tippe auf ein markiertes legales Ziel oder eine Aktion. Das Brett passt sich dem Bildschirm an. Nur dein Zug ist interaktiv.', 'Toque num destino legal destacado ou use um botão. O tabuleiro se adapta à tela. Só a sua vez é interativa.', '点击高亮合法目标或操作按钮。棋盘适应屏幕。仅在自己的回合可操作。', 'दिखाए वैध लक्ष्य या बटन दबाएँ। बोर्ड स्क्रीन के अनुसार ढलता है। केवल अपनी बारी में खेलें।', 'اضغط هدفًا قانونيًا مميزًا أو زر إجراء. تتكيف اللوحة مع الشاشة. التفاعل متاح في دورك فقط.']
 ATAXX_UI_RULES = ['Select one of your pieces, then tap a highlighted empty square. One step clones; two steps jumps.',
@@ -146,7 +152,7 @@ def specification(kind):
     types.update({'card':{'shape':'card','width':unit*.7,'height':unit*.85,'color':'#fff7df','text_color':'#172743'},'back':{'shape':'image','width':unit*.7,'height':unit*.85,'back_asset':'card_back'},'die':{'shape':'dice','width':100,'height':100,'color':'#fff7df','text_color':'#172743'},'total':{'shape':'text','width':160,'height':100,'text_color':'#a7f070'},'store':{'shape':'rect','width':42,'height':150,'color':'#ad7a3d','text_color':'#ffffff'},'domino':{'shape':'rect','width':44,'height':95,'color':'#a7f070'}})
     svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 100"><rect width="80" height="100" rx="8" fill="#334d88"/><path d="M10 50L40 10L70 50L40 90Z" fill="#a7f070"/></svg>'
     viewport={'width':600,'height':560}
-    if kind=='connect6':viewport={'width':808,'height':880,'camera_enabled':True}
+    if kind=='connect6':viewport={'width':808,'height':880,'camera_enabled':True,'camera_controls':True}
     spec={'format':'buildplay-ui','version':1,'viewport':viewport,'boards':[board],
           'piece_types':types,'assets':{'card_back':{'uri':'data:image/svg+xml;base64,'+base64.b64encode(svg.encode()).decode(),'media_type':'image/svg+xml'}},
           'strings':strings(kind),'ui_code':f'const KIND={json.dumps(kind)};\nconst SOURCE_STRINGS={json.dumps(strings(kind),ensure_ascii=False)};\n'+(DEST/'presentation.js').read_text()}
@@ -228,6 +234,11 @@ def main():
         if args.presentation_only:
             payload=json.loads(filename.read_text(encoding='utf-8'))
             payload['declarative_ui']=specification(kind)
+            if kind in ('connect6','ataxx'):
+                for i, locale in enumerate(LOCALES[1:], 1):
+                    payload['translations'][locale]['client_strings'].update({
+                        key: COMMON[key][i] for key in ('winner','draw','position','piece_at','select_piece','move_to')
+                    })
         else:
             payload=package(kind)
         filename.write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')

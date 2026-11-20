@@ -100,6 +100,7 @@ def test_large_table_does_not_overlap_hand_or_hint():
     hand_top = next(p['position']['y'] for p in pieces if p['id'] == 'card_0') - 48
     hint = next(label for label in frame['scene']['labels'] if label['id'] == 'hint')
     assert table_bottom < hint['y'] < hand_top
+    assert any(path['id'] == 'table_extension_0' for path in frame['scene']['paths'])
     assert scene_event(ui, message, frame, view['legal'][0])['make_move'] == view['legal'][0]
 
     spectator = {**message, 'my_player_index':None, 'acting_for_player_index':None,

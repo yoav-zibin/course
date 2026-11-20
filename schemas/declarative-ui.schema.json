@@ -28,6 +28,11 @@
           "type": "boolean",
           "default": true,
           "description": "Whether users can zoom or pan the board using pinch, wheel, background drag or keyboard camera shortcuts. False keeps the automatically fitted board fixed while preserving piece interactions. Two-finger gestures cancel unfinished piece interactions in either mode."
+        },
+        "camera_controls": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt in to visible zoom and reset buttons when camera movement is enabled."
         }
       },
       "required": [

@@ -41,6 +41,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     }
     if(!spec.viewport || !(spec.viewport.width>0) || !(spec.viewport.height>0))throw new Error(t("ui.declarative.error.invalid_viewport", {}, "Invalid viewport"));
     if(Object.hasOwn(spec.viewport,"camera_enabled")&&typeof spec.viewport.camera_enabled!=="boolean")throw new Error(t("ui.declarative.error.invalid_viewport", {}, "Invalid viewport"));
+    if(Object.hasOwn(spec.viewport,"camera_controls")&&typeof spec.viewport.camera_controls!=="boolean")throw new Error(t("ui.declarative.error.invalid_viewport", {}, "Invalid viewport"));
     if(!Array.isArray(spec.boards)||!spec.boards.length||spec.boards.length>32)throw new Error(t("ui.declarative.error.expected_1_32_boards", {}, "Expected 1–32 boards"));
     if(!spec.piece_types||typeof spec.piece_types!=="object"||Array.isArray(spec.piece_types))throw new Error(t("ui.declarative.error.expected_piece_types", {}, "Expected piece types"));
     for(const type of Object.values(spec.piece_types)){

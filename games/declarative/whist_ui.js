@@ -7,6 +7,10 @@ const gameUI = {
     const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});
     const text = (key, values = {}) => String(strings[key]).replace(/\{(\w+)\}/g,
       (_, name) => String(values[name] ?? ''));
+    const shortName = (name, limit) => {
+      const chars = Array.from(name);
+      return chars.length > limit ? chars.slice(0,limit-1).join('') + '…' : chars.join('');
+    };
     const symbols = {S:'♠',H:'♥',D:'♦',C:'♣'};
     const cardText = card => {
       const rank = Number(card.slice(0,-1));
@@ -22,14 +26,14 @@ const gameUI = {
     label('team_two', `2 + 4: ${s.tricks[1]}`, 410, 90, 23);
     const turnName = m.players?.[s.turn]?.name || text('player',{n:s.turn + 1});
     label('turn', s.over ? text('winner',{team:s.winner === 0 ? '1 + 3' : '2 + 4'}) :
-      text('turn',{name:turnName}), 240, 315, 16);
+      text('turn',{name:shortName(turnName,10)}), 240, 315, 20);
     const played = s.trick.length ? s.trick : s.last_trick;
     played.forEach((play, i) => {
       const position = {x:140 + i * 120,y:205};
       scene.pieces.push({id:`played_${i}`,type:cardType(play.card),board:'table',position,
         text:cardText(play.card),actions:[]});
       const name = m.players?.[play.seat]?.name || text('player',{n:play.seat + 1});
-      label(`name_${i}`,name,position.x - 25,270,13);
+      label(`name_${i}`,shortName(name,8),position.x - 25,270,15);
     });
     const legal = new Set(active ? s.legal : []);
     (s.hand || []).forEach((card,i) => {

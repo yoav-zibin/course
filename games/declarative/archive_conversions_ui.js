@@ -18,6 +18,10 @@ const gameUI = {
     const names = (m.players || []).map((p, i) => p.name || text('Player {n}', {n:i + 1}));
     const title = m.strings?.title || SOURCE_STRINGS.title || KIND;
     const playerName = i => names[i] || text('Player {n}', {n:i + 1});
+    const shortName = i => {
+      const chars = Array.from(playerName(i));
+      return chars.length > 10 ? chars.slice(0, 9).join('') + '…' : chars.join('');
+    };
     const label = (id, value, x, y, font_size = 14) =>
       scene.labels.push({id, text:String(value), x, y, font_size,
         ...(KIND === 'six_mens_morris' ? {color:'#30251b'} : {})});
@@ -38,6 +42,7 @@ const gameUI = {
       } else if (mode === 'target') {
         scene.targets.push({id, board, position, label:String(value || '•'),
           ...(KIND === 'gobblet' ? {color:'#fff0d833'} : {}),
+          ...(KIND === 'six_mens_morris' ? {hit_area:{x:-43,y:-43,width:86,height:86}} : {}),
           ...(aria_label ? {aria_label} : {})});
       } else if (mode === 'piece') {
         scene.pieces.push({id, type:'card', board, position, text:String(value),
@@ -68,10 +73,17 @@ const gameUI = {
           Number.isInteger(s.turn) ? s.turn :
             Number.isInteger(s.turnSeat) ? s.turnSeat : m.turn_of_player_indices[0];
       label('status', m.status === 'over' ? text('Game over') :
-        (active ? text('Your turn · {name}', {name:playerName(turn)}) :
-          text('{name} to play', {name:playerName(turn)})),
+        (active ? text('Your turn · {name}', {name:shortName(turn)}) :
+          text('{name} to play', {name:shortName(turn)})),
         KIND === 'thirty_one' || KIND === 'kisolo' || KIND === 'mau_mau' || KIND === 'dos' ? 220 : KIND === 'gobblet' ? 190 : 22,
-        KIND === 'six_mens_morris' ? 22 : KIND === 'thirty_one' || KIND === 'mau_mau' || KIND === 'dos' ? 55 : 52, 16);
+        KIND === 'six_mens_morris' ? 22 : KIND === 'thirty_one' || KIND === 'mau_mau' || KIND === 'dos' ? 55 : 52, 22);
+    }
+    if (m.status === 'over' && ['mau_mau','gobblet','six_mens_morris'].includes(KIND)) {
+      const result = s.draw === true || s.winner === -1 ? text('Draw') :
+        Number.isInteger(s.winner) && s.winner >= 0 ? text('Winner: {name}', {name:shortName(s.winner)}) : text('Game over');
+      const status = scene.labels.find(item => item.id === 'status');
+      if (status) status.text = result;
+      else label('status', result, KIND === 'gobblet' ? 190 : 22, KIND === 'six_mens_morris' ? 22 : 52, 18);
     }
 
     let selectedSize = localValid ? localState.selectedSize : null;
@@ -158,8 +170,8 @@ const gameUI = {
         scene.controls.push({id:'hand_previous',kind:'button',label:text('Previous cards')});
       if (active && handPage + 1 < pages)
         scene.controls.push({id:'hand_next',kind:'button',label:text('Next cards')});
-      label('hand-counts', (s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),
-        230, 565, 14);
+      label('hand-counts', (s.hand_counts || []).map((n,i) => `${shortName(i)} · ${n}`).join('   '),
+        230, 565, 18);
     } else if (KIND === 'dos') {
       const hand = Array.isArray(s.hand) ? s.hand : [];
       const center = s.center || [];
@@ -168,6 +180,10 @@ const gameUI = {
         hand[i] === 'WD' ? {i,color:'R'} : {i};
       const value = card => card === 'WD' ? 'DOS' : String(card).slice(1);
       const cardType = card => `dos_${card === 'WD' ? 'W' : card[0]}`;
+      const cardName = card => {
+        const color = {R:'Red {value}',B:'Blue {value}',G:'Green {value}',Y:'Yellow {value}'}[card[0]];
+        return color ? text(color,{value:value(card)}) : value(card);
+      };
       const usedPiles = () => new Set(dosPlacements.map(item => item.pile));
       const usedCards = () => new Set(dosPlacements.flatMap(item => item.cards.map(card => card.i)));
       const matches = placement => {
@@ -264,13 +280,13 @@ const gameUI = {
         const count = Math.min(7,center.length-centerPage*14-row*7);
         const position = {x:320-(count-1)*40+(slot%7)*80,y:230+row*105};
         staticPiece(`center_${i}`,cardType(card.id),'table',position,
-          {text:value(card.id),scale:usedPiles().has(i) ? 0.9 : 1});
+          {text:value(card.id),aria_label:cardName(card.id),scale:usedPiles().has(i) ? 0.9 : 1});
         if (active && !dosEdit && !dosBonusMode && !usedPiles().has(i) &&
             placements.some(item => item.pile === i && item.cards.length === dosSelected.length &&
               item.cards.every(ref => dosSelected.includes(ref.i)))) {
           scene.targets.push({id:`dos_pile_${i}`,board:'table',position,color:'#00000000',
             hit_area:{x:-38,y:-48,width:76,height:96},
-            aria_label:text('Center card {n}: {card}',{n:i+1,card:card.id})});
+            aria_label:text('Center card {n}: {card}',{n:i+1,card:cardName(card.id)})});
         }
       });
       hand.slice(handPage*14,handPage*14+14).forEach((card,slot) => {
@@ -280,19 +296,19 @@ const gameUI = {
         const selected = dosSelected.includes(i) || dosBonus.some(ref => ref.i === i) ||
           dosEdit?.card?.i === i;
         staticPiece(`hand_${i}`,cardType(card),'table',position,
-          {text:value(card),scale:selected ? 1.08 : usedCards().has(i) ? 0.9 : 1});
+          {text:value(card),aria_label:cardName(card),scale:selected ? 1.08 : usedCards().has(i) ? 0.9 : 1});
         if (active && !dosEdit && !usedCards().has(i))
           scene.targets.push({id:`dos_hand_${i}`,board:'table',position,color:'#00000000',
             hit_area:{x:-38,y:-48,width:76,height:96},
-            aria_label:text('Play {card}',{card})});
+            aria_label:text('Play {card}',{card:cardName(card)})});
       });
       label('hint',s.phase === 'over' && Number.isInteger(s.winner) ?
-        text('Winner: {name}',{name:playerName(s.winner)}) :
+        (s.winner < 0 ? text('Draw') : text('Winner: {name}',{name:shortName(s.winner)})) :
         dosEdit ? text(dosEdit.kind === 'add' && dosEdit.card.num === undefined &&
           dosEdit.card.color === undefined ? 'Continue' : 'Choose number or color') : s.phase === 'add_center' ?
           text('Choose a card for the center') : dosBonusMode ?
             text('Bonus cards') : text('Select cards, then a center card'),180,415,16);
-      label('counts',(s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),230,690,14);
+      label('counts',(s.hand_counts || []).map((n,i) => `${shortName(i)} · ${n}`).join('   '),230,690,18);
       if (active && handPage > 0) scene.controls.push({id:'dos_hand_previous',kind:'button',label:text('Previous cards')});
       if (active && (handPage+1)*14 < hand.length) scene.controls.push({id:'dos_hand_next',kind:'button',label:text('Next cards')});
       if (active && centerPage > 0) scene.controls.push({id:'dos_center_previous',kind:'button',label:text('Previous center cards')});
@@ -341,8 +357,9 @@ const gameUI = {
         offer({pit}, '', 'main', boardCell(pit,7), 'clear',
           text('Pit row {r}, column {c} · {n} seeds', {r:r + 1,c:c + 1,n:rows[r]?.[c] ?? 0}));
       }
-      if (s.over && Number.isInteger(s.winner) && s.winner >= 0)
-        label('winner', text('Winner: {name}', {name:playerName(s.winner)}), 230, 420, 18);
+      if (s.over && Number.isInteger(s.winner))
+        label('winner', s.winner < 0 ? text('Draw') :
+          text('Winner: {name}', {name:shortName(s.winner)}), 230, 420, 18);
     } else if (KIND === 'thirty_one') {
       const hand = Array.isArray(s.hand) ? s.hand : [];
       const cardType = card => /[HD]$/.test(card) ? 'red_card' : 'black_card';
@@ -373,7 +390,7 @@ const gameUI = {
         if (s.phase === 'over') {
           const scoreIndex = Number.isInteger(m.my_player_index) ? (row === seat ? 0 : 1) : row;
           const score = s.scores?.[scoreIndex];
-          label(`hand-owner_${row}`, `${playerName(row)}${score == null ? '' : ` · ${score}`}`,
+          label(`hand-owner_${row}`, `${shortName(row)}${score == null ? '' : ` · ${score}`}`,
             260, 165 + row * 180, 17);
         }
         cards.forEach((card, i) => {
@@ -386,9 +403,10 @@ const gameUI = {
         });
       });
       if (s.phase === 'over' && Number.isInteger(s.winner))
-        label('winner', text('Winner: {name}', {name:playerName(s.winner)}), 240, 100, 19);
+        label('winner', s.winner < 0 ? text('Draw') :
+          text('Winner: {name}', {name:shortName(s.winner)}), 240, 100, 19);
       else if (s.scores?.[0] != null)
-        label('scores', `${playerName(seat)} · ${s.scores[0]}`, 260, 100, 19);
+        label('scores', `${shortName(seat)} · ${s.scores[0]}`, 260, 100, 22);
     } else if (KIND === 'gobblet') {
       const moves = s.legal_moves || [];
       const board = s.board || [];
@@ -480,8 +498,14 @@ const gameUI = {
         ['👑','🎩','🚢','🐶','🎒','🚗'].filter(piece => !used.has(piece)).forEach(piece =>
           offer({kind:'select',emoji:piece}, piece));
       } else if (active) offer({kind:'spin'}, `↻ ${text('Spin')}`);
-      const last = (s.log || []).slice(-1);
-      last.forEach(entry => label('log',entry,22,690,14));
+      label('status', m.status === 'over' ? (Number.isInteger(s.winner) ?
+        text('Winner: {name}',{name:shortName(s.winner)}) : text('Game over')) :
+        s.phase === 'rolloff' ? text('Spin to decide who goes first') :
+          s.phase === 'select' ? text('Choose your piece') : text('Spin'), 22, 52, 22);
+      if (Number.isInteger(s.lastSpin))
+        label('last-spin', Number.isInteger(s.lastFrom) && Number.isInteger(s.lastTo) ?
+          text('Last spin: {n} · {from} → {to}',{n:s.lastSpin,from:s.lastFrom,to:s.lastTo}) :
+          text('Last spin: {n}',{n:s.lastSpin}), 22, 690, 18);
     } else if (KIND === 'dots_boxes') {
       const xy = (r,c) => ({x:100 + c * 120,y:135 + r * 120});
       for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
@@ -528,17 +552,19 @@ const gameUI = {
       (s.board || []).forEach((owner,point) => {
         if (owner < 0) return;
         staticPiece(`stone_${point}`, `stone_${owner}`, 'main',
-          {x:points[point][0],y:points[point][1]});
+          {x:points[point][0],y:points[point][1]},
+          {text:owner === 0 ? '●' : '◆',aria_label:playerName(owner)});
         if (active && moves.some(move => move.from === point))
           scene.targets.push({id:`source_${point}`,board:'main',
             position:{x:points[point][0],y:points[point][1]},label:'◇',
+            hit_area:{x:-43,y:-43,width:86,height:86},
             aria_label:text('Select stone at point {n}',{n:point + 1})});
       });
       if (active && moves.some(move => move.from === -1)) {
         staticPiece('reserve',`stone_${seat}`,'main',{x:310,y:630},
           {text:String((s.reserve || [])[seat] ?? '')});
         scene.targets.push({id:'reserve_place',board:'main',position:{x:310,y:630},
-          color:'#00000000',aria_label:text('Place stone')});
+          color:'#00000000',hit_area:{x:-43,y:-43,width:86,height:86},aria_label:text('Place stone')});
       }
       const selectedMoves = moves.filter(move => move.from === selectedFrom);
       const groups = new Map();
@@ -557,6 +583,7 @@ const gameUI = {
           const p = points[Number(destination)];
           scene.targets.push({id:`destination_${destination}`,board:'main',
             position:{x:p[0],y:p[1]},label:selectedTo === null ? '•' : '↶',
+            hit_area:{x:-43,y:-43,width:86,height:86},
             aria_label:text('Move to point {n}',{n:Number(destination) + 1})});
           if (selectedTo !== null) group.forEach(move => {
             if (move.take < 0 || !points[move.take]) return;
@@ -568,8 +595,8 @@ const gameUI = {
       }
       moves.filter(move => move.type === 'claim_draw' || move.type === 'continue')
         .forEach(move => offer(move, text(move.type === 'claim_draw' ? 'Claim draw' : 'Continue')));
-      const countText = (s.counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   ');
-      label('counts', countText, Math.max(22,310-countText.length*3.5), 575, 14);
+      const countText = (s.counts || []).map((n,i) => `${shortName(i)} · ${n}`).join('   ');
+      label('counts', countText, Math.max(22,310-countText.length*4.5), 575, 18);
     }
 
     const match = /^intent_(\d+)$/.exec(click);

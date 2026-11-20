@@ -169,7 +169,7 @@ The package has these top-level fields:
 | Field | Purpose |
 | --- | --- |
 | `format`, `version` | Exactly `"buildplay-ui"` and `1`. Reject unsupported versions rather than guessing. |
-| `viewport` | Positive logical `width` and `height`; renderers scale this coordinate system to available space. Optional boolean `camera_enabled` defaults to `true`. Set it to `false` to keep the fitted board fixed. |
+| `viewport` | Positive logical `width` and `height`; renderers scale this coordinate system to available space. Optional boolean `camera_enabled` defaults to `true`. Set it to `false` to keep the fitted board fixed. Set `camera_controls` to `true` to show zoom and reset buttons for dense boards; it defaults to `false` and has no effect when the camera is disabled. |
 | `motion` | Optional bounded opponent movement/roll/announcement timing policy. |
 | `boards` | One or more positioned surfaces: `grid`, `hex`, `graph`, `track`, `free` or `zone`. |
 | `piece_types` | Named reusable appearances: `circle`, `rect`, `card`, `dice`, `image` or `text`; dimensions, colors and optional front/back artwork. |

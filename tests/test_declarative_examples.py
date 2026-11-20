@@ -117,7 +117,8 @@ def test_morris_capture_choices_are_selected_on_the_board():
     initial = ui.reduce(m)
     reserve = next(piece for piece in initial['scene']['pieces'] if piece['id'] == 'reserve')
     assert reserve['text'] == '6'
-    assert any(target['id'] == 'reserve_place' for target in initial['scene']['targets'])
+    reserve_target = next(target for target in initial['scene']['targets'] if target['id'] == 'reserve_place')
+    assert reserve_target['hit_area']['width'] >= 86
     selected = tap(initial, 'reserve_place')
     destination = next(target for target in selected['scene']['targets'] if target['id'] == 'destination_1')
     choosing = tap(selected, destination['id'])
@@ -137,6 +138,50 @@ def test_morris_capture_choices_are_selected_on_the_board():
         assert all(not piece['actions'] for piece in scene['pieces'])
 
 
+@pytest.mark.parametrize(('kind','winner','draw','expected'), [
+    ('mau_mau',1,False,'Winner: Bob'),
+    ('dos',-1,False,'Draw'),
+    ('kisolo',-1,False,'Draw'),
+    ('gobblet',0,False,'Winner: Alice'),
+    ('gobblet',None,True,'Draw'),
+    ('six_mens_morris',1,False,'Winner: Bob'),
+    ('six_mens_morris',-1,False,'Draw'),
+    ('chutes_ladders',0,False,'Winner: Alice'),
+    ('thirty_one',-1,False,'Draw'),
+    ('thirty_one',1,False,'Winner: Bob'),
+    ('ataxx',0,False,'Winner: Alice'),
+    ('connect6',-1,False,'Draw'),
+])
+def test_game_results_announce_the_winner_or_draw(kind, winner, draw, expected):
+    body = load(kind)
+    view = dict(body.unit_tests['cases'][0]['view_of_mover'])
+    view.update(winner=winner, draw=draw, over=True, phase='over')
+    m = {'type':'state_changed', 'view':view, 'status':'over',
+         'players':[{'name':'Alice'},{'name':'Bob'}], 'my_player_index':0,
+         'acting_for_player_index':None, 'move_count':2}
+    labels = DeclarativeLogic(body.declarative_ui).reduce(m)['scene']['labels']
+    assert expected in [label['text'] for label in labels]
+
+
+def test_dos_cards_include_distinct_non_color_marks_and_names():
+    import base64
+    body = load('dos')
+    assets = body.declarative_ui['assets']
+    designs = [base64.b64decode(assets['dos_'+color]['uri'].split(',',1)[1]).decode()
+               for color in 'RBGY']
+    assert all(mark in design for mark, design in zip(
+        ['<circle cx="13"', '<rect x="9"', 'M13 8L18 13', 'M13 8L18 17'], designs))
+    view = dict(body.unit_tests['cases'][0]['view_of_mover'])
+    view.update(hand=['R5','B5','G5','Y5'], phase='play', legal_placements=[])
+    m = {'type':'state_changed','view':view,'status':'ongoing',
+         'acting_for_player_index':0,'my_player_index':0,'move_count':0}
+    scene = DeclarativeLogic(body.declarative_ui).reduce(m)['scene']
+    labels = [target.get('aria_label','') for target in scene['targets']]
+    assert all('Play '+color+' 5' in labels for color in ['Red','Blue','Green','Yellow'])
+    assert {piece['aria_label'] for piece in scene['pieces'] if piece['id'].startswith('hand_')} == {
+        'Red 5','Blue 5','Green 5','Yellow 5'}
+
+
 def test_chutes_ladders_links_and_shared_square_tokens_remain_visible():
     body = load('chutes_ladders')
     ui = DeclarativeLogic(body.declarative_ui)
@@ -153,6 +198,16 @@ def test_chutes_ladders_links_and_shared_square_tokens_remain_visible():
     assert paths['chute_16']['points'][0] == {'x':282,'y':588}
     assert len({(piece['position']['x'],piece['position']['y']) for piece in tokens}) == 4
     assert all(not piece['id'].startswith('square_') for piece in scene['pieces'])
+
+
+def test_chutes_reports_the_last_spin_and_movement():
+    body = load('chutes_ladders')
+    view = dict(body.unit_tests['cases'][0]['view_of_mover'])
+    view.update(phase='play',lastSpin=4,lastFrom=7,lastTo=38,lastEvent='ladder')
+    message = {'type':'state_changed','view':view,'status':'ongoing',
+               'acting_for_player_index':0,'my_player_index':0,'move_count':3}
+    labels = DeclarativeLogic(body.declarative_ui).reduce(message)['scene']['labels']
+    assert next(item['text'] for item in labels if item['id']=='last-spin') == 'Last spin: 4 · 7 → 38'
 
 
 @pytest.mark.parametrize(('card','declaration'), [('R#', {'num':1}), ('WD', {'color':'R'})])

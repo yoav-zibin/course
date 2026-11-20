@@ -203,6 +203,67 @@ test('boards omit zoom controls, retain camera gestures and keep fixed-camera ga
   await expect(page.getByRole('button',{name:/^(Zoom in|Zoom out|Reset board view)$/})).toHaveCount(0);
 });
 
+test('dense boards can opt in to single-pointer zoom without submitting a move',async({page,request})=>{
+  const pkg={...spec(),viewport:{width:400,height:300,camera_controls:true}};
+  await mount(page,request,pkg);
+  const canvas=page.getByLabel('Game board. Use pieces and highlighted destinations.').locator('svg').first();
+  await page.getByRole('button',{name:'Zoom in',exact:true}).click();
+  await expect(canvas).not.toHaveAttribute('viewBox','0 0 400 300');
+  await page.getByRole('button',{name:'Reset board view',exact:true}).click();
+  await expect(canvas).toHaveAttribute('viewBox','0 0 400 300');
+  expect(await moves(page)).toEqual([]);
+  await mount(page,request,{...pkg,viewport:{...pkg.viewport,camera_enabled:false}});
+  await expect(page.getByRole('button',{name:'Zoom in',exact:true})).toHaveCount(0);
+});
+
+test('Connect6 can enlarge a legal intersection and play it on a narrow screen',async({page,request,isMobile})=>{
+  await page.setViewportSize({width:390,height:844});
+  const game=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/connect6.json'),'utf8'));
+  const opening=game.unit_tests.cases.find((item:{kind:string})=>item.kind==='initial');
+  await mount(page,request,game.declarative_ui,state({view:opening.view_of_mover}));
+  const target=page.getByRole('button',{name:'Row 10, column 10',exact:true});
+  await expect(target).toBeVisible();
+  for(let i=0;i<3;i++)await page.getByRole('button',{name:'Zoom in',exact:true}).click();
+  await expect.poll(async()=>((await target.boundingBox())?.width||0)).toBeGreaterThanOrEqual(44);
+  expect(await moves(page)).toEqual([]);
+  const canvas=page.getByLabel('Game board. Use pieces and highlighted destinations.').locator('svg').first();
+  const before=await canvas.getAttribute('viewBox'),box=(await canvas.boundingBox())!;
+  const cdp=isMobile?await page.context().newCDPSession(page):null;
+  for(let i=0;i<3;i++){
+    const x=box.x+box.width/2,y=box.y+box.height/2;
+    if(cdp){
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+      for(let step=1;step<=10;step++)
+        await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+step*15,y:y+step*15}]});
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    }else{
+      await page.mouse.move(x,y);await page.mouse.down();
+      await page.mouse.move(x+150,y+150,{steps:10});await page.mouse.up();
+    }
+  }
+  await cdp?.detach();
+  await expect(canvas).not.toHaveAttribute('viewBox',before!);
+  expect(await moves(page)).toEqual([]);
+  await page.getByRole('button',{name:'Row 1, column 1',exact:true}).click();
+  await expect.poll(()=>moves(page)).toEqual([{cell:0}]);
+});
+
+test('a large Scopa table keeps its hand on the felt and supports a multi-card capture',async({page,request})=>{
+  await page.setViewportSize({width:390,height:844});
+  const game=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/scopa.json'),'utf8'));
+  const opening=game.unit_tests.cases.find((item:{kind:string})=>item.kind==='initial');
+  const table=['S','H','C'].flatMap(suit=>Array.from({length:7},(_,i)=>`${i+1}${suit}`));
+  const view={...opening.view_of_mover,table,hand:['10D'],legal:[{card:'10D',capture:['3S','7C']}]};
+  await mount(page,request,game.declarative_ui,state({view}));
+  const hand=page.getByRole('button',{name:'Play K♦',exact:true});
+  await expect(hand).toBeVisible();
+  await expect(page.locator('svg polyline[stroke="#316f68"]')).toHaveCount(1);
+  await hand.click();
+  await page.getByRole('button',{name:'Take 3♠',exact:true}).click();
+  await page.getByRole('button',{name:'Take 7♣',exact:true}).click();
+  await expect.poll(()=>moves(page)).toEqual([{card:'10D',capture:['3S','7C']}]);
+});
+
 test('scene copy hides internal terminology without changing move identifiers or option values',async({page,request})=>{
   const pkg=spec(`const gameUI={reduce(message){return {scene:{
     pieces:[{id:'declarative_piece',type:'token',board:'board',position:{cell:'0'},text:'Token (Declarative)',aria_label:'Token (Declarative)',actions:['move'],move_targets:['declarative_target']}],

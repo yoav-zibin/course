@@ -18,7 +18,7 @@ export type Motion = {
   animate_own?: boolean; easing?: 'ease-out' | 'ease-in-out-quad';
 };
 export type GameSpec = {
-  format: 'buildplay-ui'; version: 1; viewport: { width: number; height: number; camera_enabled?: boolean };
+  format: 'buildplay-ui'; version: 1; viewport: { width: number; height: number; camera_enabled?: boolean; camera_controls?: boolean };
   boards: Board[]; piece_types: Record<string, PieceType>; assets?: Record<string, { uri: string }>;
   strings?: Record<string, string>; ui_code: string; motion?: Motion;
 };

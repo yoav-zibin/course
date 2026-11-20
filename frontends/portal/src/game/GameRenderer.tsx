@@ -309,7 +309,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
           y:clamp(at.y-(g.touch?Math.min(54,size.height*scale*.6+22):0),size.height*scale/2+8,c.height-size.height*scale/2-8)};
         const point=actions.current.boardPoint(lifted),target=hitTarget(spec,sceneRef.current,point,piece,16/scale);
         setDrag({id:piece.id,at:target?position(spec,target):point,target:target?.id});actions.current.showPreview(target?.id||null);
-      }else if(g.moved&&!g.piece&&!g.target){
+      }else if(g.moved&&!g.piece&&(!g.target||
+        spec.viewport.camera_controls===true&&current.current.camera.zoom!==1)){
         g.kind='pan';
         const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height);
         actions.current.setSafeCamera({...g.camera,x:g.camera.x-dx/scale,y:g.camera.y-dy/scale});
@@ -367,6 +368,11 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   return <View style={styles.container}>
     <View style={styles.toolbar}>
       <Text style={styles.status} accessibilityLiveRegion="polite">{message.replay?copyText("Reviewing match"):busy?copyText("Sending move…"):message.status!=='ongoing'?copyText("Game finished"):active?copyText("Your turn"):copyText("Waiting for a move")}</Text>
+      {spec.viewport.camera_controls===true&&spec.viewport.camera_enabled!==false&&<View style={styles.row}>
+        <Tool label={copyText("Zoom out")} text="−" disabled={camera.zoom<=.25} onPress={()=>zoomTo(camera.zoom/1.5)}/>
+        <Tool label={copyText("Reset board view")} text="1:1" onPress={()=>setSafeCamera({zoom:1,x:0,y:0})}/>
+        <Tool label={copyText("Zoom in")} text="+" disabled={camera.zoom>=6} onPress={()=>zoomTo(camera.zoom*1.5)}/>
+      </View>}
     </View>
     {!ready&&<ActivityIndicator accessibilityLabel={copyText("Loading game board")} color="#91d7c4" style={styles.loading}/>}
     {!!error&&<Text accessibilityRole="alert" style={styles.error}>{playerText(error)}</Text>}

@@ -7,6 +7,10 @@ const gameUI = {
     const strings = Object.assign({},SOURCE_STRINGS,m.strings || {});
     const text = (key,values={}) => String(strings[key]).replace(/\{(\w+)\}/g,
       (_,name) => String(values[name] ?? ''));
+    const shortName = name => {
+      const chars = Array.from(name);
+      return chars.length > 10 ? chars.slice(0,9).join('') + '…' : chars.join('');
+    };
     const symbols = {S:'♠',H:'♥',D:'♦',C:'♣'};
     const cardText = card => {
       const n = Number(card.slice(0,-1));
@@ -40,7 +44,7 @@ const gameUI = {
       emitted = candidates.find(move => move.capture.length === taken.length &&
         taken.every(value => move.capture.includes(value))) || null;
     }
-    const scene = {pieces:[],targets:[],controls:[],labels:[]};
+    const scene = {pieces:[],targets:[],controls:[],labels:[],paths:[]};
     const label = (id,value,x,y,font_size) => scene.labels.push({id,text:String(value),x,y,font_size});
     const piece = (id,card,position,scale=1) => scene.pieces.push({id,type:type(card),board:'table',
       position,text:cardText(card),scale,actions:[]});
@@ -52,8 +56,11 @@ const gameUI = {
     label('stock',text('stock',{n:s.deck_count}),260,85,16);
     const extraRows = Math.max(0, Math.ceil(s.table.length / 7) - 2);
     const shift = extraRows * 105;
+    for (let row = 0; row < extraRows; row++)
+      scene.paths.push({id:`table_extension_${row}`,points:[
+        {x:0,y:642.5+row*105},{x:640,y:642.5+row*105}],color:'#316f68',width:105});
     if (s.over) label('result',s.winner < 0 ? strings.tie :
-      text('winner',{name:m.players?.[s.winner]?.name || text('player',{n:s.winner+1})}),240,105,18);
+      text('winner',{name:shortName(m.players?.[s.winner]?.name || text('player',{n:s.winner+1}))}),240,105,18);
     else if (active && s.hand?.length)
       label('hint',selected ? strings.choose_capture : strings.choose_card,220,405+shift,16);
     s.table.forEach((card,i) => {

@@ -24,8 +24,13 @@ const gameUI = {
     const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined;
     const legal=active?(s.legal||[]):[];
     const pieces=[],targets=[],controls=[],paths=[];
+    const playerName=seat=>m.players?.[seat]?.name||t('turn',{n:seat+1});
+    const shortName=seat=>{const chars=Array.from(playerName(seat));return chars.length>14?chars.slice(0,13).join('')+'…':chars.join('');};
+    const result=(KIND==='connect6'||KIND==='ataxx')&&(m.status==='over'||s.over)
+      ? s.winner===-1?t('draw'):Number.isInteger(s.winner)&&s.winner>=0
+        ?t('winner',{name:shortName(s.winner)}):t('finished') : null;
     const labels=[{id:'title',text:t('title'),x:24,y:18,font_size:26},
-      {id:'turn',text:m.status==='over'||s.over?t('finished'):t('turn',{n:s.turn+1}),x:24,y:54,font_size:18}];
+      {id:'turn',text:result||((m.status==='over'||s.over)?t('finished'):t('turn',{n:s.turn+1})),x:24,y:54,font_size:(KIND==='connect6'||KIND==='ataxx')?22:18}];
     if(KIND==='connect6'&&s.pending)labels.push({id:'turn-progress',text:t('place_second'),x:24,y:82,font_size:14});
     if(KIND==='connect6')for(let i=0;i<19;i++){
       const offset=20+i*40;
@@ -57,13 +62,15 @@ const gameUI = {
     }else if(KIND==='ataxx'){
       s.board.forEach((value,cell)=>{
         if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},
+          text:value===0?'○':'◆',aria_label:t('piece_at',{name:playerName(value),r:Math.floor(cell/7)+1,c:cell%7+1}),
           scale:selectedFrom===cell?1.12:1,actions:[]});
         if(active&&legal.some(move=>move.from===cell))
           targets.push({id:'select_'+cell,board:'main',position:{cell:String(cell)},
-            color:'#00000000',aria_label:t('cell',{n:cell+1})});
+            color:'#00000000',aria_label:t('select_piece',{r:Math.floor(cell/7)+1,c:cell%7+1})});
       });
       if(selectedFrom!==null)legal.filter(move=>move.from===selectedFrom).forEach(move=>
-        targets.push({id:keyOf(move),board:'main',position:{cell:String(move.to)},label:'•',aria_label:t('cell',{n:move.to+1})}));
+        targets.push({id:keyOf(move),board:'main',position:{cell:String(move.to)},label:'•',
+          aria_label:t('move_to',{r:Math.floor(move.to/7)+1,c:move.to%7+1})}));
       const counts=[0,1].map(player=>s.board.filter(value=>value===player).length);
       labels.push({id:'score',text:t('score',{a:counts[0],b:counts[1]}),x:275,y:520,font_size:20});
     }else{
@@ -72,7 +79,8 @@ const gameUI = {
         else if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},text:KIND==='tictactoe'?(value===0?'X':'O'):'',rotation:KIND==='domineering'&&value===1?90:0});
       });
       legal.forEach(move=>targets.push(KIND==='connect6'
-        ?{id:keyOf(move),board:'main',position:{cell:String(move.cell)},asset:'connect6_cell',aria_label:t('cell',{n:move.cell+1})}
+        ?{id:keyOf(move),board:'main',position:{cell:String(move.cell)},asset:'connect6_cell',
+          aria_label:t('position',{r:Math.floor(move.cell/19)+1,c:move.cell%19+1})}
         :{id:keyOf(move),board:'main',position:{cell:String(KIND==='connect4'?move.column:move.cell)},label:t('cell',{n:(KIND==='connect4'?move.column:move.cell)+1})}));
       if(KIND==='domineering'&&targets.length)pieces.push({id:'domino',type:'domino',board:'tray',position:{x:60,y:70},rotation:s.turn?90:0,draggable:true,move_targets:targets.map(p=>p.id),actions:['move']});
     }
