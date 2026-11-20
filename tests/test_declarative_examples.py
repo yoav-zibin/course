@@ -154,6 +154,25 @@ def test_chutes_ladders_links_and_shared_square_tokens_remain_visible():
     assert all(not piece['id'].startswith('square_') for piece in scene['pieces'])
 
 
+@pytest.mark.parametrize(('card','declaration'), [('R#', {'num':1}), ('WD', {'color':'R'})])
+def test_dos_wild_card_added_to_center_has_a_valid_declaration(card, declaration):
+    body = load('dos')
+    case = body.unit_tests['cases'][0]
+    state = case['state']
+    state['phase'] = 'add_center'
+    index = state['hands'][0].index(card)
+    ctx = case['ctx']
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    view = rules.call('viewFor',state,case['player_id'],ctx=ctx,seed=17)
+    ui = DeclarativeLogic(body.declarative_ui)
+    m = {'type':'state_changed','view':view,'status':'ongoing',
+         'acting_for_player_index':0,'my_player_index':0,'move_count':0}
+    move = {'type':'add_center','card':{'i':index,**declaration}}
+    emitted = scene_event(ui,m,ui.reduce(m),move)['make_move']
+    result = rules.call('applyMove',state,case['player_id'],emitted,ctx=ctx,seed=17)
+    assert result['state']['center'][-1]['id'] == card
+
+
 def test_thirty_one_direct_pile_and_card_actions_and_revealed_hands():
     body = load('thirty_one')
     ui = DeclarativeLogic(body.declarative_ui)

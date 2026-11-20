@@ -178,6 +178,10 @@ const gameUI = {
         230, 565, 14);
     } else if (KIND === 'dos') {
       const hand = Array.isArray(s.hand) ? s.hand : [];
+      const centerRef = index => {
+        const card = String(hand[index] || '');
+        return card.endsWith('#') ? {i:index,num:1} : card === 'WD' ? {i:index,color:'R'} : {i:index};
+      };
       (s.center || []).forEach((card, i) =>
         staticPiece(`center_${i}`, 'played', 'table', {x:250 + i * 70,y:100},
           {text:cardText(card.id || card)}));
@@ -199,10 +203,7 @@ const gameUI = {
           kind:'button',label:text('Play {card}',{card:value})});
       });
       if (active && dosPlacements.length) {
-        const bonusRefs = dosBonus.map(index => {
-          const card = String(hand[index] || '');
-          return card.endsWith('#') ? {i:index,num:1} : card === 'WD' ? {i:index,color:'R'} : {i:index};
-        });
+        const bonusRefs = dosBonus.map(centerRef);
         const movePlacements = dosPlacements.map(placement => ({pile:placement.pile,cards:placement.cards,
           ...(placement.centerNum !== undefined ? {centerNum:placement.centerNum} : {}),
           ...(placement.centerColor !== undefined ? {centerColor:placement.centerColor} : {})}));
@@ -219,7 +220,7 @@ const gameUI = {
         offer({type:'draw'}, text('Draw a card ({n} left)', {n:s.deck_count || 0}));
       if (active && s.phase === 'after_draw') offer({type:'pass'}, text('Pass'));
       if (active && s.phase === 'add_center') hand.forEach((card, i) =>
-        offer({type:'add_center',card:{i}}, text('Play {card}', {card:cardText(card)})));
+        offer({type:'add_center',card:centerRef(i)}, text('Play {card}', {card:cardText(card)})));
       label('counts', (s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),
         22, 470, 14);
     } else if (KIND === 'kisolo') {
