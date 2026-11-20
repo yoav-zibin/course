@@ -36,6 +36,11 @@ def test_examples_declare_only_real_piece_actions(kind):
             assert piece['actions']==(['tap']if {'pit':pit}in message['view']['legal']else [])
         elif kind=='ataxx':
             assert piece['actions']==[]
+        elif kind in ('chinese_checkers','abalone'):
+            cell=int(piece['position']['cell'])
+            can_move=any(cell in (move['from'] if isinstance(move['from'],list) else [move['from']])
+                         for move in message['view']['legal'])
+            assert piece['actions']==(['tap'] if can_move else [])
         elif kind=='domineering'and piece['id']=='domino':
             assert piece['actions']==['move']
             assert set(piece['move_targets'])=={target['id']for target in scene['targets']}

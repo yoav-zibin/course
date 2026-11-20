@@ -106,7 +106,8 @@ const gameUI={reduce(message,localState){
         if(KIND==='chinese_checkers')selected=[cell];
         else if(selected.includes(cell))selected=selected.filter(v=>v!==cell);
         else if(selected.length<3)selected.push(cell);
-        output={scene:null,local_state:nextLocal};
+        const updatedLocal={...nextLocal,selected:selected.slice()};
+        output={scene:null,local_state:updatedLocal};
       }else{
         const move=legal.find(option=>moveKey(option)===id);
         if(move)output.make_move=move;
@@ -115,7 +116,7 @@ const gameUI={reduce(message,localState){
   }
   if(!output.scene){
     // Rebuild once with the new selection; there is no rule or state mutation here.
-    const next=gameUI.reduce(m,nextLocal);
+    const next=gameUI.reduce(m,output.local_state||nextLocal);
     output.scene=next.scene;
   }
   return output;

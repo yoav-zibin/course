@@ -62,6 +62,32 @@ def test_newly_occupied_hex_cells_use_a_stable_host_pulse(kind):
         assert same_piece["animation"]["key"] == piece["animation"]["key"]
 
 
+@pytest.mark.parametrize("kind", ["chinese_checkers", "abalone"])
+def test_piece_selection_is_kept_until_a_legal_move_is_chosen(kind):
+    body = package(kind)
+    message = {
+        "type": "state_changed", "view": body.unit_tests["cases"][0]["view_of_mover"],
+        "status": "ongoing", "my_player_index": 0, "acting_for_player_index": 0,
+        "move_count": 0, "strings": body.declarative_ui["strings"],
+    }
+    ui = DeclarativeLogic(body.declarative_ui)
+    move = message["view"]["legal"][0]
+    origins = move["from"] if isinstance(move["from"], list) else [move["from"]]
+    frame = ui.reduce(message)
+    for cell in origins:
+        frame = ui.reduce({"type": "ui_event", "event": {"type": "tap", "id": f"piece_{cell}"},
+                           "state_changed": message}, frame["local_state"])
+    assert frame["local_state"]["selected"] == origins
+
+    move_key = "move_" + "_".join(
+        f"{key}_{'.'.join(map(str, value)) if isinstance(value, list) else value}"
+        for key, value in move.items())
+    assert move_key in {target["id"] for target in frame["scene"]["targets"]}
+    result = ui.reduce({"type": "ui_event", "event": {"type": "tap", "id": move_key},
+                        "state_changed": message}, frame["local_state"])
+    assert result["make_move"] == move
+
+
 def test_chinese_checkers_has_full_star_and_supports_a_chain_hop():
     body = package("chinese_checkers")
     cells = constants(body.server_code, "HEX_CELLS")

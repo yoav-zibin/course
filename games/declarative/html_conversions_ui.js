@@ -203,8 +203,10 @@ const gameUI = {
           p.r >= 0 && p.r < 8 && p.c >= 0 && p.c < 8;
         const fromKey = inBounds(from) ? `${from.r},${from.c}` : '';
         const toKey = inBounds(to) ? `${to.r},${to.c}` : '';
+        const adjacentState = Number.isInteger(localState?.move_count) &&
+          Number.isInteger(m.move_count) && localState.move_count + 1 === m.move_count;
         const canCarry = Array.isArray(previousBoard) && previousIds && typeof previousIds === 'object' && !Array.isArray(previousIds) &&
-          inBounds(from) && inBounds(to) && previousBoard[from.r]?.[from.c] != null &&
+          adjacentState && inBounds(from) && inBounds(to) && previousBoard[from.r]?.[from.c] != null &&
           snapshot[from.r]?.[from.c] === null && snapshot[to.r]?.[to.c] != null && previousIds[fromKey];
         if (canCarry) {
           pieceIds = Object.assign({}, previousIds);
@@ -254,7 +256,9 @@ const gameUI = {
           const toIndex = valid ? last.tr * 8 + last.tc : -1;
           const oldPiece = valid && Array.isArray(previousBoard) ? previousBoard[fromIndex] : 0;
           const newPiece = valid ? snapshot[toIndex] : 0;
-          const canCarry = valid && Array.isArray(previousBoard) && previousIds && typeof previousIds === 'object' && !Array.isArray(previousIds) && oldPiece &&
+          const adjacentState = Number.isInteger(localState?.move_count) &&
+            Number.isInteger(m.move_count) && localState.move_count + 1 === m.move_count;
+          const canCarry = adjacentState && valid && Array.isArray(previousBoard) && previousIds && typeof previousIds === 'object' && !Array.isArray(previousIds) && oldPiece &&
             snapshot[fromIndex] === 0 && newPiece && Math.sign(oldPiece) === Math.sign(newPiece) &&
             previousIds[String(fromIndex)];
           if (canCarry) {
