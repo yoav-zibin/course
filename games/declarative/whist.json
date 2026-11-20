@@ -1,0 +1,1597 @@
+{
+  "name": "Whist (Declarative)",
+  "description": "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.",
+  "allowed_player_counts": [
+    4
+  ],
+  "all_state_public": false,
+  "server_code": "// Four-player partnership Whist, played as a single thirteen-trick hand.\nconst game = {\n  newMatch(ctx) {\n    const deck = [];\n    for (const suit of ['S','H','D','C'])\n      for (let rank = 2; rank <= 14; rank++) deck.push(`${rank}${suit}`);\n    for (let i = deck.length - 1; i > 0; i--) {\n      const j = Math.floor(ctx.random() * (i + 1));\n      [deck[i], deck[j]] = [deck[j], deck[i]];\n    }\n    const hands = [[],[],[],[]];\n    deck.forEach((card, i) => hands[i % 4].push(card));\n    const trump = deck[51].slice(-1);\n    return {state:{hands,trump,trick:[],last_trick:[],tricks:[0,0],turn:0,over:false,winner:-1},\n      turn:[ctx.players[0].id]};\n  },\n  applyMove(state, playerId, move, ctx) {\n    const seat = ctx.players.findIndex(player => player.id === playerId);\n    if (state.over) throw new InvalidMove('game over');\n    if (seat !== state.turn || seat < 0) throw new InvalidMove('not your turn');\n    if (!move || typeof move !== 'object' || Array.isArray(move) ||\n        Object.keys(move).length !== 1 || typeof move.card !== 'string')\n      throw new InvalidMove('choose a card');\n    const legal = legalCards(state, seat);\n    if (!legal.includes(move.card)) throw new InvalidMove('follow suit when possible');\n    const next = JSON.parse(JSON.stringify(state));\n    next.hands[seat].splice(next.hands[seat].indexOf(move.card), 1);\n    next.trick.push({seat,card:move.card});\n    if (next.trick.length === 4) {\n      const led = next.trick[0].card.slice(-1);\n      const value = card => {\n        const suit = card.slice(-1), rank = Number(card.slice(0,-1));\n        return (suit === next.trump ? 200 : suit === led ? 100 : 0) + rank;\n      };\n      const winner = next.trick.reduce((best, play) =>\n        value(play.card) > value(best.card) ? play : best).seat;\n      next.tricks[winner % 2]++;\n      next.last_trick = next.trick;\n      next.trick = [];\n      next.turn = winner;\n      if (next.tricks[0] + next.tricks[1] === 13) {\n        next.over = true;\n        next.winner = next.tricks[0] > next.tricks[1] ? 0 : 1;\n        return {state:next,turn:null,payouts:teamPayouts(next.winner,ctx)};\n      }\n    } else next.turn = (seat + 1) % 4;\n    return {state:next,turn:[ctx.players[next.turn].id]};\n  },\n  viewFor(state, playerId, ctx) {\n    const seat = playerId == null ? -1 : ctx.players.findIndex(player => player.id === playerId);\n    return {hand:seat < 0 ? [] : state.hands[seat].slice(),\n      counts:state.hands.map(hand => hand.length),trump:state.trump,\n      trick:state.trick,last_trick:state.last_trick,tricks:state.tricks,turn:state.turn,\n      over:state.over,winner:state.winner,\n      legal:seat === state.turn && !state.over ? legalCards(state,seat) : []};\n  },\n  computerMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(player => player.id === playerId);\n    const legal = legalCards(state, seat);\n    return {card:legal[Math.floor(ctx.random() * legal.length)]};\n  },\n  randomMove(state, playerId, ctx) {\n    return this.computerMove(state, playerId, ctx);\n  }\n};\n\nfunction legalCards(state, seat) {\n  const hand = state.hands[seat];\n  if (!state.trick.length) return hand.slice();\n  const led = state.trick[0].card.slice(-1);\n  const following = hand.filter(card => card.slice(-1) === led);\n  return following.length ? following : hand.slice();\n}\n\nfunction teamPayouts(winner, ctx) {\n  const humans = ctx.players.filter(player => player.kind === 'human' && player.active !== false);\n  if (!humans.length) return {};\n  const winners = ctx.players.filter((player, seat) =>\n    player.kind === 'human' && player.active !== false && seat % 2 === winner);\n  const recipients = winners.length ? winners : humans;\n  const pot = ctx.pot || 0, share = Math.floor(pot / recipients.length), remainder = pot % recipients.length;\n  const payouts = Object.fromEntries(humans.map(player => [player.id,0]));\n  recipients.forEach((player, i) => { payouts[player.id] = share + (i < remainder ? 1 : 0); });\n  return payouts;\n}\n",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 640,
+      "height": 590
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 640,
+        "height": 590,
+        "color": "#174d42",
+        "line_color": "#e2c47a"
+      }
+    ],
+    "piece_types": {
+      "red": {
+        "shape": "card",
+        "width": 74,
+        "height": 96,
+        "color": "#fffdf6",
+        "text_color": "#b02e35",
+        "border_color": "#d5c6a9"
+      },
+      "black": {
+        "shape": "card",
+        "width": 74,
+        "height": 96,
+        "color": "#fffdf6",
+        "text_color": "#1c2b31",
+        "border_color": "#d5c6a9"
+      }
+    },
+    "strings": {
+      "title": "Whist",
+      "trump": "Trump {suit}",
+      "player": "Player {n}",
+      "play": "Play {card}",
+      "winner": "{team} wins",
+      "turn": "{name} to play",
+      "server_game_over": "game over",
+      "server_not_your_turn": "not your turn",
+      "server_choose_card": "choose a card",
+      "server_follow_suit": "follow suit when possible"
+    },
+    "ui_code": "const SOURCE_STRINGS={\"title\": \"Whist\", \"trump\": \"Trump {suit}\", \"player\": \"Player {n}\", \"play\": \"Play {card}\", \"winner\": \"{team} wins\", \"turn\": \"{name} to play\", \"server_game_over\": \"game over\", \"server_not_your_turn\": \"not your turn\", \"server_choose_card\": \"choose a card\", \"server_follow_suit\": \"follow suit when possible\"};\nconst gameUI = {\n  reduce(message) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const text = (key, values = {}) => String(strings[key]).replace(/\\{(\\w+)\\}/g,\n      (_, name) => String(values[name] ?? ''));\n    const symbols = {S:'♠',H:'♥',D:'♦',C:'♣'};\n    const cardText = card => {\n      const rank = Number(card.slice(0,-1));\n      return `${({11:'J',12:'Q',13:'K',14:'A'})[rank] || rank}${symbols[card.slice(-1)]}`;\n    };\n    const cardType = card => /[HD]$/.test(card) ? 'red' : 'black';\n    const scene = {pieces:[],targets:[],controls:[],labels:[]};\n    const label = (id, value, x, y, font_size) =>\n      scene.labels.push({id,text:String(value),x,y,font_size});\n    label('title', strings.title, 275, 12, 27);\n    label('trump', text('trump',{suit:symbols[s.trump]}), 265, 55, 18);\n    label('team_one', `1 + 3: ${s.tricks[0]}`, 120, 90, 23);\n    label('team_two', `2 + 4: ${s.tricks[1]}`, 410, 90, 23);\n    const turnName = m.players?.[s.turn]?.name || text('player',{n:s.turn + 1});\n    label('turn', s.over ? text('winner',{team:s.winner === 0 ? '1 + 3' : '2 + 4'}) :\n      text('turn',{name:turnName}), 240, 315, 16);\n    const played = s.trick.length ? s.trick : s.last_trick;\n    played.forEach((play, i) => {\n      const position = {x:140 + i * 120,y:205};\n      scene.pieces.push({id:`played_${i}`,type:cardType(play.card),board:'table',position,\n        text:cardText(play.card),actions:[]});\n      const name = m.players?.[play.seat]?.name || text('player',{n:play.seat + 1});\n      label(`name_${i}`,name,position.x - 25,270,13);\n    });\n    const legal = new Set(active ? s.legal : []);\n    (s.hand || []).forEach((card,i) => {\n      const position = {x:80 + (i % 7) * 80,y:395 + Math.floor(i / 7) * 105};\n      scene.pieces.push({id:`hand_${i}`,type:cardType(card),board:'table',position,\n        text:cardText(card),actions:[]});\n      if (legal.has(card)) scene.targets.push({id:`play_${card}`,board:'table',position,\n        color:'#00000000',hit_area:{x:-37,y:-48,width:74,height:96},\n        aria_label:text('play',{card:cardText(card)})});\n    });\n    const out = {scene,local_state:{}};\n    if (active && message.type === 'ui_event' && message.event?.type === 'tap') {\n      const card = String(message.event.id || '').replace(/^play_/, '');\n      if (legal.has(card)) out.make_move = {card};\n    }\n    return out;\n  }\n};\n"
+  },
+  "rules": "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.",
+  "ui_instructions": "Tap a highlighted card to play it. The trump suit and both teams’ trick counts appear above the table.",
+  "tutorial": {
+    "text": "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><p>Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.</p>"
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+    },
+    {
+      "caption": "Table",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+    },
+    {
+      "caption": "Trick",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+    },
+    {
+      "caption": "Hand",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "properties": {
+        "trump": {
+          "enum": [
+            "S",
+            "H",
+            "D",
+            "C"
+          ]
+        },
+        "trick": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "seat",
+              "card"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "card": {
+                "type": "string",
+                "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+              }
+            }
+          },
+          "maxItems": 3
+        },
+        "last_trick": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "seat",
+              "card"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "card": {
+                "type": "string",
+                "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+              }
+            }
+          },
+          "maxItems": 4
+        },
+        "tricks": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 13
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "over": {
+          "type": "boolean"
+        },
+        "winner": {
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        },
+        "hands": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+            },
+            "maxItems": 13,
+            "uniqueItems": true
+          },
+          "minItems": 4,
+          "maxItems": 4
+        }
+      },
+      "required": [
+        "trump",
+        "trick",
+        "last_trick",
+        "tricks",
+        "turn",
+        "over",
+        "winner",
+        "hands"
+      ],
+      "additionalProperties": false
+    },
+    "view_schema": {
+      "type": "object",
+      "properties": {
+        "trump": {
+          "enum": [
+            "S",
+            "H",
+            "D",
+            "C"
+          ]
+        },
+        "trick": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "seat",
+              "card"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "card": {
+                "type": "string",
+                "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+              }
+            }
+          },
+          "maxItems": 3
+        },
+        "last_trick": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "seat",
+              "card"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "card": {
+                "type": "string",
+                "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+              }
+            }
+          },
+          "maxItems": 4
+        },
+        "tricks": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 13
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "over": {
+          "type": "boolean"
+        },
+        "winner": {
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        },
+        "hand": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+          },
+          "maxItems": 13,
+          "uniqueItems": true
+        },
+        "legal": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+          },
+          "maxItems": 13,
+          "uniqueItems": true
+        },
+        "counts": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 13
+          },
+          "minItems": 4,
+          "maxItems": 4
+        }
+      },
+      "required": [
+        "trump",
+        "trick",
+        "last_trick",
+        "tricks",
+        "turn",
+        "over",
+        "winner",
+        "hand",
+        "legal",
+        "counts"
+      ],
+      "additionalProperties": false
+    },
+    "move_schema": {
+      "type": "object",
+      "properties": {
+        "card": {
+          "type": "string",
+          "pattern": "^(?:[2-9]|1[0-4])[SHDC]$"
+        }
+      },
+      "required": [
+        "card"
+      ],
+      "additionalProperties": false
+    },
+    "cases": [
+      {
+        "name": "Initial play",
+        "description": "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p2",
+              "kind": "human",
+              "display_name": "Player 3",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p3",
+              "kind": "human",
+              "display_name": "Player 4",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "hands": [
+            [
+              "12H",
+              "8C",
+              "3C",
+              "2C",
+              "4H",
+              "12D",
+              "9C",
+              "6S",
+              "8D",
+              "2H",
+              "8S",
+              "12S",
+              "10D"
+            ],
+            [
+              "11S",
+              "10S",
+              "9D",
+              "4S",
+              "13S",
+              "14S",
+              "3H",
+              "7S",
+              "11D",
+              "9S",
+              "7C",
+              "10H",
+              "11C"
+            ],
+            [
+              "13C",
+              "2D",
+              "10C",
+              "14C",
+              "12C",
+              "14D",
+              "5C",
+              "3D",
+              "7H",
+              "9H",
+              "7D",
+              "8H",
+              "5S"
+            ],
+            [
+              "6H",
+              "5H",
+              "5D",
+              "6C",
+              "11H",
+              "3S",
+              "4D",
+              "13D",
+              "4C",
+              "6D",
+              "13H",
+              "14H",
+              "2S"
+            ]
+          ],
+          "trump": "S",
+          "trick": [],
+          "last_trick": [],
+          "tricks": [
+            0,
+            0
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1
+        },
+        "view_of_mover": {
+          "hand": [
+            "12H",
+            "8C",
+            "3C",
+            "2C",
+            "4H",
+            "12D",
+            "9C",
+            "6S",
+            "8D",
+            "2H",
+            "8S",
+            "12S",
+            "10D"
+          ],
+          "counts": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "trump": "S",
+          "trick": [],
+          "last_trick": [],
+          "tricks": [
+            0,
+            0
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1,
+          "legal": [
+            "12H",
+            "8C",
+            "3C",
+            "2C",
+            "4H",
+            "12D",
+            "9C",
+            "6S",
+            "8D",
+            "2H",
+            "8S",
+            "12S",
+            "10D"
+          ]
+        },
+        "view_of_other": {
+          "hand": [],
+          "counts": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "trump": "S",
+          "trick": [],
+          "last_trick": [],
+          "tricks": [
+            0,
+            0
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1,
+          "legal": []
+        },
+        "player_id": "p0",
+        "other_player_id": null,
+        "move": {
+          "card": "9C"
+        },
+        "expected_state": {
+          "hands": [
+            [
+              "12H",
+              "8C",
+              "3C",
+              "2C",
+              "4H",
+              "12D",
+              "6S",
+              "8D",
+              "2H",
+              "8S",
+              "12S",
+              "10D"
+            ],
+            [
+              "11S",
+              "10S",
+              "9D",
+              "4S",
+              "13S",
+              "14S",
+              "3H",
+              "7S",
+              "11D",
+              "9S",
+              "7C",
+              "10H",
+              "11C"
+            ],
+            [
+              "13C",
+              "2D",
+              "10C",
+              "14C",
+              "12C",
+              "14D",
+              "5C",
+              "3D",
+              "7H",
+              "9H",
+              "7D",
+              "8H",
+              "5S"
+            ],
+            [
+              "6H",
+              "5H",
+              "5D",
+              "6C",
+              "11H",
+              "3S",
+              "4D",
+              "13D",
+              "4C",
+              "6D",
+              "13H",
+              "14H",
+              "2S"
+            ]
+          ],
+          "trump": "S",
+          "trick": [
+            {
+              "seat": 0,
+              "card": "9C"
+            }
+          ],
+          "last_trick": [],
+          "tricks": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1
+        },
+        "expected_turn": [
+          "p1"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            "12H",
+            "8C",
+            "3C",
+            "2C",
+            "4H",
+            "12D",
+            "6S",
+            "8D",
+            "2H",
+            "8S",
+            "12S",
+            "10D"
+          ],
+          "counts": [
+            12,
+            13,
+            13,
+            13
+          ],
+          "trump": "S",
+          "trick": [
+            {
+              "seat": 0,
+              "card": "9C"
+            }
+          ],
+          "last_trick": [],
+          "tricks": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "counts": [
+            12,
+            13,
+            13,
+            13
+          ],
+          "trump": "S",
+          "trick": [
+            {
+              "seat": 0,
+              "card": "9C"
+            }
+          ],
+          "last_trick": [],
+          "tricks": [
+            0,
+            0
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Intermediate play",
+        "description": "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p2",
+              "kind": "human",
+              "display_name": "Player 3",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p3",
+              "kind": "human",
+              "display_name": "Player 4",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 12,
+          "seed": 23
+        },
+        "state": {
+          "hands": [
+            [
+              "12H",
+              "8C",
+              "3C",
+              "4H",
+              "12D",
+              "6S",
+              "8D",
+              "2H",
+              "12S",
+              "10D"
+            ],
+            [
+              "10S",
+              "9D",
+              "4S",
+              "13S",
+              "14S",
+              "3H",
+              "7S",
+              "11D",
+              "9S",
+              "10H"
+            ],
+            [
+              "13C",
+              "2D",
+              "12C",
+              "14D",
+              "5C",
+              "3D",
+              "7H",
+              "9H",
+              "7D",
+              "8H"
+            ],
+            [
+              "6H",
+              "5H",
+              "5D",
+              "11H",
+              "4D",
+              "13D",
+              "6D",
+              "13H",
+              "14H",
+              "2S"
+            ]
+          ],
+          "trump": "S",
+          "trick": [],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "11S"
+            },
+            {
+              "seat": 2,
+              "card": "5S"
+            },
+            {
+              "seat": 3,
+              "card": "3S"
+            },
+            {
+              "seat": 0,
+              "card": "8S"
+            }
+          ],
+          "tricks": [
+            1,
+            2
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1
+        },
+        "view_of_mover": {
+          "hand": [
+            "10S",
+            "9D",
+            "4S",
+            "13S",
+            "14S",
+            "3H",
+            "7S",
+            "11D",
+            "9S",
+            "10H"
+          ],
+          "counts": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "trump": "S",
+          "trick": [],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "11S"
+            },
+            {
+              "seat": 2,
+              "card": "5S"
+            },
+            {
+              "seat": 3,
+              "card": "3S"
+            },
+            {
+              "seat": 0,
+              "card": "8S"
+            }
+          ],
+          "tricks": [
+            1,
+            2
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "legal": [
+            "10S",
+            "9D",
+            "4S",
+            "13S",
+            "14S",
+            "3H",
+            "7S",
+            "11D",
+            "9S",
+            "10H"
+          ]
+        },
+        "view_of_other": {
+          "hand": [],
+          "counts": [
+            10,
+            10,
+            10,
+            10
+          ],
+          "trump": "S",
+          "trick": [],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "11S"
+            },
+            {
+              "seat": 2,
+              "card": "5S"
+            },
+            {
+              "seat": 3,
+              "card": "3S"
+            },
+            {
+              "seat": 0,
+              "card": "8S"
+            }
+          ],
+          "tricks": [
+            1,
+            2
+          ],
+          "turn": 1,
+          "over": false,
+          "winner": -1,
+          "legal": []
+        },
+        "player_id": "p1",
+        "other_player_id": null,
+        "move": {
+          "card": "10S"
+        },
+        "expected_state": {
+          "hands": [
+            [
+              "12H",
+              "8C",
+              "3C",
+              "4H",
+              "12D",
+              "6S",
+              "8D",
+              "2H",
+              "12S",
+              "10D"
+            ],
+            [
+              "9D",
+              "4S",
+              "13S",
+              "14S",
+              "3H",
+              "7S",
+              "11D",
+              "9S",
+              "10H"
+            ],
+            [
+              "13C",
+              "2D",
+              "12C",
+              "14D",
+              "5C",
+              "3D",
+              "7H",
+              "9H",
+              "7D",
+              "8H"
+            ],
+            [
+              "6H",
+              "5H",
+              "5D",
+              "11H",
+              "4D",
+              "13D",
+              "6D",
+              "13H",
+              "14H",
+              "2S"
+            ]
+          ],
+          "trump": "S",
+          "trick": [
+            {
+              "seat": 1,
+              "card": "10S"
+            }
+          ],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "11S"
+            },
+            {
+              "seat": 2,
+              "card": "5S"
+            },
+            {
+              "seat": 3,
+              "card": "3S"
+            },
+            {
+              "seat": 0,
+              "card": "8S"
+            }
+          ],
+          "tricks": [
+            1,
+            2
+          ],
+          "turn": 2,
+          "over": false,
+          "winner": -1
+        },
+        "expected_turn": [
+          "p2"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            "9D",
+            "4S",
+            "13S",
+            "14S",
+            "3H",
+            "7S",
+            "11D",
+            "9S",
+            "10H"
+          ],
+          "counts": [
+            10,
+            9,
+            10,
+            10
+          ],
+          "trump": "S",
+          "trick": [
+            {
+              "seat": 1,
+              "card": "10S"
+            }
+          ],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "11S"
+            },
+            {
+              "seat": 2,
+              "card": "5S"
+            },
+            {
+              "seat": 3,
+              "card": "3S"
+            },
+            {
+              "seat": 0,
+              "card": "8S"
+            }
+          ],
+          "tricks": [
+            1,
+            2
+          ],
+          "turn": 2,
+          "over": false,
+          "winner": -1,
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "counts": [
+            10,
+            9,
+            10,
+            10
+          ],
+          "trump": "S",
+          "trick": [
+            {
+              "seat": 1,
+              "card": "10S"
+            }
+          ],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "11S"
+            },
+            {
+              "seat": 2,
+              "card": "5S"
+            },
+            {
+              "seat": 3,
+              "card": "3S"
+            },
+            {
+              "seat": 0,
+              "card": "8S"
+            }
+          ],
+          "tricks": [
+            1,
+            2
+          ],
+          "turn": 2,
+          "over": false,
+          "winner": -1,
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Terminal play",
+        "description": "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Player 1",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Player 2",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p2",
+              "kind": "human",
+              "display_name": "Player 3",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "p3",
+              "kind": "human",
+              "display_name": "Player 4",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 51,
+          "seed": 62
+        },
+        "state": {
+          "hands": [
+            [
+              "12D"
+            ],
+            [],
+            [],
+            []
+          ],
+          "trump": "S",
+          "trick": [
+            {
+              "seat": 1,
+              "card": "7S"
+            },
+            {
+              "seat": 2,
+              "card": "5C"
+            },
+            {
+              "seat": 3,
+              "card": "4D"
+            }
+          ],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "13S"
+            },
+            {
+              "seat": 2,
+              "card": "12C"
+            },
+            {
+              "seat": 3,
+              "card": "13H"
+            },
+            {
+              "seat": 0,
+              "card": "8C"
+            }
+          ],
+          "tricks": [
+            3,
+            9
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1
+        },
+        "view_of_mover": {
+          "hand": [
+            "12D"
+          ],
+          "counts": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "trump": "S",
+          "trick": [
+            {
+              "seat": 1,
+              "card": "7S"
+            },
+            {
+              "seat": 2,
+              "card": "5C"
+            },
+            {
+              "seat": 3,
+              "card": "4D"
+            }
+          ],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "13S"
+            },
+            {
+              "seat": 2,
+              "card": "12C"
+            },
+            {
+              "seat": 3,
+              "card": "13H"
+            },
+            {
+              "seat": 0,
+              "card": "8C"
+            }
+          ],
+          "tricks": [
+            3,
+            9
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1,
+          "legal": [
+            "12D"
+          ]
+        },
+        "view_of_other": {
+          "hand": [],
+          "counts": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "trump": "S",
+          "trick": [
+            {
+              "seat": 1,
+              "card": "7S"
+            },
+            {
+              "seat": 2,
+              "card": "5C"
+            },
+            {
+              "seat": 3,
+              "card": "4D"
+            }
+          ],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "13S"
+            },
+            {
+              "seat": 2,
+              "card": "12C"
+            },
+            {
+              "seat": 3,
+              "card": "13H"
+            },
+            {
+              "seat": 0,
+              "card": "8C"
+            }
+          ],
+          "tricks": [
+            3,
+            9
+          ],
+          "turn": 0,
+          "over": false,
+          "winner": -1,
+          "legal": []
+        },
+        "player_id": "p0",
+        "other_player_id": null,
+        "move": {
+          "card": "12D"
+        },
+        "expected_state": {
+          "hands": [
+            [],
+            [],
+            [],
+            []
+          ],
+          "trump": "S",
+          "trick": [],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "7S"
+            },
+            {
+              "seat": 2,
+              "card": "5C"
+            },
+            {
+              "seat": 3,
+              "card": "4D"
+            },
+            {
+              "seat": 0,
+              "card": "12D"
+            }
+          ],
+          "tricks": [
+            3,
+            10
+          ],
+          "turn": 1,
+          "over": true,
+          "winner": 1
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "hand": [],
+          "counts": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "trump": "S",
+          "trick": [],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "7S"
+            },
+            {
+              "seat": 2,
+              "card": "5C"
+            },
+            {
+              "seat": 3,
+              "card": "4D"
+            },
+            {
+              "seat": 0,
+              "card": "12D"
+            }
+          ],
+          "tricks": [
+            3,
+            10
+          ],
+          "turn": 1,
+          "over": true,
+          "winner": 1,
+          "legal": []
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "counts": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "trump": "S",
+          "trick": [],
+          "last_trick": [
+            {
+              "seat": 1,
+              "card": "7S"
+            },
+            {
+              "seat": 2,
+              "card": "5C"
+            },
+            {
+              "seat": 3,
+              "card": "4D"
+            },
+            {
+              "seat": 0,
+              "card": "12D"
+            }
+          ],
+          "tricks": [
+            3,
+            10
+          ],
+          "turn": 1,
+          "over": true,
+          "winner": 1,
+          "legal": []
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#174d42\"/><rect x=\"38\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><rect x=\"86\" y=\"15\" width=\"36\" height=\"56\" rx=\"4\" fill=\"#fffdf6\" stroke=\"#d5c6a9\"/><circle cx=\"56\" cy=\"43\" r=\"8\" fill=\"#b02e35\"/><path d=\"M104 32l10 11-10 11-10-11z\" fill=\"#1c2b31\"/></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "p0": 0,
+          "p1": 0,
+          "p2": 0,
+          "p3": 0
+        }
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Whist (Declarative)",
+      "short_description": "Cuatro jugadores forman parejas opuestas. Reparte trece cartas a cada uno y usa la última carta del repartidor para elegir el triunfo. Sigue el palo inicial si puedes; si no, juega cualquier carta. Gana el triunfo más alto o la carta más alta del palo inicial si no hay triunfo. El ganador inicia la siguiente baza. Tras trece bazas gana la pareja con más bazas en esta mano.",
+      "game_logic_rules": "Cuatro jugadores forman parejas opuestas. Reparte trece cartas a cada uno y usa la última carta del repartidor para elegir el triunfo. Sigue el palo inicial si puedes; si no, juega cualquier carta. Gana el triunfo más alto o la carta más alta del palo inicial si no hay triunfo. El ganador inicia la siguiente baza. Tras trece bazas gana la pareja con más bazas en esta mano.",
+      "game_ui_rules": "Toca una carta resaltada para jugarla. El triunfo y las bazas de ambos equipos aparecen sobre la mesa.",
+      "tutorial_strings": {
+        "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.": "Cuatro jugadores forman parejas opuestas. Reparte trece cartas a cada uno y usa la última carta del repartidor para elegir el triunfo. Sigue el palo inicial si puedes; si no, juega cualquier carta. Gana el triunfo más alto o la carta más alta del palo inicial si no hay triunfo. El ganador inicia la siguiente baza. Tras trece bazas gana la pareja con más bazas en esta mano."
+      },
+      "client_strings": {
+        "title": "Whist",
+        "trump": "Triunfo {suit}",
+        "player": "Jugador {n}",
+        "play": "Jugar {card}",
+        "winner": "Gana {team}",
+        "turn": "Turno de {name}",
+        "server_game_over": "La partida ha terminado",
+        "server_not_your_turn": "No es tu turno",
+        "server_choose_card": "Elige una carta",
+        "server_follow_suit": "Sigue el palo si puedes"
+      }
+    },
+    "fr": {
+      "display_name": "Whist (Declarative)",
+      "short_description": "Quatre joueurs forment deux équipes opposées. Distribuez treize cartes à chacun ; la dernière carte du donneur détermine l’atout. Fournissez la couleur demandée si possible, sinon jouez une carte quelconque. Le plus fort atout gagne, sinon la plus forte carte de la couleur demandée. Le gagnant mène la levée suivante. Après treize levées, l’équipe qui en a le plus gagne cette manche.",
+      "game_logic_rules": "Quatre joueurs forment deux équipes opposées. Distribuez treize cartes à chacun ; la dernière carte du donneur détermine l’atout. Fournissez la couleur demandée si possible, sinon jouez une carte quelconque. Le plus fort atout gagne, sinon la plus forte carte de la couleur demandée. Le gagnant mène la levée suivante. Après treize levées, l’équipe qui en a le plus gagne cette manche.",
+      "game_ui_rules": "Touchez une carte surlignée pour la jouer. L’atout et les levées des deux équipes figurent au-dessus de la table.",
+      "tutorial_strings": {
+        "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.": "Quatre joueurs forment deux équipes opposées. Distribuez treize cartes à chacun ; la dernière carte du donneur détermine l’atout. Fournissez la couleur demandée si possible, sinon jouez une carte quelconque. Le plus fort atout gagne, sinon la plus forte carte de la couleur demandée. Le gagnant mène la levée suivante. Après treize levées, l’équipe qui en a le plus gagne cette manche."
+      },
+      "client_strings": {
+        "title": "Whist",
+        "trump": "Atout {suit}",
+        "player": "Joueur {n}",
+        "play": "Jouer {card}",
+        "winner": "{team} gagne",
+        "turn": "À {name} de jouer",
+        "server_game_over": "La partie est terminée",
+        "server_not_your_turn": "Ce n’est pas votre tour",
+        "server_choose_card": "Choisissez une carte",
+        "server_follow_suit": "Fournissez la couleur si possible"
+      }
+    },
+    "de": {
+      "display_name": "Whist (Declarative)",
+      "short_description": "Vier Personen bilden gegenüberliegende Partnerschaften. Jeder erhält dreizehn Karten; die letzte Karte des Gebers bestimmt Trumpf. Bediene die angespielte Farbe, wenn möglich, sonst spiele eine beliebige Karte. Der höchste Trumpf gewinnt, sonst die höchste Karte der angespielten Farbe. Der Gewinner spielt den nächsten Stich aus. Nach dreizehn Stichen gewinnt das Team mit den meisten Stichen diese Hand.",
+      "game_logic_rules": "Vier Personen bilden gegenüberliegende Partnerschaften. Jeder erhält dreizehn Karten; die letzte Karte des Gebers bestimmt Trumpf. Bediene die angespielte Farbe, wenn möglich, sonst spiele eine beliebige Karte. Der höchste Trumpf gewinnt, sonst die höchste Karte der angespielten Farbe. Der Gewinner spielt den nächsten Stich aus. Nach dreizehn Stichen gewinnt das Team mit den meisten Stichen diese Hand.",
+      "game_ui_rules": "Tippe auf eine markierte Karte, um sie zu spielen. Trumpf und Stiche beider Teams stehen über dem Tisch.",
+      "tutorial_strings": {
+        "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.": "Vier Personen bilden gegenüberliegende Partnerschaften. Jeder erhält dreizehn Karten; die letzte Karte des Gebers bestimmt Trumpf. Bediene die angespielte Farbe, wenn möglich, sonst spiele eine beliebige Karte. Der höchste Trumpf gewinnt, sonst die höchste Karte der angespielten Farbe. Der Gewinner spielt den nächsten Stich aus. Nach dreizehn Stichen gewinnt das Team mit den meisten Stichen diese Hand."
+      },
+      "client_strings": {
+        "title": "Whist",
+        "trump": "Trumpf {suit}",
+        "player": "Spieler {n}",
+        "play": "{card} spielen",
+        "winner": "{team} gewinnt",
+        "turn": "{name} ist am Zug",
+        "server_game_over": "Das Spiel ist beendet",
+        "server_not_your_turn": "Du bist nicht am Zug",
+        "server_choose_card": "Wähle eine Karte",
+        "server_follow_suit": "Bediene die Farbe, wenn möglich"
+      }
+    },
+    "pt": {
+      "display_name": "Whist (Declarative)",
+      "short_description": "Quatro jogadores formam duplas opostas. Distribua treze cartas para cada um; a última carta do carteador define o trunfo. Siga o naipe inicial se possível; caso contrário, jogue qualquer carta. O maior trunfo vence, ou a maior carta do naipe inicial se não houver trunfo. Quem vence inicia a próxima vaza. Após treze vazas, a dupla com mais vazas vence esta mão.",
+      "game_logic_rules": "Quatro jogadores formam duplas opostas. Distribua treze cartas para cada um; a última carta do carteador define o trunfo. Siga o naipe inicial se possível; caso contrário, jogue qualquer carta. O maior trunfo vence, ou a maior carta do naipe inicial se não houver trunfo. Quem vence inicia a próxima vaza. Após treze vazas, a dupla com mais vazas vence esta mão.",
+      "game_ui_rules": "Toque em uma carta destacada para jogá-la. O trunfo e as vazas das duas equipes aparecem acima da mesa.",
+      "tutorial_strings": {
+        "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.": "Quatro jogadores formam duplas opostas. Distribua treze cartas para cada um; a última carta do carteador define o trunfo. Siga o naipe inicial se possível; caso contrário, jogue qualquer carta. O maior trunfo vence, ou a maior carta do naipe inicial se não houver trunfo. Quem vence inicia a próxima vaza. Após treze vazas, a dupla com mais vazas vence esta mão."
+      },
+      "client_strings": {
+        "title": "Whist",
+        "trump": "Trunfo {suit}",
+        "player": "Jogador {n}",
+        "play": "Jogar {card}",
+        "winner": "{team} vence",
+        "turn": "Vez de {name}",
+        "server_game_over": "A partida terminou",
+        "server_not_your_turn": "Não é sua vez",
+        "server_choose_card": "Escolha uma carta",
+        "server_follow_suit": "Siga o naipe se possível"
+      }
+    },
+    "zh": {
+      "display_name": "惠斯特 (Declarative)",
+      "short_description": "四名玩家相对组成两队。每人发十三张牌，庄家最后一张牌的花色为主牌。能跟首出的花色时必须跟，否则可出任意牌。有主牌时最大主牌获胜，否则首出花色中最大牌获胜。赢家领出下一墩。十三墩后，赢得墩数较多的队伍赢得本局。",
+      "game_logic_rules": "四名玩家相对组成两队。每人发十三张牌，庄家最后一张牌的花色为主牌。能跟首出的花色时必须跟，否则可出任意牌。有主牌时最大主牌获胜，否则首出花色中最大牌获胜。赢家领出下一墩。十三墩后，赢得墩数较多的队伍赢得本局。",
+      "game_ui_rules": "点击高亮的牌出牌。主牌花色和两队的墩数显示在牌桌上方。",
+      "tutorial_strings": {
+        "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.": "四名玩家相对组成两队。每人发十三张牌，庄家最后一张牌的花色为主牌。能跟首出的花色时必须跟，否则可出任意牌。有主牌时最大主牌获胜，否则首出花色中最大牌获胜。赢家领出下一墩。十三墩后，赢得墩数较多的队伍赢得本局。"
+      },
+      "client_strings": {
+        "title": "惠斯特",
+        "trump": "主牌 {suit}",
+        "player": "玩家 {n}",
+        "play": "打出 {card}",
+        "winner": "{team} 获胜",
+        "turn": "轮到 {name}",
+        "server_game_over": "游戏已结束",
+        "server_not_your_turn": "还没轮到你",
+        "server_choose_card": "选择一张牌",
+        "server_follow_suit": "有首出花色时必须跟牌"
+      }
+    },
+    "hi": {
+      "display_name": "व्हिस्ट (Declarative)",
+      "short_description": "चार खिलाड़ी आमने-सामने की साझेदारियाँ बनाते हैं। प्रत्येक को तेरह पत्ते दें; बाँटने वाले का अंतिम पत्ता तुरुप का सूट तय करता है। संभव हो तो शुरू किया गया सूट चलें, नहीं तो कोई भी पत्ता चलें। सबसे बड़ा तुरुप जीतता है; तुरुप न होने पर शुरू हुए सूट का सबसे बड़ा पत्ता जीतता है। विजेता अगली चाल शुरू करता है। तेरह चालों के बाद अधिक चालें जीतने वाली जोड़ी यह हाथ जीतती है।",
+      "game_logic_rules": "चार खिलाड़ी आमने-सामने की साझेदारियाँ बनाते हैं। प्रत्येक को तेरह पत्ते दें; बाँटने वाले का अंतिम पत्ता तुरुप का सूट तय करता है। संभव हो तो शुरू किया गया सूट चलें, नहीं तो कोई भी पत्ता चलें। सबसे बड़ा तुरुप जीतता है; तुरुप न होने पर शुरू हुए सूट का सबसे बड़ा पत्ता जीतता है। विजेता अगली चाल शुरू करता है। तेरह चालों के बाद अधिक चालें जीतने वाली जोड़ी यह हाथ जीतती है।",
+      "game_ui_rules": "चमकते पत्ते को खेलने के लिए टैप करें। तुरुप का सूट और दोनों टीमों की चालें मेज के ऊपर दिखती हैं।",
+      "tutorial_strings": {
+        "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.": "चार खिलाड़ी आमने-सामने की साझेदारियाँ बनाते हैं। प्रत्येक को तेरह पत्ते दें; बाँटने वाले का अंतिम पत्ता तुरुप का सूट तय करता है। संभव हो तो शुरू किया गया सूट चलें, नहीं तो कोई भी पत्ता चलें। सबसे बड़ा तुरुप जीतता है; तुरुप न होने पर शुरू हुए सूट का सबसे बड़ा पत्ता जीतता है। विजेता अगली चाल शुरू करता है। तेरह चालों के बाद अधिक चालें जीतने वाली जोड़ी यह हाथ जीतती है।"
+      },
+      "client_strings": {
+        "title": "व्हिस्ट",
+        "trump": "तुरुप {suit}",
+        "player": "खिलाड़ी {n}",
+        "play": "{card} खेलें",
+        "winner": "{team} जीते",
+        "turn": "{name} की बारी",
+        "server_game_over": "खेल समाप्त हो गया",
+        "server_not_your_turn": "आपकी बारी नहीं है",
+        "server_choose_card": "एक पत्ता चुनें",
+        "server_follow_suit": "संभव हो तो वही सूट चलें"
+      }
+    },
+    "ar": {
+      "display_name": "ويست (Declarative)",
+      "short_description": "يشكل أربعة لاعبين فريقين متقابلين. يوزع ثلاثة عشر ورقة لكل لاعب، ويحدد نوع آخر ورقة للموزع نوع الحكم. اتبع النوع الأول إن استطعت، وإلا العب أي ورقة. تفوز أعلى ورقة حكم، أو أعلى ورقة من النوع الأول إذا لم يُلعب حكم. يبدأ الفائز اللمة التالية. بعد ثلاث عشرة لمة يفوز الفريق صاحب اللمّات الأكثر بهذه الجولة.",
+      "game_logic_rules": "يشكل أربعة لاعبين فريقين متقابلين. يوزع ثلاثة عشر ورقة لكل لاعب، ويحدد نوع آخر ورقة للموزع نوع الحكم. اتبع النوع الأول إن استطعت، وإلا العب أي ورقة. تفوز أعلى ورقة حكم، أو أعلى ورقة من النوع الأول إذا لم يُلعب حكم. يبدأ الفائز اللمة التالية. بعد ثلاث عشرة لمة يفوز الفريق صاحب اللمّات الأكثر بهذه الجولة.",
+      "game_ui_rules": "اضغط على ورقة مضاءة للعبها. يظهر نوع الحكم وعدد لمّات الفريقين فوق الطاولة.",
+      "tutorial_strings": {
+        "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.": "يشكل أربعة لاعبين فريقين متقابلين. يوزع ثلاثة عشر ورقة لكل لاعب، ويحدد نوع آخر ورقة للموزع نوع الحكم. اتبع النوع الأول إن استطعت، وإلا العب أي ورقة. تفوز أعلى ورقة حكم، أو أعلى ورقة من النوع الأول إذا لم يُلعب حكم. يبدأ الفائز اللمة التالية. بعد ثلاث عشرة لمة يفوز الفريق صاحب اللمّات الأكثر بهذه الجولة."
+      },
+      "client_strings": {
+        "title": "ويست",
+        "trump": "الحكم {suit}",
+        "player": "اللاعب {n}",
+        "play": "العب {card}",
+        "winner": "فاز {team}",
+        "turn": "دور {name}",
+        "server_game_over": "انتهت اللعبة",
+        "server_not_your_turn": "ليس دورك",
+        "server_choose_card": "اختر ورقة",
+        "server_follow_suit": "اتبع النوع إن استطعت"
+      }
+    }
+  },
+  "game_addition_request_id_and_secret": "example-only-whist-replace-before-publishing"
+}
