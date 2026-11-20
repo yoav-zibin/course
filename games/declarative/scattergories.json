@@ -1,0 +1,5065 @@
+{
+ "all_state_public": false,
+ "name": "Scattergories (Declarative)",
+ "description": "Turn-based Scattergories for 2 to 6 players: three rounds, each with one letter and six categories. On your turn, submit one answer per category. A unique answer that starts with the round letter scores 1 point; duplicates cancel. Most points after three rounds wins.",
+ "game_addition_request_id_and_secret": "example-only-declarative-scattergories-replace-before-publishing",
+ "allowed_player_counts": [
+  2,
+  3,
+  4,
+  5,
+  6
+ ],
+ "server_code": "\"use strict\";\n// Scattergories (Declarative): a turn-based adaptation of the word game.\n// 2-6 players, 3 rounds. Each round has one letter and six categories drawn\n// without repeats from the banks below. Players answer in seat order; on\n// your turn you submit all six answers as one move {type:\"answer\",\n// answers:[6 strings]} (an empty string is no answer). Answers are hidden\n// until the round is scored, then the scored round becomes public in `past`.\n//\n// Scoring, per category: an answer is normalized by trimming, collapsing\n// whitespace and lowercasing. It scores 1 point when it is non-empty, when\n// its first word starts with the round letter, and when no other player\n// gave the same normalized answer for that category. For the letter test\n// only, exactly one leading article (\"the \", \"an \" or \"a \", checked in that\n// order) is stripped before taking the first word; duplicate detection\n// compares the normalized answers without stripping.\n//\n// Determinism: the letter and category decks are shuffled in newMatch from\n// a hash of the player ids and the pot (never ctx.random), and later rounds\n// draw from those decks, so every state transition is reproducible. Only\n// randomMove uses ctx.random; computerMove is a deterministic function of\n// the visible state (letter, categories, round, acting seat) — see\n// computerAnswers below — so the UI reducer can reproduce it exactly.\nconst LETTERS = [\"a\", \"b\", \"c\", \"d\", \"e\", \"f\", \"g\", \"h\", \"i\", \"j\", \"k\", \"l\", \"m\", \"n\", \"o\", \"p\", \"r\", \"s\", \"t\", \"w\"];\nconst CATEGORIES = [\n  \"Animal\", \"Food\", \"City\", \"Country\", \"Movie title\", \"Book title\",\n  \"Sport\", \"Profession\", \"Color\", \"Flower\", \"Tree\", \"River\",\n  \"Musical instrument\", \"Toy\", \"Vehicle\", \"Clothing item\", \"Drink\", \"Fruit\",\n  \"Vegetable\", \"School subject\", \"Holiday\", \"Song title\", \"Famous person\",\n  \"Body part\", \"Household item\", \"Board game\", \"Ocean or sea\", \"Mountain\",\n  \"Dessert\", \"Superhero\"\n];\nconst WORDS = {\n  a: [\"apple\", \"ant\", \"anchor\", \"arrow\"], b: [\"banana\", \"bear\", \"bridge\", \"button\"],\n  c: [\"cat\", \"cake\", \"castle\", \"candle\"], d: [\"dog\", \"drum\", \"diamond\", \"door\"],\n  e: [\"elephant\", \"egg\", \"engine\", \"eagle\"], f: [\"fish\", \"flower\", \"forest\", \"flag\"],\n  g: [\"goat\", \"grape\", \"guitar\", \"garden\"], h: [\"horse\", \"house\", \"hat\", \"hammer\"],\n  i: [\"island\", \"ice\", \"iron\", \"igloo\"], j: [\"juice\", \"jungle\", \"jacket\", \"jam\"],\n  k: [\"kite\", \"kangaroo\", \"key\", \"kitchen\"], l: [\"lion\", \"lemon\", \"ladder\", \"lake\"],\n  m: [\"monkey\", \"moon\", \"mountain\", \"milk\"], n: [\"nose\", \"night\", \"nest\", \"needle\"],\n  o: [\"orange\", \"ocean\", \"owl\", \"onion\"], p: [\"pig\", \"pizza\", \"piano\", \"park\"],\n  r: [\"rabbit\", \"river\", \"rainbow\", \"ring\"], s: [\"snake\", \"sun\", \"star\", \"soup\"],\n  t: [\"tiger\", \"tree\", \"table\", \"train\"], w: [\"wolf\", \"water\", \"window\", \"whale\"]\n};\nconst RANDOM_POOL = [\"apple\", \"banana\", \"cat\", \"dog\", \"sun\", \"tree\", \"river\", \"star\", \"moon\", \"fish\", \"bird\", \"cake\", \"lion\", \"wolf\"];\n\nfunction hashSeed(ctx) {\n  let h = 2166136261 >>> 0;\n  const s = ctx.players.map(function (p) { return p.id; }).join(\",\") + \"|\" + ctx.pot + \"|\" + ctx.players.length;\n  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }\n  return h >>> 0;\n}\nfunction makeRng(seed) {\n  let a = seed >>> 0;\n  return function () {\n    a = (a + 0x6D2B79F5) | 0;\n    let t = a;\n    t = Math.imul(t ^ (t >>> 15), t | 1);\n    t = (t + Math.imul(t ^ (t >>> 7), t | 61)) ^ t;\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}\nfunction shuffled(count, rng) {\n  const out = [];\n  for (let i = 0; i < count; i++) out.push(i);\n  for (let i = count - 1; i > 0; i--) {\n    const j = Math.floor(rng() * (i + 1));\n    const t = out[i]; out[i] = out[j]; out[j] = t;\n  }\n  return out;\n}\nfunction drawRound(s) {\n  s.letter = LETTERS[s.letterDeck.pop()];\n  const cats = [];\n  for (let i = 0; i < 6; i++) cats.push(CATEGORIES[s.catDeck.pop()]);\n  s.cats = cats;\n}\nfunction norm(a) { return a.trim().replace(/\\s+/g, \" \").toLowerCase(); }\nfunction firstWord(n) {\n  let w = n;\n  if (w.indexOf(\"the \") === 0) w = w.slice(4);\n  else if (w.indexOf(\"an \") === 0) w = w.slice(3);\n  else if (w.indexOf(\"a \") === 0) w = w.slice(2);\n  const sp = w.indexOf(\" \");\n  return sp === -1 ? w : w.slice(0, sp);\n}\nfunction scoreRound(s) {\n  const n = s.scores.length;\n  const pts = [], gained = [];\n  for (let p = 0; p < n; p++) { pts.push([0, 0, 0, 0, 0, 0]); gained.push(0); }\n  for (let c = 0; c < 6; c++) {\n    const norms = s.answers.map(function (a) { return norm(a[c]); });\n    for (let p = 0; p < n; p++) {\n      const v = norms[p];\n      if (!v) continue;\n      let dup = false;\n      for (let q = 0; q < n; q++) if (q !== p && norms[q] === v) { dup = true; break; }\n      if (dup) continue;\n      const fw = firstWord(v);\n      if (fw && fw.charAt(0) === s.letter) { pts[p][c] = 1; gained[p]++; }\n    }\n  }\n  for (let p = 0; p < n; p++) s.scores[p] += gained[p];\n  return { pts: pts, gained: gained };\n}\n// Deterministic computer answers: a pure function of the visible state\n// (letter, cats, round, acting seat). For each category, FNV-1a hash the\n// string letter|round|seat|categoryIndex|category and index the letter's\n// word bank with it. The declarative UI reducer embeds an identical copy\n// of this algorithm (and of WORDS) and pre-fills the acting player's text\n// controls with these answers, so a single Submit tap emits exactly the\n// move computerMove returns. Empty string when the bank has no word.\nfunction computerAnswers(letter, cats, round, seat) {\n  const bank = WORDS[letter] || [];\n  const answers = [];\n  for (let c = 0; c < 6; c++) {\n    if (!bank.length) { answers.push(\"\"); continue; }\n    const str = String(letter) + \"|\" + String(round) + \"|\" + String(seat) + \"|\" + String(c) + \"|\" + String(cats && cats[c] ? cats[c] : \"\");\n    let h = 2166136261 >>> 0;\n    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }\n    answers.push(bank[(h >>> 0) % bank.length]);\n  }\n  return answers;\n}\nfunction payoutsFor(s, ctx) {\n  const pot = ctx.pot;\n  if (!pot) return {};\n  let recips = s.winners.filter(function (seat) {\n    const p = ctx.players[seat];\n    return p && p.kind === \"human\" && p.active !== false;\n  });\n  if (!recips.length) {\n    recips = [];\n    ctx.players.forEach(function (p, i) { if (p.kind === \"human\" && p.active !== false) recips.push(i); });\n  }\n  if (!recips.length) return {};\n  const base = Math.floor(pot / recips.length), rem = pot % recips.length, out = {};\n  recips.forEach(function (seat, i) { out[ctx.players[seat].id] = base + (i < rem ? 1 : 0); });\n  return out;\n}\n\nconst game = {\n  newMatch(ctx) {\n    const n = ctx.players.length;\n    const rng = makeRng(hashSeed(ctx));\n    const s = {\n      round: 1, letter: \"a\", cats: [], turn: 0,\n      scores: [], answers: [], past: [],\n      letterDeck: shuffled(LETTERS.length, rng),\n      catDeck: shuffled(CATEGORIES.length, rng),\n      over: false, winners: []\n    };\n    for (let i = 0; i < n; i++) { s.scores.push(0); s.answers.push(null); }\n    drawRound(s);\n    return { state: s, turn: [ctx.players[0].id] };\n  },\n  applyMove(state, id, move, ctx) {\n    if (!state || typeof state !== \"object\" || state.over) throw new InvalidMove(\"invalid move\");\n    const seat = state.turn;\n    if (!ctx.players[seat] || ctx.players[seat].id !== id) throw new InvalidMove(\"invalid move\");\n    if (!move || typeof move !== \"object\" || Array.isArray(move)) throw new InvalidMove(\"invalid move\");\n    if (move.type !== \"answer\") throw new InvalidMove(\"invalid move\");\n    if (!Array.isArray(move.answers) || move.answers.length !== 6) throw new InvalidMove(\"invalid move\");\n    for (let i = 0; i < 6; i++) {\n      if (typeof move.answers[i] !== \"string\" || move.answers[i].length > 40) throw new InvalidMove(\"invalid move\");\n    }\n    if (state.answers[seat] !== null) throw new InvalidMove(\"invalid move\");\n    const s = JSON.parse(JSON.stringify(state));\n    s.answers[seat] = move.answers.slice();\n    let next = -1;\n    for (let j = seat + 1; j < s.answers.length; j++) if (s.answers[j] === null) { next = j; break; }\n    if (next !== -1) { s.turn = next; return { state: s, turn: [ctx.players[next].id] }; }\n    const scored = scoreRound(s);\n    s.past.push({\n      letter: s.letter, cats: s.cats.slice(),\n      answers: s.answers.map(function (a) { return a.slice(); }),\n      pts: scored.pts, gained: scored.gained\n    });\n    s.answers = s.answers.map(function () { return null; });\n    if (s.round >= 3) {\n      s.over = true;\n      const best = Math.max.apply(null, s.scores);\n      s.winners = [];\n      s.scores.forEach(function (v, i) { if (v === best) s.winners.push(i); });\n      s.turn = 0;\n      return { state: s, turn: null, payouts: payoutsFor(s, ctx) };\n    }\n    s.round += 1;\n    drawRound(s);\n    s.turn = 0;\n    return { state: s, turn: [ctx.players[0].id] };\n  },\n  viewFor(state, id, ctx) {\n    let seat = -1;\n    for (let i = 0; i < ctx.players.length; i++) if (ctx.players[i].id === id) seat = i;\n    return {\n      round: state.round, letter: state.letter, cats: state.cats.slice(),\n      turn: state.turn, scores: state.scores.slice(),\n      submitted: state.answers.map(function (a) { return a !== null; }),\n      answers: state.answers.map(function (a, i) { return (i === seat && a) ? a.slice() : null; }),\n      past: JSON.parse(JSON.stringify(state.past)),\n      over: state.over, winners: state.winners.slice(), seat: seat\n    };\n  },\n  computerMove(state, id, ctx) {\n    return { type: \"answer\", answers: computerAnswers(state.letter, state.cats, state.round, state.turn) };\n  },\n  randomMove(state, id, ctx) {\n    const answers = [];\n    for (let c = 0; c < 6; c++) {\n      const r = ctx.random();\n      if (r < 0.4) answers.push(\"\");\n      else if (r < 0.8) answers.push(RANDOM_POOL[Math.floor(ctx.random() * RANDOM_POOL.length)]);\n      else answers.push(state.letter + \"word\" + (10 + Math.floor(ctx.random() * 90)));\n    }\n    return { type: \"answer\", answers: answers };\n  }\n};\n",
+ "declarative_ui": {
+  "format": "buildplay-ui",
+  "version": 1,
+  "viewport": {
+   "width": 800,
+   "height": 760,
+   "camera_enabled": false
+  },
+  "boards": [
+   {
+    "id": "main",
+    "kind": "free",
+    "x": 16,
+    "y": 104,
+    "width": 768,
+    "height": 436,
+    "color": "#172743",
+    "alternate_color": "#1e3352",
+    "line_color": "#5c7190"
+   }
+  ],
+  "piece_types": {
+   "letterBadge": {
+    "shape": "circle",
+    "width": 76,
+    "height": 76,
+    "color": "#f9d648",
+    "text_color": "#102039"
+   },
+   "catText": {
+    "shape": "text",
+    "width": 340,
+    "height": 36,
+    "text_color": "#ffffff",
+    "font_size": 20
+   },
+   "dotOn": {
+    "shape": "circle",
+    "width": 38,
+    "height": 38,
+    "color": "#a7f070",
+    "text_color": "#102039"
+   },
+   "dotOff": {
+    "shape": "circle",
+    "width": 38,
+    "height": 38,
+    "color": "#5c7190",
+    "text_color": "#ffffff"
+   }
+  },
+  "strings": {
+   "title": "Scattergories",
+   "turn_player": "Player {n} to answer",
+   "finished": "Finished",
+   "round_letter": "Round {r} of 3 - Letter {l}",
+   "scores": "Scores",
+   "player_score": "Player {n}: {v}",
+   "done_word": "answered",
+   "answering_word": "answering",
+   "waiting_word": "waiting",
+   "submit": "Submit answers",
+   "your_answers": "Your answers: {v}",
+   "round_line": "Round {r}: Letter {l}",
+   "p_gain": "P{n} +{v}",
+   "winner": "Player {n} wins",
+   "tie": "Tie between Players {v}",
+   "server_invalid_move": "invalid move"
+  },
+  "ui_code": "const SOURCE_STRINGS = {\"title\": \"Scattergories\", \"turn_player\": \"Player {n} to answer\", \"finished\": \"Finished\", \"round_letter\": \"Round {r} of 3 - Letter {l}\", \"scores\": \"Scores\", \"player_score\": \"Player {n}: {v}\", \"done_word\": \"answered\", \"answering_word\": \"answering\", \"waiting_word\": \"waiting\", \"submit\": \"Submit answers\", \"your_answers\": \"Your answers: {v}\", \"round_line\": \"Round {r}: Letter {l}\", \"p_gain\": \"P{n} +{v}\", \"winner\": \"Player {n} wins\", \"tie\": \"Tie between Players {v}\", \"server_invalid_move\": \"invalid move\"};\nvar gameUI = {\n  reduce: function (message, localState) {\n    var m = message.type === \"ui_event\" ? message.state_changed : message;\n    var s = m.view || m.state || {};\n    var strings = {};\n    var k;\n    for (k in SOURCE_STRINGS) strings[k] = SOURCE_STRINGS[k];\n    if (m.strings) for (k in m.strings) strings[k] = m.strings[k];\n    function t(key, args) {\n      var txt = strings[key] || key;\n      if (!args) return txt;\n      return txt.replace(/\\{(\\w+)\\}/g, function (_, name) { return String(args[name] === undefined ? \"\" : args[name]); });\n    }\n    var active = m.status === \"ongoing\" && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    var canAct = !!(active && !s.over && s.seat !== undefined && s.seat === s.turn && m.acting_for_player_index === s.turn);\n    // Replica of the server's computerMove: WORDS and the FNV-1a indexing in\n    // suggestedAnswers are identical copies of the server code, and both\n    // are pure functions of the visible state (letter, cats, round, acting\n    // seat = turn), so the pre-filled controls emit exactly computerMove.\n    var WORDS = {\n      a: [\"apple\", \"ant\", \"anchor\", \"arrow\"], b: [\"banana\", \"bear\", \"bridge\", \"button\"],\n      c: [\"cat\", \"cake\", \"castle\", \"candle\"], d: [\"dog\", \"drum\", \"diamond\", \"door\"],\n      e: [\"elephant\", \"egg\", \"engine\", \"eagle\"], f: [\"fish\", \"flower\", \"forest\", \"flag\"],\n      g: [\"goat\", \"grape\", \"guitar\", \"garden\"], h: [\"horse\", \"house\", \"hat\", \"hammer\"],\n      i: [\"island\", \"ice\", \"iron\", \"igloo\"], j: [\"juice\", \"jungle\", \"jacket\", \"jam\"],\n      k: [\"kite\", \"kangaroo\", \"key\", \"kitchen\"], l: [\"lion\", \"lemon\", \"ladder\", \"lake\"],\n      m: [\"monkey\", \"moon\", \"mountain\", \"milk\"], n: [\"nose\", \"night\", \"nest\", \"needle\"],\n      o: [\"orange\", \"ocean\", \"owl\", \"onion\"], p: [\"pig\", \"pizza\", \"piano\", \"park\"],\n      r: [\"rabbit\", \"river\", \"rainbow\", \"ring\"], s: [\"snake\", \"sun\", \"star\", \"soup\"],\n      t: [\"tiger\", \"tree\", \"table\", \"train\"], w: [\"wolf\", \"water\", \"window\", \"whale\"]\n    };\n    function suggestedAnswers() {\n      var bank = WORDS[s.letter] || [];\n      var viewCats = s.cats || [];\n      var out = [];\n      for (var sc = 0; sc < 6; sc++) {\n        if (!bank.length) { out.push(\"\"); continue; }\n        var str = String(s.letter) + \"|\" + String(s.round) + \"|\" + String(s.turn) + \"|\" + String(sc) + \"|\" + String(viewCats[sc] ? viewCats[sc] : \"\");\n        var hh = 2166136261 >>> 0;\n        for (var hi = 0; hi < str.length; hi++) { hh ^= str.charCodeAt(hi); hh = Math.imul(hh, 16777619); }\n        out.push(bank[(hh >>> 0) % bank.length]);\n      }\n      return out;\n    }\n    var key = String(m.move_count || 0) + \"/\" + String(s.round || 1) + \"/\" + String(s.turn || 0);\n    var local = localState || {};\n    // Pre-fill the acting player's controls with computerMove's answers on\n    // a fresh turn (new key, or a blank placeholder local for this key that\n    // was never pre-filled). filled_for tags the move_count/key the answers\n    // belong to; once it matches, answers are kept verbatim so values the\n    // user typed (change events) are never overridden within this turn.\n    if (local.key !== key || !local.answers || local.answers.length !== 6) {\n      local = { key: key, answers: canAct ? suggestedAnswers() : [\"\", \"\", \"\", \"\", \"\", \"\"], filled_for: canAct ? key : null };\n    } else if (canAct && local.filled_for !== key) {\n      local = { key: key, answers: suggestedAnswers(), filled_for: key };\n    }\n    var makeMove = null;\n    if (message.type === \"ui_event\" && canAct) {\n      var ev = message.event || {};\n      if (ev.type === \"change\" && typeof ev.id === \"string\" && ev.id.indexOf(\"ans\") === 0) {\n        var idx = parseInt(ev.id.slice(3), 10);\n        if (idx >= 0 && idx < 6) { local.answers[idx] = String(ev.value === null || ev.value === undefined ? \"\" : ev.value).slice(0, 40); local.filled_for = key; }\n      } else if (ev.type === \"tap\" && ev.id === \"submit\") {\n        var ans = [];\n        for (var ai = 0; ai < 6; ai++) ans.push(String(local.answers[ai] || \"\").slice(0, 40));\n        makeMove = { type: \"answer\", answers: ans };\n      }\n    }\n    var pieces = [], targets = [], controls = [], labels = [];\n    labels.push({ id: \"title\", text: t(\"title\"), x: 24, y: 12, font_size: 26 });\n    labels.push({ id: \"round\", text: t(\"round_letter\", { r: s.round || 1, l: String(s.letter || \"\").toUpperCase() }), x: 24, y: 46, font_size: 19 });\n    var turnText;\n    if (s.over) {\n      if (s.winners && s.winners.length > 1) turnText = t(\"tie\", { v: s.winners.map(function (w) { return String(w + 1); }).join(\", \") });\n      else if (s.winners && s.winners.length === 1) turnText = t(\"winner\", { n: s.winners[0] + 1 });\n      else turnText = t(\"finished\");\n    } else {\n      turnText = t(\"turn_player\", { n: (s.turn || 0) + 1 });\n    }\n    labels.push({ id: \"turn\", text: turnText, x: 24, y: 74, font_size: 18 });\n    pieces.push({ id: \"letter\", type: \"letterBadge\", board: \"main\", position: { x: 72, y: 66 }, text: String(s.letter || \"\").toUpperCase(), actions: [] });\n    var cats = s.cats || [];\n    for (var c = 0; c < cats.length && c < 6; c++) {\n      pieces.push({ id: \"cat_\" + c, type: \"catText\", board: \"main\", position: { x: 330, y: 38 + c * 56 }, text: String(c + 1) + \". \" + cats[c], actions: [] });\n    }\n    var submitted = s.submitted || [];\n    for (var p = 0; p < submitted.length; p++) {\n      pieces.push({ id: \"dot_\" + p, type: submitted[p] ? \"dotOn\" : \"dotOff\", board: \"main\", position: { x: 64 + p * 48, y: 392 }, text: String(p + 1), actions: [] });\n    }\n    var lines = [];\n    lines.push(t(\"scores\"));\n    var scores = s.scores || [];\n    for (var pi = 0; pi < scores.length; pi++) {\n      var line = t(\"player_score\", { n: pi + 1, v: scores[pi] });\n      if (!s.over) line += \" - \" + t(submitted[pi] ? \"done_word\" : pi === s.turn ? \"answering_word\" : \"waiting_word\");\n      lines.push(line);\n    }\n    if (s.seat !== undefined && s.seat >= 0 && s.answers && s.answers[s.seat]) {\n      lines.push(t(\"your_answers\", { v: s.answers[s.seat].map(function (a) { return a === \"\" ? \"-\" : a; }).join(\", \") }));\n    }\n    var past = s.past || [];\n    for (var ri = 0; ri < past.length; ri++) {\n      var gains = [];\n      for (var gi = 0; gi < past[ri].gained.length; gi++) gains.push(t(\"p_gain\", { n: gi + 1, v: past[ri].gained[gi] }));\n      lines.push(t(\"round_line\", { r: ri + 1, l: String(past[ri].letter || \"\").toUpperCase() }) + \" - \" + gains.join(\", \"));\n    }\n    for (var li = 0; li < lines.length; li++) {\n      labels.push({ id: \"line_\" + li, text: lines[li], x: 24, y: 552 + li * 19, font_size: 15 });\n    }\n    if (canAct) {\n      for (var ci = 0; ci < 6; ci++) {\n        controls.push({ id: \"ans\" + ci, kind: \"text\", label: cats[ci] || \"\", value: local.answers[ci] });\n      }\n      controls.push({ id: \"submit\", kind: \"button\", label: t(\"submit\") });\n    }\n    var out = { scene: { pieces: pieces, targets: targets, controls: controls, labels: labels }, local_state: local };\n    if (makeMove) out.make_move = makeMove;\n    return out;\n  }\n};\n"
+ },
+ "rules": "Scattergories, adapted turn-based for 2 to 6 players. A match lasts 3 rounds. Each round has one letter and six categories drawn without repeats from a bank of 30 categories. Players answer in seat order: on your turn, submit one answer for every category as a single move; an empty answer scores nothing. Answers stay hidden until the round is scored. Scoring, per category: answers are normalized by trimming, collapsing whitespace and lowercasing. An answer scores 1 point when it is non-empty, when its first word starts with the round letter, and when no other player gave the same normalized answer for that category. For the letter test only, one leading article (the, an or a) is stripped before taking the first word; duplicates are compared on the normalized answer without stripping. After round 3 the highest total wins and the pot is split equally among tied top scorers who are active humans, with any remainder going to the earliest seats.",
+ "ui_instructions": "The letter and the six categories are at the top. When it is your turn, type one answer in each of the six text boxes (leave a box empty to skip that category) and tap Submit answers. Other players see only that you have answered, not your answers, until the round is scored; scored rounds are listed below the scores. The board fits phones in portrait and landscape without horizontal scrolling.",
+ "tutorial": {
+  "text": "Name answers that start with the round letter for six categories. Unique answers score; duplicates cancel.",
+  "html": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>How to play Scattergories</title></head><body><h1>How to play Scattergories</h1><p>Each round shows one letter and six categories.</p><h2>Your turn</h2><p>Type one answer per category and submit all six at once. Empty answers score nothing.</p><h2>Scoring</h2><p>An answer scores 1 point when its first word starts with the letter and nobody else gave the same answer.</p></body></html>"
+ },
+ "images": [
+  {
+   "caption": "Cover",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" fill=\"#172743\"/><circle cx=\"42\" cy=\"45\" r=\"24\" fill=\"#f9d648\"/><rect x=\"78\" y=\"21\" width=\"64\" height=\"13\" rx=\"4\" fill=\"#a7f070\"/><rect x=\"78\" y=\"39\" width=\"64\" height=\"13\" rx=\"4\" fill=\"#ff9dca\"/><rect x=\"78\" y=\"57\" width=\"64\" height=\"13\" rx=\"4\" fill=\"#8ecae6\"/></svg>"
+  },
+  {
+   "caption": "Letter and categories",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><circle cx=\"52\" cy=\"46\" r=\"24\" fill=\"#f9d648\"/><text x=\"30\" y=\"70\" fill=\"#ffffff\" font-size=\"22\">Letter S</text><text x=\"30\" y=\"112\" fill=\"#ffffff\" font-size=\"22\">1. Animal</text><text x=\"30\" y=\"154\" fill=\"#ffffff\" font-size=\"22\">2. Food</text><text x=\"30\" y=\"196\" fill=\"#ffffff\" font-size=\"22\">3. City</text></svg>"
+  },
+  {
+   "caption": "Answering a round",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><circle cx=\"52\" cy=\"46\" r=\"24\" fill=\"#a7f070\"/><text x=\"30\" y=\"70\" fill=\"#ffffff\" font-size=\"22\">Type one answer</text><text x=\"30\" y=\"112\" fill=\"#ffffff\" font-size=\"22\">per category,</text><text x=\"30\" y=\"154\" fill=\"#ffffff\" font-size=\"22\">then submit all six.</text></svg>"
+  },
+  {
+   "caption": "Scoring a round",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><circle cx=\"52\" cy=\"46\" r=\"24\" fill=\"#ff9dca\"/><text x=\"30\" y=\"70\" fill=\"#ffffff\" font-size=\"22\">Unique answers score.</text><text x=\"30\" y=\"112\" fill=\"#ffffff\" font-size=\"22\">Duplicates cancel.</text><text x=\"30\" y=\"154\" fill=\"#ffffff\" font-size=\"22\">Wrong letter: 0.</text></svg>"
+  },
+  {
+   "caption": "Final scores",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><circle cx=\"52\" cy=\"46\" r=\"24\" fill=\"#8ecae6\"/><text x=\"30\" y=\"70\" fill=\"#ffffff\" font-size=\"22\">After 3 rounds,</text><text x=\"30\" y=\"112\" fill=\"#ffffff\" font-size=\"22\">the highest total wins.</text></svg>"
+  }
+ ],
+ "unit_tests": {
+  "state_schema": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "round",
+    "letter",
+    "cats",
+    "turn",
+    "scores",
+    "answers",
+    "past",
+    "letterDeck",
+    "catDeck",
+    "over",
+    "winners"
+   ],
+   "properties": {
+    "round": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 3
+    },
+    "letter": {
+     "type": "string",
+     "pattern": "^[a-z]$"
+    },
+    "cats": {
+     "type": "array",
+     "minItems": 6,
+     "maxItems": 6,
+     "items": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
+    "turn": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 5
+    },
+    "scores": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 6,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18
+     }
+    },
+    "answers": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 6,
+     "items": {
+      "anyOf": [
+       {
+        "type": "null"
+       },
+       {
+        "type": "array",
+        "minItems": 6,
+        "maxItems": 6,
+        "items": {
+         "type": "string",
+         "maxLength": 40
+        }
+       }
+      ]
+     }
+    },
+    "past": {
+     "type": "array",
+     "maxItems": 3,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "letter",
+       "cats",
+       "answers",
+       "pts",
+       "gained"
+      ],
+      "properties": {
+       "letter": {
+        "type": "string",
+        "pattern": "^[a-z]$"
+       },
+       "cats": {
+        "type": "array",
+        "minItems": 6,
+        "maxItems": 6,
+        "items": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 40
+        }
+       },
+       "answers": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 6,
+        "items": {
+         "type": "array",
+         "minItems": 6,
+         "maxItems": 6,
+         "items": {
+          "type": "string",
+          "maxLength": 40
+         }
+        }
+       },
+       "pts": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 6,
+        "items": {
+         "type": "array",
+         "minItems": 6,
+         "maxItems": 6,
+         "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+         }
+        }
+       },
+       "gained": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 6,
+        "items": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 6
+        }
+       }
+      }
+     }
+    },
+    "letterDeck": {
+     "type": "array",
+     "maxItems": 19,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 19
+     }
+    },
+    "catDeck": {
+     "type": "array",
+     "maxItems": 24,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 29
+     }
+    },
+    "over": {
+     "type": "boolean"
+    },
+    "winners": {
+     "type": "array",
+     "maxItems": 6,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+     }
+    }
+   }
+  },
+  "view_schema": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "round",
+    "letter",
+    "cats",
+    "turn",
+    "scores",
+    "submitted",
+    "answers",
+    "past",
+    "over",
+    "winners",
+    "seat"
+   ],
+   "properties": {
+    "round": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 3
+    },
+    "letter": {
+     "type": "string",
+     "pattern": "^[a-z]$"
+    },
+    "cats": {
+     "type": "array",
+     "minItems": 6,
+     "maxItems": 6,
+     "items": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
+    "turn": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 5
+    },
+    "scores": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 6,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18
+     }
+    },
+    "submitted": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 6,
+     "items": {
+      "type": "boolean"
+     }
+    },
+    "answers": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 6,
+     "items": {
+      "anyOf": [
+       {
+        "type": "null"
+       },
+       {
+        "type": "array",
+        "minItems": 6,
+        "maxItems": 6,
+        "items": {
+         "type": "string",
+         "maxLength": 40
+        }
+       }
+      ]
+     }
+    },
+    "past": {
+     "type": "array",
+     "maxItems": 3,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "letter",
+       "cats",
+       "answers",
+       "pts",
+       "gained"
+      ],
+      "properties": {
+       "letter": {
+        "type": "string",
+        "pattern": "^[a-z]$"
+       },
+       "cats": {
+        "type": "array",
+        "minItems": 6,
+        "maxItems": 6,
+        "items": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 40
+        }
+       },
+       "answers": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 6,
+        "items": {
+         "type": "array",
+         "minItems": 6,
+         "maxItems": 6,
+         "items": {
+          "type": "string",
+          "maxLength": 40
+         }
+        }
+       },
+       "pts": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 6,
+        "items": {
+         "type": "array",
+         "minItems": 6,
+         "maxItems": 6,
+         "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+         }
+        }
+       },
+       "gained": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 6,
+        "items": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 6
+        }
+       }
+      }
+     }
+    },
+    "over": {
+     "type": "boolean"
+    },
+    "winners": {
+     "type": "array",
+     "maxItems": 6,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+     }
+    },
+    "seat": {
+     "type": "integer",
+     "minimum": -1,
+     "maximum": 5
+    }
+   }
+  },
+  "move_schema": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "answers"
+   ],
+   "properties": {
+    "type": {
+     "const": "answer"
+    },
+    "answers": {
+     "type": "array",
+     "minItems": 6,
+     "maxItems": 6,
+     "items": {
+      "type": "string",
+      "maxLength": 40
+     }
+    }
+   }
+  },
+  "cases": [
+   {
+    "name": "First answers submitted",
+    "description": "The first player submits answers for all six categories; the turn passes to the second player.",
+    "kind": "initial",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "letterDeck": [
+      1,
+      7,
+      5,
+      4,
+      15,
+      2,
+      19,
+      13,
+      17,
+      16,
+      11,
+      14,
+      10,
+      6,
+      8,
+      3,
+      0,
+      18,
+      9
+     ],
+     "catDeck": [
+      0,
+      29,
+      5,
+      7,
+      24,
+      19,
+      1,
+      17,
+      11,
+      13,
+      25,
+      23,
+      3,
+      4,
+      12,
+      8,
+      14,
+      20,
+      9,
+      15,
+      10,
+      22,
+      21,
+      16
+     ],
+     "over": false,
+     "winners": []
+    },
+    "view_of_mover": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "view_of_other": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 1
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "answer",
+     "answers": [
+      "mone",
+      "mtwo",
+      "",
+      "mfour",
+      "the mfive",
+      "msix"
+     ]
+    },
+    "expected_state": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0
+     ],
+     "answers": [
+      [
+       "mone",
+       "mtwo",
+       "",
+       "mfour",
+       "the mfive",
+       "msix"
+      ],
+      null
+     ],
+     "past": [],
+     "letterDeck": [
+      1,
+      7,
+      5,
+      4,
+      15,
+      2,
+      19,
+      13,
+      17,
+      16,
+      11,
+      14,
+      10,
+      6,
+      8,
+      3,
+      0,
+      18,
+      9
+     ],
+     "catDeck": [
+      0,
+      29,
+      5,
+      7,
+      24,
+      19,
+      1,
+      17,
+      11,
+      13,
+      25,
+      23,
+      3,
+      4,
+      12,
+      8,
+      14,
+      20,
+      9,
+      15,
+      10,
+      22,
+      21,
+      16
+     ],
+     "over": false,
+     "winners": []
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      false
+     ],
+     "answers": [
+      [
+       "mone",
+       "mtwo",
+       "",
+       "mfour",
+       "the mfive",
+       "msix"
+      ],
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "expected_view_of_other": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 1
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Out of turn answer rejected",
+    "description": "The second player cannot answer on the first player's turn.",
+    "kind": "initial",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "letterDeck": [
+      1,
+      7,
+      5,
+      4,
+      15,
+      2,
+      19,
+      13,
+      17,
+      16,
+      11,
+      14,
+      10,
+      6,
+      8,
+      3,
+      0,
+      18,
+      9
+     ],
+     "catDeck": [
+      0,
+      29,
+      5,
+      7,
+      24,
+      19,
+      1,
+      17,
+      11,
+      13,
+      25,
+      23,
+      3,
+      4,
+      12,
+      8,
+      14,
+      20,
+      9,
+      15,
+      10,
+      22,
+      21,
+      16
+     ],
+     "over": false,
+     "winners": []
+    },
+    "view_of_mover": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 1
+    },
+    "view_of_other": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "player_id": "u2",
+    "other_player_id": "u1",
+    "move": {
+     "type": "answer",
+     "answers": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ]
+    },
+    "expected_state": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "letterDeck": [
+      1,
+      7,
+      5,
+      4,
+      15,
+      2,
+      19,
+      13,
+      17,
+      16,
+      11,
+      14,
+      10,
+      6,
+      8,
+      3,
+      0,
+      18,
+      9
+     ],
+     "catDeck": [
+      0,
+      29,
+      5,
+      7,
+      24,
+      19,
+      1,
+      17,
+      11,
+      13,
+      25,
+      23,
+      3,
+      4,
+      12,
+      8,
+      14,
+      20,
+      9,
+      15,
+      10,
+      22,
+      21,
+      16
+     ],
+     "over": false,
+     "winners": []
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "turn": [
+     "u1"
+    ],
+    "expected_view_of_mover": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 1
+    },
+    "expected_view_of_other": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "expected_error": "InvalidMove",
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Scoring cancels duplicates",
+    "description": "Identical normalized answers cancel, a wrong-letter answer scores 0, and a leading article is stripped only for the letter test, so both five-answers score. Before the move, the other view hides the submitted answers.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 1,
+     "seed": 12
+    },
+    "state": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0
+     ],
+     "answers": [
+      [
+       "mone",
+       "mtwo",
+       "mthree",
+       "",
+       "the mfive",
+       "msix"
+      ],
+      null
+     ],
+     "past": [],
+     "letterDeck": [
+      1,
+      7,
+      5,
+      4,
+      15,
+      2,
+      19,
+      13,
+      17,
+      16,
+      11,
+      14,
+      10,
+      6,
+      8,
+      3,
+      0,
+      18,
+      9
+     ],
+     "catDeck": [
+      0,
+      29,
+      5,
+      7,
+      24,
+      19,
+      1,
+      17,
+      11,
+      13,
+      25,
+      23,
+      3,
+      4,
+      12,
+      8,
+      14,
+      20,
+      9,
+      15,
+      10,
+      22,
+      21,
+      16
+     ],
+     "over": false,
+     "winners": []
+    },
+    "view_of_mover": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 1
+    },
+    "view_of_other": {
+     "round": 1,
+     "letter": "m",
+     "cats": [
+      "Ocean or sea",
+      "City",
+      "Mountain",
+      "Vegetable",
+      "Dessert",
+      "Sport"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      false
+     ],
+     "answers": [
+      [
+       "mone",
+       "mtwo",
+       "mthree",
+       "",
+       "the mfive",
+       "msix"
+      ],
+      null
+     ],
+     "past": [],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "player_id": "u2",
+    "other_player_id": "u1",
+    "move": {
+     "type": "answer",
+     "answers": [
+      "  MONE ",
+      "qqq",
+      "mtrio",
+      "mfour",
+      "mfive",
+      ""
+     ]
+    },
+    "expected_state": {
+     "round": 2,
+     "letter": "j",
+     "cats": [
+      "Drink",
+      "Song title",
+      "Famous person",
+      "Tree",
+      "Clothing item",
+      "Flower"
+     ],
+     "turn": 0,
+     "scores": [
+      4,
+      3
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "m",
+       "cats": [
+        "Ocean or sea",
+        "City",
+        "Mountain",
+        "Vegetable",
+        "Dessert",
+        "Sport"
+       ],
+       "answers": [
+        [
+         "mone",
+         "mtwo",
+         "mthree",
+         "",
+         "the mfive",
+         "msix"
+        ],
+        [
+         "  MONE ",
+         "qqq",
+         "mtrio",
+         "mfour",
+         "mfive",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         1,
+         1,
+         0,
+         1,
+         1
+        ],
+        [
+         0,
+         0,
+         1,
+         1,
+         1,
+         0
+        ]
+       ],
+       "gained": [
+        4,
+        3
+       ]
+      }
+     ],
+     "letterDeck": [
+      1,
+      7,
+      5,
+      4,
+      15,
+      2,
+      19,
+      13,
+      17,
+      16,
+      11,
+      14,
+      10,
+      6,
+      8,
+      3,
+      0,
+      18
+     ],
+     "catDeck": [
+      0,
+      29,
+      5,
+      7,
+      24,
+      19,
+      1,
+      17,
+      11,
+      13,
+      25,
+      23,
+      3,
+      4,
+      12,
+      8,
+      14,
+      20
+     ],
+     "over": false,
+     "winners": []
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "expected_view_of_mover": {
+     "round": 2,
+     "letter": "j",
+     "cats": [
+      "Drink",
+      "Song title",
+      "Famous person",
+      "Tree",
+      "Clothing item",
+      "Flower"
+     ],
+     "turn": 0,
+     "scores": [
+      4,
+      3
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "m",
+       "cats": [
+        "Ocean or sea",
+        "City",
+        "Mountain",
+        "Vegetable",
+        "Dessert",
+        "Sport"
+       ],
+       "answers": [
+        [
+         "mone",
+         "mtwo",
+         "mthree",
+         "",
+         "the mfive",
+         "msix"
+        ],
+        [
+         "  MONE ",
+         "qqq",
+         "mtrio",
+         "mfour",
+         "mfive",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         1,
+         1,
+         0,
+         1,
+         1
+        ],
+        [
+         0,
+         0,
+         1,
+         1,
+         1,
+         0
+        ]
+       ],
+       "gained": [
+        4,
+        3
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 1
+    },
+    "expected_view_of_other": {
+     "round": 2,
+     "letter": "j",
+     "cats": [
+      "Drink",
+      "Song title",
+      "Famous person",
+      "Tree",
+      "Clothing item",
+      "Flower"
+     ],
+     "turn": 0,
+     "scores": [
+      4,
+      3
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "m",
+       "cats": [
+        "Ocean or sea",
+        "City",
+        "Mountain",
+        "Vegetable",
+        "Dessert",
+        "Sport"
+       ],
+       "answers": [
+        [
+         "mone",
+         "mtwo",
+         "mthree",
+         "",
+         "the mfive",
+         "msix"
+        ],
+        [
+         "  MONE ",
+         "qqq",
+         "mtrio",
+         "mfour",
+         "mfive",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         1,
+         1,
+         0,
+         1,
+         1
+        ],
+        [
+         0,
+         0,
+         1,
+         1,
+         1,
+         0
+        ]
+       ],
+       "gained": [
+        4,
+        3
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 1 Letter M (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 2 Letter J (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 4, 3</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 2 Letter J (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 4, 3</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Second round answer",
+    "description": "In round 2 the first player answers one category and leaves the rest empty; the turn passes on without scoring.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u3",
+       "kind": "human",
+       "display_name": "Carol",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 3,
+     "seed": 13
+    },
+    "state": {
+     "round": 2,
+     "letter": "d",
+     "cats": [
+      "Mountain",
+      "Book title",
+      "Food",
+      "Dessert",
+      "City",
+      "Clothing item"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0,
+      0
+     ],
+     "answers": [
+      null,
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Flower",
+        "Tree",
+        "Country",
+        "Song title",
+        "Ocean or sea",
+        "Board game"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "letterDeck": [
+      6,
+      12,
+      14,
+      7,
+      10,
+      1,
+      4,
+      2,
+      0,
+      17,
+      13,
+      18,
+      11,
+      8,
+      19,
+      16,
+      9,
+      15
+     ],
+     "catDeck": [
+      12,
+      24,
+      20,
+      13,
+      16,
+      17,
+      22,
+      29,
+      6,
+      8,
+      19,
+      7,
+      11,
+      0,
+      23,
+      18,
+      4,
+      14
+     ],
+     "over": false,
+     "winners": []
+    },
+    "view_of_mover": {
+     "round": 2,
+     "letter": "d",
+     "cats": [
+      "Mountain",
+      "Book title",
+      "Food",
+      "Dessert",
+      "City",
+      "Clothing item"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0,
+      0
+     ],
+     "submitted": [
+      false,
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Flower",
+        "Tree",
+        "Country",
+        "Song title",
+        "Ocean or sea",
+        "Board game"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "view_of_other": {
+     "round": 2,
+     "letter": "d",
+     "cats": [
+      "Mountain",
+      "Book title",
+      "Food",
+      "Dessert",
+      "City",
+      "Clothing item"
+     ],
+     "turn": 0,
+     "scores": [
+      0,
+      0,
+      0
+     ],
+     "submitted": [
+      false,
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Flower",
+        "Tree",
+        "Country",
+        "Song title",
+        "Ocean or sea",
+        "Board game"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 1
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "answer",
+     "answers": [
+      "done",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ]
+    },
+    "expected_state": {
+     "round": 2,
+     "letter": "d",
+     "cats": [
+      "Mountain",
+      "Book title",
+      "Food",
+      "Dessert",
+      "City",
+      "Clothing item"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0,
+      0
+     ],
+     "answers": [
+      [
+       "done",
+       "",
+       "",
+       "",
+       "",
+       ""
+      ],
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Flower",
+        "Tree",
+        "Country",
+        "Song title",
+        "Ocean or sea",
+        "Board game"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "letterDeck": [
+      6,
+      12,
+      14,
+      7,
+      10,
+      1,
+      4,
+      2,
+      0,
+      17,
+      13,
+      18,
+      11,
+      8,
+      19,
+      16,
+      9,
+      15
+     ],
+     "catDeck": [
+      12,
+      24,
+      20,
+      13,
+      16,
+      17,
+      22,
+      29,
+      6,
+      8,
+      19,
+      7,
+      11,
+      0,
+      23,
+      18,
+      4,
+      14
+     ],
+     "over": false,
+     "winners": []
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "round": 2,
+     "letter": "d",
+     "cats": [
+      "Mountain",
+      "Book title",
+      "Food",
+      "Dessert",
+      "City",
+      "Clothing item"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      false,
+      false
+     ],
+     "answers": [
+      [
+       "done",
+       "",
+       "",
+       "",
+       "",
+       ""
+      ],
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Flower",
+        "Tree",
+        "Country",
+        "Song title",
+        "Ocean or sea",
+        "Board game"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "expected_view_of_other": {
+     "round": 2,
+     "letter": "d",
+     "cats": [
+      "Mountain",
+      "Book title",
+      "Food",
+      "Dessert",
+      "City",
+      "Clothing item"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Flower",
+        "Tree",
+        "Country",
+        "Song title",
+        "Ocean or sea",
+        "Board game"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 1
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 2 Letter D (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0, 0</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 2 Letter D (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0, 0</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 2 Letter D (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0, 0</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 2 Letter D (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0, 0</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Final round decides the winner",
+    "description": "The last answer of round 3 scores the round: six unique correct answers win the match and the whole pot.",
+    "kind": "terminal",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 30,
+     "move_count": 5,
+     "seed": 19
+    },
+    "state": {
+     "round": 3,
+     "letter": "g",
+     "cats": [
+      "Profession",
+      "Body part",
+      "Vegetable",
+      "Household item",
+      "Song title",
+      "Superhero"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0
+     ],
+     "answers": [
+      [
+       "gone",
+       "gtwo",
+       "gthree",
+       "gfour",
+       "gfive",
+       "gsix"
+      ],
+      null
+     ],
+     "past": [
+      {
+       "letter": "o",
+       "cats": [
+        "Musical instrument",
+        "Movie title",
+        "Fruit",
+        "Holiday",
+        "Color",
+        "Sport"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "n",
+       "cats": [
+        "Animal",
+        "Drink",
+        "River",
+        "Clothing item",
+        "Food",
+        "Country"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      }
+     ],
+     "letterDeck": [
+      2,
+      8,
+      0,
+      10,
+      15,
+      11,
+      5,
+      16,
+      12,
+      1,
+      7,
+      18,
+      17,
+      3,
+      9,
+      4,
+      19
+     ],
+     "catDeck": [
+      19,
+      13,
+      26,
+      2,
+      27,
+      14,
+      22,
+      10,
+      28,
+      9,
+      5,
+      25
+     ],
+     "over": false,
+     "winners": []
+    },
+    "view_of_mover": {
+     "round": 3,
+     "letter": "g",
+     "cats": [
+      "Profession",
+      "Body part",
+      "Vegetable",
+      "Household item",
+      "Song title",
+      "Superhero"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "o",
+       "cats": [
+        "Musical instrument",
+        "Movie title",
+        "Fruit",
+        "Holiday",
+        "Color",
+        "Sport"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "n",
+       "cats": [
+        "Animal",
+        "Drink",
+        "River",
+        "Clothing item",
+        "Food",
+        "Country"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 1
+    },
+    "view_of_other": {
+     "round": 3,
+     "letter": "g",
+     "cats": [
+      "Profession",
+      "Body part",
+      "Vegetable",
+      "Household item",
+      "Song title",
+      "Superhero"
+     ],
+     "turn": 1,
+     "scores": [
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      false
+     ],
+     "answers": [
+      [
+       "gone",
+       "gtwo",
+       "gthree",
+       "gfour",
+       "gfive",
+       "gsix"
+      ],
+      null
+     ],
+     "past": [
+      {
+       "letter": "o",
+       "cats": [
+        "Musical instrument",
+        "Movie title",
+        "Fruit",
+        "Holiday",
+        "Color",
+        "Sport"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "n",
+       "cats": [
+        "Animal",
+        "Drink",
+        "River",
+        "Clothing item",
+        "Food",
+        "Country"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "player_id": "u2",
+    "other_player_id": "u1",
+    "move": {
+     "type": "answer",
+     "answers": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ]
+    },
+    "expected_state": {
+     "round": 3,
+     "letter": "g",
+     "cats": [
+      "Profession",
+      "Body part",
+      "Vegetable",
+      "Household item",
+      "Song title",
+      "Superhero"
+     ],
+     "turn": 0,
+     "scores": [
+      6,
+      0
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "o",
+       "cats": [
+        "Musical instrument",
+        "Movie title",
+        "Fruit",
+        "Holiday",
+        "Color",
+        "Sport"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "n",
+       "cats": [
+        "Animal",
+        "Drink",
+        "River",
+        "Clothing item",
+        "Food",
+        "Country"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "g",
+       "cats": [
+        "Profession",
+        "Body part",
+        "Vegetable",
+        "Household item",
+        "Song title",
+        "Superhero"
+       ],
+       "answers": [
+        [
+         "gone",
+         "gtwo",
+         "gthree",
+         "gfour",
+         "gfive",
+         "gsix"
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        6,
+        0
+       ]
+      }
+     ],
+     "letterDeck": [
+      2,
+      8,
+      0,
+      10,
+      15,
+      11,
+      5,
+      16,
+      12,
+      1,
+      7,
+      18,
+      17,
+      3,
+      9,
+      4,
+      19
+     ],
+     "catDeck": [
+      19,
+      13,
+      26,
+      2,
+      27,
+      14,
+      22,
+      10,
+      28,
+      9,
+      5,
+      25
+     ],
+     "over": true,
+     "winners": [
+      0
+     ]
+    },
+    "expected_turn": null,
+    "expected_view_of_mover": {
+     "round": 3,
+     "letter": "g",
+     "cats": [
+      "Profession",
+      "Body part",
+      "Vegetable",
+      "Household item",
+      "Song title",
+      "Superhero"
+     ],
+     "turn": 0,
+     "scores": [
+      6,
+      0
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "o",
+       "cats": [
+        "Musical instrument",
+        "Movie title",
+        "Fruit",
+        "Holiday",
+        "Color",
+        "Sport"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "n",
+       "cats": [
+        "Animal",
+        "Drink",
+        "River",
+        "Clothing item",
+        "Food",
+        "Country"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "g",
+       "cats": [
+        "Profession",
+        "Body part",
+        "Vegetable",
+        "Household item",
+        "Song title",
+        "Superhero"
+       ],
+       "answers": [
+        [
+         "gone",
+         "gtwo",
+         "gthree",
+         "gfour",
+         "gfive",
+         "gsix"
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        6,
+        0
+       ]
+      }
+     ],
+     "over": true,
+     "winners": [
+      0
+     ],
+     "seat": 1
+    },
+    "expected_view_of_other": {
+     "round": 3,
+     "letter": "g",
+     "cats": [
+      "Profession",
+      "Body part",
+      "Vegetable",
+      "Household item",
+      "Song title",
+      "Superhero"
+     ],
+     "turn": 0,
+     "scores": [
+      6,
+      0
+     ],
+     "submitted": [
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "o",
+       "cats": [
+        "Musical instrument",
+        "Movie title",
+        "Fruit",
+        "Holiday",
+        "Color",
+        "Sport"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "n",
+       "cats": [
+        "Animal",
+        "Drink",
+        "River",
+        "Clothing item",
+        "Food",
+        "Country"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "g",
+       "cats": [
+        "Profession",
+        "Body part",
+        "Vegetable",
+        "Household item",
+        "Song title",
+        "Superhero"
+       ],
+       "answers": [
+        [
+         "gone",
+         "gtwo",
+         "gthree",
+         "gfour",
+         "gfive",
+         "gsix"
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        6,
+        0
+       ]
+      }
+     ],
+     "over": true,
+     "winners": [
+      0
+     ],
+     "seat": 0
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 3 Letter G (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 3 Letter G (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 3 Letter G (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 6, 0</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 3 Letter G (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 6, 0</text></svg>"
+     }
+    ],
+    "expected_payouts": {
+     "u1": 30
+    }
+   },
+   {
+    "name": "Tie splits the pot",
+    "description": "Two players tie at the top after round 3, so the pot of 31 is split 16 and 15, the remainder going to the earliest seat.",
+    "kind": "terminal",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u3",
+       "kind": "human",
+       "display_name": "Carol",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 31,
+     "move_count": 8,
+     "seed": 21
+    },
+    "state": {
+     "round": 3,
+     "letter": "j",
+     "cats": [
+      "Drink",
+      "Ocean or sea",
+      "Movie title",
+      "Holiday",
+      "Vehicle",
+      "Board game"
+     ],
+     "turn": 2,
+     "scores": [
+      0,
+      0,
+      0
+     ],
+     "answers": [
+      [
+       "jone",
+       "jtwo",
+       "",
+       "",
+       "",
+       ""
+      ],
+      [
+       "juno",
+       "jdos",
+       "",
+       "",
+       "",
+       ""
+      ],
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Fruit",
+        "Sport",
+        "Country",
+        "Famous person",
+        "Tree",
+        "Clothing item"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "t",
+       "cats": [
+        "Body part",
+        "Book title",
+        "Household item",
+        "Musical instrument",
+        "Vegetable",
+        "Animal"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "letterDeck": [
+      11,
+      12,
+      3,
+      16,
+      0,
+      8,
+      19,
+      4,
+      6,
+      14,
+      7,
+      13,
+      1,
+      2,
+      17,
+      10,
+      15
+     ],
+     "catDeck": [
+      28,
+      8,
+      13,
+      7,
+      29,
+      9,
+      2,
+      21,
+      11,
+      1,
+      27,
+      19
+     ],
+     "over": false,
+     "winners": []
+    },
+    "view_of_mover": {
+     "round": 3,
+     "letter": "j",
+     "cats": [
+      "Drink",
+      "Ocean or sea",
+      "Movie title",
+      "Holiday",
+      "Vehicle",
+      "Board game"
+     ],
+     "turn": 2,
+     "scores": [
+      0,
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      true,
+      false
+     ],
+     "answers": [
+      null,
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Fruit",
+        "Sport",
+        "Country",
+        "Famous person",
+        "Tree",
+        "Clothing item"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "t",
+       "cats": [
+        "Body part",
+        "Book title",
+        "Household item",
+        "Musical instrument",
+        "Vegetable",
+        "Animal"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 2
+    },
+    "view_of_other": {
+     "round": 3,
+     "letter": "j",
+     "cats": [
+      "Drink",
+      "Ocean or sea",
+      "Movie title",
+      "Holiday",
+      "Vehicle",
+      "Board game"
+     ],
+     "turn": 2,
+     "scores": [
+      0,
+      0,
+      0
+     ],
+     "submitted": [
+      true,
+      true,
+      false
+     ],
+     "answers": [
+      [
+       "jone",
+       "jtwo",
+       "",
+       "",
+       "",
+       ""
+      ],
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Fruit",
+        "Sport",
+        "Country",
+        "Famous person",
+        "Tree",
+        "Clothing item"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "t",
+       "cats": [
+        "Body part",
+        "Book title",
+        "Household item",
+        "Musical instrument",
+        "Vegetable",
+        "Animal"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "over": false,
+     "winners": [],
+     "seat": 0
+    },
+    "player_id": "u3",
+    "other_player_id": "u1",
+    "move": {
+     "type": "answer",
+     "answers": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ]
+    },
+    "expected_state": {
+     "round": 3,
+     "letter": "j",
+     "cats": [
+      "Drink",
+      "Ocean or sea",
+      "Movie title",
+      "Holiday",
+      "Vehicle",
+      "Board game"
+     ],
+     "turn": 0,
+     "scores": [
+      2,
+      2,
+      0
+     ],
+     "answers": [
+      null,
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Fruit",
+        "Sport",
+        "Country",
+        "Famous person",
+        "Tree",
+        "Clothing item"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "t",
+       "cats": [
+        "Body part",
+        "Book title",
+        "Household item",
+        "Musical instrument",
+        "Vegetable",
+        "Animal"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "j",
+       "cats": [
+        "Drink",
+        "Ocean or sea",
+        "Movie title",
+        "Holiday",
+        "Vehicle",
+        "Board game"
+       ],
+       "answers": [
+        [
+         "jone",
+         "jtwo",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "juno",
+         "jdos",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         1,
+         1,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         1,
+         1,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        2,
+        2,
+        0
+       ]
+      }
+     ],
+     "letterDeck": [
+      11,
+      12,
+      3,
+      16,
+      0,
+      8,
+      19,
+      4,
+      6,
+      14,
+      7,
+      13,
+      1,
+      2,
+      17,
+      10,
+      15
+     ],
+     "catDeck": [
+      28,
+      8,
+      13,
+      7,
+      29,
+      9,
+      2,
+      21,
+      11,
+      1,
+      27,
+      19
+     ],
+     "over": true,
+     "winners": [
+      0,
+      1
+     ]
+    },
+    "expected_turn": null,
+    "expected_view_of_mover": {
+     "round": 3,
+     "letter": "j",
+     "cats": [
+      "Drink",
+      "Ocean or sea",
+      "Movie title",
+      "Holiday",
+      "Vehicle",
+      "Board game"
+     ],
+     "turn": 0,
+     "scores": [
+      2,
+      2,
+      0
+     ],
+     "submitted": [
+      false,
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Fruit",
+        "Sport",
+        "Country",
+        "Famous person",
+        "Tree",
+        "Clothing item"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "t",
+       "cats": [
+        "Body part",
+        "Book title",
+        "Household item",
+        "Musical instrument",
+        "Vegetable",
+        "Animal"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "j",
+       "cats": [
+        "Drink",
+        "Ocean or sea",
+        "Movie title",
+        "Holiday",
+        "Vehicle",
+        "Board game"
+       ],
+       "answers": [
+        [
+         "jone",
+         "jtwo",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "juno",
+         "jdos",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         1,
+         1,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         1,
+         1,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        2,
+        2,
+        0
+       ]
+      }
+     ],
+     "over": true,
+     "winners": [
+      0,
+      1
+     ],
+     "seat": 2
+    },
+    "expected_view_of_other": {
+     "round": 3,
+     "letter": "j",
+     "cats": [
+      "Drink",
+      "Ocean or sea",
+      "Movie title",
+      "Holiday",
+      "Vehicle",
+      "Board game"
+     ],
+     "turn": 0,
+     "scores": [
+      2,
+      2,
+      0
+     ],
+     "submitted": [
+      false,
+      false,
+      false
+     ],
+     "answers": [
+      null,
+      null,
+      null
+     ],
+     "past": [
+      {
+       "letter": "f",
+       "cats": [
+        "Fruit",
+        "Sport",
+        "Country",
+        "Famous person",
+        "Tree",
+        "Clothing item"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "t",
+       "cats": [
+        "Body part",
+        "Book title",
+        "Household item",
+        "Musical instrument",
+        "Vegetable",
+        "Animal"
+       ],
+       "answers": [
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "letter": "j",
+       "cats": [
+        "Drink",
+        "Ocean or sea",
+        "Movie title",
+        "Holiday",
+        "Vehicle",
+        "Board game"
+       ],
+       "answers": [
+        [
+         "jone",
+         "jtwo",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "juno",
+         "jdos",
+         "",
+         "",
+         "",
+         ""
+        ],
+        [
+         "",
+         "",
+         "",
+         "",
+         "",
+         ""
+        ]
+       ],
+       "pts": [
+        [
+         1,
+         1,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         1,
+         1,
+         0,
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0
+        ]
+       ],
+       "gained": [
+        2,
+        2,
+        0
+       ]
+      }
+     ],
+     "over": true,
+     "winners": [
+      0,
+      1
+     ],
+     "seat": 0
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 3 Letter J (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0, 0</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 3 Letter J (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 0, 0, 0</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 3 Letter J (mover)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 2, 2, 0</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"34\" fill=\"#ffffff\">Scattergories</text><text x=\"25\" y=\"66\" fill=\"#ffffff\">Round 3 Letter J (spectator)</text><text x=\"25\" y=\"98\" fill=\"#ffffff\">Scores: 2, 2, 0</text></svg>"
+     }
+    ],
+    "expected_payouts": {
+     "u1": 16,
+     "u2": 15
+    }
+   }
+  ]
+ },
+ "translations": {
+  "es": {
+   "display_name": "Scattergories (Declarative)",
+   "short_description": "Scattergories por turnos para 2 a 6 jugadores: tres rondas, cada una con una letra y seis categorías. En tu turno, envía una respuesta por categoría. Una respuesta única que empiece con la letra de la ronda vale 1 punto; los duplicados se cancelan. Gana quien tenga más puntos tras tres rondas.",
+   "game_logic_rules": "Scattergories, adaptado por turnos para 2 a 6 jugadores. Una partida dura 3 rondas. Cada ronda tiene una letra y seis categorías extraídas sin repetición de un banco de 30 categorías. Los jugadores responden en orden de asiento: en tu turno, envía una respuesta para cada categoría en una sola jugada; una respuesta vacía no vale nada. Las respuestas permanecen ocultas hasta que se puntúa la ronda. Puntuación, por categoría: las respuestas se normalizan recortando, uniendo espacios y pasando a minúsculas. Una respuesta vale 1 punto cuando no está vacía, cuando su primera palabra empieza con la letra de la ronda y cuando ningún otro jugador dio la misma respuesta normalizada en esa categoría. Solo para la prueba de la letra, se quita un artículo inicial (the, an o a) antes de tomar la primera palabra; los duplicados se comparan con la respuesta normalizada sin quitarlo. Tras la ronda 3 gana el total más alto y el bote se reparte a partes iguales entre los mejores empatados que sean humanos activos, y el resto va a los asientos más tempranos.",
+   "game_ui_rules": "La letra y las seis categorías están arriba. Cuando sea tu turno, escribe una respuesta en cada uno de los seis cuadros de texto (deja un cuadro vacío para saltar esa categoría) y toca Enviar respuestas. Los demás jugadores solo ven que has respondido, no tus respuestas, hasta que se puntúa la ronda; las rondas puntuadas se listan debajo de los puntajes. El tablero se ajusta a teléfonos en vertical y horizontal sin desplazamiento horizontal.",
+   "tutorial_strings": {
+    "How to play Scattergories": "Cómo jugar a Scattergories",
+    "Each round shows one letter and six categories.": "Cada ronda muestra una letra y seis categorías.",
+    "Your turn": "Tu turno",
+    "Type one answer per category and submit all six at once. Empty answers score nothing.": "Escribe una respuesta por categoría y envía las seis a la vez. Las respuestas vacías no valen nada.",
+    "Scoring": "Puntuación",
+    "An answer scores 1 point when its first word starts with the letter and nobody else gave the same answer.": "Una respuesta vale 1 punto cuando su primera palabra empieza con la letra y nadie más dio la misma respuesta."
+   },
+   "client_strings": {
+    "title": "Scattergories",
+    "turn_player": "Turno del jugador {n}",
+    "finished": "Terminado",
+    "round_letter": "Ronda {r} de 3 - Letra {l}",
+    "scores": "Puntajes",
+    "player_score": "Jugador {n}: {v}",
+    "done_word": "respondió",
+    "answering_word": "respondiendo",
+    "waiting_word": "esperando",
+    "submit": "Enviar respuestas",
+    "your_answers": "Tus respuestas: {v}",
+    "round_line": "Ronda {r}: Letra {l}",
+    "p_gain": "J{n} +{v}",
+    "winner": "Gana el jugador {n}",
+    "tie": "Empate entre los jugadores {v}",
+    "server_invalid_move": "invalid move"
+   }
+  },
+  "fr": {
+   "display_name": "Scattergories (Declarative)",
+   "short_description": "Scattergories au tour par tour pour 2 à 6 joueurs : trois manches, chacune avec une lettre et six catégories. À votre tour, envoyez une réponse par catégorie. Une réponse unique commençant par la lettre de la manche vaut 1 point ; les doublons s'annulent. Le plus de points après trois manches gagne.",
+   "game_logic_rules": "Scattergories, adapté au tour par tour pour 2 à 6 joueurs. Une partie dure 3 manches. Chaque manche a une lettre et six catégories tirées sans répétition d'une banque de 30 catégories. Les joueurs répondent dans l'ordre des sièges : à votre tour, envoyez une réponse pour chaque catégorie en un seul coup ; une réponse vide ne vaut rien. Les réponses restent cachées jusqu'au score de la manche. Score, par catégorie : les réponses sont normalisées en coupant, en réduisant les espaces et en passant en minuscules. Une réponse vaut 1 point quand elle est non vide, quand son premier mot commence par la lettre de la manche et quand aucun autre joueur n'a donné la même réponse normalisée dans cette catégorie. Pour le test de la lettre seulement, un article initial (the, an ou a) est retiré avant de prendre le premier mot ; les doublons sont comparés sur la réponse normalisée sans retrait. Après la manche 3, le total le plus élevé gagne et le pot est partagé à parts égales entre les meilleurs ex aequo qui sont des humains actifs, le reste allant aux sièges les plus précoces.",
+   "game_ui_rules": "La lettre et les six catégories sont en haut. Quand c'est votre tour, tapez une réponse dans chacune des six zones de texte (laissez une zone vide pour passer cette catégorie) et touchez Envoyer les réponses. Les autres joueurs voient seulement que vous avez répondu, pas vos réponses, jusqu'au score de la manche ; les manches scorées sont listées sous les scores. Le plateau s'adapte aux téléphones en portrait et en paysage sans défilement horizontal.",
+   "tutorial_strings": {
+    "How to play Scattergories": "Comment jouer à Scattergories",
+    "Each round shows one letter and six categories.": "Chaque manche montre une lettre et six catégories.",
+    "Your turn": "Votre tour",
+    "Type one answer per category and submit all six at once. Empty answers score nothing.": "Tapez une réponse par catégorie et envoyez les six à la fois. Les réponses vides ne valent rien.",
+    "Scoring": "Score",
+    "An answer scores 1 point when its first word starts with the letter and nobody else gave the same answer.": "Une réponse vaut 1 point quand son premier mot commence par la lettre et que personne d'autre n'a donné la même réponse."
+   },
+   "client_strings": {
+    "title": "Scattergories",
+    "turn_player": "Au joueur {n} de répondre",
+    "finished": "Terminé",
+    "round_letter": "Manche {r} sur 3 - Lettre {l}",
+    "scores": "Scores",
+    "player_score": "Joueur {n} : {v}",
+    "done_word": "a répondu",
+    "answering_word": "répond",
+    "waiting_word": "en attente",
+    "submit": "Envoyer les réponses",
+    "your_answers": "Vos réponses : {v}",
+    "round_line": "Manche {r} : Lettre {l}",
+    "p_gain": "J{n} +{v}",
+    "winner": "Le joueur {n} gagne",
+    "tie": "Égalité entre les joueurs {v}",
+    "server_invalid_move": "invalid move"
+   }
+  },
+  "de": {
+   "display_name": "Scattergories (Declarative)",
+   "short_description": "Scattergories rundenbasiert für 2 bis 6 Spieler: drei Runden, jede mit einem Buchstaben und sechs Kategorien. In deinem Zug reichst du eine Antwort pro Kategorie ein. Eine einzigartige Antwort, die mit dem Rundenbuchstaben beginnt, gibt 1 Punkt; Duplikate heben sich auf. Die meisten Punkte nach drei Runden gewinnen.",
+   "game_logic_rules": "Scattergories, rundenbasiert angepasst für 2 bis 6 Spieler. Eine Partie dauert 3 Runden. Jede Runde hat einen Buchstaben und sechs Kategorien, die ohne Wiederholung aus einer Bank von 30 Kategorien gezogen werden. Die Spieler antworten in Sitzreihenfolge: In deinem Zug reichst du eine Antwort für jede Kategorie als einen einzigen Zug ein; eine leere Antwort zählt nichts. Antworten bleiben verborgen, bis die Runde gewertet wird. Wertung pro Kategorie: Antworten werden durch Kürzen, Zusammenfassen von Leerzeichen und Kleinschreibung normalisiert. Eine Antwort gibt 1 Punkt, wenn sie nicht leer ist, wenn ihr erstes Wort mit dem Rundenbuchstaben beginnt und wenn kein anderer Spieler dieselbe normalisierte Antwort in dieser Kategorie gegeben hat. Nur für den Buchstabentest wird ein führender Artikel (the, an oder a) entfernt, bevor das erste Wort genommen wird; Duplikate werden an der normalisierten Antwort ohne Entfernung verglichen. Nach Runde 3 gewinnt die höchste Summe, und der Pot wird zu gleichen Teilen unter den gleichauf führenden aktiven Menschen aufgeteilt, wobei ein Rest an die frühesten Sitze geht.",
+   "game_ui_rules": "Der Buchstabe und die sechs Kategorien stehen oben. Wenn du am Zug bist, tippe eine Antwort in jedes der sechs Textfelder (lasse ein Feld leer, um diese Kategorie zu überspringen) und tippe auf Antworten einreichen. Andere Spieler sehen nur, dass du geantwortet hast, nicht deine Antworten, bis die Runde gewertet wird; gewertete Runden stehen unter den Punkten. Das Brett passt auf Telefone im Hoch- und Querformat ohne horizontales Scrollen.",
+   "tutorial_strings": {
+    "How to play Scattergories": "So spielt man Scattergories",
+    "Each round shows one letter and six categories.": "Jede Runde zeigt einen Buchstaben und sechs Kategorien.",
+    "Your turn": "Dein Zug",
+    "Type one answer per category and submit all six at once. Empty answers score nothing.": "Tippe eine Antwort pro Kategorie und reiche alle sechs auf einmal ein. Leere Antworten zählen nichts.",
+    "Scoring": "Wertung",
+    "An answer scores 1 point when its first word starts with the letter and nobody else gave the same answer.": "Eine Antwort gibt 1 Punkt, wenn ihr erstes Wort mit dem Buchstaben beginnt und niemand sonst dieselbe Antwort gegeben hat."
+   },
+   "client_strings": {
+    "title": "Scattergories",
+    "turn_player": "Spieler {n} antwortet",
+    "finished": "Beendet",
+    "round_letter": "Runde {r} von 3 - Buchstabe {l}",
+    "scores": "Punkte",
+    "player_score": "Spieler {n}: {v}",
+    "done_word": "fertig",
+    "answering_word": "antwortet",
+    "waiting_word": "wartet",
+    "submit": "Antworten einreichen",
+    "your_answers": "Deine Antworten: {v}",
+    "round_line": "Runde {r}: Buchstabe {l}",
+    "p_gain": "S{n} +{v}",
+    "winner": "Spieler {n} gewinnt",
+    "tie": "Gleichstand zwischen Spielern {v}",
+    "server_invalid_move": "invalid move"
+   }
+  },
+  "pt": {
+   "display_name": "Scattergories (Declarative)",
+   "short_description": "Scattergories por turnos para 2 a 6 jogadores: três rodadas, cada uma com uma letra e seis categorias. No seu turno, envie uma resposta por categoria. Uma resposta única que comece com a letra da rodada vale 1 ponto; duplicadas se cancelam. Mais pontos após três rodadas vence.",
+   "game_logic_rules": "Scattergories, adaptado por turnos para 2 a 6 jogadores. Uma partida dura 3 rodadas. Cada rodada tem uma letra e seis categorias sorteadas sem repetição de um banco de 30 categorias. Os jogadores respondem na ordem dos assentos: no seu turno, envie uma resposta para cada categoria em uma única jogada; uma resposta vazia não vale nada. As respostas ficam ocultas até a rodada ser pontuada. Pontuação, por categoria: as respostas são normalizadas aparando, juntando espaços e passando para minúsculas. Uma resposta vale 1 ponto quando não está vazia, quando sua primeira palavra começa com a letra da rodada e quando nenhum outro jogador deu a mesma resposta normalizada nessa categoria. Só para o teste da letra, um artigo inicial (the, an ou a) é removido antes de tomar a primeira palavra; duplicadas são comparadas na resposta normalizada sem remoção. Após a rodada 3, o maior total vence e o pote é dividido igualmente entre os melhores empatados que forem humanos ativos, com o resto indo para os assentos mais cedo.",
+   "game_ui_rules": "A letra e as seis categorias ficam no topo. Quando for o seu turno, digite uma resposta em cada uma das seis caixas de texto (deixe uma caixa vazia para pular essa categoria) e toque em Enviar respostas. Os outros jogadores veem apenas que você respondeu, não suas respostas, até a rodada ser pontuada; as rodadas pontuadas ficam listadas abaixo dos pontos. O tabuleiro se ajusta a telefones em vertical e horizontal sem rolagem horizontal.",
+   "tutorial_strings": {
+    "How to play Scattergories": "Como jogar Scattergories",
+    "Each round shows one letter and six categories.": "Cada rodada mostra uma letra e seis categorias.",
+    "Your turn": "Seu turno",
+    "Type one answer per category and submit all six at once. Empty answers score nothing.": "Digite uma resposta por categoria e envie as seis de uma vez. Respostas vazias não valem nada.",
+    "Scoring": "Pontuação",
+    "An answer scores 1 point when its first word starts with the letter and nobody else gave the same answer.": "Uma resposta vale 1 ponto quando sua primeira palavra começa com a letra e ninguém mais deu a mesma resposta."
+   },
+   "client_strings": {
+    "title": "Scattergories",
+    "turn_player": "Jogador {n} responde",
+    "finished": "Terminado",
+    "round_letter": "Rodada {r} de 3 - Letra {l}",
+    "scores": "Pontos",
+    "player_score": "Jogador {n}: {v}",
+    "done_word": "respondeu",
+    "answering_word": "respondendo",
+    "waiting_word": "aguardando",
+    "submit": "Enviar respostas",
+    "your_answers": "Suas respostas: {v}",
+    "round_line": "Rodada {r}: Letra {l}",
+    "p_gain": "J{n} +{v}",
+    "winner": "Jogador {n} vence",
+    "tie": "Empate entre os jogadores {v}",
+    "server_invalid_move": "invalid move"
+   }
+  },
+  "zh": {
+   "display_name": "Scattergories (Declarative)",
+   "short_description": "2至6人回合制Scattergories：共三轮，每轮一个字母和六个类别。轮到你时，每个类别提交一个答案。以本轮字母开头且唯一的答案得1分；重复答案取消。三轮后分数最高者获胜。",
+   "game_logic_rules": "Scattergories，改编为2至6人的回合制游戏。一场比赛共3轮。每轮有一个字母和从30个类别库中不重复抽取的六个类别。玩家按座位顺序作答：轮到你时，一次提交每个类别的一个答案；空答案不得分。答案在本轮计分前保持隐藏。每类计分：答案先经修剪、合并空白并转为小写进行规范化。当答案非空、其第一个词以本轮字母开头、且没有其他玩家在该类别给出相同的规范化答案时，得1分。仅在字母检验时，在取第一个词之前去掉一个前置冠词（the、an或a）；重复判定则按未去掉冠词的规范化答案比较。第3轮后，总分最高者获胜，奖池在并列最高且为活跃真人的玩家之间平均分配，余数给最早的座位。",
+   "game_ui_rules": "字母和六个类别位于顶部。轮到你时，在六个文本框中各输入一个答案（留空可跳过该类别），然后点击提交答案。在本轮计分前，其他玩家只能看到你已作答，看不到你的答案；已计分的轮次列在分数下方。棋盘适配手机竖屏和横屏，无需横向滚动。",
+   "tutorial_strings": {
+    "How to play Scattergories": "如何玩Scattergories",
+    "Each round shows one letter and six categories.": "每轮显示一个字母和六个类别。",
+    "Your turn": "你的回合",
+    "Type one answer per category and submit all six at once. Empty answers score nothing.": "每个类别输入一个答案，一次提交全部六个。空答案不得分。",
+    "Scoring": "计分",
+    "An answer scores 1 point when its first word starts with the letter and nobody else gave the same answer.": "当答案的第一个词以该字母开头且无人给出相同答案时，该答案得1分。"
+   },
+   "client_strings": {
+    "title": "Scattergories",
+    "turn_player": "玩家{n}作答",
+    "finished": "已结束",
+    "round_letter": "第{r}轮（共3轮）- 字母{l}",
+    "scores": "分数",
+    "player_score": "玩家{n}：{v}",
+    "done_word": "已作答",
+    "answering_word": "作答中",
+    "waiting_word": "等待中",
+    "submit": "提交答案",
+    "your_answers": "你的答案：{v}",
+    "round_line": "第{r}轮：字母{l}",
+    "p_gain": "P{n} +{v}",
+    "winner": "玩家{n}获胜",
+    "tie": "玩家{v}并列",
+    "server_invalid_move": "invalid move"
+   }
+  },
+  "hi": {
+   "display_name": "Scattergories (Declarative)",
+   "short_description": "2 से 6 खिलाड़ियों के लिए बारी-आधारित Scattergories: तीन राउंड, हर राउंड में एक अक्षर और छह श्रेणियाँ। अपनी बारी पर, हर श्रेणी के लिए एक उत्तर भेजें। राउंड के अक्षर से शुरू होने वाला अनूठा उत्तर 1 अंक देता है; दोहराए गए उत्तर रद्द हो जाते हैं। तीन राउंड के बाद सबसे अधिक अंक जीतते हैं।",
+   "game_logic_rules": "Scattergories, 2 से 6 खिलाड़ियों के लिए बारी-आधारित रूपांतरण। एक मैच 3 राउंड चलता है। हर राउंड में एक अक्षर और 30 श्रेणियों के बैंक से बिना दोहराव निकाली गई छह श्रेणियाँ होती हैं। खिलाड़ी सीट क्रम में उत्तर देते हैं: अपनी बारी पर, हर श्रेणी के लिए एक उत्तर एक ही चाल में भेजें; खाली उत्तर का कोई अंक नहीं। उत्तर राउंड के स्कोर होने तक छिपे रहते हैं। स्कोरिंग, प्रति श्रेणी: उत्तरों को ट्रिम करके, रिक्त स्थान जोड़कर और छोटे अक्षरों में बदलकर सामान्य किया जाता है। उत्तर को 1 अंक तब मिलता है जब वह खाली न हो, जब उसका पहला शब्द राउंड के अक्षर से शुरू हो, और जब किसी अन्य खिलाड़ी ने उस श्रेणी में वही सामान्यीकृत उत्तर न दिया हो। केवल अक्षर परीक्षण के लिए, पहला शब्द लेने से पहले एक शुरुआती आर्टिकल (the, an या a) हटाया जाता है; दोहराव की तुलना बिना हटाए सामान्यीकृत उत्तर पर होती है। राउंड 3 के बाद सबसे अधिक कुल जीतता है और पॉट बराबर बँटता है उन शीर्ष स्कोररों में जो सक्रिय मानव हैं, शेष सबसे शुरुआती सीटों को जाता है।",
+   "game_ui_rules": "अक्षर और छह श्रेणियाँ ऊपर हैं। जब आपकी बारी हो, छह टेक्स्ट बॉक्स में से हर एक में एक उत्तर लिखें (किसी श्रेणी को छोड़ने के लिए बॉक्स खाली छोड़ें) और उत्तर भेजें दबाएँ। अन्य खिलाड़ी केवल यह देखते हैं कि आपने उत्तर दिया है, आपके उत्तर नहीं, जब तक राउंड स्कोर न हो जाए; स्कोर हुए राउंड अंकों के नीचे सूचीबद्ध होते हैं। बोर्ड फ़ोन पर लंबवत और क्षैतिज दोनों में बिना क्षैतिज स्क्रॉल के फिट होता है।",
+   "tutorial_strings": {
+    "How to play Scattergories": "Scattergories कैसे खेलें",
+    "Each round shows one letter and six categories.": "हर राउंड में एक अक्षर और छह श्रेणियाँ दिखती हैं।",
+    "Your turn": "आपकी बारी",
+    "Type one answer per category and submit all six at once. Empty answers score nothing.": "हर श्रेणी के लिए एक उत्तर लिखें और सभी छह एक साथ भेजें। खाली उत्तरों का कोई अंक नहीं।",
+    "Scoring": "स्कोरिंग",
+    "An answer scores 1 point when its first word starts with the letter and nobody else gave the same answer.": "उत्तर को 1 अंक तब मिलता है जब उसका पहला शब्द अक्षर से शुरू हो और किसी और ने वही उत्तर न दिया हो।"
+   },
+   "client_strings": {
+    "title": "Scattergories",
+    "turn_player": "खिलाड़ी {n} उत्तर दे",
+    "finished": "समाप्त",
+    "round_letter": "राउंड {r} / 3 - अक्षर {l}",
+    "scores": "अंक",
+    "player_score": "खिलाड़ी {n}: {v}",
+    "done_word": "उत्तर दिया",
+    "answering_word": "उत्तर दे रहा है",
+    "waiting_word": "प्रतीक्षा में",
+    "submit": "उत्तर भेजें",
+    "your_answers": "आपके उत्तर: {v}",
+    "round_line": "राउंड {r}: अक्षर {l}",
+    "p_gain": "P{n} +{v}",
+    "winner": "खिलाड़ी {n} जीतता है",
+    "tie": "खिलाड़ियों {v} के बीच टाई",
+    "server_invalid_move": "invalid move"
+   }
+  },
+  "ar": {
+   "display_name": "Scattergories (Declarative)",
+   "short_description": "سكاتيرغوريز بنظام الأدوار من 2 إلى 6 لاعبين: ثلاث جولات، لكل جولة حرف واحد وست فئات. في دورك، أرسل إجابة واحدة لكل فئة. الإجابة الفريدة التي تبدأ بحرف الجولة تسجل نقطة واحدة؛ والمكررة تُلغى. الأعلى نقاطًا بعد ثلاث جولات يفوز.",
+   "game_logic_rules": "سكاتيرغوريز، مقتبسة بنظام الأدوار من 2 إلى 6 لاعبين. تستمر المباراة 3 جولات. لكل جولة حرف واحد وست فئات تُسحب دون تكرار من بنك من 30 فئة. يجيب اللاعبون بترتيب المقاعد: في دورك، أرسل إجابة واحدة لكل فئة في حركة واحدة؛ والإجابة الفارغة لا تسجل شيئًا. تبقى الإجابات مخفية حتى تُسجل الجولة. التسجيل، لكل فئة: تُطبَّع الإجابات بالقص ودمج المسافات والتحويل إلى أحرف صغيرة. تسجل الإجابة نقطة واحدة عندما تكون غير فارغة، وعندما تبدأ كلمتها الأولى بحرف الجولة، وعندما لا يكون أي لاعب آخر قد أعطى الإجابة المطبعة نفسها في تلك الفئة. لاختبار الحرف فقط، تُحذف أداة تعريف واحدة في البداية (the أو an أو a) قبل أخذ الكلمة الأولى؛ وتُقارن المكررات على الإجابة المطبعة دون حذف. بعد الجولة 3 يفوز المجموع الأعلى ويُقسم الوعاء بالتساوي بين أصحاب أعلى النقاط المتعادلين من البشر النشطين، ويذهب الباقي إلى المقاعد الأبكر.",
+   "game_ui_rules": "الحرف والفئات الست في الأعلى. عندما يأتي دورك، اكتب إجابة واحدة في كل مربع من مربعات النص الستة (اترك مربعًا فارغًا لتخطي تلك الفئة) واضغط إرسال الإجابات. يرى اللاعبون الآخرون فقط أنك أجبت، لا إجاباتك، حتى تُسجل الجولة؛ وتُدرج الجولات المسجلة أسفل النقاط. تتناسب اللوحة مع الهواتف عموديًا وأفقيًا دون تمرير أفقي.",
+   "tutorial_strings": {
+    "How to play Scattergories": "كيف تلعب سكاتيرغوريز",
+    "Each round shows one letter and six categories.": "تعرض كل جولة حرفًا واحدًا وست فئات.",
+    "Your turn": "دورك",
+    "Type one answer per category and submit all six at once. Empty answers score nothing.": "اكتب إجابة واحدة لكل فئة وأرسل الست دفعة واحدة. الإجابات الفارغة لا تسجل شيئًا.",
+    "Scoring": "التسجيل",
+    "An answer scores 1 point when its first word starts with the letter and nobody else gave the same answer.": "تسجل الإجابة نقطة واحدة عندما تبدأ كلمتها الأولى بالحرف ولم يعطِ أحد آخر الإجابة نفسها."
+   },
+   "client_strings": {
+    "title": "Scattergories",
+    "turn_player": "اللاعب {n} يجيب",
+    "finished": "انتهت",
+    "round_letter": "الجولة {r} من 3 - الحرف {l}",
+    "scores": "النقاط",
+    "player_score": "اللاعب {n}: {v}",
+    "done_word": "أجاب",
+    "answering_word": "يجيب",
+    "waiting_word": "ينتظر",
+    "submit": "إرسال الإجابات",
+    "your_answers": "إجاباتك: {v}",
+    "round_line": "الجولة {r}: الحرف {l}",
+    "p_gain": "P{n} +{v}",
+    "winner": "يفوز اللاعب {n}",
+    "tie": "تعادل بين اللاعبين {v}",
+    "server_invalid_move": "invalid move"
+   }
+  }
+ }
+}

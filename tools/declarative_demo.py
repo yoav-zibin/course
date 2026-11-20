@@ -29,7 +29,7 @@ KINDS = ('tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domine
          'four_player_chess','quoridor','crazy_eights','go_fish','hearts','spades','guess_who',
          'mau_mau','dos','kisolo','thirty_one','gobblet','chutes_ladders',
          'six_mens_morris','connect6','ataxx','whist','scopa',
-         'sim','paper_soccer','hackenbush','cartographers','dots_boxes','catan','oware','quarto','codenames','pentago','onitama','trivial_pursuit','love_letter','mastermind')
+         'sim','paper_soccer','hackenbush','cartographers','dots_boxes','catan','oware','quarto','codenames','pentago','onitama','trivial_pursuit','love_letter','mastermind','scattergories')
 DEMO_KINDS = (*KINDS, 'backgammon', 'twistfive', 'lanterntrails', 'crownfields')
 
 

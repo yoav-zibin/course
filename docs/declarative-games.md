@@ -172,6 +172,18 @@ codebreaker and spectators until the match ends and it is revealed — so the
 package declares `all_state_public: false`. Select it for publication with
 `--kinds mastermind`.
 
+Scattergories is a two- to six-player turn-based adaptation of the word
+game: a match is three rounds, each with one letter and six categories
+drawn without repeats from a bank of 30. Players answer in seat order,
+submitting all six answers as one move; answers stay hidden until the round
+is scored, then become public. A normalized answer scores one point when
+its first word — after stripping one leading article (the, an or a), a rule
+applied only to the letter test — starts with the round letter and no other
+player gave the same normalized answer. The highest total after three
+rounds wins and splits the pot among tied top scorers. Answers are hidden
+information, so the package declares `all_state_public: false`. Select it
+for publication with `--kinds scattergories`.
+
 Quarto is a two-player game on a 4-by-4 board with sixteen unique pieces:
 every combination of tall/short, light/dark, round/square and solid/hollow
 (piece id 0–15 is the 4-bit attribute vector: bit0 tall, bit1 dark, bit2
