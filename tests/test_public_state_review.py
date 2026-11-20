@@ -12,7 +12,8 @@ HIDDEN_FIXTURES = {"battleship", "crazy_eights", "go_fish", "guess_who",
                    "hearts", "memory", "spades", "thirty_one", "pedro",
                    "nim_single_heap", "big_two", "last_floe", "court_piece",
                    "blokus", "dos", "catch_the_ten", "mille_bornes",
-                   "sergeant_major", "mau_mau", "conquian", "snap", "slapjack"}
+                   "sergeant_major", "mau_mau", "conquian", "snap", "slapjack",
+                   "whist", "scopa"}
 
 
 def test_every_declarative_fixture_explicitly_classifies_its_gameplay_state():
