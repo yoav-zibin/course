@@ -56,6 +56,12 @@ Connect6 is a separate 19-by-19 declarative game. Its publication selection is
 stores it in the private state file outside the checkout. Creating a new game
 does not require the administrator/master password.
 
+Ataxx is a 7-by-7 clone-and-jump game with corner starts and automatic conversion
+of adjacent opposing pieces. A player without a legal move passes; the game ends
+when the board fills, a side is eliminated, neither side can move, or after 300
+moves, with the piece majority winning. Select it for publication with
+`--kinds ataxx`. See the [Ataxx rules reference](https://playabstractgames.com/en/ataxx/rules/).
+
 The Backgammon package keeps the regular audited game's rules as its base,
 with reviewed wrappers for retained rolls and unambiguous moves that use several
 dice with one checker. Its strict move schema describes roll, pass and moves
@@ -672,7 +678,7 @@ node tools/build_html_declarative_conversions.mjs
 python -m game_platform.tools.declarative_demo --port 8134
 ```
 
-Open `http://127.0.0.1:8134/portal` to play all twenty-one games in an isolated,
+Open `http://127.0.0.1:8134/portal` to play all thirty-one games in an isolated,
 ephemeral local platform. This runner uses no production data. Its fixtures
 support local development and do not substitute for the publication gate.
 The scene playground can load the same examples from

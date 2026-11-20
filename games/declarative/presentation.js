@@ -14,6 +14,16 @@ const gameUI = {
     if(KIND==='connect6'&&s.pending)labels.push({id:'turn-progress',text:t('place_second'),x:24,y:82,font_size:14});
     if(KIND==='pig'||KIND==='memory')labels.push({id:'score',text:t('score',{a:s.scores[0],b:s.scores[1]}),x:350,y:54,font_size:20});
     const keyOf=move=>Object.keys(move).map(k=>k+'_'+move[k]).join('_');
+    let selectedFrom=KIND==='ataxx'&&localState&&localState.move_count===m.move_count&&localState.viewer===m.my_player_index
+      &&Number.isInteger(localState.selectedFrom)?localState.selectedFrom:null;
+    const event=message.type==='ui_event'?message.event:null;
+    if(KIND==='ataxx'&&active&&event&&event.type==='tap'&&event.id) {
+      const source=/^piece_(\d+)$/.exec(event.id);
+      if(source) {
+        const cell=Number(source[1]);
+        if(legal.some(move=>move.from===cell))selectedFrom=selectedFrom===cell?null:cell;
+      }
+    }
     if(KIND==='nim'){
       for(let i=0;i<s.board[0];i++)pieces.push({id:'stone_'+i,type:'p0',board:'main',position:{x:35+(i%5)*95,y:50+Math.floor(i/5)*105},text:String(i+1)});
       legal.forEach(move=>controls.push({id:keyOf(move),kind:'button',label:t('take',{n:move.take})}));
@@ -24,6 +34,13 @@ const gameUI = {
     }else if(KIND==='mancala'){
       s.board.forEach((n,cell)=>pieces.push({id:'stonepit_'+cell,type:cell===6||cell===13?'store':'p0',board:'main',position:{cell:String(cell)},text:String(n),actions:legal.some(move=>move.pit===cell)?['tap']:[]}));
       legal.forEach(move=>targets.push({id:keyOf(move),board:'main',position:{cell:String(move.pit)},label:t('sow',{n:move.pit+1})}));
+    }else if(KIND==='ataxx'){
+      s.board.forEach((value,cell)=>{
+        if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},
+          scale:selectedFrom===cell?1.12:1,actions:active&&legal.some(move=>move.from===cell)?['tap']:[]});
+      });
+      if(selectedFrom!==null)legal.filter(move=>move.from===selectedFrom).forEach(move=>
+        targets.push({id:keyOf(move),board:'main',position:{cell:String(move.to)},label:t('cell',{n:move.to+1})}));
     }else{
       s.board.forEach((value,cell)=>{
         if(KIND==='memory')pieces.push({id:'card_'+cell,type:value===-1?'back':'card',board:'main',position:{cell:String(cell)},text:value===-1?'':String(value+1),face:value===-1?'back':'front',scale:s.matched.includes(cell)?0.86:1,opacity:s.matched.includes(cell)?0.6:1,actions:legal.some(move=>move.cell===cell)?['tap']:[]});
@@ -36,10 +53,15 @@ const gameUI = {
     // stay passive; legal destinations and enabled buttons supply their hints.
     for(const piece of pieces)if(!piece.actions)piece.actions=[];
     const scene={pieces,targets,controls,labels};
-    const out={scene,local_state:{}};
+    const out={scene,local_state:KIND==='ataxx'?{move_count:m.move_count,viewer:m.my_player_index,selectedFrom}:{}};
     if(message.type==='ui_event'&&active&&['tap','drop'].includes(message.event.type)){
       const e=message.event;
       let id=e.type==='drop'?e.target_id:e.id;
+      if(KIND==='ataxx'&&id) {
+        const move=legal.find(option=>keyOf(option)===id&&option.from===selectedFrom);
+        if(move)out.make_move=move;
+        return out;
+      }
       // Covered cards are pieces, so a piece tap is equivalent to the cell's
       // legal target. No rule or hidden state is calculated in presentation.
       if(KIND==='memory'&&id&&id.startsWith('card_'))id='cell_'+id.slice(5);

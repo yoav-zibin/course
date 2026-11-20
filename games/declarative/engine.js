@@ -1,10 +1,11 @@
-// Shared rules for the eleven declarative examples. The generated package prefixes
+// Shared rules for the twelve declarative examples. The generated package prefixes
 // this file with a constant KIND. No rendering, network or device APIs are used.
 function fresh() {
-  const sizes = {tictactoe:9, connect4:42, reversi:64, gomoku:81, hex:49, domineering:36, memory:16};
+  const sizes = {tictactoe:9, connect4:42, reversi:64, gomoku:81, hex:49, ataxx:49, domineering:36, memory:16};
   const s = {board:Array(sizes[KIND] || 0).fill(-1), turn:0, scores:[0,0],
     selected:[], matched:[], roll:0, total:0, winner:-1, turns:0, over:false};
   if (KIND === 'connect6') {s.board=Array(361).fill(-1);s.opening=true;s.pending=0;}
+  if (KIND === 'ataxx') {s.board[0]=0;s.board[6]=1;s.board[42]=1;s.board[48]=0;}
   if (KIND === 'reversi') {s.board[27]=1;s.board[28]=0;s.board[35]=0;s.board[36]=1;}
   if (KIND === 'nim') s.board = [15];
   if (KIND === 'mancala') s.board = [4,4,4,4,4,4,0,4,4,4,4,4,4,0];
@@ -34,6 +35,19 @@ function legal(s) {
     (s.turn ? cell%6<5&&s.board[cell+1]===-1 : cell<30&&s.board[cell+6]===-1)?[{cell}]:[]);
   if (KIND === 'memory') return s.board.flatMap((_,cell)=>!s.matched.includes(cell)&&
     !(s.selected.length===1&&s.selected.includes(cell))?[{cell}]:[]);
+  if (KIND === 'ataxx') {
+    const moves=[];
+    for(let from=0;from<49;from++) if(s.board[from]===s.turn) {
+      const row=Math.floor(from/7),col=from%7;
+      for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++) {
+        const distance=Math.max(Math.abs(dr),Math.abs(dc));
+        const r=row+dr,c=col+dc,to=r*7+c;
+        if(distance&&distance<=2&&r>=0&&r<7&&c>=0&&c<7&&s.board[to]===-1)
+          moves.push({from,to});
+      }
+    }
+    return moves;
+  }
   return s.board.flatMap((v,cell)=>v===-1?[{cell}]:[]);
 }
 function lineWon(s, cell, n, need) {
@@ -107,6 +121,25 @@ function apply(s,move,ctx) {
   } else if(KIND==='domineering') {
     s.board[move.cell]=seat;s.board[move.cell+(seat?1:6)]=seat;
     s.turn=1-seat;if(!legal(s).length)finish(s,seat);return;
+  } else if(KIND==='ataxx') {
+    const fromRow=Math.floor(move.from/7),fromCol=move.from%7;
+    const toRow=Math.floor(move.to/7),toCol=move.to%7;
+    if(Math.max(Math.abs(toRow-fromRow),Math.abs(toCol-fromCol))===2)s.board[move.from]=-1;
+    s.board[move.to]=seat;
+    for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++) {
+      if(!dr&&!dc)continue;
+      const r=toRow+dr,c=toCol+dc,cell=r*7+c;
+      if(r>=0&&r<7&&c>=0&&c<7&&s.board[cell]===1-seat)s.board[cell]=seat;
+    }
+    const count0=s.board.filter(v=>v===0).length,count1=s.board.filter(v=>v===1).length;
+    if(!count1)finish(s,seat);
+    else if(!count0)finish(s,1-seat);
+    else if(s.board.every(v=>v!==-1)||s.turns>=300)majority(s,count0,count1);
+    else {
+      s.turn=1-seat;
+      if(!legal(s).length){s.turn=seat;if(!legal(s).length)majority(s,count0,count1);}
+    }
+    return;
   } else {
     let cell=move.cell;
     if(KIND==='connect4'){cell=move.column;while(cell+7<42&&s.board[cell+7]===-1)cell+=7;}
