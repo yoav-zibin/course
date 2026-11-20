@@ -9,6 +9,45 @@ from google.api_core.exceptions import NotFound
 from google.cloud import firestore_admin_v1 as admin
 
 
+@pytest.mark.parametrize('operation', ['latest', 'rows', 'checks', 'open_session'])
+def test_game_test_queries_have_indexes_with_payload_indexing_disabled(operation):
+    from game_platform import game_traces
+
+    store = Mock()
+    store._query.return_value = []
+    if operation == 'latest':
+        game_traces.latest_submission(store, 'test-digest')
+    elif operation == 'rows':
+        game_traces.rows_for_submission(store, 'test-submission')
+    elif operation == 'checks':
+        game_traces.rows_for_submission(store, 'test-submission', kind='server_check')
+    else:
+        game_traces.open_session(store, 'test-submission')
+    kind, filters = store._query.call_args.args
+    assert kind == game_traces.TRACE_KIND
+    assert all(operator == '==' for _, operator, _ in filters)
+    fields = {field for field, _, _ in filters}
+    config = index_config('test_traces')
+    group = 'test_traces_' + kind
+    overrides = {item['fieldPath']: item for item in config['fieldOverrides']
+                 if item['collectionGroup'] == group}
+    assert overrides['*']['indexes'] == []
+    if len(fields) == 1:
+        assert overrides[next(iter(fields))]['indexes'] == [
+            {'queryScope': 'COLLECTION', 'order': 'ASCENDING'},
+        ]
+    else:
+        assert any(
+            index['collectionGroup'] == group
+            and index['queryScope'] == 'COLLECTION'
+            and index['fields'] == [
+                {'fieldPath': field, 'order': 'ASCENDING'} for field in sorted(fields)
+            ]
+            for index in config['indexes']
+        ), f'Missing production index for {operation}: {fields}'
+    assert set(overrides) == {'*', 'submission_id'}
+
+
 def test_native_receipt_worker_due_time_remains_indexed_when_defaults_are_disabled():
     overrides = index_config("test_notifications")["fieldOverrides"]
     fields = {item["fieldPath"]: item for item in overrides

@@ -36,6 +36,11 @@ def index_config(namespace):
             ),
         ],
         "invites": [(["created_by_user_id", "match_id"], None)],
+        "game_test_traces": [
+            (["kind", "secret_hash"], None),
+            (["kind", "submission_id"], None),
+            (["kind", "status", "submission_id"], None),
+        ],
         "game_version_errors": [(["game_id", "game_version"], None)],
         "users": [(["invited_by_user_id", "replaced_by_user_id"], None)],
     }
@@ -74,6 +79,7 @@ def index_config(namespace):
         },
         "feedback_targets": {"problem": "desc"},
         "game_server_bugs": {"examined": "order", "match_id": "order"},
+        "game_test_traces": {"submission_id": "order"},
         "bug_reports": {"status": "order", "reporter_user_id": "order"},
         "jobs": {"due_at": "order", "match_id": "order"},
         "failed_jobs": {"match_id": "order"},
