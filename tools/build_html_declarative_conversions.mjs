@@ -47,6 +47,10 @@ const entries = [
     ui:'Choose a question or tap a character to make a guess. Your secret character stays private during play; question history is public.'}
 ];
 
+const requestedKinds = new Set(process.argv.slice(2));
+const unknownKinds = [...requestedKinds].filter(kind => !entries.some(entry => entry.kind === kind));
+if (unknownKinds.length) throw new Error(`Unknown declarative conversion kind(s): ${unknownKinds.join(', ')}`);
+
 const TITLE_TRANSLATIONS = {
   battleship: ['Acorazado', 'Bataille navale', 'Schiffe versenken', 'Batalha naval', '战舰', 'युद्धपोत', 'سفن حربية'],
   checkers: ['Damas', 'Dames', 'Dame', 'Damas', '跳棋', 'चेकर्स', 'الداما'],
@@ -167,6 +171,14 @@ function makeSpec(entry) {
     entry.kind === 'guess_who' ? [] : ['card','played'];
   const typeValues = {};
   for (const name of typeNames) typeValues[name] = TYPES[name];
+  if (entry.kind === 'checkers') {
+    for (const name of ['p0','p1']) typeValues[name] = {...TYPES[name],width:58,height:58};
+    for (const name of ['king_p0','king_p1']) typeValues[name] = {...TYPES[name],width:58,height:58,font_size:44};
+  }
+  if (entry.kind === 'chess') {
+    typeValues.white_piece = {shape:'card',width:64,height:64,color:'#fff9e8',text_color:'#283044',border_color:'#a77b42',font_size:54};
+    typeValues.black_piece = {shape:'card',width:64,height:64,color:'#263348',text_color:'#fff5dc',border_color:'#e1bd72',font_size:54};
+  }
   if (entry.kind === 'quoridor') { typeValues.p0 = TYPES.pawn; typeValues.p1 = TYPES.pawn_red; }
   return {format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
     piece_types:typeValues,strings:{...ENGLISH,...sourceStrings(entry)},
@@ -316,4 +328,4 @@ function packageFor(entry) {
   console.log(`${entry.kind}: ${Buffer.byteLength(JSON.stringify(payload))} bytes`);
 }
 
-for (const entry of entries) packageFor(entry);
+for (const entry of entries.filter(entry => !requestedKinds.size || requestedKinds.has(entry.kind))) packageFor(entry);

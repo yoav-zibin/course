@@ -607,13 +607,14 @@
         },
         "animation": {
           "type": "object",
-          "description": "Optional host-rendered visual event. Keep the key stable for the same event; a roll effect does not alter game state, grant actions, or determine dice values.",
+          "description": "Optional host-rendered visual event. Keep the key stable for the same event. Roll, notice and pulse effects are visual only; they do not alter game state or grant actions.",
           "properties": {
             "kind": {
               "enum": [
                 "roll",
                 "move",
-                "notice"
+                "notice",
+                "pulse"
               ]
             },
             "duration_ms": {

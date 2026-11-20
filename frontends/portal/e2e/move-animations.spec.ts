@@ -34,6 +34,29 @@ async function point(page:Page,name:string):Promise<number[]>{
     return match?[Number(match[1]),Number(match[2])]:[];
   });
 }
+async function scale(page:Page,name:string):Promise<number>{
+  return page.getByLabel(name,{exact:true}).evaluate(node=>{
+    const matches=[...(node.getAttribute('transform')||'').matchAll(/scale\(([-\d.e]+)/g)];
+    return matches.length?Number(matches[matches.length-1][1]):NaN;
+  });
+}
+async function holdPieceAt(page:Page,at:number[]):Promise<string|null>{
+  return page.locator('g[aria-label]').evaluateAll((nodes,point)=>{
+    const node=nodes.find(item=>{
+      const match=/translate\(([-\d.e]+)[, ]+([-\d.e]+)\)/.exec(item.getAttribute('transform')||'');
+      return !!match&&Math.abs(Number(match[1])-point[0])<.001&&Math.abs(Number(match[2])-point[1])<.001;
+    });
+    (window as any).__heldPiece=node||null;
+    return node?.getAttribute('aria-label')||null;
+  },at);
+}
+async function heldPiece(page:Page){
+  return page.evaluate(()=>{
+    const node=(window as any).__heldPiece;
+    const match=/translate\(([-\d.e]+)[, ]+([-\d.e]+)\)/.exec(node?.getAttribute('transform')||'');
+    return {connected:!!node?.isConnected,position:match?[Number(match[1]),Number(match[2])]:[]};
+  });
+}
 async function settled(page:Page,name:string,at:number[]){
   // Equivalent scene coordinates can differ by floating point rounding.
   await expect.poll(async()=>{
@@ -71,6 +94,42 @@ const connect4Views=()=>{
   Object.assign(after,{turn:0,turns:1,last_move:{seat:1,column:6,cell:41}});
   return {game,before,after};
 };
+
+test('Hex placement pulses at its final cell for the player who placed it',async({page,request})=>{
+  const game=load('hex'),example=game.unit_tests.cases[0],pkg=game.declarative_ui;
+  const before=example.view_of_mover,after=example.expected_view_of_mover,cell=example.move.cell;
+  await mount(page,request,pkg,state({view:before,strings:pkg.strings,move_count:0}));
+  const piece=`piece_${cell}`,board=pkg.boards.find((item:any)=>item.id==='main');
+  const square=board.cells.find((item:any)=>item.id===String(cell));
+  await send(page,state({view:after,strings:pkg.strings,move_count:1,last_move_player_index:0}));
+  await painted(page,1);
+  const position=await point(page,piece);
+  expect(position[0]).toBeCloseTo(board.x+square.x,5);
+  expect(position[1]).toBeCloseTo(board.y+square.y,5);
+  await expect.poll(()=>scale(page,piece),{timeout:3000}).toBeGreaterThan(1.05);
+  await expect.poll(async()=>Math.abs(await scale(page,piece)-1),{timeout:4000}).toBeLessThan(.02);
+  await expect(page.getByRole('alert')).toHaveCount(0);await noMoves(page);
+});
+
+for(const kind of ['chess','checkers'])test(`${kind} preserves a piece identity while it moves`,async({page,request})=>{
+  const game=load(kind),example=game.unit_tests.cases[0],pkg=game.declarative_ui;
+  const before=example.view_of_mover,after=example.expected_view_of_mover,move=example.move;
+  const from=kind==='chess'?move.fr*8+move.fc:move.from.r*8+move.from.c;
+  const to=kind==='chess'?move.tr*8+move.tc:move.to.r*8+move.to.c;
+  const board=pkg.boards.find((item:any)=>item.id==='main'),unit=board.width/8;
+  const origin=[board.x+(from%8+.5)*unit,board.y+(Math.floor(from/8)+.5)*unit];
+  const destination=[board.x+(to%8+.5)*unit,board.y+(Math.floor(to/8)+.5)*unit];
+  await mount(page,request,pkg,state({view:before,strings:pkg.strings,move_count:0}));
+  expect(await holdPieceAt(page,origin)).toBeTruthy();
+  await send(page,state({view:after,strings:pkg.strings,move_count:1,last_move_player_index:1}));
+  await painted(page,1);
+  await expect.poll(async()=>{
+    const result=await heldPiece(page);
+    return result.connected&&result.position.length===2
+      ?Math.max(Math.abs(result.position[0]-destination[0]),Math.abs(result.position[1]-destination[1])):Infinity;
+  },{timeout:10000}).toBeLessThan(1);
+  await expect(page.getByRole('alert')).toHaveCount(0);await noMoves(page);
+});
 
 test('Connect Four authored paths drop vertically even when a reserve disc previously sat in another column',async({page,request},info)=>{
   const {game}=JSON.parse(readFileSync(path.resolve(__dirname,'../../../tests/fixtures/declarative/connect4-native-package.json'),'utf8'));

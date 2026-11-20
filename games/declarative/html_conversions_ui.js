@@ -9,6 +9,7 @@ const gameUI = {
     const legal = active;
     const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};
     const offers = [];
+    const presentationState = {};
     let selectedMode = 'pawn';
     let selectedFrom = null;
     const text = (source, values = {}) => String(m.strings?.[SOURCE_KEYS[source]] ?? source).replace(/\{(\w+)\}/g, (match, key) => values[key] == null ? match : String(values[key]));
@@ -188,10 +189,42 @@ const gameUI = {
     } else if (KIND === 'checkers') {
       const board = s.board || [];
       const moves = legal ? (s.moves || []) : [];
+      const snapshot = board.map(row => row.map(piece => piece ? `${piece.c}:${piece.k ? 1 : 0}` : null));
+      const previousBoard = localState && localState.checkers_board;
+      const previousIds = localState && localState.checkers_ids;
+      let pieceIds = {};
+      if (Array.isArray(previousBoard) && previousIds && typeof previousIds === 'object' && !Array.isArray(previousIds) &&
+          JSON.stringify(previousBoard) === JSON.stringify(snapshot)) {
+        pieceIds = Object.assign({}, previousIds);
+      } else {
+        const last = s.lastMove;
+        const from = last && last.from, to = last && last.to;
+        const inBounds = p => p && Number.isInteger(p.r) && Number.isInteger(p.c) &&
+          p.r >= 0 && p.r < 8 && p.c >= 0 && p.c < 8;
+        const fromKey = inBounds(from) ? `${from.r},${from.c}` : '';
+        const toKey = inBounds(to) ? `${to.r},${to.c}` : '';
+        const canCarry = Array.isArray(previousBoard) && previousIds && typeof previousIds === 'object' && !Array.isArray(previousIds) &&
+          inBounds(from) && inBounds(to) && previousBoard[from.r]?.[from.c] != null &&
+          snapshot[from.r]?.[from.c] === null && snapshot[to.r]?.[to.c] != null && previousIds[fromKey];
+        if (canCarry) {
+          pieceIds = Object.assign({}, previousIds);
+          const movedId = pieceIds[fromKey];
+          delete pieceIds[fromKey];
+          delete pieceIds[toKey];
+          pieceIds[toKey] = movedId;
+        }
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+          const key = `${r},${c}`;
+          if (snapshot[r]?.[c] == null) delete pieceIds[key];
+          else if (!pieceIds[key]) pieceIds[key] = key.replace(',', '_');
+        }
+      }
+      presentationState.checkers_board = snapshot;
+      presentationState.checkers_ids = pieceIds;
       board.forEach((row, r) => row.forEach((piece, c) => {
         if (!piece) return;
         const owner = piece.c === 0 ? 'p0' : 'p1';
-        staticPiece(`piece_${r}_${c}`, piece.k ? 'king_' + owner : owner, 'main',
+        staticPiece(`checker_${pieceIds[`${r},${c}`]}`, piece.k ? 'king_' + owner : owner, 'main',
           {cell: String(r * 8 + c)}, {text: piece.k ? '♛' : ''});
       }));
       selectFrom(moves,move=>move.from,cell=>({cell:String(cell.r*8+cell.c)})).forEach(move => intent({from: move.from, to: move.to}, move.cap ? '×' : '•', 'main',
@@ -206,12 +239,53 @@ const gameUI = {
       const fourSymbols = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙'};
       if (KIND === 'chess') {
         const pieceNames = {1:'P', 2:'N', 3:'B', 4:'R', 5:'Q', 6:'K'};
+        const snapshot = board.map(piece => Number(piece) || 0);
+        const previousBoard = localState && localState.chess_board;
+        const previousIds = localState && localState.chess_ids;
+        let pieceIds = {};
+        if (Array.isArray(previousBoard) && previousIds && typeof previousIds === 'object' && !Array.isArray(previousIds) &&
+            JSON.stringify(previousBoard) === JSON.stringify(snapshot)) {
+          pieceIds = Object.assign({}, previousIds);
+        } else {
+          const last = s.lastMove;
+          const inBounds = value => Number.isInteger(value) && value >= 0 && value < 8;
+          const valid = last && inBounds(last.fr) && inBounds(last.fc) && inBounds(last.tr) && inBounds(last.tc);
+          const fromIndex = valid ? last.fr * 8 + last.fc : -1;
+          const toIndex = valid ? last.tr * 8 + last.tc : -1;
+          const oldPiece = valid && Array.isArray(previousBoard) ? previousBoard[fromIndex] : 0;
+          const newPiece = valid ? snapshot[toIndex] : 0;
+          const canCarry = valid && Array.isArray(previousBoard) && previousIds && typeof previousIds === 'object' && !Array.isArray(previousIds) && oldPiece &&
+            snapshot[fromIndex] === 0 && newPiece && Math.sign(oldPiece) === Math.sign(newPiece) &&
+            previousIds[String(fromIndex)];
+          if (canCarry) {
+            pieceIds = Object.assign({}, previousIds);
+            const movedId = pieceIds[String(fromIndex)];
+            delete pieceIds[String(fromIndex)];
+            delete pieceIds[String(toIndex)];
+            pieceIds[String(toIndex)] = movedId;
+            if (Math.abs(oldPiece) === 6 && Math.abs(last.fc - last.tc) === 2) {
+              const rookFrom = last.fr * 8 + (last.tc > last.fc ? 7 : 0);
+              const rookTo = last.fr * 8 + (last.tc > last.fc ? 5 : 3);
+              if (previousBoard[rookFrom] === Math.sign(oldPiece) * 4 && snapshot[rookFrom] === 0 &&
+                  snapshot[rookTo] === Math.sign(oldPiece) * 4 && pieceIds[String(rookFrom)]) {
+                pieceIds[String(rookTo)] = pieceIds[String(rookFrom)];
+                delete pieceIds[String(rookFrom)];
+              }
+            }
+          }
+          for (let index = 0; index < 64; index++) {
+            if (!snapshot[index]) delete pieceIds[String(index)];
+            else if (!pieceIds[String(index)]) pieceIds[String(index)] = String(index);
+          }
+        }
+        presentationState.chess_board = snapshot;
+        presentationState.chess_ids = pieceIds;
         board.forEach((piece, index) => {
           if (!piece) return;
           const r = Math.floor(index / 8), c = index % 8;
           const name = pieceNames[Math.abs(piece)] || 'P';
           const code = `${piece > 0 ? 'w' : 'b'}${name}`;
-          staticPiece(`piece_${r}_${c}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,
+          staticPiece(`chess_${pieceIds[String(index)]}`, piece > 0 ? 'white_piece' : 'black_piece', boardId,
             {cell: String(index)}, {text: symbols[code] || name});
         });
       } else {
@@ -359,7 +433,7 @@ const gameUI = {
     }
 
     const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;
-    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};
+    const nextLocal = Object.assign({intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat},presentationState);
     if (KIND === 'battleship' && fleetSetup) Object.assign(nextLocal,{
       phase:'SETUP',fleetDraft,selectedShip,orientation:fleetOrientation
     });

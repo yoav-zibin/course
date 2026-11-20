@@ -392,6 +392,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         {[...(display.scene.pieces||[])].sort((a,b)=>(a.z||0)-(b.z||0)).filter(piece=>!piece.hidden&&piece.id!==drag?.id).map(piece=><PieceGraphic key={piece.id} piece={piece} previous={display.previous.pieces?.find(old=>old.id===piece.id)}
           spec={spec} animate={display.animate&&!reducedMotion&&(display.tracks===undefined||display.tracks.has(piece.id))} serial={display.serial} effect={replayEffects.get(piece.id)} enabled={active} selected={piece.selected||piece.id===selected}
           inferMovement={display.moves===undefined&&display.tracks===undefined} moveTrack={display.moves?.get(piece.id)} sceneTrack={display.tracks?.get(piece.id)} started={display.started}
+          pulseEnabled={!reducedMotion}
           onPress={()=>activatePiece(piece)}/>) }
         {!reducedMotion&&display.ghosts.map(piece=><PieceGraphic key={`history-ghost-${piece.id}`} piece={piece} previous={piece} spec={spec} animate={true} serial={display.serial} effect="exit" enabled={false}/>)}
         {previewTarget?.preview?.map((cell,index)=>{
@@ -461,13 +462,14 @@ const BoardGraphic=memo(function BoardGraphic({board,spec}:{board:Board;spec:Gam
   </G>;
 });
 
-const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:()=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number}) {
+const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:()=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean}) {
   const [frameState,setFrameState]=useState({serial:-1,phase:1});
   const newEffect=previous?.animation?.key!==piece.animation?.key;
   const next=position(spec,piece),before=previous?position(spec,previous):next,type=spec.piece_types[piece.type],size=pieceSize(spec,piece);
   const moved=!!previous&&(before.x!==next.x||before.y!==next.y||(previous.rotation||0)!==(piece.rotation||0)||(previous.scale??1)!==(piece.scale??1));
-  const needsAnimation=animate&&(sceneTrack?sceneTrack.duration+sceneTrack.delay>0:!!moveTrack||!!effect||inferMovement&&moved||newEffect&&!!piece.animation&&piece.animation.kind!=='move');
-  const duration=sceneTrack?.duration??moveTrack?.duration??(effect?(spec.motion?.move_ms??1440):piece.animation?.duration_ms??(piece.animation?.kind==='roll'?spec.motion?.roll_ms??650:spec.motion?.move_ms??1440));
+  const popAnimation=pulseEnabled&&newEffect&&piece.animation?.kind==='pulse';
+  const needsAnimation=popAnimation||animate&&(sceneTrack?sceneTrack.duration+sceneTrack.delay>0:!!moveTrack||!!effect||inferMovement&&moved||newEffect&&!!piece.animation&&piece.animation.kind!=='move');
+  const duration=sceneTrack?.duration??moveTrack?.duration??(effect?(spec.motion?.move_ms??1440):piece.animation?.duration_ms??(piece.animation?.kind==='roll'?spec.motion?.roll_ms??650:piece.animation?.kind==='pulse'?560:spec.motion?.move_ms??1440));
   const delay=sceneTrack?.delay??(moveTrack||effect?0:piece.animation?.delay_ms??0);
   useEffect(()=>{
     if(!needsAnimation)return;
@@ -481,6 +483,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const x=at.x,y=at.y;
   const rotation=authored?.rotation??(inferMovement?(previous?.rotation||0)+((piece.rotation||0)-(previous?.rotation||0))*eased:piece.rotation||0);
   const scale=authored?.scale??(inferMovement?(previous?.scale??1)+((piece.scale??1)-(previous?.scale??1))*eased:piece.scale??1);
+  const pulseScale=popAnimation&&needsAnimation?(p<.48?.46+.72*p/.48:1.18-.18*(p-.48)/.52):1;
   const actions=pieceActions(piece),outline=selected?'#b8ff67':enabled&&actions.length?'#79d5ff':'transparent';
   const roll=!sceneTrack&&animate&&newEffect&&piece.animation?.kind==='roll'?(1-p)*360:0;
   const notice=!sceneTrack&&piece.animation?.kind==='notice'?(animate&&newEffect&&p>.02&&p<.96?1:0):1;
@@ -488,7 +491,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const accessibleName=`${playerText(pieceName(piece))}${enabled&&actions.length?`: ${actions.map(a=>copyText(labels[a])).join(', ')}`:''}`;
   const accessibility:Record<string,unknown>=effect==='exit'?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:'history-ghost',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
     accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length?onPress:undefined};
-  return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale})`} opacity={(authored?.opacity??piece.opacity??1)*notice*fade} {...accessibility}>
+  return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale*pulseScale})`} opacity={(authored?.opacity??piece.opacity??1)*notice*fade} {...accessibility}>
     {type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:type.shape==='hex'?<Polygon points={Array.from({length:6},(_,i)=>`${Math.cos((i*60+30)*Math.PI/180)*size.width/2},${Math.sin((i*60+30)*Math.PI/180)*size.height/2}`).join(' ')} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:((type.shape!=='text'&&type.shape!=='image')||piece.face==='back')?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={type.shape==='card'?7:4} fill={piece.face==='back'?'#324a88':type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
     <Asset spec={spec} id={piece.face==='back'?type.back_asset:piece.asset||type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
     {(piece.face==='back'||piece.text!==undefined)&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{piece.face==='back'?'◆':playerText(piece.text||'')}</SvgText>}

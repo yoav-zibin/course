@@ -28,7 +28,7 @@ export type Piece = {
   asset?: string; rotation?: number; scale?: number; opacity?: number; z?: number;
   face?: 'front' | 'back'; move_targets?: string[]; selected?: boolean; hidden?: boolean;
   draggable?: boolean; actions?: PieceAction[];
-  animation?: { kind: 'roll' | 'move' | 'notice'; key: string; duration_ms?: number; delay_ms?: number };
+  animation?: { kind: 'roll' | 'move' | 'notice' | 'pulse'; key: string; duration_ms?: number; delay_ms?: number };
 };
 export type Target = {
   id: string; board: string; position: Position; label?: string; aria_label?: string; color?: string;

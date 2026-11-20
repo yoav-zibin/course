@@ -27,6 +27,52 @@ def package(kind):
     return json.loads((DIRECTORY / (kind + '.json')).read_text())
 
 
+@pytest.mark.parametrize('kind', ['chess', 'checkers'])
+def test_chess_and_checkers_preserve_the_piece_id_across_a_move(kind):
+    body = GameImport.model_validate(package(kind))
+    example = body.unit_tests['cases'][0]
+    ui = DeclarativeLogic(body.declarative_ui)
+    def message(view, move_count):
+        return {'type':'state_changed','state':view,'view':view,'status':'ongoing',
+                'my_player_index':0,'acting_for_player_index':None,'move_count':move_count,
+                'strings':body.declarative_ui['strings']}
+    first = ui.reduce(message(example['view_of_mover'], 0))
+    move = example['move']
+    if kind == 'chess':
+        source, destination = move['fr'] * 8 + move['fc'], move['tr'] * 8 + move['tc']
+    else:
+        source = move['from']['r'] * 8 + move['from']['c']
+        destination = move['to']['r'] * 8 + move['to']['c']
+    before_piece = next(piece for piece in first['scene']['pieces']
+                        if piece['position'].get('cell') == str(source))
+    next_frame = ui.reduce(message(example['expected_view_of_mover'], 1), first['local_state'])
+    after_piece = next(piece for piece in next_frame['scene']['pieces']
+                       if piece['position'].get('cell') == str(destination))
+    assert after_piece['id'] == before_piece['id']
+
+
+def test_hex_placement_pulse_is_stable_across_same_move_renders():
+    body = GameImport.model_validate(package('hex'))
+    example = body.unit_tests['cases'][0]
+    ui = DeclarativeLogic(body.declarative_ui)
+    def message(view, move_count):
+        return {'type':'state_changed','state':view,'view':view,'status':'ongoing',
+                'my_player_index':0,'acting_for_player_index':None,'move_count':move_count,
+                'strings':body.declarative_ui['strings']}
+    first = ui.reduce(message(example['view_of_mover'], 0))
+    after_message = message(example['expected_view_of_mover'], 1)
+    placed = ui.reduce(after_message, first['local_state'])
+    piece = next(piece for piece in placed['scene']['pieces']
+                 if piece['position'].get('cell') == str(example['move']['cell']))
+    assert piece['animation']['kind'] == 'pulse'
+    piece_id = piece['id']
+    refreshed = ui.reduce({'type':'ui_event','event':{'type':'tap','id':'cell'},
+                           'state_changed':after_message}, placed['local_state'])
+    refreshed_piece = next(piece for piece in refreshed['scene']['pieces']
+                           if piece['id'] == piece_id)
+    assert refreshed_piece['animation']['key'] == piece['animation']['key']
+
+
 @pytest.mark.parametrize('kind', ['checkers', 'chess', 'four_player_chess'])
 def test_source_selection_keeps_every_legal_move_reachable_without_overlapping_targets(kind):
     ui, message = inputs(kind)

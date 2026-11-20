@@ -24,6 +24,16 @@ const gameUI = {
     const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined;
     const legal=active?(s.legal||[]):[];
     const pieces=[],targets=[],controls=[],paths=[];
+    const previousHexBoard=KIND==='hex'&&Array.isArray(localState?.hex_board)?localState.hex_board:null;
+    const hexBoardSnapshot=KIND==='hex'&&Array.isArray(s.board)?s.board.slice():null;
+    const addedHexCells=previousHexBoard&&hexBoardSnapshot
+      ?hexBoardSnapshot.flatMap((value,cell)=>value!==-1&&previousHexBoard[cell]===-1?[cell]:[]):[];
+    const moveKey=Number.isSafeInteger(m.move_count)?m.move_count:Number.isSafeInteger(s.turns)?s.turns:0;
+    let hexPulse=KIND==='hex'&&localState?.hex_pulse?.move_count===moveKey&&
+      previousHexBoard&&hexBoardSnapshot&&JSON.stringify(previousHexBoard)===JSON.stringify(hexBoardSnapshot)
+      ?localState.hex_pulse:null;
+    if(!m.replay&&addedHexCells.length===1)
+      hexPulse={cell:addedHexCells[0],move_count:moveKey,key:`hex-${moveKey}-${addedHexCells[0]}`};
     let ataxxMotion={};
     const playerName=seat=>m.players?.[seat]?.name||t('turn',{n:seat+1});
     const shortName=seat=>{const chars=Array.from(playerName(seat));return chars.length>14?chars.slice(0,13).join('')+'…':chars.join('');};
@@ -95,7 +105,7 @@ const gameUI = {
     }else{
       s.board.forEach((value,cell)=>{
         if(KIND==='memory')pieces.push({id:'card_'+cell,type:value===-1?'back':'card',board:'main',position:{cell:String(cell)},text:value===-1?'':String(value+1),face:value===-1?'back':'front',scale:s.matched.includes(cell)?0.86:1,opacity:s.matched.includes(cell)?0.6:1,actions:legal.some(move=>move.cell===cell)?['tap']:[]});
-        else if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},text:KIND==='tictactoe'?(value===0?'X':'O'):'',rotation:KIND==='domineering'&&value===1?90:0});
+        else if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},text:KIND==='tictactoe'?(value===0?'X':'O'):'',rotation:KIND==='domineering'&&value===1?90:0,...(hexPulse?.cell===cell?{animation:{kind:'pulse',key:hexPulse.key,duration_ms:560}}:{})});
       });
       legal.forEach(move=>targets.push(KIND==='connect6'
         ?{id:keyOf(move),board:'main',position:{cell:String(move.cell)},asset:'connect6_cell',
@@ -107,7 +117,9 @@ const gameUI = {
     // stay passive; legal destinations and enabled buttons supply their hints.
     for(const piece of pieces)if(!piece.actions)piece.actions=[];
     const scene={pieces,targets,controls,labels,paths};
-    const out={scene,local_state:KIND==='ataxx'?{move_count:m.move_count,viewer:m.my_player_index,selectedFrom,...ataxxMotion}:{}};
+    const localPresentationState=KIND==='ataxx'?{move_count:m.move_count,viewer:m.my_player_index,selectedFrom,...ataxxMotion}:{};
+    if(KIND==='hex')Object.assign(localPresentationState,{hex_board:hexBoardSnapshot,hex_pulse:hexPulse});
+    const out={scene,local_state:localPresentationState};
     if(message.type==='ui_event'&&active&&['tap','drop'].includes(message.event.type)){
       const e=message.event;
       let id=e.type==='drop'?e.target_id:e.id;

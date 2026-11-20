@@ -87,7 +87,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     if("actions" in item&&(!Array.isArray(item.actions)||item.actions.some(action=>!["tap","move","rotate","flip","scale"].includes(action))||new Set(item.actions).size!==item.actions.length||item.actions.includes("move")&&!item.move_targets?.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
     if("animation" in item){
       knownObject(item.animation,["kind","key","duration_ms","delay_ms"],["kind","key"]);
-      if(!["roll","move","notice"].includes(item.animation.kind))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+      if(!["roll","move","notice","pulse"].includes(item.animation.kind))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
       if(!isId(item.animation.key))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
       for(const key of ["duration_ms","delay_ms"])if(key in item.animation&&(!Number.isInteger(item.animation[key])||item.animation[key]<0||item.animation[key]>5000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
     }

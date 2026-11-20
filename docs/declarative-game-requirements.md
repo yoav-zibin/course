@@ -129,7 +129,7 @@ a valid move; they do not have to reveal the best strategy.
 
 | Context | Required behavior |
 | --- | --- |
-| Your move during live play | Apply it immediately by default, including affected objects. A reducer may explicitly return `animations` for a local interaction or its own accepted move, including pass-and-play. `motion.animate_own` is accepted for compatibility and ignored during live play. |
+| Your move during live play | Apply it immediately by default, including affected objects. A declared `pulse` may briefly emphasize an object at its already-updated final position; it never delays or blocks the move. A reducer may explicitly return `animations` for a local interaction or its own accepted move, including pass-and-play. `motion.animate_own` is accepted for compatibility and ignored during live play. |
 | Another human's or a computer's move during live play | Animate the affected objects so you can see what that player did. This includes your piece being captured or displaced by their action. |
 | Match history review | Animate each recorded move when stepping or playing through history, including the reviewer's own recorded moves. Backward steps should visibly reverse the recorded changes. |
 

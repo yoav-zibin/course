@@ -75,6 +75,31 @@ development-card hands are hidden information â€” only hand counts are public â€
 so the package declares `all_state_public: false`. Select it for publication
 with `--kinds catan`.
 
+Hex is the existing two-player connection game on a 7-by-7 rhombus. Players
+place one stone per turn and connect their opposite edges; the two paths cannot
+tie. A newly placed stone gets a short scale pulse at its final cell to point
+out the placement without delaying the player's next action.
+
+Three additional hex-board games use the shared `hex_family_engine.js` rules
+and `hex_family_ui.js` presentation:
+
+- **Chinese Checkers** supports two to six players, one-step moves and chained
+  hops. A player wins by occupying all ten holes in the opposite camp. A
+  400-move cap resolves by remaining distance to the target camp.
+- **Abalone** supports two players. A group of up to three marbles can push a
+  smaller opposing group; eject six opposing marbles to win. A 500-move cap
+  resolves by marbles remaining.
+- **Havannah** supports two players. Connect two corners, three edges, or close
+  a ring to win.
+
+Build only these three new packages with
+`python tools/build_declarative_hex_family.py`, then use
+`python -m game_platform.tools.publish_declarative_games --base-url
+https://buildplay.fun --state-file <private-file> --report <report-file>
+--kinds chinese_checkers abalone havannah`. Keep the private state file
+outside the checkout. Hex and Catan already have separate portal packages; the
+family builder leaves them unchanged.
+
 Codenames is a four- to eight-player team word game: Red and Blue each have a
 spymaster and operatives racing to find their words on a 5-by-5 grid of 25
 words (the key is 9 Red, 8 Blue, 7 bystanders and 1 assassin). Spymasters give
@@ -536,6 +561,13 @@ gets a new key. The host chooses the brief visual effect and can suppress it
 for initial mounting, history or reduced-motion settings. This metadata neither
 changes the final die value nor grants an action, changes the board camera, or
 controls authoritative randomness. It carries no executable code.
+
+`kind:"pulse"` briefly grows and shrinks an object at its already-updated final
+position. It is useful for pointing out a newly placed piece and never delays or
+blocks the next action. Pulses stay hidden on initial mounting, in history and
+when reduced motion is enabled. Keep the key stable while the same placement is
+shown so polling does not restart the animation; give each new placement a new
+key.
 
 Packages may set `motion:{move_ms,roll_ms,roll_settle_ms,turn_pause_ms,animate_own,scene_transitions,easing}`.
 Each timing is an integer from 0 to 5000 milliseconds; `easing` is `ease-out` or
