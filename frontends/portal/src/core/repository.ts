@@ -1,12 +1,12 @@
 import * as storage from '../platform/storage';
-import type { AccountData } from './types';
+import type { AccountData, LocalMatch } from './types';
 import { redactedArchive } from './redaction';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 export {utf8Size} from '../platform/recoverable-cache';
 import {originEvictions} from '../platform/origin-cache';
 import {protectedResponsePaths,responseRetentionPriorities} from './cache-policy';
 import {apiOrigin,DEFAULT_API_ORIGIN} from '../platform/credential-vault';
-import {hydrateSinglePlayer} from './single-player';
+import {hydrateSinglePlayer,needsCloudSave} from './single-player';
 export const LEGACY_ORIGIN_KEY='game-platform.portal.origin.v1';
 export interface StorageAdapter { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem?(key: string): Promise<void>; keys(): Promise<string[]>; exclusive<T>(name: string, run: () => Promise<T>): Promise<T> }
 export const emptyAccountData = (): AccountData => ({ version: 1, responses: {}, queues: {}, conflicts: {}, local: {}, archives: [], archivedMatches: [], selectedId: null });
@@ -17,6 +17,34 @@ export function equal(a: any, b: any): boolean {
 }
 export function requestId(): string { return globalThis.crypto?.randomUUID?.() ?? `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`; }
 const RECOVERABLE_BUDGET = 1_000_000, MATCH_BUDGET = 20_000_000, QUOTA_RETRIES = 8;
+const LOCAL_BUDGET = 2_000_000, ARCHIVE_BUDGET = 1_000_000, PRUNE_ON_LOAD_BYTES = 3_000_000;
+function entryBytes(key: string, value: unknown): number { return utf8Size(JSON.stringify(value)) + utf8Size(JSON.stringify(key)) + 2; }
+function savedTimestamp(value: any): number {
+  for (const field of ['savedAt', 'created_at', 'saved_at']) { const at = Date.parse(value?.[field]); if (Number.isFinite(at)) return at; }
+  return 0;
+}
+function oldestFirst<T>(entries: [string, T][], stamp: (value: T) => number): [string, T][] {
+  return entries.map(([key, value], index) => ({key, value, index, at: stamp(value)}))
+    .sort((a, b) => a.at - b.at || a.index - b.index)
+    .map(({key, value}) => [key, value] as [string, T]);
+}
+/** A local match may be shed only once the cloud has acknowledged every
+ * revision and nothing durable still references it. Pending actions, unsynced
+ * single-player history and conflict branches are never shed. */
+function sheddableLocalMatch(data: AccountData, id: string): boolean {
+  const match = data.local[id]; if (!match) return false;
+  if (match.status === 'ongoing' || match.status === 'waiting_for_players') return false;
+  if (match.cloud_inflight || match.cloud_pending || needsCloudSave(match)) return false;
+  if (data.queues[id]?.length || data.conflicts[id] || data.creations?.[id]) return false;
+  return data.selectedId !== id;
+}
+/** The raw platform quota exception never reaches the app. Callers already
+ * treat a quota failure as recoverable and keep the previously stored copy. */
+function storageQuotaError(): Error {
+  const failure = new Error('Saved data no longer fits in this device\'s storage quota. The previous saved copy was kept.');
+  failure.name = 'QuotaExceededError';
+  return failure;
+}
 function validRecency(value: unknown): number { return Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : 0; }
 function touchResponse(data: AccountData, path: string): void {
   const entries = data.responseRecency && typeof data.responseRecency === 'object' && !Array.isArray(data.responseRecency) ? data.responseRecency : {};
@@ -51,7 +79,7 @@ export class AccountRepository {
   lock<T>(id: string, run: () => Promise<T>): Promise<T> { return this.adapter.exclusive(this.key(id), run); }
   async read(id: string): Promise<AccountData> {
     const text = await this.adapter.getItem(this.key(id));
-    if (text) { const parsed = JSON.parse(text); if (parsed?.version !== 1 || !parsed.responses || !parsed.queues || !parsed.local) throw new Error('Saved portal data needs recovery; the original data was kept.'); return parsed; }
+    if (text) { const parsed = JSON.parse(text); if (parsed?.version !== 1 || !parsed.responses || !parsed.queues || !parsed.local) throw new Error('Saved portal data needs recovery; the original data was kept.'); if (utf8Size(text) > PRUNE_ON_LOAD_BYTES) this.trim(parsed, id); return parsed; }
     // Browser storage already proves the old serving origin. Native unscoped
     // saves belong to production; an explicit retained marker can override it.
     const legacyOrigin=await this.adapter.getItem(LEGACY_ORIGIN_KEY);
@@ -77,21 +105,52 @@ export class AccountRepository {
   async write(id: string, data: AccountData): Promise<void> {
     // One atomic replacement commits queue+snapshot together on every platform.
     this.trim(data,id);
-    let candidates: {key: string; at: number; priority?: number; bytes?: number; evict: () => Promise<void>}[] | null = null;
+    type Candidate = {key: string; at: number; priority?: number; bytes?: number; evict: () => Promise<void>};
+    let candidates: Candidate[] | null = null;
+    // Quota recovery sheds in a fixed order: replaceable downloads and legacy
+    // origin caches, recovery copies of already-removed matches, finished
+    // local matches the cloud has acknowledged, and only then the remaining
+    // downloads pinned by durable records (everything except the active
+    // game's own package). Queues, conflicts, creations and local state
+    // itself are never shed, so a pending save can always drain once the
+    // recoverable bulk around it is gone.
+    let stage = 0;
+    const buildStage = async (): Promise<Candidate[]> => {
+      const priorities = responseRetentionPriorities(data,this.matchUsers.get(id) || id);
+      const responseCandidate = (path: string): Candidate => ({key:path,priority:priorities.get(path) || 0,at:validRecency(data.responseRecency?.[path]),bytes:utf8Size(JSON.stringify(data.responses[path])),evict:async()=>{delete data.responses[path];if(data.responseRecency)delete data.responseRecency[path];}});
+      const byPriority = (a: Candidate, b: Candidate) => (a.priority || 0)-(b.priority || 0) || a.at-b.at || a.key.localeCompare(b.key);
+      if (stage === 0) {
+        const pinned = protectedResponsePaths(data,this.activeGames.get(id));
+        const list = Object.keys(data.responses).filter(path => !pinned.has(path)).map(responseCandidate);
+        list.push(...await originEvictions(this.adapter,this.key(id)));
+        return list.sort(byPriority);
+      }
+      if (stage === 1) {
+        return data.archivedMatches.map((entry, index) => ({entry, index, at: savedTimestamp(entry)}))
+          .sort((a, b) => a.at - b.at || a.index - b.index)
+          .map(({entry, at}) => ({key:`archived:${String(entry?.id ?? '')}`,at,bytes:utf8Size(JSON.stringify(entry)),evict:async()=>{const index = data.archivedMatches.indexOf(entry); if (index >= 0) data.archivedMatches.splice(index, 1);}}));
+      }
+      if (stage === 2) {
+        return oldestFirst(Object.keys(data.local).filter(matchId => sheddableLocalMatch(data, matchId)).map(matchId => [matchId, data.local[matchId]] as [string, LocalMatch]), match => savedTimestamp(match))
+          .map(([matchId, match]) => ({key:`local:${matchId}`,at:savedTimestamp(match),bytes:entryBytes(matchId, match),evict:async()=>{delete data.local[matchId];}}));
+      }
+      const active = this.activeGames.get(id);
+      const keepActive = (path: string) => !!active && (path === `/games/${active.id}` || path === `/games/${encodeURIComponent(active.id)}`
+        || (active.version === undefined ? path.startsWith(`/games/${encodeURIComponent(active.id)}/versions/`) : path === `/games/${encodeURIComponent(active.id)}/versions/${active.version}`));
+      return Object.keys(data.responses).filter(path => !keepActive(path)).map(responseCandidate).sort(byPriority);
+    };
     for (let attempt=0;;attempt++) {
       try {await this.adapter.setItem(this.key(id), JSON.stringify(data));return;}
       catch (error) {
-        if (!isQuotaError(error) || attempt >= QUOTA_RETRIES) throw error;
-        if (!candidates) {
-          const pinned = protectedResponsePaths(data,this.activeGames.get(id));
-          const priorities = responseRetentionPriorities(data,this.matchUsers.get(id) || id);
-          candidates = Object.keys(data.responses).filter(path => !pinned.has(path)).map(path => ({key:path,priority:priorities.get(path) || 0,at:validRecency(data.responseRecency?.[path]),bytes:utf8Size(JSON.stringify(data.responses[path])),evict:async()=>{delete data.responses[path];if(data.responseRecency)delete data.responseRecency[path];}}));
-          candidates.push(...await originEvictions(this.adapter,this.key(id)));
-          candidates.sort((a,b) => (a.priority || 0)-(b.priority || 0) || a.at-b.at || a.key.localeCompare(b.key));
+        if (!isQuotaError(error)) throw error;
+        if (attempt > 200) throw storageQuotaError();
+        if (!candidates) candidates = await buildStage();
+        while (!candidates.length) {
+          if (stage >= 3) throw storageQuotaError();
+          stage++; candidates = await buildStage();
         }
-        if (!candidates.length) throw error;
         const batch = [];let freed=0;
-        const target=32768*2**attempt;
+        const target=32768*2**Math.min(attempt, QUOTA_RETRIES);
         // Retry before removing the newest remaining cache entry. Small old
         // metadata must not consume every retry before reaching a large cache.
         const priority = candidates[0].priority || 0;
@@ -194,6 +253,31 @@ export class AccountRepository {
         if (pinned.has(path)) continue;
         bytes -= utf8Size(JSON.stringify(data.responses[path])) + utf8Size(JSON.stringify(path)) + 2;
         delete data.responses[path]; if (data.responseRecency) delete data.responseRecency[path];
+      }
+    }
+    // Archived matches are recovery copies of games already removed from the
+    // live lists; retain only a bounded newest window of them.
+    if (data.archivedMatches.length) {
+      let bytes = data.archivedMatches.reduce((total, entry) => total + utf8Size(JSON.stringify(entry)), 0);
+      if (bytes > ARCHIVE_BUDGET) {
+        const drop = new Set<number>();
+        const order = data.archivedMatches.map((entry, index) => ({entry, index, at: savedTimestamp(entry)})).sort((a, b) => a.at - b.at || a.index - b.index);
+        for (const {entry, index} of order) { if (bytes <= ARCHIVE_BUDGET) break; drop.add(index); bytes -= utf8Size(JSON.stringify(entry)); }
+        if (drop.size) data.archivedMatches = data.archivedMatches.filter((_, index) => !drop.has(index));
+      }
+    }
+    // Finished local matches the cloud has acknowledged can be downloaded
+    // again, so bound their retained payloads oldest-first. Anything pending,
+    // unsynced, conflicted or selected is durable and always kept.
+    const localIds = Object.keys(data.local);
+    if (localIds.length) {
+      let bytes = localIds.reduce((total, localId) => total + entryBytes(localId, data.local[localId]), 0);
+      if (bytes > LOCAL_BUDGET) {
+        for (const [localId, match] of oldestFirst(localIds.map(localId => [localId, data.local[localId]] as [string, LocalMatch]), match => savedTimestamp(match))) {
+          if (bytes <= LOCAL_BUDGET) break;
+          if (!sheddableLocalMatch(data, localId)) continue;
+          bytes -= entryBytes(localId, match); delete data.local[localId];
+        }
       }
     }
   }

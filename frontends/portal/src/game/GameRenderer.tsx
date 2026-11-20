@@ -535,6 +535,6 @@ const styles=StyleSheet.create({
   loading:{padding:20},error:{color:'#ffc8b9',backgroundColor:'#4a2527',padding:12,borderRadius:8},
   tool:{minWidth:44,minHeight:44,maxWidth:'100%',flexShrink:1,paddingHorizontal:12,paddingVertical:11,borderRadius:10,borderWidth:1,borderColor:'#355469',backgroundColor:'#172f40',alignItems:'center',justifyContent:'center'},
   toolText:{color:'#eff8fc',fontSize:14,fontWeight:'600',flexShrink:1,minWidth:0,maxWidth:'100%'},disabled:{opacity:.4},pressed:{backgroundColor:'#2a5365'},chosen:{borderColor:'#a7e6ba',backgroundColor:'#225247'},
-  tools:{gap:7},selectedLabel:{color:'#b9e4ce',fontSize:13},preview:{color:'#d0eab2',fontSize:13,minHeight:20},controls:{flexDirection:'row',flexWrap:'wrap',gap:10,minWidth:0,maxWidth:'100%'},
+  tools:{gap:7},selectedLabel:{color:'#b9e4ce',fontSize:13},preview:{color:'#d0eab2',fontSize:13,minHeight:20},controls:{flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:10,minWidth:0,maxWidth:'100%'},
   field:{gap:5,minWidth:130,maxWidth:'100%',flexGrow:1},fieldLabel:{color:'#cbdce5',fontSize:13},input:{borderWidth:1,borderColor:'#365165',backgroundColor:'#102635',borderRadius:9,minHeight:44,color:'#ffffff',paddingHorizontal:12},
 });

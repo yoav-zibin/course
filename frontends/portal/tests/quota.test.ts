@@ -84,6 +84,24 @@ test('translation recency is monotonic on reads/writes and metadata failures are
   try{await touchTranslationCache(storage,key);const first=JSON.parse(storage.values.get(I18N_RECENCY_KEY)!).clock;await touchTranslationCache(storage,key);assert.ok(JSON.parse(storage.values.get(I18N_RECENCY_KEY)!).clock>first);storage.failure=new Error('denied');storage.failAfter=0;await touchTranslationCache(storage,key);}
   finally{Date.now=now;}
 });
+test('quota recovery sheds archived copies and acknowledged local matches so a pending queue still persists',async()=>{
+  const storage=new QuotaStorage(),repo=new AccountRepository('',storage),data=emptyAccountData();
+  const queueEntry=(n:number)=>({requestId:`request-${n}`,body:{move:{cell:n},expected_move_count:n},baseState:{exact:n},baseTurn:[1]});
+  data.queues.pending=[queueEntry(1)];
+  data.local['done-local']={id:'done-local',game_id:'game',game_version:1,status:'over',cloud_revision:3,local_revision:2,synced_local_revision:2,created_at:'2026-01-01T00:00:00.000Z',moves:[{new_state:{blob:'x'.repeat(600000)}}]} as any;
+  data.responses['/games/game/versions/1']={id:'game',version:1,server_code:'z'.repeat(400000)};
+  data.archivedMatches=[{id:'archived-old',savedAt:'2026-01-02T00:00:00.000Z',match:{id:'archived-old',blob:'y'.repeat(600000)}}];
+  await repo.write('alice',data);storage.limit=storage.size();
+  await repo.mutate('alice',current=>{current.queues.pending.push(queueEntry(2));});
+  let saved=await repo.read('alice');
+  assert.equal(saved.queues.pending.length,2);assert.deepEqual(saved.archivedMatches,[]);
+  assert.ok(saved.local['done-local']);assert.ok(saved.responses['/games/game/versions/1']);
+  storage.limit=storage.size();
+  await repo.mutate('alice',current=>{current.queues.pending.push(queueEntry(3));});
+  saved=await repo.read('alice');
+  assert.equal(saved.queues.pending.length,3);assert.equal(saved.local['done-local'],undefined);
+  assert.ok(saved.responses['/games/game/versions/1']);
+});
 test('unresolved durable dependencies conservatively retain packages and history',async()=>{
   for(const dependency of ['queue','conflict','selected','local','archive']){
     const storage=new QuotaStorage(),repo=new AccountRepository('',storage),data=emptyAccountData();
