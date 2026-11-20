@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from game_platform.tools import publish_public_state_flags as publisher
+from game_platform.agent_import import GameImport
+from game_platform.game_logic import GameLogic
 
 ROOT = Path(__file__).resolve().parents[1]
 HIDDEN_FIXTURES = {"battleship", "catan", "crazy_eights", "go_fish", "guess_who",
@@ -14,7 +16,8 @@ HIDDEN_FIXTURES = {"battleship", "catan", "crazy_eights", "go_fish", "guess_who"
                    "blokus", "dos", "catch_the_ten", "mille_bornes",
                    "sergeant_major", "mau_mau", "conquian", "snap", "slapjack",
                    "whist", "scopa", "cartographers",
-                   "lanterntrails", "crownfields"}
+                   "lanterntrails", "crownfields", "codenames", "love_letter",
+                   "mastermind", "scattergories"}
 
 
 def test_every_declarative_fixture_explicitly_classifies_its_gameplay_state():
@@ -29,6 +32,19 @@ def test_every_declarative_fixture_explicitly_classifies_its_gameplay_state():
     native = json.loads((ROOT / "tests/fixtures/declarative/connect4-native-package.json").read_text())
     assert bundled["all_state_public"] is True
     assert native["game"]["all_state_public"] is True
+
+
+@pytest.mark.parametrize("kind", ["abalone", "chinese_checkers", "havannah"])
+def test_public_hex_games_expose_the_complete_rules_state_to_every_viewer(kind):
+    package = json.loads((ROOT / "games/declarative" / f"{kind}.json").read_text())
+    assert package["all_state_public"] is True
+    body = GameImport.model_validate(package)
+    logic = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    for case in body.unit_tests["cases"]:
+        state, ctx = case["state"], case["ctx"]
+        for viewer in [None, *[player["id"] for player in ctx["players"]]]:
+            view = logic.call("viewFor", state, viewer, ctx=ctx, seed=case["ctx"]["seed"])
+            assert {key: view[key] for key in state} == state, (kind, case["name"], viewer)
 
 
 def row_and_current(public=True):

@@ -284,6 +284,7 @@ def main():
             "name": title + " (Declarative)", "description": source_rules,
             "game_addition_request_id_and_secret": "example-only-hex-family-" + kind + "-replace-before-publishing",
             "allowed_player_counts": [3, 4] if kind == "catan" else [2] if kind != "chinese_checkers" else [2, 3, 4, 5, 6],
+            "all_state_public": kind != "catan",
             "server_code": server_code, "declarative_ui": ui, "rules": source_rules,
             "ui_instructions": "Select your marble or stones, then choose a highlighted legal destination. Catan offers its current legal build or action choices. All game rules and move validation are authoritative on the server.",
             "tutorial": {"text": source_rules, "html": '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><main><h1>' + html.escape(title) + '</h1><p>' + html.escape(source_rules) + '</p></main>'},

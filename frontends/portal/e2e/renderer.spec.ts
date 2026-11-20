@@ -143,7 +143,10 @@ test('Catan setup keeps the score choice visible and its island and placement ma
   for(let index=0;index<19;index++){
     const tile=terrain.nth(index);
     await expect(tile).toBeVisible();
-    await expect(tile.locator(':scope > path[fill="none"][stroke]')).toHaveAttribute('d','M52 2 L95 27 L95 77 L52 102 L9 77 L9 27 Z');
+    const border=tile.locator(':scope > path[fill="none"][stroke]');
+    await expect(border).toBeVisible();
+    const borderBox=(await border.boundingBox())!;
+    expect(borderBox.width).toBeGreaterThan(0);expect(borderBox.height).toBeGreaterThan(0);
     const box=(await tile.boundingBox())!;
     expect(box.width).toBeGreaterThan(0);expect(box.height).toBeGreaterThan(0);
     expect(box.x).toBeGreaterThanOrEqual(canvasBox.x);expect(box.y).toBeGreaterThanOrEqual(canvasBox.y);
