@@ -521,7 +521,7 @@ test('Battleship requests a private automatic fleet and clears its cells when th
   const game=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/battleship.json'),'utf8'));
   const opening=game.unit_tests.cases[0],view=opening.view_of_mover;
   await mount(page,request,game.declarative_ui,state({view,state:view,strings:game.declarative_ui.strings,move_count:0}));
-  await page.getByRole('button',{name:'Place fleet and start battle',exact:true}).click();
+  await page.getByRole('button',{name:'Random fleet',exact:true}).click();
   await expect.poll(()=>moves(page)).toEqual([{type:'auto_place'}]);
   const own=opening.expected_view_of_mover;
   await send(page,state({view:own,state:own,strings:game.declarative_ui.strings,move_count:1,acting_for_player_index:null}));
@@ -530,7 +530,7 @@ test('Battleship requests a private automatic fleet and clears its cells when th
   const hidden=opening.expected_view_of_other;
   await send(page,state({view:hidden,state:hidden,strings:game.declarative_ui.strings,move_count:1,my_player_index:1,acting_for_player_index:1}));
   await expect(page.getByText('■',{exact:true})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Place fleet and start battle',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Random fleet',exact:true})).toBeVisible();
   expect(await moves(page)).toEqual([{type:'auto_place'}]);
 });
 
