@@ -17,6 +17,8 @@ const EXTRA_STRINGS = {
   'Claim draw':['Reclamar tablas','Réclamer la nulle','Remis beanspruchen','Reivindicar empate','申请和棋','ड्रॉ का दावा करें','المطالبة بالتعادل'],
   Continue:['Continuar','Continuer','Fortsetzen','Continuar','继续','जारी रखें','متابعة'],
   'Take {n}':['Retirar {n}','Prendre {n}','Stein {n} schlagen','Capturar {n}','移除 {n}','{n} को हटाएँ','خذ {n}'],
+  'Move to point {n}':['Mover al punto {n}','Déplacer au point {n}','Zu Punkt {n} ziehen','Mover para o ponto {n}','移动到位置 {n}','बिंदु {n} पर जाएँ','انتقل إلى النقطة {n}'],
+  'Select stone at point {n}':['Seleccionar ficha en el punto {n}','Sélectionner le pion au point {n}','Stein an Punkt {n} auswählen','Selecionar a peça no ponto {n}','选择位置 {n} 的棋子','बिंदु {n} की गोटी चुनें','اختر القطعة عند النقطة {n}'],
   'Reset guess':['Reiniciar intento','Réinitialiser la proposition','Tipp zurücksetzen','Reiniciar palpite','重置猜测','अनुमान रीसेट करें','إعادة تعيين التخمين']
 };
 const ALL_STRINGS={...COPY.strings,...EXTRA_STRINGS};
@@ -30,6 +32,17 @@ const ENTRIES = [
   {kind:'gobblet', title:'Gobblet', players:[2], board:'gobblet'},
   {kind:'chutes_ladders', title:'Chutes & Ladders', players:[2,3,4], board:'chutes_ladders'},
   {kind:'six_mens_morris', title:"Six Men's Morris", players:[2], board:'six_mens_morris'}
+];
+
+const MORRIS_UI = [
+  'Tap your reserve stone, then an empty point. Later, tap a stone and its destination. If a mill offers a choice, tap a highlighted opposing stone to remove it.',
+  'Toca tu ficha de reserva y después un punto vacío. Más adelante, toca una ficha y su destino. Si un molino ofrece varias opciones, toca una ficha rival resaltada para retirarla.',
+  'Touchez votre pion en réserve, puis un point libre. Ensuite, touchez un pion et sa destination. Si un moulin offre un choix, touchez un pion adverse surligné pour le retirer.',
+  'Tippe auf deinen Vorratsstein und dann auf einen freien Punkt. Später tippe auf einen Stein und sein Ziel. Wenn du nach einer Mühle wählen kannst, tippe auf einen markierten gegnerischen Stein.',
+  'Toque na peça da reserva e depois em um ponto vazio. Mais tarde, toque em uma peça e no destino. Se um moinho oferecer uma escolha, toque em uma peça adversária destacada para removê-la.',
+  '点击备用棋子，再点击空位。之后点击棋子和目标位置。组成三子连线且可以选择时，点击高亮的对方棋子将其移除。',
+  'अपनी आरक्षित गोटी और फिर खाली बिंदु पर टैप करें। बाद में गोटी और उसके गंतव्य पर टैप करें। तीन की पंक्ति में विकल्प मिलने पर विरोधी की चमकती गोटी हटाने के लिए उस पर टैप करें।',
+  'اضغط على قطعة الاحتياط ثم على نقطة فارغة. لاحقًا اضغط على قطعة ثم وجهتها. إذا أتاح الصف اختيارًا، فاضغط على قطعة منافسة مضاءة لإزالتها.'
 ];
 
 const CUSTOM = {
@@ -204,7 +217,8 @@ function board(kind) {
     {id:'main',kind:'grid',x:20,y:112,width:560,height:560,rows:10,columns:10,color:'#f3e8c8',alternate_color:'#e2d3a8',line_color:'#718096'}]};
   if (kind === 'dots_boxes') return {viewport:{width:620,height:710},boards:[{id:'main',...free}]};
   if (kind === 'mastermind') return {viewport:{width:620,height:780},boards:[{id:'main',...free}]};
-  if (kind === 'six_mens_morris') return {viewport:{width:620,height:680},boards:[{id:'main',...free}]};
+  if (kind === 'six_mens_morris') return {viewport:{width:620,height:680},boards:[
+    {id:'main',kind:'free',x:0,y:0,width:620,height:680,color:'#eed5a6',line_color:'#60452e'}]};
   return {viewport:{width:640,height:720},boards:[{id:'table',...free}]};
 }
 
@@ -232,8 +246,9 @@ function typesFor(kind) {
     shape:'circle',width:38,height:38,color:['#e53935','#1e88e5','#43a047','#fdd835','#fb8c00','#8e24aa'][i],
     text_color:'#ffffff',border_color:'#334155'};
   if (kind === 'six_mens_morris') {
-    types.stone_0 = {shape:'circle',width:42,height:42,color:COLORS.stone_0,text_color:'#ffffff'};
-    types.stone_1 = {shape:'circle',width:42,height:42,color:COLORS.stone_1,text_color:'#ffffff'};
+    types.point = {shape:'circle',width:14,height:14,color:'#60452e'};
+    types.stone_0 = {shape:'circle',width:48,height:48,color:'#ad4e39',text_color:'#ffffff',border_color:'#653123'};
+    types.stone_1 = {shape:'circle',width:48,height:48,color:'#263b4a',text_color:'#ffffff',border_color:'#10232f'};
   }
   return types;
 }
@@ -379,7 +394,7 @@ function build(entry) {
   const sourceTranslation=source.translations || {};
   const custom=CUSTOM[entry.kind];
   const rules=custom?.rules || source.rules;
-  const ui=custom?.ui || source.ui_instructions;
+  const ui=entry.kind === 'six_mens_morris' ? MORRIS_UI[0] : custom?.ui || source.ui_instructions;
   const description=custom?.description || source.description;
   const title=`${entry.title} (Declarative)`;
   const translations={};
@@ -396,6 +411,7 @@ function build(entry) {
       ? old.display_name.slice(0,-suffix.length) : old.display_name;
     const displayName=`${baseName}${suffix}`;
     translations[locale]={...old,display_name:displayName,
+      ...(entry.kind === 'six_mens_morris' ? {game_ui_rules:MORRIS_UI[LOCALES.indexOf(locale)+1]} : {}),
       client_strings:translatedStrings(locale,displayName,entry.kind)};
   }
   const strings={...ENGLISH,title,...serverStrings(entry.kind).english};
@@ -424,4 +440,8 @@ function build(entry) {
   console.log(`${entry.kind}: ${Buffer.byteLength(JSON.stringify(payload))} bytes; ${tests.cases.length} examples`);
 }
 
-for(const entry of ENTRIES) build(entry);
+const requested = process.argv.slice(2);
+if (requested.some(kind => !ENTRIES.some(entry => entry.kind === kind)))
+  throw new Error(`Unknown game kind: ${requested.join(', ')}`);
+for(const entry of ENTRIES)
+  if (!requested.length || requested.includes(entry.kind)) build(entry);

@@ -19,7 +19,8 @@ const gameUI = {
     const title = m.strings?.title || SOURCE_STRINGS.title || KIND;
     const playerName = i => names[i] || text('Player {n}', {n:i + 1});
     const label = (id, value, x, y, font_size = 14) =>
-      scene.labels.push({id, text:String(value), x, y, font_size});
+      scene.labels.push({id, text:String(value), x, y, font_size,
+        ...(KIND === 'six_mens_morris' ? {color:'#30251b'} : {})});
     const staticPiece = (id, type, board, position, extra = {}) =>
       scene.pieces.push(Object.assign({id, type, board, position, actions:[]}, extra));
     const offer = (move, value, board, position, mode = 'control', aria_label) => {
@@ -50,19 +51,23 @@ const gameUI = {
     const cardPos = i => ({x:36 + (i % 8) * 67,y:125 + Math.floor(i / 8) * 94});
     const boardCell = (i, columns) => ({cell:String(i)});
     const handLabel = hand => Array.isArray(hand) ? hand.map(cardText).join(' ') : '';
-    label('title', title, 22, 16, 25);
+    if (KIND !== 'six_mens_morris') label('title', title, 22, 16, 25);
     if (Number.isInteger(s.to_move) || Number.isInteger(s.toMove) ||
-        Number.isInteger(s.turn) || Number.isInteger(s.turnSeat)) {
+        Number.isInteger(s.turn) || Number.isInteger(s.turnSeat) ||
+        (KIND === 'six_mens_morris' && Number.isInteger(m.turn_of_player_indices?.[0]))) {
       const turn = Number.isInteger(s.to_move) ? s.to_move :
         Number.isInteger(s.toMove) ? s.toMove :
-          Number.isInteger(s.turn) ? s.turn : s.turnSeat;
+          Number.isInteger(s.turn) ? s.turn :
+            Number.isInteger(s.turnSeat) ? s.turnSeat : m.turn_of_player_indices[0];
       label('status', m.status === 'over' ? text('Game over') :
         (active ? text('Your turn · {name}', {name:playerName(turn)}) :
-          text('{name} to play', {name:playerName(turn)})), 22, 52, 16);
+          text('{name} to play', {name:playerName(turn)})), 22,
+        KIND === 'six_mens_morris' ? 22 : 52, 16);
     }
 
     let selectedSize = localValid ? localState.selectedSize : null;
     let selectedFrom = localValid ? localState.selectedFrom : null;
+    let selectedTo = localValid && Number.isInteger(localState.selectedTo) ? localState.selectedTo : null;
     let dosPlacements = localValid && Array.isArray(localState.dosPlacements)
       ? localState.dosPlacements.slice() : [];
     let dosBonus = localValid && Array.isArray(localState.dosBonus) ? localState.dosBonus.slice() : [];
@@ -72,10 +77,17 @@ const gameUI = {
       if (reserve) { selectedSize = Number(reserve[1]); selectedFrom = null; }
       if (source) { selectedFrom = Number(source[1]); selectedSize = null; }
     }
-    if (KIND === 'six_mens_morris') {
-      if (click === 'reserve_place') selectedFrom = -1;
+    if (KIND === 'six_mens_morris' && active) {
+      if (click === 'reserve_place') { selectedFrom = -1; selectedTo = null; }
       const source = /^source_(\d+)$/.exec(click);
-      if (source) selectedFrom = Number(source[1]);
+      if (source) { selectedFrom = Number(source[1]); selectedTo = null; }
+      const destination = /^destination_(\d+)$/.exec(click);
+      if (destination) {
+        const to = Number(destination[1]);
+        const matching = (s.moves || []).filter(move => move.from === selectedFrom &&
+          move.to === to && (move.type === 'place' || move.type === 'slide'));
+        if (matching.length > 1) selectedTo = selectedTo === to ? null : to;
+      }
     }
     if (KIND === 'dos') {
       const selected = /^dos_pick_(\d+)_/.exec(click);
@@ -289,28 +301,32 @@ const gameUI = {
         100, 635, 15);
     } else if (KIND === 'six_mens_morris') {
       const points = [
-        [70,70],[300,70],[530,70],[530,300],[530,530],[300,530],[70,530],[70,300],
-        [170,170],[300,170],[430,170],[430,300],[430,430],[300,430],[170,430],[170,300]
+        [80,70],[310,70],[540,70],[540,300],[540,530],[310,530],[80,530],[80,300],
+        [180,170],[310,170],[440,170],[440,300],[440,430],[310,430],[180,430],[180,300]
       ];
       const edges = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,0],
         [8,9],[9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[15,8],
         [1,9],[3,11],[5,13],[7,15]];
       edges.forEach(([a,b],i) => scene.paths.push({id:`line_${i}`,
         points:[{x:points[a][0],y:points[a][1]},{x:points[b][0],y:points[b][1]}],
-        color:'#64748b',width:5}));
+        color:'#60452e',width:5}));
       const moves = s.moves || [];
+      points.forEach(([x,y],i) => staticPiece(`point_${i}`, 'point', 'main', {x,y}));
       (s.board || []).forEach((owner,point) => {
         if (owner < 0) return;
         staticPiece(`stone_${point}`, `stone_${owner}`, 'main',
-          {x:points[point][0],y:points[point][1]}, {text:String(point + 1)});
+          {x:points[point][0],y:points[point][1]});
         if (active && moves.some(move => move.from === point))
           scene.targets.push({id:`source_${point}`,board:'main',
             position:{x:points[point][0],y:points[point][1]},label:'◇',
-            aria_label:text('Select piece at row {r}, column {c}',
-              {r:point + 1,c:1})});
+            aria_label:text('Select stone at point {n}',{n:point + 1})});
       });
-      if (active && moves.some(move => move.from === -1))
-        scene.controls.push({id:'reserve_place',kind:'button',label:text('Place stone')});
+      if (active && moves.some(move => move.from === -1)) {
+        staticPiece('reserve',`stone_${seat}`,'main',{x:310,y:630},
+          {text:String((s.reserve || [])[seat] ?? '')});
+        scene.targets.push({id:'reserve_place',board:'main',position:{x:310,y:630},
+          color:'#00000000',aria_label:text('Place stone')});
+      }
       const selectedMoves = moves.filter(move => move.from === selectedFrom);
       const groups = new Map();
       selectedMoves.filter(move => move.type === 'place' || move.type === 'slide').forEach(move => {
@@ -318,23 +334,34 @@ const gameUI = {
         if (!groups.has(key)) groups.set(key,[]);
         groups.get(key).push(move);
       });
-      for (const [destination, group] of groups) {
-        if (group.length === 1) {
+      for (const [destination, group] of active ? groups : []) {
+        if (selectedTo !== null && selectedTo !== Number(destination)) continue;
+        if (group.length === 1 && selectedTo === null) {
           const move = group[0], p = points[move.to];
-          offer(move, move.take >= 0 ? '×' : '•', 'main', {x:p[0],y:p[1]}, 'target');
+          offer(move, move.take >= 0 ? '×' : '•', 'main', {x:p[0],y:p[1]}, 'target',
+            text('Move to point {n}',{n:move.to + 1}));
         } else {
-          group.forEach(move => offer(move, text('Take {n}',{n:move.take + 1})));
+          const p = points[Number(destination)];
+          scene.targets.push({id:`destination_${destination}`,board:'main',
+            position:{x:p[0],y:p[1]},label:selectedTo === null ? '•' : '↶',
+            aria_label:text('Move to point {n}',{n:Number(destination) + 1})});
+          if (selectedTo !== null) group.forEach(move => {
+            if (move.take < 0 || !points[move.take]) return;
+            const captured = points[move.take];
+            offer(move, '×', 'main', {x:captured[0],y:captured[1]}, 'target',
+              text('Take {n}',{n:move.take + 1}));
+          });
         }
       }
       moves.filter(move => move.type === 'claim_draw' || move.type === 'continue')
         .forEach(move => offer(move, text(move.type === 'claim_draw' ? 'Claim draw' : 'Continue')));
-      label('counts', (s.counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),
-        22, 590, 14);
+      const countText = (s.counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   ');
+      label('counts', countText, Math.max(22,310-countText.length*3.5), 575, 14);
     }
 
     const match = /^intent_(\d+)$/.exec(click);
     const move = match && active ? offers[Number(match[1])] : undefined;
-    const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,
+    const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,selectedTo,
       dosPlacements,dosBonus};
     if (message.type === 'ui_event' && move !== undefined)
       return {scene,local_state:nextLocal,make_move:move};

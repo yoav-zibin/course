@@ -1,10 +1,12 @@
 """Play declarative rules engines through their JSON-only presentation reducers."""
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from game_platform.agent_import import GameImport
+from game_platform.agent_import import GameImport, prepare
 from game_platform.declarative_ui import DeclarativeLogic
 from game_platform.game_contract import verify_examples
 from game_platform.game_logic import GameLogic, InvalidMoveError
@@ -93,6 +95,61 @@ def test_archived_html_ui_can_emit_every_documented_legal_move(kind):
         frame=ui.reduce(message_data)
         emitted=scene_event(ui,message_data,frame,case['move'])
         assert emitted.get('make_move')==case['move'], (kind,case['name'],case['move'])
+
+
+def test_morris_capture_choices_are_selected_on_the_board():
+    body = load('six_mens_morris')
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = dict(body.unit_tests['cases'][0]['view_of_mover'])
+    view['board'] = [0, -1, 0, 1, -1, 1] + [-1] * 10
+    view['moves'] = [
+        {'type':'place', 'from':-1, 'to':1, 'take':3},
+        {'type':'place', 'from':-1, 'to':1, 'take':5},
+    ]
+    m = {'type':'state_changed', 'view':view, 'status':'ongoing',
+         'acting_for_player_index':0, 'my_player_index':0, 'move_count':3}
+
+    def tap(frame, ident):
+        return ui.reduce({'type':'ui_event', 'event':{'type':'tap', 'id':ident},
+                          'state_changed':m}, frame['local_state'])
+
+    initial = ui.reduce(m)
+    reserve = next(piece for piece in initial['scene']['pieces'] if piece['id'] == 'reserve')
+    assert reserve['text'] == '6'
+    assert any(target['id'] == 'reserve_place' for target in initial['scene']['targets'])
+    selected = tap(initial, 'reserve_place')
+    destination = next(target for target in selected['scene']['targets'] if target['id'] == 'destination_1')
+    choosing = tap(selected, destination['id'])
+    assert 'make_move' not in choosing
+    captures = [target for target in choosing['scene']['targets'] if target['id'].startswith('intent_')]
+    assert {target['position']['x'] for target in captures} == {310, 540}
+    for move in view['moves']:
+        assert scene_event(ui, m, initial, move)['make_move'] == move
+
+    reset = ui.reduce({**m, 'move_count':4}, choosing['local_state'])
+    assert reset['local_state']['selectedFrom'] is None
+    assert reset['local_state']['selectedTo'] is None
+    for waiting in ({'acting_for_player_index':None}, {'replay':{'index':0,'total':2}},
+                    {'status':'over'}):
+        scene = ui.reduce({**m, **waiting}, choosing['local_state'])['scene']
+        assert not scene['targets'] and not scene['controls']
+        assert all(not piece['actions'] for piece in scene['pieces'])
+
+
+def test_morris_package_and_single_game_generator_are_consistent(tmp_path):
+    prepare(load('six_mens_morris'))
+    root = EXAMPLES.parents[1]
+    (tmp_path / 'tools').mkdir()
+    destination = tmp_path / 'games' / 'declarative'
+    (destination / 'locales').mkdir(parents=True)
+    shutil.copy(root / 'tools' / 'build_archive_html_declarative_conversions.mjs', tmp_path / 'tools')
+    for name in (Path('archive_conversions_ui.js'), Path('six_mens_morris.json'),
+                 Path('locales') / 'html_conversions.json', Path('locales') / 'archive_server_strings.json'):
+        shutil.copy(EXAMPLES / name, destination / name)
+    expected = (destination / 'six_mens_morris.json').read_bytes()
+    subprocess.run(['node', str(Path('tools') / 'build_archive_html_declarative_conversions.mjs'), 'six_mens_morris'],
+                   cwd=tmp_path, check=True, capture_output=True, timeout=30)
+    assert (destination / 'six_mens_morris.json').read_bytes() == expected
 
 
 def test_demo_validation_subprocess_imports_the_local_checkout():
