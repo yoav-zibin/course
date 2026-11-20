@@ -116,6 +116,8 @@ def test_seeded_malformed_move_payloads_never_crash_or_mutate(seed: int) -> None
     game = api.new_game(owner=owner, allowed_player_counts=[1])
     match = api.new_match(owner=owner, game_id=game, start=True)
     before = api.ok("GET", f"/matches/{match}", as_user=owner)
+    assert before["match_kind"] == "pass_and_play"
+    assert api.request("GET", f"/matches/{match}").status_code == 404
     bad_turns = [[], [-1], [10], [0, 0], [None], ["not-a-seat"], {}, "bad", [[], 0]]
     for step in range(30):
         payload = {"move": {"state": {"x": rng.randrange(1000)},

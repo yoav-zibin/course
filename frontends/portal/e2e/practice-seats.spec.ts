@@ -45,8 +45,9 @@ async function reloadMatch(page:Page,id:string){
   // Observe that read and the first ordinary refresh before exercising controls.
   let reads=0;
   const refreshed=page.waitForResponse(response=>response.request().method()==='GET'
-    &&new URL(response.url()).pathname===`/matches/${id}`&&++reads===2);
+    &&new URL(response.url()).pathname===`/matches/${id}`&&response.ok()&&++reads===2);
   await page.reload();await (await refreshed).finished();
+  await expect(page.getByTestId('header-matches')).toHaveAttribute('aria-current','page');
 }
 
 async function randomSeat(page:Page,value:number){
@@ -108,7 +109,9 @@ test('computer batch playback keeps the full host queue outside the twelve-entry
     new MutationObserver(()=>{const labels=[...document.querySelectorAll('[data-testid="game-stage"] svg text')];const n=Number(labels.find(node=>node.textContent?.startsWith('Accepted step '))?.textContent?.slice(14)),history=Number(labels.find(node=>node.textContent?.startsWith('Reducer history '))?.textContent?.slice(16)),seen=(window as any).__batchPaint;if(Number.isInteger(n)&&n!==seen.at(-1)?.n)seen.push({n,history});}).observe(document.body,{subtree:true,childList:true,characterData:true});
   });
   await page.getByRole('button',{name:'Advance',exact:true}).click();
-  await expect(page.getByText('Accepted step 13',{exact:true})).toBeVisible();
+  // Every accepted frame includes the package's settle/turn pause, so the
+  // complete ordered batch can outlast the usual five-second UI assertion.
+  await expect(page.getByText('Accepted step 13',{exact:true})).toBeVisible({timeout:20000});
   const frames=await page.evaluate(()=>(window as any).__batchPaint as {n:number;history:number}[]);
   expect(frames.filter(frame=>frame.n>=2).map(frame=>frame.n)).toEqual(Array.from({length:12},(_,i)=>i+2));
   expect(frames.every(frame=>frame.history<=12)).toBe(true);
@@ -131,7 +134,7 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
     await expect(page.getByText(`Your seat ${seat+1}`,{exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Advance',exact:true}).click();
   }
-  await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');await page.reload();
+  await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');await reloadMatch(page,id);
   for(let frame=3;frame>=0;frame--){
     const previous=page.getByRole('button',{name:'← Previous',exact:true});
     if(isMobile)await previous.tap();else await previous.click();
@@ -180,4 +183,50 @@ for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer pract
   await expect(page.getByText(`Hand belongs to local-player-${rematchSeat}`,{exact:true})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath('computer-practice-seat.png'),fullPage:true});
+});
+
+for(const portable of [false,true])test(`Play again from a finished cloud computer match starts playable computer seats (${portable?'portable save':'legacy detail'})`,async({page},info)=>{
+  await randomSeat(page,0.999999);
+  const originalId='finished-cloud-computer',created='2026-01-01T00:00:00Z';
+  let original:any;const rematchRequests:string[]=[];
+  await page.route(url=>/^\/games\/practice-seat-fixture(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:fixture}));
+  await page.route(url=>url.pathname===`/matches/${originalId}`,async route=>{
+    const owner=route.request().headers()['x-user-id'];
+    const players=[{id:owner,user_id:owner,player_index:0,kind:'human',active:true,name:'Original owner'},
+      {id:'original-computer',user_id:null,player_index:1,kind:'computer',active:true,name:'Computer 2'}];
+    const state={turn:2,winner:1,done:true,private_for:owner};
+    const snapshot={id:originalId,game_id:fixture.id,game_version:1,owner_user_id:owner,match_kind:'computer',localMode:'computer',
+      players,status:'over',state,logicState:state,practiceSeed:1,moves:[],initialState:state,initialTurn:[0],
+      turn_of_player_indices:null,move_count:0,created_at:created,awaitingHandoff:false};
+    original={...snapshot,localMode:undefined,cloud_revision:portable?1:0,single_player_state:portable?snapshot:null};
+    await route.fulfill({json:original});
+  });
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/rematch'))rematchRequests.push(request.url());});
+  await page.goto(`/portal#match=${originalId}`);
+  await expect(page.getByTestId('match-outcome')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Play again',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Play again',exact:true}).click();
+  await expect(page).toHaveURL(/#match=local-/);
+  await expect(page.getByRole('button',{name:'Advance',exact:true})).toBeVisible();
+  await expect(page.getByText('Your seat 2',{exact:true})).toBeVisible();
+  await expect(page.getByText('Waiting for players',{exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Share link',exact:true})).toHaveCount(0);
+  const nextId=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
+  const next=await savedMatch(page,nextId);
+  expect(next).toMatchObject({match_kind:'computer',status:'ongoing',move_count:1,turn_of_player_indices:[1]});
+  expect(next.players.filter((player:any)=>player.kind==='human')).toHaveLength(1);
+  expect(next.players[1]).toMatchObject({kind:'human',user_id:original.owner_user_id});
+  expect(next.players[0].kind).toBe('computer');expect(nextId).not.toBe(originalId);
+  await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
+  await reloadMatch(page,nextId);await expect(page.getByRole('button',{name:'Advance',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Advance',exact:true}).click();
+  await expect(page.getByTestId('match-outcome')).toHaveText('You won');
+  expect((await savedMatch(page,nextId)).move_count).toBe(2);
+  expect(rematchRequests).toEqual([]);
+  const retained=await page.evaluate(id=>{
+    const key=Object.keys(localStorage).find(key=>key.startsWith('buildplay.shared.v1.')&&key.endsWith('.'+localStorage.getItem('game-platform.current-account.v1')));
+    const data=JSON.parse(localStorage.getItem(key!)!);return data.local[id]||data.responses[`/matches/${id}`];
+  },originalId);
+  expect(retained).toMatchObject({id:originalId,status:'over',players:original.players});
+  await page.screenshot({path:info.outputPath('cloud-computer-play-again.png'),fullPage:true});
 });

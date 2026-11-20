@@ -167,8 +167,12 @@ def test_stale_html_match_records_cannot_be_read_joined_or_rematched(query_mode,
     assert api.request("POST", f"/matches/{stale.id}/join", as_user=owner).status_code == 404
     assert api.request("POST", f"/matches/{stale.id}/rematch", as_user=owner).status_code == 404
     assert all(match["id"] != stale.id for match in api.ok("GET", "/matches", as_user=owner))
+    # Retired games are rejected for private and multiplayer records alike.
     with pytest.raises(NotFoundError):
         api.platform._join(stale, caller_id="other-player")
+    # A stale public record must still fail the retired-game check itself.
+    with pytest.raises(NotFoundError):
+        api.platform._join(replace(stale, match_kind="multiplayer"), caller_id="other-player")
 
     def forbidden_logic(_game):
         raise AssertionError("retired HTML game logic executed")

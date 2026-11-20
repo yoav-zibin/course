@@ -336,19 +336,25 @@ def test_ending_a_match_notifies_the_other_players() -> None:
 def test_solo_client_does_not_notify_itself_after_a_computer_move() -> None:
     api, notifier = _api_with_notifier()
     alice = api.new_user("alice")
-    bob = alice
-    _subscribe_ok(api, bob, "https://push.example.com/s/bob")
+    _subscribe_ok(api, alice, "https://push.example.com/s/alice")
     game_id = api.new_game(owner=alice, allowed_player_counts=(3,))
     match_id = api.new_match(
         owner=alice, game_id=game_id, num_computer_opponents=2, start=True
     )
 
-    # Computer practice is private to the owner and never sends turn alerts,
-    # including when a retained legacy server computer answers immediately.
+    before = api.platform._store.get_user(alice).notifications
+    assert before == ()
+    # A legacy computer still takes its turn, but this private single-owner
+    # match must not generate opponent alerts, turn pushes or inbox messages.
     api.move(match_id, as_user=alice, next_turn=2)
-    assert _messages_to(notifier, bob) == []
-    assert api.platform._store.get_user(alice).notifications == ()
-    assert api.match_summary(match_id, as_user=alice)["turn"] == [0]
+    saved = api.ok("GET", f"/matches/{match_id}", as_user=alice)
+    assert saved["match_kind"] == "computer"
+    assert saved["turn_of_player_indices"] == [0] and saved["move_count"] == 2
+    assert notifier.messages == []
+    assert api.platform._store.get_user(alice).notifications == before
+    api.move(match_id, as_user=alice, next_turn=None)
+    assert notifier.messages == []
+    assert api.platform._store.get_user(alice).notifications == before
 
 
 def test_every_subscription_of_a_user_is_notified() -> None:

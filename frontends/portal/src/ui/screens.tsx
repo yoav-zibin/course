@@ -10,6 +10,7 @@ import {GameInstructions} from './GameInstructions';
 import {matchGameName} from './match-game';
 import {GameSearch} from './GameSearch';
 import {isSinglePlayerMatch, matchKind, singlePlayerMatches} from './match-kind';
+import {readLocalUiTest} from '../platform/legacy';
 
 function useText() {const {p} = useApp(); return (key: string, fallback: string) => text(p,key,fallback);}
 function GameCard({game}: {game: Game}) {
@@ -105,30 +106,35 @@ function MatchCard({match,local=false,carousel=false}: {match: Match;local?: boo
   </Card>;
 }
 
+function MatchCarousel({matches,local=false,testID}: {matches: Match[];local?: boolean;testID: string}) {
+  return <ScrollView testID={testID} horizontal keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:14,paddingBottom:6}}>{matches.map(match=><MatchCard key={match.id} match={match} local={local} carousel/>)}</ScrollView>;
+}
+
 function LocalMatchCarousels() {
   const {p}=useApp();
   const saved=singlePlayerMatches(p.myMatches,p.localMatches);
   const groups=[{id:'computer-local-matches',title:copyText('Play against the computer'),kind:'computer'},{id:'pass-local-matches',title:copyText('Pass and play'),kind:'pass_and_play'}];
-  return <>{groups.map(group=>{const matches=saved.filter(match=>matchKind(match)===group.kind);return matches.length?<View key={group.id} testID={group.id} style={{gap:12}}><Title small>{group.title}</Title><ScrollView horizontal contentContainerStyle={{gap:14,paddingBottom:6}}>{matches.map(match=><MatchCard key={match.id} match={match} local carousel/>)}</ScrollView></View>:null;})}</>;
+  return <>{groups.map(group=>{const matches=saved.filter(match=>matchKind(match)===group.kind);return matches.length?<View key={group.id} testID={group.id} style={{gap:12}}><Title small>{group.title}</Title><MatchCarousel matches={matches} local testID={`${group.id}-carousel`}/></View>:null;})}</>;
 }
 
 export function Matches() {
   const {p,run,openAccount}=useApp(),t=useText();
   const multiplayer=p.myMatches.filter(match=>!isSinglePlayerMatch(match));
-  const groups=[{title:copyText("Your turn"),matches:multiplayer.filter(m=>m.status==='ongoing'&&m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{title:copyText("Ongoing"),matches:multiplayer.filter(m=>m.status==='ongoing'&&!m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{title:copyText("Waiting for players"),matches:multiplayer.filter(m=>m.status==='waiting_for_players')},{title:copyText("Finished"),matches:multiplayer.filter(m=>m.status==='over')}];
+  const groups=[{id:'your-turn',title:copyText("Your turn"),matches:multiplayer.filter(m=>m.status==='ongoing'&&m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{id:'ongoing',title:copyText("Ongoing"),matches:multiplayer.filter(m=>m.status==='ongoing'&&!m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{id:'waiting',title:copyText("Waiting for players"),matches:multiplayer.filter(m=>m.status==='waiting_for_players')},{id:'finished',title:copyText("Finished"),matches:multiplayer.filter(m=>m.status==='over')}];
   return <><Title>{t('ui.portal.nav_matches','Matches')}</Title><Copy muted>{copyText('Every match is saved to your account. Single-player matches are private; multiplayer matches are shared with human players.')}</Copy>
     <LocalMatchCarousels/>
     {!p.account&&<Button onPress={openAccount}>{t('ui.auth.log_in','Log in to see your matches')}</Button>}
 
     {multiplayer.length>0&&<Title small>{copyText('Multiplayer')}</Title>}
-    {groups.map(group=><View key={group.title} style={{gap:12}}><Title small>{group.title} · {group.matches.length}</Title>{group.matches.map(match=><MatchCard key={match.id} match={match}/>)}{!group.matches.length&&<Empty>{copyText("No matches here yet.")}</Empty>}</View>)}
+    {groups.map(group=><View key={group.id} style={{gap:12}}><Title small>{group.title} · {group.matches.length}</Title>{group.matches.length?<MatchCarousel matches={group.matches} testID={`multiplayer-${group.id}-carousel`}/>:<Empty>{copyText("No matches here yet.")}</Empty>}</View>)}
     {p.cursors.myMatches&&<Button secondary onPress={()=>run(()=>p.actions.loadMore('myMatches'))}>{copyText("Load more matches")}</Button>}
   </>;
 }
 
 export function LocalMatches() {
   const {p,run,openMatch,openAccount}=useApp(),t=useText();
-  const start=async(computers:number)=>{if(!p.account){openAccount();return;}const match=await p.actions.startPractice('bundled-tictactoe',{humans:2-computers,computers,humanSeat:computers?Math.floor(Math.random()*2):0});await openMatch(match.id);};
+  const localOnly=useRef(readLocalUiTest()).current;
+  const start=async(computers:number)=>{if(!p.account&&!localOnly){openAccount();return;}const match=await p.actions.startPractice('bundled-tictactoe',{humans:2-computers,computers,humanSeat:computers?Math.floor(Math.random()*2):0});await openMatch(match.id);};
   return <><Title>{copyText('Single-player matches')}</Title><Copy muted>{copyText('Your private computer and pass-and-play matches save locally first and sync to the cloud. Download a game once, then keep playing offline.')}</Copy><LocalMatchCarousels/><Card><Title small>{copyText("Tic-tac-toe")}</Title><Copy muted>{copyText("A bundled game, ready to play offline on a fresh installation.")}</Copy><Row><Button onPress={()=>run(()=>start(0))}>{copyText("Pass and play")}</Button><Button secondary onPress={()=>run(()=>start(1))}>{copyText("Practice with a computer")}</Button></Row></Card>{!singlePlayerMatches(p.myMatches,p.localMatches).length&&<Empty>{copyText('No single-player matches yet. Choose a game to get started.')}</Empty>}
     {p.archived.length>0&&<Card><Title small>{copyText("Preserved previous app data")}</Title><Copy muted>{copyText("Saved games and pending branches from the previous app are preserved for review. Retired HTML moves cannot be submitted to current online matches.")}</Copy><Copy small>{p.archived.length} {copyText("saved records")}</Copy><Button secondary onPress={()=>run(async()=>{await Clipboard.setStringAsync(JSON.stringify(p.archived,null,2));})}>{copyText("Copy preserved data")}</Button></Card>}
   </>;

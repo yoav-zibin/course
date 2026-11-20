@@ -34,9 +34,10 @@ def test_declared_viewport_is_not_replaced_with_board_bounds():
     assert smoke.fixture_cell_point(FIXTURE, 1, (0, 0, 600, 560)) == (91, 167)
 
 
-def android_tree(canvas, *legal_cells):
+def android_tree(canvas, *legal_cells, move_count=0):
     root = ET.Element("hierarchy")
     scroll = ET.SubElement(root, "node", {"class": "android.widget.ScrollView", "bounds": "[0,469][1080,2328]"})
+    ET.SubElement(scroll, "node", {"text": f"{move_count} moves · 2 players", "bounds": "[0,470][1080,520]"})
     view = ET.SubElement(scroll, "node", {"content-desc": "Game board. Use pieces and highlighted destinations.", "bounds": canvas})
     for cell in legal_cells:
         # Deliberately wrong Android virtual bounds from the actual CI failure.
@@ -47,6 +48,7 @@ def android_tree(canvas, *legal_cells):
 def driver():
     value = smoke.NativeSmoke.__new__(smoke.NativeSmoke)
     value.fixture, value.width, value.height = FIXTURE, 1080, 2400
+    value.package = "com.buildplay.app"
     value.events, value.played_cells = [], []
     value.tap = lambda label: None
     value.capture = lambda stage: None
@@ -78,27 +80,57 @@ def test_clipped_canvas_is_revealed_then_physical_tap_ignores_bad_virtual_bounds
     value.dump = lambda: next(trees)
     scrolls, touches = [], []
     value.scroll_outside_canvas = lambda canvas, viewport, upwards=True, distance=0: scrolls.append(upwards)
-    value.command = lambda *args: touches.append(args)
+    def command(*args):
+        touches.append(args)
+        return value.package + "/.MainActivity" if args[1:3] == ("cmd", "package") else ""
+
+    value.command = command
     waited = []
 
     def wait(label, **options):
         waited.append(label)
-        return ET.Element("node") if label in {"1 moves", "Game board."} else pytest.fail(label)
+        return ET.Element("node") if label in {"0 moves", "1 moves", "Game board."} else pytest.fail(label)
 
     value.wait = wait
     value.tap_cell(1)
     assert scrolls == [True]
-    assert touches == [("shell", "input", "tap", "163", "855")]
+    assert touches[0] == ("shell", "am", "force-stop", value.package)
+    assert touches[1][1:3] == ("cmd", "package")
+    assert touches[2][:6] == ("shell", "am", "start", "-W", "-n", value.package + "/.MainActivity")
+    assert touches[2][6:] == ("--ez", "buildplayLocalUiTest", "true")
+    assert touches[3:] == [("shell", "input", "tap", "163", "855")]
     assert value.played_cells == [1]
-    assert waited == ["1 moves", "Game board."]
+    assert waited == ["0 moves", "1 moves", "Game board."]
+    assert {"assertion": "fitted-camera-after-process-restart", "move_count": 0,
+            "occupied_cells": [], "canvas": (0, 555, 1080, 1563)} in value.events
 
 
 def test_a_wrong_previous_physical_cell_cannot_be_accepted_as_progress():
     value = driver()
     value.played_cells = [1]
-    value.dump = lambda: android_tree("[0,555][1080,1563]", 1, 4)
+    value.dump = lambda: android_tree("[0,555][1080,1563]", 1, 4, move_count=1)
+    value.command = lambda *args: value.package + "/.MainActivity" if args[1:3] == ("cmd", "package") else ""
+    value.wait = lambda *args, **options: ET.Element("node")
     with pytest.raises(RuntimeError, match="did not occupy Cell 1"):
         value.tap_cell(4)
+
+
+def test_restart_cannot_accept_a_different_saved_move_count_before_physical_touches():
+    value = driver()
+    commands = []
+
+    def command(*args):
+        commands.append(args)
+        return value.package + "/.MainActivity" if args[1:3] == ("cmd", "package") else ""
+
+    value.command = command
+    # A substring wait for "0 moves" could also see "10 moves". The fitted
+    # board must confirm the exact saved count before projecting any touch.
+    value.wait = lambda *args, **options: ET.Element("node")
+    value.dump = lambda: android_tree("[0,555][1080,1563]", 1, move_count=10)
+    with pytest.raises(RuntimeError, match="expected 0-move board"):
+        value.tap_cell(1)
+    assert not any(args[1:3] == ("input", "tap") for args in commands)
 
 
 def test_narrow_full_width_board_is_revealed_by_swiping_page_header():

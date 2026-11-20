@@ -72,6 +72,25 @@ test('a not-yet-deployed save route backs off without parking the save or markin
   } finally {restore();}
 });
 
+test('an explicit local-only native test launch plays and resumes without an account or network calls',async()=>{
+  browserStorage();let requests=0;const restore=mockedFetch(()=>{requests++;});
+  try {
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test',true);
+    assert.equal(store.getSnapshot().account,null);assert.equal(store.getSnapshot().network,false);
+    const match=await store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0});
+    await store.actions.practiceMove({cell:0});
+    assert.equal(store.getSnapshot().selectedMatch!.move_count,1);
+    assert.equal(store.getSnapshot().selectedMatch!.state.board[0],0);
+    assert.deepEqual(store.getSnapshot().selectedMatch!.turn_of_player_indices,[1]);
+    const restarted=new PortalStore(testRuntime());await restarted.bootstrap('https://local.test',true);
+    assert.equal(restarted.getSnapshot().account,null);assert.deepEqual(restarted.getSnapshot().accounts,[]);
+    assert.equal(restarted.getSnapshot().selectedMatch!.id,match.id);
+    assert.equal(restarted.getSnapshot().selectedMatch!.move_count,1);
+    assert.equal(restarted.getSnapshot().selectedMatch!.state.board[0],0);
+    assert.equal(requests,0);
+  } finally {restore();}
+});
+
 test('multiplayer creation is durable before POST and retries a lost acknowledgement using the same match id',async()=>{
   browserStorage(true);const repository=new AccountRepository('https://local.test');let remote:any,first=true;const ids:string[]=[];
   const restore=mockedFetch(async(url,init)=>{

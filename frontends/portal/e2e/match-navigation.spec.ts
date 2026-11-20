@@ -74,7 +74,7 @@ test('online matches use the shared navigation and retain their public game thro
   expect(current).not.toHaveProperty('private');
 });
 
-test('the local return control still opens saved local matches and resumes the played board',async({page,request,isMobile},info)=>{
+test('single-player matches use the shared navigation and resume the played board without a duplicate return row',async({page,request,isMobile},info)=>{
   await loginAs(page,await createUser(request,uniqueName('Single-player navigation owner')));
   await page.setViewportSize(viewports[0]);
   await page.goto('/portal#local');
@@ -86,9 +86,11 @@ test('the local return control still opens saved local matches and resumes the p
 
   for(const viewport of viewports){
     await page.setViewportSize(viewport);
-    await expect(backToMatches(page)).toBeVisible();
-    await expect(page.getByText('Private to your account',{exact:true})).toBeVisible();
-    await activate(backToMatches(page),isMobile);
+    await expect(backToMatches(page)).toHaveCount(0);
+    await expect(page.getByText(/^(?:On this device|Saved on this device)$/)).toHaveCount(0);
+    await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
+    await expect(matchesNavigation(page)).toHaveCount(1);
+    await activate(matchesNavigation(page),isMobile);
     await expect(page).toHaveURL(/#matches$/);
     await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
     const reopen=page.getByRole('button',{name:'Open match',exact:true});
@@ -97,6 +99,12 @@ test('the local return control still opens saved local matches and resumes the p
     await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
     await expect(page.getByText('1 moves · 2 players · Pass and play',{exact:true})).toBeVisible();
+    await activate(page.getByRole('button',{name:'Focus mode',exact:true}),isMobile);
+    await expect(matchesNavigation(page)).toHaveCount(0);
+    await expect(backToMatches(page)).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Report a bug or request a feature',exact:true})).toBeVisible();
+    await activate(page.getByRole('button',{name:'Exit focus mode',exact:true}),isMobile);
+    await expect(matchesNavigation(page)).toBeVisible();
     await page.screenshot({path:info.outputPath(`local-resumed-${viewport.width}.png`)});
     await page.goBack();
     await expect(page).toHaveURL(/#matches$/);

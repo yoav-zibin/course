@@ -292,7 +292,7 @@ class NativeSmoke:
         self.assert_bug_control("account-restored-after-report")
         self.events.append({"assertion": "closing-bug-report-restores-account-modal-without-sending"})
         self.tap("Close dialog", scroll=False)
-        self.wait("On this device")
+        self.wait("Single-player matches")
 
     def fitted_canvas(self) -> tuple[ET.Element, tuple[int, int, int, int]]:
         """Reveal a full canvas before using its dimensions for SVG projection."""
@@ -334,19 +334,32 @@ class NativeSmoke:
         x = (viewport[0] + viewport[2]) // 2
         self.command("shell", "input", "swipe", str(x), str(bottom if upwards else top), str(x), str(bottom - distance if upwards else top + distance), "700")
 
+    def remount_fitted_board(self) -> tuple[ET.Element, tuple[int, int, int, int]]:
+        # Camera toolbar buttons were removed from the product. A real process
+        # restart mounts the renderer with its fitted camera instead, without
+        # injecting view state or disturbing the durably saved match.
+        self.command("shell", "am", "force-stop", self.package)
+        self.launch()
+        count = len(self.played_cells)
+        self.wait(f"{count} moves", contains=True, timeout=60, scroll=True)
+        tree, canvas = self.fitted_canvas()
+        labels = {label for node in tree.iter("node") for label in self.labels(node)}
+        if not any(re.search(rf"(?<!\d){count}\s+moves\b", label) for label in labels):
+            raise RuntimeError(f"Process restart did not restore the expected {count}-move board")
+        for played in self.played_cells:
+            if normalized(f"Cell {played}") in labels:
+                raise RuntimeError(f"The previous physical tap did not occupy Cell {played}")
+        self.events.append({"assertion": "fitted-camera-after-process-restart", "move_count": count,
+                            "occupied_cells": self.played_cells.copy(), "canvas": canvas})
+        return tree, canvas
+
     def tap_cell(self, number: int, *, finished: bool = False):
         expected = "Finished" if finished else f"{len(self.played_cells) + 1} moves"
-        # Exercise the normal camera control so the projection has a known
-        # fitted view even if an earlier scrolling gesture moved the camera.
-        self.tap("Reset board view")
         for attempt in range(4):
             if attempt and self.find(self.dump(), expected, contains=True) is not None:
                 break
-            tree, canvas = self.fitted_canvas()
+            tree, canvas = self.remount_fitted_board()
             labels = {label for node in tree.iter("node") for label in self.labels(node)}
-            for played in self.played_cells:
-                if normalized(f"Cell {played}") in labels:
-                    raise RuntimeError(f"The previous physical tap did not occupy Cell {played}")
             if normalized(f"Cell {number}") not in labels:
                 self.wait(f"Cell {number}", timeout=12)
                 continue
@@ -375,7 +388,7 @@ class NativeSmoke:
         # Saved local games remain available by deep link after their navigation
         # tab was removed. Restart launches below omit the route to resume play.
         self.launch(local_list=True)
-        self.wait("On this device")
+        self.wait("Single-player matches")
         self.bug_report_from_account()
         self.tap("Pass and play")
         self.tap("Focus mode", scroll=False)

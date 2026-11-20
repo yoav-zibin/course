@@ -107,6 +107,35 @@ def test_an_opening_tie_is_visible_and_rerolls_without_creating_four_moves(code,
     assert resolved['result']['state']['opening'] is False
 
 
+def test_two_automatic_computer_rerolls_still_let_the_human_finish_opening_and_move(rules):
+    ctx = context()
+    ctx['players'][0]['kind'] = 'computer'
+    seed = 7420
+    state = rules.call('newMatch', ctx=ctx, seed=seed)['state']
+    for count in range(6):
+        actor = ctx['players'][state['cur']]['id']
+        current = {**ctx, 'move_count': count}
+        move = rules.call('computerMove', state, actor, ctx=current, seed=seed + count)
+        state = rules.call('applyMove', state, actor, move, ctx=current, seed=seed + count)['state']
+    # Configure, computer roll, human tie, computer reroll, human tie, computer
+    # reroll: the settled six-action position has just one visible die again.
+    assert state['opening'] and state['opening_roll'] == [5, None]
+    assert state['cur'] == 1 and state['last_roll']['values'] == [5, 5]
+    assert state['needRoll'] and state['moves'] == []
+    continued = rules.call('applyMove', state, 'b', {'action': 'roll'},
+                           ctx={**ctx, 'move_count': 6}, seed=seed + 6)
+    assert not continued['state']['opening']
+    assert continued['state']['opening_roll'] == [5, 6]
+    assert continued['turn'] == ['b']
+    current = {**ctx, 'move_count': 7}
+    view = rules.call('viewFor', continued['state'], 'b', ctx=current, seed=seed + 7)
+    move = view['legalMoves'][0]
+    moved = rules.call('applyMove', continued['state'], 'b',
+                       {'action': 'move', 'from': move['from'], 'to': move['to']},
+                       ctx=current, seed=seed + 7)
+    assert moved['state']['cnt'] != state['cnt']
+
+
 def test_opening_respects_current_player_and_malformed_move_schema(rules):
     ctx = context()
     state = configured(rules, ctx)

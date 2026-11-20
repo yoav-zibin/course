@@ -54,7 +54,6 @@ export function MatchStage() {
   const submit=async(move:any)=>{if(local)await p.actions.practiceMove(move);else await p.actions.submitMove(move);};
   const replay=p.replayIndex;
   return <>
-    {singlePlayer&&<Row><Button compact secondary onPress={()=>navigate('matches')}>← {t('ui.portal.nav_matches','Matches')}</Button><View style={{flex:1}}/><Copy small muted>{copyText('Private to your account')}</Copy></Row>}
     <View style={{gap:8}}><Row><Title>{game?.name||copyText("Match")}</Title><View style={{flex:1}}/><Copy style={{color:over?colors.purple:yourTurn?colors.accent:colors.blue,fontWeight:'700'}}>{over?copyText("Finished"):waiting?copyText("Waiting for players"):yourTurn?copyText("Your turn"):copyText("Game in progress")}</Copy></Row><Copy small muted>{match.move_count} {copyText("moves ·")} {match.players.length} {copyText("players")}{' · '}{matchKind(match)==='computer'?copyText('Against computers'):matchKind(match)==='pass_and_play'?copyText('Pass and play'):copyText('Multiplayer')}{clock?copyText(" · {v0} remaining",{v0:clock}):''}</Copy></View>
     {!singlePlayer&&match.cloud_pending&&<Notice>{copyText('Match saved locally. Connect to save it in the cloud and get an invite link.')}</Notice>}
     {singlePlayer&&<Copy small muted>{match.cloud_pending?copyText('Saved locally · waiting to sync'):copyText('Saved in the cloud')}</Copy>}

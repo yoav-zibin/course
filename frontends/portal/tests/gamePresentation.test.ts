@@ -31,12 +31,32 @@ test('presentation repair is scoped by game identity, authoritative rule hash an
   }
 });
 test('bundled repair hash, independent result copies and fail-safe cryptography behavior remain stable',async()=>{
-  assert.equal(await digest(canonical(replacement)),'a1bdcb5339cfc42f8eb1be318aa3e96bd223f41b336f3534cb078131fb4a66da');
+  assert.equal(await digest(canonical(replacement)),'a28abb2f66e4cfd8e049481078dc7a8387bf6f43c9acee3cbcbb59da354001a7');
   const input=game(),first=await reviewedPresentation(input,digest),second=await reviewedPresentation(input,digest);
   assert.notEqual(first,second);assert.deepEqual(first,second);
   assert.equal(await reviewedPresentation(input,async()=>{throw new Error('unavailable');}),input.declarative_ui);
   assert.equal(await reviewedPresentation(null,digest),undefined);
   assert.equal(canonical({'9':'nine','10':'ten'}),'{"10":"ten","9":"nine"}');
+});
+
+test('exact modern Backgammon opening repair preserves saved rules and package pins and rejects other hashes',async()=>{
+  const modern=()=>({...game(),version:7,
+    server_code:read('games/declarative/backgammon.json').server_code,
+    declarative_ui:read('tests/fixtures/declarative/backgammon-v7-ui.json')});
+  const input=modern(),before=JSON.stringify(input);
+  const result=await reviewedPresentation(input,digest);
+  assert.deepEqual(result,replacement);assert.notEqual(result,replacement);
+  assert.equal(JSON.stringify(input),before);
+  assert.equal(input.version,7);
+  assert.equal(await digest(input.server_code),'f7044be96b2a162fe084edc82fedc7d0451d8856121be19bf31cfa69aa12e4e8');
+  for(const change of [(g:ReturnType<typeof modern>)=>{g.id='another-game';},
+    (g:ReturnType<typeof modern>)=>{g.server_code+='\n// different rules';},
+    (g:ReturnType<typeof modern>)=>{g.declarative_ui.ui_code+='\n// different authored UI';},
+    (g:ReturnType<typeof modern>)=>{g.declarative_ui=read('tests/fixtures/declarative/backgammon-v1-ui.json');}]){
+    const changed=modern();change(changed);
+    assert.equal(await reviewedPresentation(changed,digest),changed.declarative_ui);
+  }
+  assert.equal(await reviewedPresentation(input,async()=>{throw new Error('digest unavailable');}),input.declarative_ui);
 });
 
 test('exact rich Connect Four presentation adds game-authored falling paths while preserving pinned packages',async()=>{

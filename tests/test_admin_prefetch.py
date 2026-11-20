@@ -50,5 +50,6 @@ def test_empty_match_state_needs_no_game_version_read():
     platform = object.__new__(GamePlatform)
     platform._store = SimpleNamespace(get_game_version=lambda *args: (_ for _ in ()).throw(
         AssertionError('an unstarted match read game code')))
-    match = SimpleNamespace(state=None, effective_match_kind="multiplayer", single_player_state=None)
+    match = SimpleNamespace(state=None, effective_match_kind="multiplayer",
+                            owner_user_id="owner", single_player_state=None)
     assert platform.view_state(match, None) is None

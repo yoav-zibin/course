@@ -117,6 +117,65 @@ def test_opening_and_blocked_roll_notices_keep_their_clock_on_repeated_polls():
                                      'duration_ms': 2000, 'delay_ms': 1000}
 
 
+def test_partial_opening_explains_one_die_and_only_offers_the_current_players_die():
+    ui = DeclarativeLogic(specification())
+    message = changed(configured=True, cur=1, opening_roll=[5, None])
+    message.update(my_player_index=1, acting_for_player_index=1, turn_of_player_indices=[1])
+    frame = ui.reduce(message)
+    pieces = {piece['id']: piece for piece in frame['scene']['pieces']}
+    labels = {label['id']: label['text'] for label in frame['scene']['labels']}
+    assert pieces['die_0']['aria_label'] == 'Die 1: 5'
+    assert pieces['die_0']['actions'] == []
+    assert pieces['die_1']['aria_label'] == 'Die 2: roll your opening die'
+    assert pieces['die_1']['actions'] == ['tap']
+    assert pieces['roll']['text'] == 'Roll one die'
+    assert labels['turn'] == 'Each player rolls one die.'
+    assert labels['opening_status'] == 'Higher die starts with both dice.'
+    assert not frame['scene']['targets']
+    assert 'make_move' not in tap(ui, message, frame, 'die_0')
+    assert tap(ui, message, frame, 'die_1')['make_move'] == {'action': 'roll'}
+
+
+def test_opening_tie_feedback_survives_the_computer_reroll_repeated_polls_and_remount():
+    ui = DeclarativeLogic(specification())
+    # A human opening tie is immediately followed by the computer's new die.
+    # This final frame previously looked identical to the initial one-die roll.
+    message = changed(configured=True, cur=1, opening_roll=[5, None],
+                      last_roll={'seat': 0, 'turn': 0, 'values': [5, 5], 'move_count': 5})
+    message.update(move_count=6, my_player_index=1, acting_for_player_index=1,
+                   turn_of_player_indices=[1])
+    frame = ui.reduce(message)
+    for state in (None, frame['local_state']):
+        repeated = ui.reduce(message, state)
+        label = next(item for item in repeated['scene']['labels'] if item['id'] == 'opening_status')
+        assert label['text'] == 'Tie 5–5: roll one die again.'
+        assert 'animation' not in label
+        assert not repeated['scene']['targets']
+        assert tap(ui, message, repeated, 'roll')['make_move'] == {'action': 'roll'}
+    message['view']['opening_roll'] = [5, 5]
+    tied = ui.reduce(message)
+    assert next(piece for piece in tied['scene']['pieces'] if piece['id'] == 'die_1')['actions'] == ['tap']
+
+
+def test_new_opening_instructions_are_localized_even_with_an_older_saved_locale_table():
+    from game_platform.tools.build_declarative_backgammon import LOCALES, strings
+
+    ui = DeclarativeLogic(specification())
+    for index, locale in enumerate(LOCALES):
+        table = strings(index)
+        message = changed(configured=True, cur=1, opening_roll=[5, None],
+                          last_roll={'seat': 0, 'turn': 0, 'values': [5, 5], 'move_count': 5})
+        message.update(locale=locale, my_player_index=1, acting_for_player_index=1,
+                       turn_of_player_indices=[1],
+                       strings={key: value for key, value in table.items() if key not in (
+                           'opening_rule', 'opening_goal', 'opening_tied_roll',
+                           'opening_roll', 'opening_die_roll')})
+        frame = ui.reduce(message)
+        assert next(item for item in frame['scene']['labels'] if item['id'] == 'turn')['text'] == table['opening_rule']
+        assert next(item for item in frame['scene']['labels'] if item['id'] == 'opening_status')['text'] == table['opening_tied_roll'].replace('{a}', '5').replace('{b}', '5')
+        assert next(piece for piece in frame['scene']['pieces'] if piece['id'] == 'roll')['text'] == table['opening_roll']
+
+
 def test_round_end_preserves_spent_faces_and_only_offers_the_next_game():
     ui = DeclarativeLogic(specification())
     before = changed(configured=True, opening=False, needRoll=False, n=4,

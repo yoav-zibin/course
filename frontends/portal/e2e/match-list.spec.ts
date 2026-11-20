@@ -85,3 +85,54 @@ test('local carousels are newest first, show opponent labels and disappear indep
   await card(page,oldPass).getByRole('button',{name:'Delete',exact:true}).click();await page.getByRole('button',{name:'Delete',exact:true}).last().click();await expect(passes).toHaveCount(0);
   await page.reload();await expect(page.getByTestId('computer-local-matches')).toHaveCount(0);await expect(page.getByTestId('pass-local-matches')).toHaveCount(0);
 });
+
+test('every multiplayer category scrolls horizontally and keeps its match state when reopened',async({page,request,isMobile},info)=>{
+  test.setTimeout(90000);
+  const owner=await createUser(request,uniqueName('Carousel owner')),opponent=await createUser(request,uniqueName('Carousel opponent'));
+  const gameId=await createGame(request,uniqueName('Carousel game'));
+  const groups=[{id:'your-turn',status:'ongoing',turn:true},{id:'ongoing',status:'ongoing',turn:false},{id:'waiting',status:'waiting_for_players'},{id:'finished',status:'over'}];
+  const saved=new Map<string,any[]>();
+  for(const group of groups){
+    const matches=[];
+    for(let i=0;i<2;i++){
+      const created=await request.post('/matches',{headers:headers(owner),data:{game_id:gameId}});expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
+      if(group.status!=='waiting_for_players'){
+        const joined=await request.post(`/matches/${match.id}/join`,{headers:headers(opponent)});expect(joined.ok(),await joined.text()).toBeTruthy();
+        const started=await request.post(`/matches/${match.id}/start`,{headers:headers(owner)});expect(started.ok(),await started.text()).toBeTruthy();
+        if(group.id==='ongoing'){
+          const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(owner),data:{move:{cell:0},expected_move_count:0}});expect(moved.ok(),await moved.text()).toBeTruthy();
+        }else if(group.status==='over'){
+          const left=await request.post(`/matches/${match.id}/leave`,{headers:headers(opponent)});expect(left.ok(),await left.text()).toBeTruthy();
+        }
+      }
+      matches.push(await matchDetail(request,match.id,owner));
+    }
+    saved.set(group.id,matches);
+  }
+  await loginAs(page,owner);await page.goto('/portal#matches');
+  await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
+  await expect(page.getByText(/^(?:On this device|Saved on this device)$/)).toHaveCount(0);
+  const mutations:string[]=[];page.on('request',request=>{if(/^\/matches(?:\/|$)/.test(new URL(request.url()).pathname)&&!['GET','HEAD'].includes(request.method()))mutations.push(request.method());});
+  for(const group of groups){
+    const carousel=page.getByTestId(`multiplayer-${group.id}-carousel`),matches=saved.get(group.id)!;
+    await expect(carousel).toBeVisible();
+    const cards=carousel.locator('[data-testid^="match-card-"]');await expect(cards).toHaveCount(2);
+    const geometry=await cards.evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width};}));
+    expect(Math.abs(geometry[0].y-geometry[1].y)).toBeLessThan(1);expect(geometry[0].width).toBe(300);expect(geometry[1].x-geometry[0].x).toBeGreaterThanOrEqual(300);
+    expect(await carousel.evaluate(node=>['auto','scroll'].includes(getComputedStyle(node).overflowX))).toBe(true);
+    if(isMobile){
+      expect(await carousel.evaluate(node=>node.scrollWidth>node.clientWidth)).toBe(true);
+      await carousel.evaluate(node=>{node.scrollLeft=node.scrollWidth;});expect(await carousel.evaluate(node=>node.scrollLeft)).toBeGreaterThan(0);
+    }
+    const target=cards.last(),targetId=(await target.getAttribute('data-testid'))!.replace('match-card-','');
+    await target.getByRole('button',{name:'Open match',exact:true}).click();
+    await expect(page).toHaveURL(new RegExp(`#match=${targetId}$`));
+    await expect(page.getByRole('button',{name:/^←\s+Matches$/})).toHaveCount(0);
+    await page.getByTestId('header-matches').click();await expect(carousel).toBeVisible();
+    for(const before of matches){
+      const after=await matchDetail(request,before.id,owner);
+      expect(after).toMatchObject({status:before.status,move_count:before.move_count,turn_of_player_indices:before.turn_of_player_indices,players:before.players,state:before.state});
+    }
+  }
+  expect(mutations).toEqual([]);await page.screenshot({path:info.outputPath('all-match-carousels.png'),fullPage:true});
+});

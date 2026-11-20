@@ -111,8 +111,10 @@ def test_joining_cannot_take_over_a_single_player_computer(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game = api.new_game(owner=alice, allows_join_mid_match=True)
     mid = api.new_match(owner=alice, game_id=game, num_computer_opponents=1, start=True)
-    assert api.request("POST", f"/matches/{mid}/join", as_user=bob).status_code == 403
+    assert error(api.request("POST", f"/matches/{mid}/join", as_user=bob)) == (
+        403, "single-player matches cannot be joined or shared")
     assert api.match_summary(mid, as_user=alice)["players"] == ["alice", "computer"]
+    assert api.request("GET", f"/matches/{mid}", as_user=bob).status_code == 404
 
 
 def test_joining_mid_match_adds_seats_up_to_the_games_maximum(api: Api) -> None:
@@ -133,10 +135,10 @@ def test_joining_mid_match_adds_seats_up_to_the_games_maximum(api: Api) -> None:
 
 
 def test_cannot_join_a_match_that_is_over(api: Api) -> None:
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+    alice, bob, carol = (api.new_user(name) for name in ("alice", "bob", "carol"))
     game_id = api.new_game(owner=alice, allows_join_mid_match=True)
     match_id = api.new_match(
-        owner=alice, game_id=game_id, joiners=[api.new_user("carol")], start=True
+        owner=alice, game_id=game_id, joiners=[carol], start=True
     )
     api.move(match_id, as_user=alice, next_turn=None)
     assert error(api.request("POST", f"/matches/{match_id}/join", as_user=bob)) == (

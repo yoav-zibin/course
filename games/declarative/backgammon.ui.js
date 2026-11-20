@@ -31,7 +31,9 @@ const gameUI = {
   reduce(message, localState) {
     const m = message.type === 'ui_event' ? message.state_changed : message;
     const s = m.view || m.state;
-    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});
+    // A narrowly reviewed repair can also be used by an immutable saved game.
+    // Its old locale table does not contain these new opening instructions.
+    const strings = Object.assign({}, SOURCE_STRINGS, OPENING_STRINGS[m.locale] || {}, m.strings || {});
     const t = (key, args = {}) => (strings[key] || key).replace(/\{(\w+)\}/g,
       (_, key) => String(args[key] === undefined ? '' : args[key]));
     const active = m.status === 'ongoing' && !m.replay && s.winner === null &&
@@ -259,8 +261,10 @@ const gameUI = {
           else unused.splice(index, 1);
         }
       }
-      const canRoll = active && s.needRoll && !doubling && !awaitingNext && !setup;
-      const label = s.needRoll ? t(canRoll ? 'die_roll' : 'die_ready', {n: i + 1}) :
+      const canRoll = active && s.needRoll && !doubling && !awaitingNext && !setup &&
+        (!opening || i === s.cur && (!openingFaces || !isFace(openingFaces[i]) || openingFaces.every(isFace)));
+      const label = opening && isFace(value) && !canRoll ? t('die_value', {n: i + 1, value}) :
+        s.needRoll ? t(canRoll ? opening ? 'opening_die_roll' : 'die_roll' : 'die_ready', {n: i + 1}) :
         value === null || value === undefined ? t('die_unknown', {n: i + 1}) :
           t(used === 2 ? 'die_used' : 'die_value', {n: i + 1, value});
       const rollKey = openingPair ? (value ? openingEvents[i] || 'opening:' + i + ':' + m.move_count : null) :
@@ -281,7 +285,7 @@ const gameUI = {
       if (legal.length) button('hint', t('hint'), 536, -80);
       if (s.can_undo && !setup) button('undo', t('undo'), 450, -80);
       if (awaitingNext) button('next', t('next_game'), 165, 220, true);
-      if (s.needRoll && !doubling && !awaitingNext && !setup) button('roll', t('roll'), 165, 220, true);
+      if (s.needRoll && !doubling && !awaitingNext && !setup) button('roll', t(opening ? 'opening_roll' : 'roll'), 165, 220, true);
       if (s.can_double && !setup) button('double', t('double'), 165, 278);
       if (doubling) {
         button('take', t('take'), 160, 220, true);
@@ -293,9 +297,13 @@ const gameUI = {
     const pip = seat => s.bar[seat] * 25 + s.cnt.reduce((sum, count, point) =>
       sum + (s.owner[point] === seat ? count * (seat === 0 ? point + 1 : 24 - point) : 0), 0);
     const tiedOpening = opening && openingFaces && openingFaces.every(isFace) && openingFaces[0] === openingFaces[1];
+    const previousTie = opening && s.last_roll && Array.isArray(s.last_roll.values) &&
+      s.last_roll.values.length === 2 && s.last_roll.values.every(isFace) &&
+      s.last_roll.values[0] === s.last_roll.values[1];
     const labels = [
       {id: 'title', text: t('title').replace(' (Declarative)', ''), x: 20, y: 26, font_size: 25, color: '#fff3cf'},
       {id: 'turn', text: s.winner !== null ? t('winner', {name: name(s.winner)}) :
+        opening && !setup ? t('opening_rule') :
         t(awaitingNext ? 'winner' : doubling ? 'double_offer' : tiedOpening ? 'opening_tie' : opening ? 'opening_turn' : s.needRoll ? 'roll_turn' : 'move_turn', {name: name(awaitingNext ? s.round_winner : s.cur)}),
         x: 20, y: 58, font_size: 15, color: '#fff3cf'},
       ...(!s.needRoll && !awaitingNext ? [{id: 'moves_remaining', text: t('moves_remaining', {count: remaining.length}),
@@ -303,6 +311,10 @@ const gameUI = {
       {id: 'bar_label', text: t('bar'), x: 344, y: 92, font_size: 11, color: '#ecd09e'},
       {id: 'off_label', text: t('off'), x: 738, y: 94, font_size: 12, color: '#ecd09e'}
     ];
+    if (opening && !setup && !help) labels.push({id:'opening_status',
+      text:previousTie ? t('opening_tied_roll', {
+        a:s.last_roll.values[0],b:s.last_roll.values[1]}) : t('opening_goal'),
+      x:20,y:80,font_size:16,color:'#fff3cf'});
     for (let seat = 0; seat < 2; seat++) {
       const y = seat === 0 ? 465 : -27;
       pieces.push({id: 'status_' + seat, type: 'status', board: 'main', position: {x: 456, y},
@@ -384,7 +396,8 @@ const gameUI = {
       out.make_move = {action:'configure',difficulty:options.difficulty,goal:options.goal,cube_enabled:options.cube_enabled};
     if (message.type === 'ui_event' && active && !setup && !help) {
       const e = message.event;
-      if (e.type === 'tap' && s.needRoll && !doubling && !awaitingNext && (e.id === 'roll' || dice.some(die => die.id === e.id)))
+      if (e.type === 'tap' && s.needRoll && !doubling && !awaitingNext &&
+          (e.id === 'roll' || dice.some(die => die.id === e.id && die.actions.includes('tap'))))
         out.make_move = {action: 'roll'};
       if (e.type === 'tap' && ((e.id === 'next' && awaitingNext) || (e.id === 'undo' && s.can_undo) ||
           ((e.id === 'double' || e.id === 'cube') && s.can_double) ||
