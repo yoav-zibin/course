@@ -1,0 +1,4407 @@
+{
+ "all_state_public": false,
+ "name": "Love Letter (Declarative)",
+ "description": "Love Letter, the 16-card game of deduction and risk: draw one card, play one card, knock rivals out of the round and be first to the token target - 7 tokens with 2 players, 5 with 3, 4 with 4.",
+ "game_addition_request_id_and_secret": "example-only-declarative-love_letter-replace-before-publishing",
+ "allowed_player_counts": [
+  2,
+  3,
+  4
+ ],
+ "server_code": "\n\"use strict\";\n// Love Letter (2-4 players), standard rules, one combined play per turn.\n// Deck of 16: Guard(1)x5, Priest(2)x2, Baron(3)x2, Handmaid(4)x2,\n// Prince(5)x2, King(6)x1, Countess(7)x1, Princess(8)x1.\n// State keeps the deck as an explicit card array, so drawing is a\n// deterministic pop; only shuffling (newMatch and a new round) uses\n// ctx.random(). The player to move always holds 2 cards in state: the\n// draw at the start of their turn happens when the turn advances to\n// them (and in setup for the round starter).\nconst DECK_SPEC = [[1,5],[2,2],[3,2],[4,2],[5,2],[6,1],[7,1],[8,1]];\nfunction buildDeck(ctx) {\n  const d = [];\n  for (const pair of DECK_SPEC) for (let i = 0; i < pair[1]; i++) d.push(pair[0]);\n  for (let i = d.length - 1; i > 0; i--) {\n    const j = Math.floor(ctx.random() * (i + 1));\n    const t = d[i]; d[i] = d[j]; d[j] = t;\n  }\n  return d;\n}\nfunction tokensNeededFor(n) { return n === 2 ? 7 : n === 3 ? 5 : 4; }\nfunction copyState(s) { return JSON.parse(JSON.stringify(s)); }\nfunction clearSeenColumn(s, seat) { for (let i = 0; i < s.lastSeen.length; i++) s.lastSeen[i][seat] = 0; }\nfunction setupRound(s, ctx, starter) {\n  const n = ctx.players.length;\n  const deck = buildDeck(ctx);\n  s.removedDown = [deck.pop()];\n  s.removedUp = [];\n  if (n === 2) s.removedUp = [deck.pop(), deck.pop(), deck.pop()];\n  s.hands = []; s.discards = []; s.active = []; s.protected = []; s.lastSeen = [];\n  for (let i = 0; i < n; i++) {\n    s.hands.push([deck.pop()]); s.discards.push([]);\n    s.active.push(true); s.protected.push(false); s.lastSeen.push(Array(n).fill(0));\n  }\n  s.deck = deck; s.starter = starter; s.turn = starter;\n  s.hands[starter].push(s.deck.pop());\n}\nfunction eliminate(s, seat) {\n  s.active[seat] = false; s.protected[seat] = false;\n  for (const c of s.hands[seat]) s.discards[seat].push(c);\n  s.hands[seat] = [];\n  clearSeenColumn(s, seat);\n  for (let i = 0; i < s.lastSeen.length; i++) s.lastSeen[seat][i] = 0;\n}\nfunction legalMoves(s, ctx) {\n  if (s.over) return [];\n  const seat = s.turn, hand = s.hands[seat];\n  if (!hand || !hand.length) return [];\n  const ids = ctx.players.map(p => p.id);\n  const mustCountess = hand.indexOf(7) !== -1 && (hand.indexOf(6) !== -1 || hand.indexOf(5) !== -1);\n  const distinct = [];\n  for (const c of hand) if (distinct.indexOf(c) === -1) distinct.push(c);\n  const cards = mustCountess ? [7] : distinct;\n  const others = [];\n  for (let i = 0; i < s.hands.length; i++)\n    if (i !== seat && s.active[i] && !s.protected[i]) others.push(i);\n  const out = [];\n  for (const c of cards) {\n    if (c === 1) {\n      if (!others.length) out.push({type:'play', card:1, target:null, guess:null});\n      else for (const t of others) for (let g = 2; g <= 8; g++)\n        out.push({type:'play', card:1, target:ids[t], guess:g});\n    } else if (c === 2 || c === 3 || c === 6) {\n      if (!others.length) out.push({type:'play', card:c, target:null, guess:null});\n      else for (const t of others) out.push({type:'play', card:c, target:ids[t], guess:null});\n    } else if (c === 5) {\n      for (const t of others) out.push({type:'play', card:5, target:ids[t], guess:null});\n      out.push({type:'play', card:5, target:ids[seat], guess:null});\n      if (!others.length) out.push({type:'play', card:5, target:null, guess:null});\n    } else {\n      out.push({type:'play', card:c, target:null, guess:null});\n    }\n  }\n  return out;\n}\nfunction payoutFor(s, ctx) {\n  if (!ctx.pot) return {};\n  const humans = ctx.players.filter(p => p.kind === 'human' && p.active !== false);\n  const w = ctx.players[s.winner];\n  const recips = w && w.kind === 'human' && w.active !== false ? [w] : humans;\n  const out = {};\n  if (!recips.length) return out;\n  recips.forEach((p, i) => { out[p.id] = Math.floor(ctx.pot / recips.length) + (i < ctx.pot % recips.length ? 1 : 0); });\n  return out;\n}\nfunction endRound(s, ctx, winners) {\n  for (const w of winners) s.tokens[w]++;\n  let champ = -1;\n  for (let i = 0; i < s.tokens.length; i++)\n    if (s.tokens[i] >= s.tokensNeeded && (champ === -1 || s.tokens[i] > s.tokens[champ])) champ = i;\n  if (champ >= 0) {\n    s.over = true; s.winner = champ; s.lastRoundWinners = winners.slice();\n    return {state:s, turn:null, payouts:payoutFor(s, ctx)};\n  }\n  const starter = winners[0], round = s.round + 1;\n  setupRound(s, ctx, starter);\n  s.round = round; s.lastRoundWinners = winners.slice();\n  return {state:s, turn:[ctx.players[starter].id]};\n}\nconst game = {\n  newMatch(ctx) {\n    const n = ctx.players.length;\n    const s = {hands:[], deck:[], removedDown:[], removedUp:[], discards:[],\n      tokens:Array(n).fill(0), active:[], protected:[], turn:0, round:1,\n      starter:0, tokensNeeded:tokensNeededFor(n), winner:-1, over:false,\n      lastRoundWinners:[], lastSeen:[], turns:0};\n    setupRound(s, ctx, 0);\n    return {state:s, turn:[ctx.players[0].id]};\n  },\n  applyMove(state, id, move, ctx) {\n    if (state.over) throw new InvalidMove('Illegal move');\n    const seat = ctx.players.findIndex(p => p.id === id);\n    if (seat < 0 || seat !== state.turn) throw new InvalidMove('Illegal move');\n    if (!move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('Illegal move');\n    const opts = legalMoves(state, ctx);\n    const ok = Object.keys(move).length === 4 && opts.some(m =>\n      m.type === move.type && m.card === move.card && m.target === move.target && m.guess === move.guess);\n    if (!ok) throw new InvalidMove('Illegal move');\n    const s = copyState(state); s.turns++;\n    const A = seat, card = move.card;\n    const T = move.target === null ? -1 : ctx.players.findIndex(p => p.id === move.target);\n    s.hands[A].splice(s.hands[A].indexOf(card), 1);\n    s.discards[A].push(card);\n    clearSeenColumn(s, A);\n    if (card === 1 && T >= 0) {\n      if (s.hands[T].length && s.hands[T][0] === move.guess) eliminate(s, T);\n    } else if (card === 2 && T >= 0) {\n      if (s.hands[T].length) s.lastSeen[A][T] = s.hands[T][0];\n    } else if (card === 3 && T >= 0) {\n      const a = s.hands[A][0], b = s.hands[T][0];\n      if (a !== undefined && b !== undefined) {\n        s.lastSeen[A][T] = b; s.lastSeen[T][A] = a;\n        if (a < b) eliminate(s, A); else if (b < a) eliminate(s, T);\n      }\n    } else if (card === 4) {\n      s.protected[A] = true;\n    } else if (card === 5 && T >= 0) {\n      const discarded = s.hands[T].length ? s.hands[T][0] : null;\n      if (discarded !== null) {\n        s.discards[T].push(discarded); s.hands[T] = []; clearSeenColumn(s, T);\n        if (discarded === 8) eliminate(s, T);\n        else {\n          let nc = null;\n          if (s.deck.length) nc = s.deck.pop();\n          else if (s.removedDown.length) nc = s.removedDown.pop();\n          if (nc !== null) s.hands[T] = [nc];\n        }\n      }\n    } else if (card === 6 && T >= 0) {\n      const tmp = s.hands[A]; s.hands[A] = s.hands[T]; s.hands[T] = tmp;\n      clearSeenColumn(s, A); clearSeenColumn(s, T);\n    } else if (card === 8) {\n      eliminate(s, A);\n    }\n    const alive = [];\n    for (let i = 0; i < s.hands.length; i++) if (s.active[i]) alive.push(i);\n    if (alive.length === 1) return endRound(s, ctx, [alive[0]]);\n    if (s.deck.length === 0) {\n      const val = i => s.hands[i].length ? s.hands[i][0] : 0;\n      let best = -1;\n      for (const i of alive) best = Math.max(best, val(i));\n      let tied = alive.filter(i => val(i) === best);\n      if (tied.length > 1) {\n        const sum = i => s.discards[i].reduce((x, y) => x + y, 0);\n        let bs = -1;\n        for (const i of tied) bs = Math.max(bs, sum(i));\n        tied = tied.filter(i => sum(i) === bs);\n      }\n      return endRound(s, ctx, tied);\n    }\n    let nx = A;\n    do { nx = (nx + 1) % s.hands.length; } while (!s.active[nx]);\n    s.turn = nx; s.protected[nx] = false;\n    if (s.deck.length) s.hands[nx].push(s.deck.pop());\n    return {state:s, turn:[ctx.players[nx].id]};\n  },\n  viewFor(state, id, ctx) {\n    const seat = id === null || id === undefined ? -1 : ctx.players.findIndex(p => p.id === id);\n    const n = state.hands.length;\n    return {\n      myIndex: seat,\n      playerIds: ctx.players.map(p => p.id),\n      myHand: seat >= 0 ? state.hands[seat].slice() : [],\n      handCounts: state.hands.map(h => h.length),\n      deckCount: state.deck.length,\n      removedUp: state.removedUp.slice(),\n      removedDownCount: state.removedDown.length,\n      discards: state.discards.map(d => d.slice()),\n      tokens: state.tokens.slice(),\n      active: state.active.slice(),\n      protected: state.protected.slice(),\n      turn: state.turn, round: state.round, starter: state.starter,\n      tokensNeeded: state.tokensNeeded, winner: state.winner, over: state.over,\n      lastRoundWinners: state.lastRoundWinners.slice(),\n      seen: seat >= 0 ? state.lastSeen[seat].slice() : Array(n).fill(0),\n      legal: seat >= 0 && seat === state.turn && !state.over ? legalMoves(state, ctx) : []\n    };\n  },\n  randomMove(s, id, ctx) {\n    const opts = legalMoves(s, ctx);\n    return opts[Math.floor(ctx.random() * opts.length)];\n  },\n  computerMove(s, id, ctx) {\n    const seat = s.turn, opts = legalMoves(s, ctx);\n    const remaining = s.hands[seat].filter(c => true);\n    const otherCard = c => { const h = s.hands[seat].slice(); h.splice(h.indexOf(c), 1); return h[0]; };\n    let best = opts[0], bestScore = -Infinity;\n    for (const m of opts) {\n      const rest = otherCard(m.card);\n      let score = 0;\n      if (m.card === 8) score = -100;\n      else if (m.card === 1) {\n        const ts = m.target === null ? -1 : ctx.players.findIndex(p => p.id === m.target);\n        score = ts >= 0 && s.lastSeen[seat][ts] >= 2 && m.guess === s.lastSeen[seat][ts] ? 50 : 6;\n      }\n      else if (m.card === 2) score = 11;\n      else if (m.card === 3) score = rest >= 4 ? 20 + rest : 2;\n      else if (m.card === 4) score = 12;\n      else if (m.card === 5) {\n        const self = m.target === ctx.players[seat].id;\n        score = self ? (rest === 8 ? -90 : 4) : 9;\n      }\n      else if (m.card === 6) score = rest === 8 ? -80 : 10 - rest;\n      else if (m.card === 7) score = 7;\n      if (score > bestScore) { bestScore = score; best = m; }\n    }\n    return best;\n  }\n};\n",
+ "declarative_ui": {
+  "format": "buildplay-ui",
+  "version": 1,
+  "viewport": {
+   "width": 700,
+   "height": 800,
+   "camera_enabled": false
+  },
+  "boards": [
+   {
+    "id": "table",
+    "kind": "free",
+    "x": 0,
+    "y": 0,
+    "width": 700,
+    "height": 800,
+    "color": "#4a1f2b",
+    "line_color": "#d8b4a0"
+   }
+  ],
+  "piece_types": {
+   "card": {
+    "shape": "card",
+    "width": 96,
+    "height": 132,
+    "color": "#fff7df",
+    "text_color": "#402030",
+    "border_color": "#8a6d3b"
+   },
+   "back": {
+    "shape": "card",
+    "width": 62,
+    "height": 86,
+    "color": "#7a1f2b",
+    "text_color": "#f3d9c8",
+    "border_color": "#d8b4a0"
+   },
+   "mini": {
+    "shape": "card",
+    "width": 40,
+    "height": 56,
+    "color": "#fff7df",
+    "text_color": "#402030",
+    "border_color": "#8a6d3b"
+   }
+  },
+  "strings": {
+   "title": "Love Letter",
+   "turn": "Player {n} to play",
+   "your_turn": "Your turn, Player {n}",
+   "finished": "Finished",
+   "winner": "Player {n} wins the match",
+   "round": "Round {n}",
+   "deck": "Deck {n}",
+   "tokens": "Tokens {n}",
+   "you": "You",
+   "opp": "Player {n}",
+   "protected": "Protected",
+   "out": "Out",
+   "removed": "Removed face up",
+   "seen": "Seen: Player {n} holds {v}",
+   "hint_card": "Tap a card to play it",
+   "hint_target": "Tap a target player",
+   "hint_guess": "Choose your Guard guess",
+   "cancel": "Cancel",
+   "play_target": "Target Player {n}",
+   "target_self": "Target yourself",
+   "no_target": "Play with no target",
+   "guess": "Guess {v}",
+   "card_1": "1 Guard",
+   "card_2": "2 Priest",
+   "card_3": "3 Baron",
+   "card_4": "4 Handmaid",
+   "card_5": "5 Prince",
+   "card_6": "6 King",
+   "card_7": "7 Countess",
+   "card_8": "8 Princess",
+   "name_2": "Priest",
+   "name_3": "Baron",
+   "name_4": "Handmaid",
+   "name_5": "Prince",
+   "name_6": "King",
+   "name_7": "Countess",
+   "name_8": "Princess",
+   "server_invalid": "Illegal move"
+  },
+  "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Love Letter\", \"turn\": \"Player {n} to play\", \"your_turn\": \"Your turn, Player {n}\", \"finished\": \"Finished\", \"winner\": \"Player {n} wins the match\", \"round\": \"Round {n}\", \"deck\": \"Deck {n}\", \"tokens\": \"Tokens {n}\", \"you\": \"You\", \"opp\": \"Player {n}\", \"protected\": \"Protected\", \"out\": \"Out\", \"removed\": \"Removed face up\", \"seen\": \"Seen: Player {n} holds {v}\", \"hint_card\": \"Tap a card to play it\", \"hint_target\": \"Tap a target player\", \"hint_guess\": \"Choose your Guard guess\", \"cancel\": \"Cancel\", \"play_target\": \"Target Player {n}\", \"target_self\": \"Target yourself\", \"no_target\": \"Play with no target\", \"guess\": \"Guess {v}\", \"card_1\": \"1 Guard\", \"card_2\": \"2 Priest\", \"card_3\": \"3 Baron\", \"card_4\": \"4 Handmaid\", \"card_5\": \"5 Prince\", \"card_6\": \"6 King\", \"card_7\": \"7 Countess\", \"card_8\": \"8 Princess\", \"name_2\": \"Priest\", \"name_3\": \"Baron\", \"name_4\": \"Handmaid\", \"name_5\": \"Prince\", \"name_6\": \"King\", \"name_7\": \"Countess\", \"name_8\": \"Princess\", \"server_invalid\": \"Illegal move\"};\nconst gameUI={\n  reduce(message,localState){\n    const m=message.type==='ui_event'?message.state_changed:message;\n    const s=m.view||m.state||{};\n    const strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    const t=(key,args)=>(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String((args||{})[k]===undefined?'':(args||{})[k]));\n    const seat=Number.isInteger(s.myIndex)?s.myIndex:-1;\n    const legal=(m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined&&m.acting_for_player_index===seat&&Array.isArray(s.legal))?s.legal:[];\n    const active=legal.length>0;\n    const n=(s.handCounts||[]).length;\n    const cardText=v=>t('card_'+v);\n    let sel=null;\n    if(active&&localState&&localState.mc===m.move_count&&localState.viewer===seat&&Number.isInteger(localState.card)){\n      const c=localState.card;\n      if(legal.some(mv=>mv.card===c)){\n        sel={card:c,target:(typeof localState.target==='string'?localState.target:null)};\n        if(sel.target!==null&&!legal.some(mv=>mv.card===c&&mv.target===sel.target)) sel.target=null;\n      }\n    }\n    let makeMove=null;\n    if(message.type==='ui_event'&&active&&message.event&&message.event.type==='tap'){\n      const eid=String(message.event.id||'');\n      if(eid.indexOf('hand_')===0){\n        const v=parseInt(eid.slice(5),10);\n        const movesC=legal.filter(mv=>mv.card===v);\n        if(movesC.length===1&&movesC[0].target===null&&movesC[0].guess===null) makeMove=movesC[0];\n        else if(movesC.length) sel={card:v,target:null};\n      } else if(eid.indexOf('tgt_')===0&&sel){\n        const ts=parseInt(eid.slice(4),10);\n        const tid=(s.playerIds||[])[ts];\n        const cand=legal.filter(mv=>mv.card===sel.card&&mv.target===tid);\n        if(cand.length===1) makeMove=cand[0];\n        else if(cand.length>1) sel={card:sel.card,target:tid};\n      } else if(eid.indexOf('guess_')===0&&sel&&sel.target!==null){\n        const g=parseInt(eid.slice(6),10);\n        const mv=legal.find(mv=>mv.card===sel.card&&mv.target===sel.target&&mv.guess===g);\n        if(mv) makeMove=mv;\n      } else if(eid==='notarget'&&sel){\n        const mv=legal.find(mv=>mv.card===sel.card&&mv.target===null&&mv.guess===null);\n        if(mv) makeMove=mv;\n      } else if(eid==='cancel'){\n        sel=null;\n      }\n    }\n    const pieces=[],targets=[],controls=[],labels=[];\n    labels.push({id:'title',text:t('title'),x:24,y:14,font_size:26});\n    labels.push({id:'info',text:t('round',{n:s.round})+' - '+t('deck',{n:s.deckCount}),x:470,y:20,font_size:15});\n    let status;\n    if(s.over) status=s.winner>=0?t('winner',{n:s.winner+1}):t('finished');\n    else status=active?t('your_turn',{n:seat+1}):t('turn',{n:(s.turn||0)+1});\n    labels.push({id:'status',text:status,x:24,y:48,font_size:18});\n    const rows=[];\n    for(let i=0;i<n;i++) if(i!==seat) rows.push(i);\n    rows.forEach((pi,ri)=>{\n      const y=86+ri*124;\n      let txt=t('opp',{n:pi+1})+' - '+t('tokens',{n:(s.tokens||[])[pi]});\n      if((s.protected||[])[pi]) txt+=' - '+t('protected');\n      if(!(s.active||[])[pi]) txt+=' - '+t('out');\n      labels.push({id:'name_'+pi,text:txt,x:24,y:y,font_size:16});\n      for(let j=0;j<((s.handCounts||[])[pi]||0);j++)\n        pieces.push({id:'back_'+pi+'_'+j,type:'back',board:'table',position:{x:30+j*70,y:y+24},text:'',actions:[]});\n      ((s.discards||[])[pi]||[]).slice(-8).forEach((v,j)=>\n        pieces.push({id:'disc_'+pi+'_'+j,type:'mini',board:'table',position:{x:230+j*44,y:y+30},text:cardText(v),actions:[]}));\n    });\n    if(seat>=0){\n      let txt=t('you')+' - '+t('tokens',{n:(s.tokens||[])[seat]});\n      if((s.protected||[])[seat]) txt+=' - '+t('protected');\n      if(!(s.active||[])[seat]) txt+=' - '+t('out');\n      labels.push({id:'you',text:txt,x:24,y:520,font_size:17});\n      ((s.discards||[])[seat]||[]).slice(-8).forEach((v,j)=>\n        pieces.push({id:'mydisc_'+j,type:'mini',board:'table',position:{x:24+j*44,y:548},text:cardText(v),actions:[]}));\n      if((s.removedUp||[]).length){\n        labels.push({id:'removed_label',text:t('removed'),x:480,y:520,font_size:13});\n        s.removedUp.forEach((v,j)=>\n          pieces.push({id:'rem_'+j,type:'mini',board:'table',position:{x:480+j*44,y:548},text:cardText(v),actions:[]}));\n      }\n      (s.myHand||[]).forEach((v,i)=>\n        pieces.push({id:'handp_'+i,type:'card',board:'table',position:{x:170+i*140,y:640},text:cardText(v),actions:[]}));\n      const seenParts=[];\n      (s.seen||[]).forEach((v,i)=>{ if(v&&i!==seat) seenParts.push(t('seen',{n:i+1,v:cardText(v)})); });\n      if(seenParts.length) labels.push({id:'seen',text:seenParts.join(' - '),x:24,y:614,font_size:14});\n    }\n    pieces.push({id:'deck_pile',type:'back',board:'table',position:{x:600,y:640},text:String(s.deckCount||0),actions:[]});\n    if(active){\n      const handVals=[];\n      legal.forEach(mv=>{ if(handVals.indexOf(mv.card)===-1) handVals.push(mv.card); });\n      handVals.forEach(v=>{\n        const idx=(s.myHand||[]).indexOf(v);\n        targets.push({id:'hand_'+v,board:'table',position:{x:170+(idx>=0?idx:0)*140,y:640},label:cardText(v)});\n      });\n      if(sel){\n        const tids=[];\n        legal.filter(mv=>mv.card===sel.card).forEach(mv=>{ if(mv.target!==null&&tids.indexOf(mv.target)===-1) tids.push(mv.target); });\n        tids.forEach(tid=>{\n          const ts=(s.playerIds||[]).indexOf(tid);\n          if(ts===seat) targets.push({id:'tgt_'+ts,board:'table',position:{x:470,y:660},label:t('target_self')});\n          else {\n            const ri=rows.indexOf(ts);\n            targets.push({id:'tgt_'+ts,board:'table',position:{x:610,y:86+(ri>=0?ri:0)*124+40},label:t('play_target',{n:ts+1})});\n          }\n        });\n        if(legal.some(mv=>mv.card===sel.card&&mv.target===null))\n          controls.push({id:'notarget',kind:'button',label:t('no_target')});\n        if(sel.card===1&&sel.target!==null)\n          legal.filter(mv=>mv.card===1&&mv.target===sel.target).forEach(mv=>\n            controls.push({id:'guess_'+mv.guess,kind:'button',label:t('guess',{v:t('name_'+mv.guess)})}));\n        controls.push({id:'cancel',kind:'button',label:t('cancel')});\n        labels.push({id:'hint',text:(sel.card===1&&sel.target!==null)?t('hint_guess'):t('hint_target'),x:330,y:48,font_size:14});\n      } else {\n        labels.push({id:'hint',text:t('hint_card'),x:330,y:48,font_size:14});\n      }\n    }\n    const scene={pieces:pieces,targets:targets,controls:controls,labels:labels};\n    const out={scene:scene,local_state:sel?{mc:m.move_count,viewer:seat,card:sel.card,target:sel.target}:{}};\n    if(makeMove) out.make_move=makeMove;\n    return out;\n  }\n};\n"
+ },
+ "rules": "Love Letter for 2-4 players, played in rounds with a 16-card deck: Guard (1) x5, Priest (2) x2, Baron (3) x2, Handmaid (4) x2, Prince (5) x2, King (6) x1, Countess (7) x1 and Princess (8) x1. Each round the deck is shuffled with the match seed, one card is removed face down and unseen, and in 2-player rounds three more cards are removed face up. Every player is dealt one card; the player to move draws a second card and then plays one card with a move {type:\"play\", card, target, guess}, where target is a player id or null and guess is a card value or null. Guard: name a value from 2 to 8 (never Guard); if the target holds it, they are out of the round. Priest: you privately learn the target's card, and remember it until their hand changes or the round ends. Baron: you and the target privately compare your remaining cards; the lower value is out of the round and a tie eliminates nobody. Handmaid: you cannot be targeted until your next turn. Prince: the target, possibly yourself, discards their card and draws a replacement, from the face-down removed card if the deck is empty; discarding the Princess eliminates them. King: swap hands with the target. Countess: no effect when played, but a player holding the Countess with the King or a Prince must play the Countess. Princess: a player who plays or discards it is out of the round. A target must be an active, unprotected player; if every other player is protected, a card that targets another player may be played with target null and no effect, while the Prince may still target yourself. A round ends when one player remains, or when the deck is empty and the current turn finishes: then the highest remaining card wins the round, ties are broken by the highest total value of discarded cards, and players still tied each receive a token. The round winner receives a token of affection and starts the next round. The first player to 7 tokens in a 2-player match, 5 in a 3-player match or 4 in a 4-player match wins the match and takes the pot (no payout when the pot is 0). Hands, the deck order and the face-down removed card are secret; played and discarded cards, the face-up removed cards, tokens, and who is protected or out are public.",
+ "ui_instructions": "Your cards are face up at the bottom; tap a card to select it. Cards that need no target play at once. If the card needs a target, tap a highlighted player area - the Prince may target yourself with the Target yourself marker - and for the Guard, then tap a guess button naming the value you think the target holds. Use Cancel to change your selection. Opponents appear as card backs with their token counts, protection and public discard piles; your own discards, any face-up removed cards, the round number and the deck count are also shown. A card you have seen with the Priest or Baron is noted under your hand. Only the player to move sees targets and controls.",
+ "tutorial": {
+  "text": "Draw a card, play a card: outlast the round, or hold the highest card when the deck runs out, to win a token of affection.",
+  "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><p>Draw a card, play a card: outlast the round, or hold the highest card when the deck runs out, to win a token of affection.</p>"
+ },
+ "images": [
+  {
+   "caption": "Cover",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" fill=\"#4a1f2b\"/><rect x=\"52\" y=\"18\" width=\"24\" height=\"34\" rx=\"3\" fill=\"#fff7df\"/><rect x=\"84\" y=\"18\" width=\"24\" height=\"34\" rx=\"3\" fill=\"#7a1f2b\"/><rect x=\"68\" y=\"38\" width=\"24\" height=\"34\" rx=\"3\" fill=\"#d8a24a\"/></svg>"
+  },
+  {
+   "caption": "A hand of two cards",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">5</text></svg>"
+  },
+  {
+   "caption": "The deck",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">9</text></svg>"
+  },
+  {
+   "caption": "Discards",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+  },
+  {
+   "caption": "A token of affection",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">7</text></svg>"
+  }
+ ],
+ "unit_tests": {
+  "state_schema": {
+   "type": "object",
+   "required": [
+    "hands",
+    "deck",
+    "removedDown",
+    "removedUp",
+    "discards",
+    "tokens",
+    "active",
+    "protected",
+    "turn",
+    "round",
+    "starter",
+    "tokensNeeded",
+    "winner",
+    "over",
+    "lastRoundWinners",
+    "lastSeen",
+    "turns"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "hands": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 2,
+      "items": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 8
+      }
+     }
+    },
+    "deck": {
+     "type": "array",
+     "maxItems": 16,
+     "items": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+     }
+    },
+    "removedDown": {
+     "type": "array",
+     "maxItems": 1,
+     "items": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+     }
+    },
+    "removedUp": {
+     "type": "array",
+     "maxItems": 3,
+     "items": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+     }
+    },
+    "discards": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 8
+      }
+     }
+    },
+    "tokens": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20
+     }
+    },
+    "active": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "boolean"
+     }
+    },
+    "protected": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "boolean"
+     }
+    },
+    "turn": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 3
+    },
+    "round": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 1000
+    },
+    "starter": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 3
+    },
+    "tokensNeeded": {
+     "enum": [
+      4,
+      5,
+      7
+     ]
+    },
+    "winner": {
+     "enum": [
+      -1,
+      0,
+      1,
+      2,
+      3
+     ]
+    },
+    "over": {
+     "type": "boolean"
+    },
+    "lastRoundWinners": {
+     "type": "array",
+     "minItems": 0,
+     "maxItems": 4,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+     }
+    },
+    "lastSeen": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 4,
+      "items": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 8
+      }
+     }
+    },
+    "turns": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 100000
+    }
+   }
+  },
+  "view_schema": {
+   "type": "object",
+   "required": [
+    "myIndex",
+    "playerIds",
+    "myHand",
+    "handCounts",
+    "deckCount",
+    "removedUp",
+    "removedDownCount",
+    "discards",
+    "tokens",
+    "active",
+    "protected",
+    "turn",
+    "round",
+    "starter",
+    "tokensNeeded",
+    "winner",
+    "over",
+    "lastRoundWinners",
+    "seen",
+    "legal"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "myIndex": {
+     "enum": [
+      -1,
+      0,
+      1,
+      2,
+      3
+     ]
+    },
+    "playerIds": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "string",
+      "maxLength": 64
+     }
+    },
+    "myHand": {
+     "type": "array",
+     "maxItems": 2,
+     "items": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+     }
+    },
+    "handCounts": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+     }
+    },
+    "deckCount": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 16
+    },
+    "removedUp": {
+     "type": "array",
+     "maxItems": 3,
+     "items": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+     }
+    },
+    "removedDownCount": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 1
+    },
+    "discards": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 8
+      }
+     }
+    },
+    "tokens": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20
+     }
+    },
+    "active": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "boolean"
+     }
+    },
+    "protected": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "boolean"
+     }
+    },
+    "turn": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 3
+    },
+    "round": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 1000
+    },
+    "starter": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 3
+    },
+    "tokensNeeded": {
+     "enum": [
+      4,
+      5,
+      7
+     ]
+    },
+    "winner": {
+     "enum": [
+      -1,
+      0,
+      1,
+      2,
+      3
+     ]
+    },
+    "over": {
+     "type": "boolean"
+    },
+    "lastRoundWinners": {
+     "type": "array",
+     "minItems": 0,
+     "maxItems": 4,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+     }
+    },
+    "seen": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 4,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 8
+     }
+    },
+    "legal": {
+     "type": "array",
+     "maxItems": 64,
+     "items": {
+      "type": "object",
+      "required": [
+       "type",
+       "card",
+       "target",
+       "guess"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "type": {
+        "enum": [
+         "play"
+        ]
+       },
+       "card": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8
+       },
+       "target": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "maxLength": 64
+       },
+       "guess": {
+        "type": [
+         "integer",
+         "null"
+        ],
+        "minimum": 2,
+        "maximum": 8
+       }
+      }
+     }
+    }
+   }
+  },
+  "move_schema": {
+   "type": "object",
+   "required": [
+    "type",
+    "card",
+    "target",
+    "guess"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "enum": [
+      "play"
+     ]
+    },
+    "card": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 8
+    },
+    "target": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "maxLength": 64
+    },
+    "guess": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 2,
+     "maximum": 8
+    }
+   }
+  },
+  "cases": [
+   {
+    "name": "Initial deal and first play",
+    "kind": "initial",
+    "description": "Love Letter, the 16-card game of deduction and risk: draw one card, play one card, knock rivals out of the round and be first to the token target - 7 tokens with 2 players, 5 with 3, 4 with 4.",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "hands": [
+      [
+       4,
+       1
+      ],
+      [
+       2
+      ]
+     ],
+     "deck": [
+      4,
+      2,
+      5,
+      1,
+      5,
+      1,
+      1,
+      6,
+      1
+     ],
+     "removedDown": [
+      3
+     ],
+     "removedUp": [
+      3,
+      8,
+      7
+     ],
+     "discards": [
+      [],
+      []
+     ],
+     "tokens": [
+      0,
+      0
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "lastSeen": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ],
+     "turns": 0
+    },
+    "view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      4,
+      1
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 9,
+     "removedUp": [
+      3,
+      8,
+      7
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [],
+      []
+     ],
+     "tokens": [
+      0,
+      0
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 4,
+       "target": null,
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 2
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 3
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 4
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 5
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 6
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 7
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 8
+      }
+     ]
+    },
+    "view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      2
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 9,
+     "removedUp": [
+      3,
+      8,
+      7
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [],
+      []
+     ],
+     "tokens": [
+      0,
+      0
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "play",
+     "card": 4,
+     "target": null,
+     "guess": null
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     }
+    ],
+    "expected_state": {
+     "hands": [
+      [
+       1
+      ],
+      [
+       2,
+       1
+      ]
+     ],
+     "deck": [
+      4,
+      2,
+      5,
+      1,
+      5,
+      1,
+      1,
+      6
+     ],
+     "removedDown": [
+      3
+     ],
+     "removedUp": [
+      3,
+      8,
+      7
+     ],
+     "discards": [
+      [
+       4
+      ],
+      []
+     ],
+     "tokens": [
+      0,
+      0
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      true,
+      false
+     ],
+     "turn": 1,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "lastSeen": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ],
+     "turns": 1
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      1
+     ],
+     "handCounts": [
+      1,
+      2
+     ],
+     "deckCount": 8,
+     "removedUp": [
+      3,
+      8,
+      7
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       4
+      ],
+      []
+     ],
+     "tokens": [
+      0,
+      0
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      true,
+      false
+     ],
+     "turn": 1,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      2,
+      1
+     ],
+     "handCounts": [
+      1,
+      2
+     ],
+     "deckCount": 8,
+     "removedUp": [
+      3,
+      8,
+      7
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       4
+      ],
+      []
+     ],
+     "tokens": [
+      0,
+      0
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      true,
+      false
+     ],
+     "turn": 1,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 2,
+       "target": null,
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": null,
+       "guess": null
+      }
+     ]
+    }
+   },
+   {
+    "name": "Priest reveals a hand privately",
+    "kind": "intermediate",
+    "description": "Love Letter, the 16-card game of deduction and risk: draw one card, play one card, knock rivals out of the round and be first to the token target - 7 tokens with 2 players, 5 with 3, 4 with 4.",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u3",
+       "kind": "human",
+       "display_name": "Carol",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 5,
+     "seed": 21
+    },
+    "state": {
+     "hands": [
+      [
+       2,
+       4
+      ],
+      [
+       6
+      ],
+      [
+       1
+      ]
+     ],
+     "deck": [
+      1,
+      1,
+      1,
+      1,
+      2,
+      3,
+      4,
+      5,
+      7
+     ],
+     "removedDown": [
+      8
+     ],
+     "removedUp": [],
+     "discards": [
+      [
+       5
+      ],
+      [
+       3
+      ],
+      []
+     ],
+     "tokens": [
+      1,
+      0,
+      2
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 2,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      2
+     ],
+     "lastSeen": [
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ]
+     ],
+     "turns": 5
+    },
+    "view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      2,
+      4
+     ],
+     "handCounts": [
+      2,
+      1,
+      1
+     ],
+     "deckCount": 9,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       5
+      ],
+      [
+       3
+      ],
+      []
+     ],
+     "tokens": [
+      1,
+      0,
+      2
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 2,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      2
+     ],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 2,
+       "target": "u2",
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 2,
+       "target": "u3",
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 4,
+       "target": null,
+       "guess": null
+      }
+     ]
+    },
+    "view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      6
+     ],
+     "handCounts": [
+      2,
+      1,
+      1
+     ],
+     "deckCount": 9,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       5
+      ],
+      [
+       3
+      ],
+      []
+     ],
+     "tokens": [
+      1,
+      0,
+      2
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 2,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      2
+     ],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "play",
+     "card": 2,
+     "target": "u2",
+     "guess": null
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     }
+    ],
+    "expected_state": {
+     "hands": [
+      [
+       4
+      ],
+      [
+       6,
+       7
+      ],
+      [
+       1
+      ]
+     ],
+     "deck": [
+      1,
+      1,
+      1,
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "removedDown": [
+      8
+     ],
+     "removedUp": [],
+     "discards": [
+      [
+       5,
+       2
+      ],
+      [
+       3
+      ],
+      []
+     ],
+     "tokens": [
+      1,
+      0,
+      2
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 1,
+     "round": 2,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      2
+     ],
+     "lastSeen": [
+      [
+       0,
+       6,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ]
+     ],
+     "turns": 6
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      4
+     ],
+     "handCounts": [
+      1,
+      2,
+      1
+     ],
+     "deckCount": 8,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       5,
+       2
+      ],
+      [
+       3
+      ],
+      []
+     ],
+     "tokens": [
+      1,
+      0,
+      2
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 1,
+     "round": 2,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      2
+     ],
+     "seen": [
+      0,
+      6,
+      0
+     ],
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      6,
+      7
+     ],
+     "handCounts": [
+      1,
+      2,
+      1
+     ],
+     "deckCount": 8,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       5,
+       2
+      ],
+      [
+       3
+      ],
+      []
+     ],
+     "tokens": [
+      1,
+      0,
+      2
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 1,
+     "round": 2,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      2
+     ],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 7,
+       "target": null,
+       "guess": null
+      }
+     ]
+    }
+   },
+   {
+    "name": "Guard guess eliminates",
+    "kind": "intermediate",
+    "description": "Love Letter, the 16-card game of deduction and risk: draw one card, play one card, knock rivals out of the round and be first to the token target - 7 tokens with 2 players, 5 with 3, 4 with 4.",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u3",
+       "kind": "human",
+       "display_name": "Carol",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 6,
+     "seed": 22
+    },
+    "state": {
+     "hands": [
+      [
+       1,
+       7
+      ],
+      [
+       3
+      ],
+      [
+       5
+      ]
+     ],
+     "deck": [
+      8,
+      5,
+      4,
+      3,
+      2,
+      1,
+      1,
+      1,
+      1
+     ],
+     "removedDown": [
+      6
+     ],
+     "removedUp": [],
+     "discards": [
+      [],
+      [
+       2
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      0,
+      1,
+      0
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "lastSeen": [
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ]
+     ],
+     "turns": 6
+    },
+    "view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      1,
+      7
+     ],
+     "handCounts": [
+      2,
+      1,
+      1
+     ],
+     "deckCount": 9,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [],
+      [
+       2
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      0,
+      1,
+      0
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 2
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 3
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 4
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 5
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 6
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 7
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 8
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 2
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 3
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 4
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 5
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 6
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 7
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 8
+      },
+      {
+       "type": "play",
+       "card": 7,
+       "target": null,
+       "guess": null
+      }
+     ]
+    },
+    "view_of_other": {
+     "myIndex": 2,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      5
+     ],
+     "handCounts": [
+      2,
+      1,
+      1
+     ],
+     "deckCount": 9,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [],
+      [
+       2
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      0,
+      1,
+      0
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u3",
+    "move": {
+     "type": "play",
+     "card": 1,
+     "target": "u2",
+     "guess": 3
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     }
+    ],
+    "expected_state": {
+     "hands": [
+      [
+       7
+      ],
+      [],
+      [
+       5,
+       1
+      ]
+     ],
+     "deck": [
+      8,
+      5,
+      4,
+      3,
+      2,
+      1,
+      1,
+      1
+     ],
+     "removedDown": [
+      6
+     ],
+     "removedUp": [],
+     "discards": [
+      [
+       1
+      ],
+      [
+       2,
+       3
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      0,
+      1,
+      0
+     ],
+     "active": [
+      true,
+      false,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 2,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "lastSeen": [
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ]
+     ],
+     "turns": 7
+    },
+    "expected_turn": [
+     "u3"
+    ],
+    "expected_view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      7
+     ],
+     "handCounts": [
+      1,
+      0,
+      2
+     ],
+     "deckCount": 8,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1
+      ],
+      [
+       2,
+       3
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      0,
+      1,
+      0
+     ],
+     "active": [
+      true,
+      false,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 2,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "myIndex": 2,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      5,
+      1
+     ],
+     "handCounts": [
+      1,
+      0,
+      2
+     ],
+     "deckCount": 8,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1
+      ],
+      [
+       2,
+       3
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      0,
+      1,
+      0
+     ],
+     "active": [
+      true,
+      false,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 2,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 5,
+       "target": "u1",
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 5,
+       "target": "u3",
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 2
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 3
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 4
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 5
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 6
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 7
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 8
+      }
+     ]
+    }
+   },
+   {
+    "name": "Countess must be played with King",
+    "kind": "intermediate",
+    "description": "Love Letter, the 16-card game of deduction and risk: draw one card, play one card, knock rivals out of the round and be first to the token target - 7 tokens with 2 players, 5 with 3, 4 with 4.",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 3,
+     "seed": 23
+    },
+    "state": {
+     "hands": [
+      [
+       7,
+       6
+      ],
+      [
+       2
+      ]
+     ],
+     "deck": [
+      5,
+      4,
+      3,
+      2,
+      1,
+      1,
+      1
+     ],
+     "removedDown": [
+      3
+     ],
+     "removedUp": [
+      5,
+      8,
+      1
+     ],
+     "discards": [
+      [
+       1
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      2,
+      1
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 3,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      1
+     ],
+     "lastSeen": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ],
+     "turns": 3
+    },
+    "view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      7,
+      6
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 7,
+     "removedUp": [
+      5,
+      8,
+      1
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      2,
+      1
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 3,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      1
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 7,
+       "target": null,
+       "guess": null
+      }
+     ]
+    },
+    "view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      2
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 7,
+     "removedUp": [
+      5,
+      8,
+      1
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      2,
+      1
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 3,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      1
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "play",
+     "card": 6,
+     "target": "u2",
+     "guess": null
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     }
+    ],
+    "expected_error": "InvalidMove",
+    "turn": [
+     "u1"
+    ],
+    "expected_state": {
+     "hands": [
+      [
+       7,
+       6
+      ],
+      [
+       2
+      ]
+     ],
+     "deck": [
+      5,
+      4,
+      3,
+      2,
+      1,
+      1,
+      1
+     ],
+     "removedDown": [
+      3
+     ],
+     "removedUp": [
+      5,
+      8,
+      1
+     ],
+     "discards": [
+      [
+       1
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      2,
+      1
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 3,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      1
+     ],
+     "lastSeen": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ],
+     "turns": 3
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "expected_view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      7,
+      6
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 7,
+     "removedUp": [
+      5,
+      8,
+      1
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      2,
+      1
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 3,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      1
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 7,
+       "target": null,
+       "guess": null
+      }
+     ]
+    },
+    "expected_view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      2
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 7,
+     "removedUp": [
+      5,
+      8,
+      1
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1
+      ],
+      [
+       4
+      ]
+     ],
+     "tokens": [
+      2,
+      1
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 3,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      1
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    }
+   },
+   {
+    "name": "Prince discards the Princess",
+    "kind": "intermediate",
+    "description": "Love Letter, the 16-card game of deduction and risk: draw one card, play one card, knock rivals out of the round and be first to the token target - 7 tokens with 2 players, 5 with 3, 4 with 4.",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u3",
+       "kind": "human",
+       "display_name": "Carol",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 7,
+     "seed": 24
+    },
+    "state": {
+     "hands": [
+      [
+       5,
+       1
+      ],
+      [
+       8
+      ],
+      [
+       4
+      ]
+     ],
+     "deck": [
+      6,
+      5,
+      4,
+      3,
+      2,
+      1,
+      1,
+      1,
+      1
+     ],
+     "removedDown": [
+      7
+     ],
+     "removedUp": [],
+     "discards": [
+      [
+       2
+      ],
+      [],
+      [
+       3
+      ]
+     ],
+     "tokens": [
+      0,
+      0,
+      0
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "lastSeen": [
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ]
+     ],
+     "turns": 7
+    },
+    "view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      5,
+      1
+     ],
+     "handCounts": [
+      2,
+      1,
+      1
+     ],
+     "deckCount": 9,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       2
+      ],
+      [],
+      [
+       3
+      ]
+     ],
+     "tokens": [
+      0,
+      0,
+      0
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 5,
+       "target": "u2",
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 5,
+       "target": "u3",
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 5,
+       "target": "u1",
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 2
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 3
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 4
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 5
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 6
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 7
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 8
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 2
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 3
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 4
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 5
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 6
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 7
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u3",
+       "guess": 8
+      }
+     ]
+    },
+    "view_of_other": {
+     "myIndex": 2,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      4
+     ],
+     "handCounts": [
+      2,
+      1,
+      1
+     ],
+     "deckCount": 9,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       2
+      ],
+      [],
+      [
+       3
+      ]
+     ],
+     "tokens": [
+      0,
+      0,
+      0
+     ],
+     "active": [
+      true,
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u3",
+    "move": {
+     "type": "play",
+     "card": 5,
+     "target": "u2",
+     "guess": null
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">4</text></svg>"
+     }
+    ],
+    "expected_state": {
+     "hands": [
+      [
+       1
+      ],
+      [],
+      [
+       4,
+       1
+      ]
+     ],
+     "deck": [
+      6,
+      5,
+      4,
+      3,
+      2,
+      1,
+      1,
+      1
+     ],
+     "removedDown": [
+      7
+     ],
+     "removedUp": [],
+     "discards": [
+      [
+       2,
+       5
+      ],
+      [
+       8
+      ],
+      [
+       3
+      ]
+     ],
+     "tokens": [
+      0,
+      0,
+      0
+     ],
+     "active": [
+      true,
+      false,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 2,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "lastSeen": [
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0
+      ]
+     ],
+     "turns": 8
+    },
+    "expected_turn": [
+     "u3"
+    ],
+    "expected_view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      1
+     ],
+     "handCounts": [
+      1,
+      0,
+      2
+     ],
+     "deckCount": 8,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       2,
+       5
+      ],
+      [
+       8
+      ],
+      [
+       3
+      ]
+     ],
+     "tokens": [
+      0,
+      0,
+      0
+     ],
+     "active": [
+      true,
+      false,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 2,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "myIndex": 2,
+     "playerIds": [
+      "u1",
+      "u2",
+      "u3"
+     ],
+     "myHand": [
+      4,
+      1
+     ],
+     "handCounts": [
+      1,
+      0,
+      2
+     ],
+     "deckCount": 8,
+     "removedUp": [],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       2,
+       5
+      ],
+      [
+       8
+      ],
+      [
+       3
+      ]
+     ],
+     "tokens": [
+      0,
+      0,
+      0
+     ],
+     "active": [
+      true,
+      false,
+      true
+     ],
+     "protected": [
+      false,
+      false,
+      false
+     ],
+     "turn": 2,
+     "round": 1,
+     "starter": 0,
+     "tokensNeeded": 5,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [],
+     "seen": [
+      0,
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 4,
+       "target": null,
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 2
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 3
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 4
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 5
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 6
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 7
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u1",
+       "guess": 8
+      }
+     ]
+    }
+   },
+   {
+    "name": "Guard win takes the match",
+    "kind": "terminal",
+    "description": "Love Letter, the 16-card game of deduction and risk: draw one card, play one card, knock rivals out of the round and be first to the token target - 7 tokens with 2 players, 5 with 3, 4 with 4.",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 20,
+     "move_count": 40,
+     "seed": 25
+    },
+    "state": {
+     "hands": [
+      [
+       1,
+       4
+      ],
+      [
+       8
+      ]
+     ],
+     "deck": [
+      4,
+      3,
+      1,
+      1,
+      1
+     ],
+     "removedDown": [
+      7
+     ],
+     "removedUp": [
+      1,
+      2,
+      5
+     ],
+     "discards": [
+      [
+       2,
+       5
+      ],
+      [
+       3,
+       6
+      ]
+     ],
+     "tokens": [
+      6,
+      3
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 9,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      0
+     ],
+     "lastSeen": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ],
+     "turns": 40
+    },
+    "view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      1,
+      4
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 5,
+     "removedUp": [
+      1,
+      2,
+      5
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       2,
+       5
+      ],
+      [
+       3,
+       6
+      ]
+     ],
+     "tokens": [
+      6,
+      3
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 9,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      0
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 2
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 3
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 4
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 5
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 6
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 7
+      },
+      {
+       "type": "play",
+       "card": 1,
+       "target": "u2",
+       "guess": 8
+      },
+      {
+       "type": "play",
+       "card": 4,
+       "target": null,
+       "guess": null
+      }
+     ]
+    },
+    "view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      8
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 5,
+     "removedUp": [
+      1,
+      2,
+      5
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       2,
+       5
+      ],
+      [
+       3,
+       6
+      ]
+     ],
+     "tokens": [
+      6,
+      3
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 9,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      0
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "play",
+     "card": 1,
+     "target": "u2",
+     "guess": 8
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     }
+    ],
+    "expected_state": {
+     "hands": [
+      [
+       4
+      ],
+      []
+     ],
+     "deck": [
+      4,
+      3,
+      1,
+      1,
+      1
+     ],
+     "removedDown": [
+      7
+     ],
+     "removedUp": [
+      1,
+      2,
+      5
+     ],
+     "discards": [
+      [
+       2,
+       5,
+       1
+      ],
+      [
+       3,
+       6,
+       8
+      ]
+     ],
+     "tokens": [
+      7,
+      3
+     ],
+     "active": [
+      true,
+      false
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 9,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": 0,
+     "over": true,
+     "lastRoundWinners": [
+      0
+     ],
+     "lastSeen": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ],
+     "turns": 41
+    },
+    "expected_turn": null,
+    "expected_payouts": {
+     "u1": 20
+    },
+    "expected_view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      4
+     ],
+     "handCounts": [
+      1,
+      0
+     ],
+     "deckCount": 5,
+     "removedUp": [
+      1,
+      2,
+      5
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       2,
+       5,
+       1
+      ],
+      [
+       3,
+       6,
+       8
+      ]
+     ],
+     "tokens": [
+      7,
+      3
+     ],
+     "active": [
+      true,
+      false
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 9,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": 0,
+     "over": true,
+     "lastRoundWinners": [
+      0
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [],
+     "handCounts": [
+      1,
+      0
+     ],
+     "deckCount": 5,
+     "removedUp": [
+      1,
+      2,
+      5
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       2,
+       5,
+       1
+      ],
+      [
+       3,
+       6,
+       8
+      ]
+     ],
+     "tokens": [
+      7,
+      3
+     ],
+     "active": [
+      true,
+      false
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 9,
+     "starter": 0,
+     "tokensNeeded": 7,
+     "winner": 0,
+     "over": true,
+     "lastRoundWinners": [
+      0
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    }
+   },
+   {
+    "name": "Deck out: highest card wins the match",
+    "kind": "terminal",
+    "description": "Love Letter, the 16-card game of deduction and risk: draw one card, play one card, knock rivals out of the round and be first to the token target - 7 tokens with 2 players, 5 with 3, 4 with 4.",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 20,
+     "move_count": 41,
+     "seed": 26
+    },
+    "state": {
+     "hands": [
+      [
+       4,
+       3
+      ],
+      [
+       6
+      ]
+     ],
+     "deck": [],
+     "removedDown": [
+      8
+     ],
+     "removedUp": [
+      1,
+      3,
+      5
+     ],
+     "discards": [
+      [
+       1,
+       1,
+       2,
+       5,
+       7
+      ],
+      [
+       1,
+       2,
+       4,
+       1
+      ]
+     ],
+     "tokens": [
+      2,
+      6
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 8,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      1
+     ],
+     "lastSeen": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ],
+     "turns": 41
+    },
+    "view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      4,
+      3
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 0,
+     "removedUp": [
+      1,
+      3,
+      5
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1,
+       1,
+       2,
+       5,
+       7
+      ],
+      [
+       1,
+       2,
+       4,
+       1
+      ]
+     ],
+     "tokens": [
+      2,
+      6
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 8,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      1
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": [
+      {
+       "type": "play",
+       "card": 4,
+       "target": null,
+       "guess": null
+      },
+      {
+       "type": "play",
+       "card": 3,
+       "target": "u2",
+       "guess": null
+      }
+     ]
+    },
+    "view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      6
+     ],
+     "handCounts": [
+      2,
+      1
+     ],
+     "deckCount": 0,
+     "removedUp": [
+      1,
+      3,
+      5
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1,
+       1,
+       2,
+       5,
+       7
+      ],
+      [
+       1,
+       2,
+       4,
+       1
+      ]
+     ],
+     "tokens": [
+      2,
+      6
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      false,
+      false
+     ],
+     "turn": 0,
+     "round": 8,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": -1,
+     "over": false,
+     "lastRoundWinners": [
+      1
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "play",
+     "card": 4,
+     "target": null,
+     "guess": null
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#4a1f2b\"/><text x=\"25\" y=\"30\" fill=\"#ffffff\">Love Letter</text><rect x=\"30\" y=\"60\" width=\"52\" height=\"72\" rx=\"6\" fill=\"#fff7df\"/><text x=\"48\" y=\"105\" fill=\"#402030\">3</text></svg>"
+     }
+    ],
+    "expected_state": {
+     "hands": [
+      [
+       3
+      ],
+      [
+       6
+      ]
+     ],
+     "deck": [],
+     "removedDown": [
+      8
+     ],
+     "removedUp": [
+      1,
+      3,
+      5
+     ],
+     "discards": [
+      [
+       1,
+       1,
+       2,
+       5,
+       7,
+       4
+      ],
+      [
+       1,
+       2,
+       4,
+       1
+      ]
+     ],
+     "tokens": [
+      2,
+      7
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      true,
+      false
+     ],
+     "turn": 0,
+     "round": 8,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": 1,
+     "over": true,
+     "lastRoundWinners": [
+      1
+     ],
+     "lastSeen": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ],
+     "turns": 42
+    },
+    "expected_turn": null,
+    "expected_payouts": {
+     "u2": 20
+    },
+    "expected_view_of_mover": {
+     "myIndex": 0,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      3
+     ],
+     "handCounts": [
+      1,
+      1
+     ],
+     "deckCount": 0,
+     "removedUp": [
+      1,
+      3,
+      5
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1,
+       1,
+       2,
+       5,
+       7,
+       4
+      ],
+      [
+       1,
+       2,
+       4,
+       1
+      ]
+     ],
+     "tokens": [
+      2,
+      7
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      true,
+      false
+     ],
+     "turn": 0,
+     "round": 8,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": 1,
+     "over": true,
+     "lastRoundWinners": [
+      1
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "myIndex": 1,
+     "playerIds": [
+      "u1",
+      "u2"
+     ],
+     "myHand": [
+      6
+     ],
+     "handCounts": [
+      1,
+      1
+     ],
+     "deckCount": 0,
+     "removedUp": [
+      1,
+      3,
+      5
+     ],
+     "removedDownCount": 1,
+     "discards": [
+      [
+       1,
+       1,
+       2,
+       5,
+       7,
+       4
+      ],
+      [
+       1,
+       2,
+       4,
+       1
+      ]
+     ],
+     "tokens": [
+      2,
+      7
+     ],
+     "active": [
+      true,
+      true
+     ],
+     "protected": [
+      true,
+      false
+     ],
+     "turn": 0,
+     "round": 8,
+     "starter": 1,
+     "tokensNeeded": 7,
+     "winner": 1,
+     "over": true,
+     "lastRoundWinners": [
+      1
+     ],
+     "seen": [
+      0,
+      0
+     ],
+     "legal": []
+    }
+   }
+  ]
+ },
+ "translations": {
+  "es": {
+   "display_name": "Love Letter (Declarativo)",
+   "short_description": "Love Letter, el juego de 16 cartas de deducción y riesgo: roba una carta, juega una carta, elimina a tus rivales de la ronda y sé el primero en alcanzar la meta de fichas: 7 fichas con 2 jugadores, 5 con 3 y 4 con 4.",
+   "game_logic_rules": "Love Letter para 2-4 jugadores, por rondas con un mazo de 16 cartas: Guardia (1) x5, Sacerdote (2) x2, Barón (3) x2, Doncella (4) x2, Príncipe (5) x2, Rey (6) x1, Condesa (7) x1 y Princesa (8) x1. En cada ronda el mazo se baraja con la semilla de la partida, se retira una carta boca abajo sin verla y, en rondas de 2 jugadores, se retiran tres cartas más boca arriba. Cada jugador recibe una carta; quien mueve roba una segunda carta y luego juega una carta con una jugada {type:\"play\", card, target, guess}, donde target es un id de jugador o null y guess es un valor de carta o null. Guardia: nombra un valor de 2 a 8 (nunca Guardia); si el objetivo lo tiene, queda fuera de la ronda. Sacerdote: aprendes en privado la carta del objetivo y la recuerdas hasta que su mano cambie o termine la ronda. Barón: tú y el objetivo comparan en privado sus cartas restantes; el valor menor queda fuera y un empate no elimina a nadie. Doncella: no puedes ser objetivo hasta tu próximo turno. Príncipe: el objetivo, que puedes ser tú, descarta su carta y roba un reemplazo, de la carta retirada boca abajo si el mazo está vacío; descartar la Princesa lo elimina. Rey: intercambia manos con el objetivo. Condesa: sin efecto al jugarla, pero quien tenga la Condesa junto al Rey o un Príncipe debe jugar la Condesa. Princesa: quien la juega o la descarta queda fuera de la ronda. El objetivo debe ser un jugador activo y sin protección; si todos los demás están protegidos, una carta que apunta a otro jugador puede jugarse con target null y sin efecto, mientras que el Príncipe aún puede apuntarse a sí mismo. La ronda termina cuando queda un jugador, o cuando el mazo se agota y termina el turno actual: entonces gana la carta restante más alta, los empates se resuelven por el mayor valor total de cartas descartadas y los jugadores aún empatados reciben cada uno una ficha. El ganador de la ronda recibe una ficha de afecto y empieza la siguiente ronda. El primero en llegar a 7 fichas en una partida de 2 jugadores, 5 en una de 3 o 4 en una de 4 gana la partida y se lleva el bote (sin pago si el bote es 0). Las manos, el orden del mazo y la carta retirada boca abajo son secretos; las cartas jugadas y descartadas, las retiradas boca arriba, las fichas y quién está protegido o fuera son públicos.",
+   "game_ui_rules": "Tus cartas están boca arriba abajo; toca una carta para seleccionarla. Las cartas que no necesitan objetivo se juegan de inmediato. Si la carta necesita un objetivo, toca un área de jugador resaltada (el Príncipe puede apuntarte a ti con el marcador de objetivo propio) y, para el Guardia, toca luego un botón de suposición con el valor que crees que tiene el objetivo. Usa Cancelar para cambiar tu selección. Los oponentes aparecen como dorsos de carta con sus fichas, su protección y sus pilas públicas de descarte; también se muestran tus descartes, las cartas retiradas boca arriba, el número de ronda y el conteo del mazo. Una carta que hayas visto con el Sacerdote o el Barón se anota bajo tu mano. Solo el jugador que mueve ve objetivos y controles.",
+   "tutorial_strings": {
+    "Draw a card, play a card: outlast the round, or hold the highest card when the deck runs out, to win a token of affection.": "Roba una carta, juega una carta: sobrevive a la ronda, o ten la carta más alta cuando se acabe el mazo, para ganar una ficha de afecto."
+   },
+   "client_strings": {
+    "title": "Love Letter",
+    "turn": "Turno del jugador {n}",
+    "your_turn": "Tu turno, jugador {n}",
+    "finished": "Terminado",
+    "winner": "El jugador {n} gana la partida",
+    "round": "Ronda {n}",
+    "deck": "Mazo {n}",
+    "tokens": "Fichas {n}",
+    "you": "Tú",
+    "opp": "Jugador {n}",
+    "protected": "Protegido",
+    "out": "Fuera",
+    "removed": "Retiradas boca arriba",
+    "seen": "Visto: el jugador {n} tiene {v}",
+    "hint_card": "Toca una carta para jugarla",
+    "hint_target": "Toca un jugador objetivo",
+    "hint_guess": "Elige tu suposición de Guardia",
+    "cancel": "Cancelar",
+    "play_target": "Objetivo: jugador {n}",
+    "target_self": "Objetivo: tú mismo",
+    "no_target": "Jugar sin objetivo",
+    "guess": "Suposición: {v}",
+    "server_invalid": "Jugada ilegal",
+    "card_1": "1 Guardia",
+    "card_2": "2 Sacerdote",
+    "name_2": "Sacerdote",
+    "card_3": "3 Barón",
+    "name_3": "Barón",
+    "card_4": "4 Doncella",
+    "name_4": "Doncella",
+    "card_5": "5 Príncipe",
+    "name_5": "Príncipe",
+    "card_6": "6 Rey",
+    "name_6": "Rey",
+    "card_7": "7 Condesa",
+    "name_7": "Condesa",
+    "card_8": "8 Princesa",
+    "name_8": "Princesa"
+   }
+  },
+  "fr": {
+   "display_name": "Love Letter (Déclaratif)",
+   "short_description": "Love Letter, le jeu de déduction et de risque en 16 cartes : piochez une carte, jouez une carte, éliminez vos rivaux de la manche et atteignez le premier l'objectif de jetons : 7 jetons à 2 joueurs, 5 à 3 et 4 à 4.",
+   "game_logic_rules": "Love Letter pour 2 à 4 joueurs, en manches avec un paquet de 16 cartes : Garde (1) x5, Prêtre (2) x2, Baron (3) x2, Servante (4) x2, Prince (5) x2, Roi (6) x1, Comtesse (7) x1 et Princesse (8) x1. À chaque manche, le paquet est mélangé avec la graine de la partie, une carte est retirée face cachée sans être vue et, dans les manches à 2 joueurs, trois autres cartes sont retirées face visible. Chaque joueur reçoit une carte ; le joueur qui joue en pioche une seconde puis joue une carte avec un coup {type:\"play\", card, target, guess}, où target est un identifiant de joueur ou null et guess une valeur de carte ou null. Garde : nommez une valeur de 2 à 8 (jamais Garde) ; si la cible la détient, elle quitte la manche. Prêtre : vous apprenez en privé la carte de la cible et la retenez jusqu'à ce que sa main change ou que la manche se termine. Baron : vous et la cible comparez en privé vos cartes restantes ; la plus faible valeur quitte la manche et une égalité n'élimine personne. Servante : vous ne pouvez pas être ciblé jusqu'à votre prochain tour. Prince : la cible, éventuellement vous-même, défausse sa carte et en pioche une de remplacement, la carte retirée face cachée si le paquet est vide ; défausser la Princesse l'élimine. Roi : échangez votre main avec la cible. Comtesse : aucun effet quand elle est jouée, mais un joueur qui tient la Comtesse avec le Roi ou un Prince doit jouer la Comtesse. Princesse : qui la joue ou la défausse quitte la manche. La cible doit être un joueur actif et non protégé ; si tous les autres joueurs sont protégés, une carte visant un autre joueur peut être jouée avec target null et sans effet, tandis que le Prince peut encore se cibler lui-même. Une manche se termine quand il reste un joueur, ou quand le paquet est vide et que le tour en cours s'achève : la carte restante la plus forte gagne alors la manche, les égalités sont départagées par la plus grande valeur totale des cartes défaussées, et les joueurs encore à égalité reçoivent chacun un jeton. Le vainqueur de la manche reçoit un jeton d'affection et commence la manche suivante. Le premier à 7 jetons dans une partie à 2 joueurs, 5 à 3 joueurs ou 4 à 4 joueurs gagne la partie et remporte le pot (aucun paiement si le pot est de 0). Les mains, l'ordre du paquet et la carte retirée face cachée sont secrets ; les cartes jouées et défaussées, les cartes retirées face visible, les jetons et l'identité des joueurs protégés ou éliminés sont publics.",
+   "game_ui_rules": "Vos cartes sont face visible en bas ; touchez une carte pour la sélectionner. Les cartes sans cible se jouent aussitôt. Si la carte exige une cible, touchez une zone de joueur en surbrillance (le Prince peut vous cibler avec le marqueur de cible personnelle) puis, pour le Garde, touchez un bouton de supposition nommant la valeur que vous croyez chez la cible. Utilisez Annuler pour changer votre sélection. Les adversaires apparaissent comme des dos de cartes avec leurs jetons, leur protection et leurs piles de défausse publiques ; vos propres défausses, les cartes retirées face visible, le numéro de manche et le nombre de cartes du paquet sont aussi affichés. Une carte vue grâce au Prêtre ou au Baron est notée sous votre main. Seul le joueur qui joue voit les cibles et les commandes.",
+   "tutorial_strings": {
+    "Draw a card, play a card: outlast the round, or hold the highest card when the deck runs out, to win a token of affection.": "Piochez une carte, jouez une carte : survivez à la manche, ou détenez la carte la plus forte quand le paquet s'épuise, pour gagner un jeton d'affection."
+   },
+   "client_strings": {
+    "title": "Love Letter",
+    "turn": "Au joueur {n} de jouer",
+    "your_turn": "À vous, joueur {n}",
+    "finished": "Terminé",
+    "winner": "Le joueur {n} gagne la partie",
+    "round": "Manche {n}",
+    "deck": "Pioche {n}",
+    "tokens": "Jetons {n}",
+    "you": "Vous",
+    "opp": "Joueur {n}",
+    "protected": "Protégé",
+    "out": "Éliminé",
+    "removed": "Retirées face visible",
+    "seen": "Vu : le joueur {n} tient {v}",
+    "hint_card": "Touchez une carte pour la jouer",
+    "hint_target": "Touchez un joueur cible",
+    "hint_guess": "Choisissez votre supposition de Garde",
+    "cancel": "Annuler",
+    "play_target": "Cible : joueur {n}",
+    "target_self": "Vous cibler vous-même",
+    "no_target": "Jouer sans cible",
+    "guess": "Supposition : {v}",
+    "server_invalid": "Coup illégal",
+    "card_1": "1 Garde",
+    "card_2": "2 Prêtre",
+    "name_2": "Prêtre",
+    "card_3": "3 Baron",
+    "name_3": "Baron",
+    "card_4": "4 Servante",
+    "name_4": "Servante",
+    "card_5": "5 Prince",
+    "name_5": "Prince",
+    "card_6": "6 Roi",
+    "name_6": "Roi",
+    "card_7": "7 Comtesse",
+    "name_7": "Comtesse",
+    "card_8": "8 Princesse",
+    "name_8": "Princesse"
+   }
+  },
+  "de": {
+   "display_name": "Love Letter (Deklarativ)",
+   "short_description": "Love Letter, das Deduktions- und Risikospiel mit 16 Karten: Ziehe eine Karte, spiele eine Karte, wirf deine Rivalen aus der Runde und erreiche zuerst das Markerziel - 7 Marker mit 2 Spielern, 5 mit 3 und 4 mit 4.",
+   "game_logic_rules": "Love Letter für 2-4 Spieler, gespielt in Runden mit einem Stapel aus 16 Karten: Wache (1) x5, Priester (2) x2, Baron (3) x2, Zofe (4) x2, Prinz (5) x2, König (6) x1, Gräfin (7) x1 und Prinzessin (8) x1. In jeder Runde wird der Stapel mit dem Partieseed gemischt, eine Karte wird verdeckt und ungesehen entfernt, und in Runden mit 2 Spielern werden drei weitere Karten offen entfernt. Jeder Spieler erhält eine Karte; der Spieler am Zug zieht eine zweite Karte und spielt dann eine Karte mit einem Zug {type:\"play\", card, target, guess}, wobei target eine Spieler-ID oder null ist und guess ein Kartenwert oder null. Wache: Nenne einen Wert von 2 bis 8 (nie Wache); hält das Ziel ihn, scheidet es aus der Runde aus. Priester: Du erfährst privat die Karte des Ziels und merkst sie dir, bis sich seine Hand ändert oder die Runde endet. Baron: Du und das Ziel vergleicht privat eure übrigen Karten; der niedrigere Wert scheidet aus, bei Gleichstand niemand. Zofe: Du kannst bis zu deinem nächsten Zug nicht als Ziel gewählt werden. Prinz: Das Ziel, möglicherweise du selbst, legt seine Karte ab und zieht Ersatz, bei leerem Stapel die verdeckt entfernte Karte; wer die Prinzessin ablegt, scheidet aus. König: Tausche deine Hand mit dem Ziel. Gräfin: Kein Effekt beim Ausspielen, aber wer die Gräfin zusammen mit dem König oder einem Prinzen hält, muss die Gräfin spielen. Prinzessin: Wer sie spielt oder ablegt, scheidet aus der Runde aus. Ein Ziel muss ein aktiver, ungeschützter Spieler sein; sind alle anderen Spieler geschützt, darf eine Karte, die einen anderen Spieler als Ziel braucht, mit target null und ohne Effekt gespielt werden, während der Prinz weiterhin dich selbst als Ziel wählen darf. Eine Runde endet, wenn ein Spieler übrig ist, oder wenn der Stapel leer ist und der laufende Zug endet: Dann gewinnt die höchste übrige Karte die Runde, Gleichstände werden durch den höchsten Gesamtwert der abgelegten Karten gebrochen, und Spieler, die immer noch gleichauf sind, erhalten je einen Marker. Der Rundengewinner erhält einen Zuneigungsmarker und beginnt die nächste Runde. Wer zuerst 7 Marker in einer Partie mit 2 Spielern, 5 mit 3 oder 4 mit 4 erreicht, gewinnt die Partie und den Pot (keine Auszahlung, wenn der Pot 0 ist). Hände, die Stapelreihenfolge und die verdeckt entfernte Karte sind geheim; gespielte und abgelegte Karten, die offen entfernten Karten, Marker und wer geschützt oder ausgeschieden ist, sind öffentlich.",
+   "game_ui_rules": "Deine Karten liegen offen unten; tippe eine Karte an, um sie zu wählen. Karten ohne Ziel werden sofort gespielt. Braucht die Karte ein Ziel, tippe einen hervorgehobenen Spielerbereich an - der Prinz darf mit der Selbstziel-Markierung dich selbst wählen - und tippe dann für die Wache eine Vermutungsschaltfläche mit dem Wert, den das Ziel deiner Meinung nach hält. Mit Abbrechen änderst du deine Wahl. Gegner erscheinen als Kartenrücken mit ihren Markern, ihrem Schutz und ihren öffentlichen Ablagestapeln; auch deine eigenen Ablagen, offen entfernte Karten, die Rundennummer und die Stapelgröße werden angezeigt. Eine mit Priester oder Baron gesehene Karte wird unter deiner Hand notiert. Nur der Spieler am Zug sieht Ziele und Schaltflächen.",
+   "tutorial_strings": {
+    "Draw a card, play a card: outlast the round, or hold the highest card when the deck runs out, to win a token of affection.": "Ziehe eine Karte, spiele eine Karte: Überstehe die Runde oder halte die höchste Karte, wenn der Stapel leer ist, um einen Zuneigungsmarker zu gewinnen."
+   },
+   "client_strings": {
+    "title": "Love Letter",
+    "turn": "Spieler {n} ist am Zug",
+    "your_turn": "Du bist am Zug, Spieler {n}",
+    "finished": "Beendet",
+    "winner": "Spieler {n} gewinnt die Partie",
+    "round": "Runde {n}",
+    "deck": "Stapel {n}",
+    "tokens": "Marker {n}",
+    "you": "Du",
+    "opp": "Spieler {n}",
+    "protected": "Geschützt",
+    "out": "Ausgeschieden",
+    "removed": "Offen entfernt",
+    "seen": "Gesehen: Spieler {n} hält {v}",
+    "hint_card": "Tippe eine Karte, um sie zu spielen",
+    "hint_target": "Tippe einen Zielspieler an",
+    "hint_guess": "Wähle deine Wachen-Vermutung",
+    "cancel": "Abbrechen",
+    "play_target": "Ziel: Spieler {n}",
+    "target_self": "Dich selbst als Ziel",
+    "no_target": "Ohne Ziel spielen",
+    "guess": "Vermutung: {v}",
+    "server_invalid": "Illegaler Zug",
+    "card_1": "1 Wache",
+    "card_2": "2 Priester",
+    "name_2": "Priester",
+    "card_3": "3 Baron",
+    "name_3": "Baron",
+    "card_4": "4 Zofe",
+    "name_4": "Zofe",
+    "card_5": "5 Prinz",
+    "name_5": "Prinz",
+    "card_6": "6 König",
+    "name_6": "König",
+    "card_7": "7 Gräfin",
+    "name_7": "Gräfin",
+    "card_8": "8 Prinzessin",
+    "name_8": "Prinzessin"
+   }
+  },
+  "pt": {
+   "display_name": "Love Letter (Declarativo)",
+   "short_description": "Love Letter, o jogo de 16 cartas de dedução e risco: compre uma carta, jogue uma carta, elimine os rivais da rodada e seja o primeiro a atingir a meta de fichas - 7 fichas com 2 jogadores, 5 com 3 e 4 com 4.",
+   "game_logic_rules": "Love Letter para 2-4 jogadores, em rodadas com um baralho de 16 cartas: Guarda (1) x5, Padre (2) x2, Barão (3) x2, Aia (4) x2, Príncipe (5) x2, Rei (6) x1, Condessa (7) x1 e Princesa (8) x1. Em cada rodada o baralho é embaralhado com a semente da partida, uma carta é removida virada para baixo sem ser vista e, em rodadas de 2 jogadores, mais três cartas são removidas viradas para cima. Cada jogador recebe uma carta; quem joga compra uma segunda carta e depois joga uma carta com uma jogada {type:\"play\", card, target, guess}, em que target é um id de jogador ou null e guess é um valor de carta ou null. Guarda: nomeie um valor de 2 a 8 (nunca Guarda); se o alvo o tiver, sai da rodada. Padre: você fica sabendo em privado a carta do alvo e a lembra até a mão dele mudar ou a rodada terminar. Barão: você e o alvo comparam em privado as cartas restantes; o menor valor sai da rodada e um empate não elimina ninguém. Aia: você não pode ser alvo até o seu próximo turno. Príncipe: o alvo, que pode ser você, descarta a carta e compra uma substituta, a carta removida virada para baixo se o baralho estiver vazio; descartar a Princesa o elimina. Rei: troque de mão com o alvo. Condessa: sem efeito ao ser jogada, mas quem tiver a Condessa junto do Rei ou de um Príncipe deve jogar a Condessa. Princesa: quem a joga ou descarta sai da rodada. O alvo deve ser um jogador ativo e desprotegido; se todos os outros jogadores estiverem protegidos, uma carta que mira outro jogador pode ser jogada com target null e sem efeito, enquanto o Príncipe ainda pode mirar você mesmo. A rodada termina quando resta um jogador, ou quando o baralho acaba e o turno atual termina: então a maior carta restante vence a rodada, empates são decididos pelo maior valor total das cartas descartadas e jogadores ainda empatados recebem cada um uma ficha. O vencedor da rodada recebe uma ficha de afeto e começa a rodada seguinte. O primeiro a chegar a 7 fichas numa partida de 2 jogadores, 5 numa de 3 ou 4 numa de 4 vence a partida e leva o pote (sem pagamento se o pote for 0). Mãos, a ordem do baralho e a carta removida virada para baixo são secretas; cartas jogadas e descartadas, as removidas viradas para cima, as fichas e quem está protegido ou fora são públicos.",
+   "game_ui_rules": "Suas cartas ficam viradas para cima na parte inferior; toque numa carta para selecioná-la. Cartas que não precisam de alvo são jogadas de imediato. Se a carta precisar de um alvo, toque numa área de jogador destacada (o Príncipe pode mirar você mesmo com o marcador de alvo próprio) e, para o Guarda, toque depois num botão de palpite com o valor que você acha que o alvo tem. Use Cancelar para mudar a seleção. Os oponentes aparecem como versos de carta com suas fichas, proteção e pilhas públicas de descarte; seus próprios descartes, as cartas removidas viradas para cima, o número da rodada e a contagem do baralho também são mostrados. Uma carta vista com o Padre ou o Barão é anotada sob a sua mão. Só o jogador da vez vê alvos e controles.",
+   "tutorial_strings": {
+    "Draw a card, play a card: outlast the round, or hold the highest card when the deck runs out, to win a token of affection.": "Compre uma carta, jogue uma carta: sobreviva à rodada, ou tenha a maior carta quando o baralho acabar, para ganhar uma ficha de afeto."
+   },
+   "client_strings": {
+    "title": "Love Letter",
+    "turn": "Vez do jogador {n}",
+    "your_turn": "Sua vez, jogador {n}",
+    "finished": "Terminado",
+    "winner": "O jogador {n} vence a partida",
+    "round": "Rodada {n}",
+    "deck": "Baralho {n}",
+    "tokens": "Fichas {n}",
+    "you": "Você",
+    "opp": "Jogador {n}",
+    "protected": "Protegido",
+    "out": "Fora",
+    "removed": "Removidas viradas para cima",
+    "seen": "Visto: o jogador {n} tem {v}",
+    "hint_card": "Toque numa carta para jogá-la",
+    "hint_target": "Toque num jogador alvo",
+    "hint_guess": "Escolha o seu palpite de Guarda",
+    "cancel": "Cancelar",
+    "play_target": "Alvo: jogador {n}",
+    "target_self": "Alvo: você mesmo",
+    "no_target": "Jogar sem alvo",
+    "guess": "Palpite: {v}",
+    "server_invalid": "Jogada ilegal",
+    "card_1": "1 Guarda",
+    "card_2": "2 Padre",
+    "name_2": "Padre",
+    "card_3": "3 Barão",
+    "name_3": "Barão",
+    "card_4": "4 Aia",
+    "name_4": "Aia",
+    "card_5": "5 Príncipe",
+    "name_5": "Príncipe",
+    "card_6": "6 Rei",
+    "name_6": "Rei",
+    "card_7": "7 Condessa",
+    "name_7": "Condessa",
+    "card_8": "8 Princesa",
+    "name_8": "Princesa"
+   }
+  },
+  "zh": {
+   "display_name": "情书 (声明式)",
+   "short_description": "情书:16 张牌的推理与冒险游戏。抽一张牌,打一张牌,把对手淘汰出本轮,率先达到信物目标:2 人 7 枚、3 人 5 枚、4 人 4 枚。",
+   "game_logic_rules": "情书供 2-4 名玩家以轮次进行,使用 16 张牌:卫兵(1)x5、祭司(2)x2、男爵(3)x2、侍女(4)x2、王子(5)x2、国王(6)x1、伯爵夫人(7)x1、公主(8)x1。每轮用对局种子洗牌,面朝下移除一张未看的牌;2 人轮次再面朝上移除三张牌。每名玩家发一张牌;轮到的玩家再抽一张,然后以一步 {type:\"play\", card, target, guess} 打出一张牌,其中 target 是玩家 id 或 null,guess 是牌值或 null。卫兵:说出 2 到 8 的一个值(不能是卫兵);若目标持有该牌,目标出局。祭司:你私下得知目标的牌,并记住它,直到其手牌变化或本轮结束。男爵:你与目标私下比较各自剩余的牌,较小者出局,平局无人出局。侍女:在你的下一个回合之前,你不能成为目标。王子:目标(可以是你自己)弃掉手牌并补抽一张,牌堆为空时补抽那张面朝下移除的牌;弃掉公主者出局。国王:与目标交换手牌。伯爵夫人:打出时无效果,但同时持有伯爵夫人与国王或王子者必须打出伯爵夫人。公主:打出或弃掉它的人出局。目标必须是仍在轮次内且未受保护的玩家;若其他所有玩家都受保护,需要以他人为目标的牌可以以 target null 且无效果打出,而王子仍可把自己选为目标。当只剩一名玩家,或牌堆抽空且当前回合结束时,本轮结束:此时剩余牌最大者赢得本轮,平局按弃牌总值较高者胜,仍平局者各得一枚信物。轮次胜者获得一枚好感信物并开启下一轮。2 人对局先到 7 枚、3 人先到 5 枚、4 人先到 4 枚者赢得比赛并赢得奖池(奖池为 0 时无赔付)。手牌、牌堆顺序和面朝下移除的牌是秘密;已打出和弃掉的牌、面朝上移除的牌、信物以及谁受保护或出局都是公开的。",
+   "game_ui_rules": "你的牌面朝上显示在底部;点选一张牌将其选中。不需要目标的牌会立即打出。若牌需要目标,点选一个高亮的玩家区域(王子可以用“以自己为目标”标记选择你自己);卫兵还需再点选一个猜测按钮,说出你认为目标持有的牌值。用“取消”更改选择。对手显示为牌背,并带有其信物数、保护状态和公开弃牌堆;你自己的弃牌、面朝上移除的牌、轮次号和牌堆数量也会显示。用祭司或男爵看到的牌会记在你的手牌下方。只有轮到的玩家能看到目标和按钮。",
+   "tutorial_strings": {
+    "Draw a card, play a card: outlast the round, or hold the highest card when the deck runs out, to win a token of affection.": "抽一张牌,打一张牌:撑过本轮,或在牌堆抽空时持有最大的牌,即可赢得一枚好感信物。"
+   },
+   "client_strings": {
+    "title": "情书",
+    "turn": "轮到玩家 {n}",
+    "your_turn": "轮到你了,玩家 {n}",
+    "finished": "已结束",
+    "winner": "玩家 {n} 赢得比赛",
+    "round": "第 {n} 轮",
+    "deck": "牌堆 {n}",
+    "tokens": "信物 {n}",
+    "you": "你",
+    "opp": "玩家 {n}",
+    "protected": "受保护",
+    "out": "出局",
+    "removed": "明置移除",
+    "seen": "已看到:玩家 {n} 持有 {v}",
+    "hint_card": "点选手牌打出",
+    "hint_target": "点选目标玩家",
+    "hint_guess": "选择卫兵的猜测",
+    "cancel": "取消",
+    "play_target": "目标:玩家 {n}",
+    "target_self": "以自己为目标",
+    "no_target": "无目标打出",
+    "guess": "猜测:{v}",
+    "server_invalid": "非法行动",
+    "card_1": "1 卫兵",
+    "card_2": "2 祭司",
+    "name_2": "祭司",
+    "card_3": "3 男爵",
+    "name_3": "男爵",
+    "card_4": "4 侍女",
+    "name_4": "侍女",
+    "card_5": "5 王子",
+    "name_5": "王子",
+    "card_6": "6 国王",
+    "name_6": "国王",
+    "card_7": "7 伯爵夫人",
+    "name_7": "伯爵夫人",
+    "card_8": "8 公主",
+    "name_8": "公主"
+   }
+  },
+  "hi": {
+   "display_name": "Love Letter (घोषणात्मक)",
+   "short_description": "Love Letter, 16 कार्डों का अनुमान और जोखिम का खेल: एक कार्ड निकालें, एक कार्ड खेलें, प्रतिद्वंद्वियों को राउंड से बाहर करें और टोकन लक्ष्य तक सबसे पहले पहुँचें - 2 खिलाड़ियों के साथ 7 टोकन, 3 के साथ 5 और 4 के साथ 4।",
+   "game_logic_rules": "Love Letter 2-4 खिलाड़ियों के लिए, 16 कार्डों के डेक के साथ राउंड में खेला जाता है: रक्षक (1) x5, पुजारी (2) x2, बैरन (3) x2, दासी (4) x2, राजकुमार (5) x2, राजा (6) x1, काउंटेस (7) x1 और राजकुमारी (8) x1। हर राउंड में डेक को मैच सीड से फेंटा जाता है, एक कार्ड बिना देखे उल्टा रखकर हटाया जाता है, और 2-खिलाड़ी राउंड में तीन और कार्ड सामने रखकर हटाए जाते हैं। हर खिलाड़ी को एक कार्ड मिलता है; जिसकी बारी है वह दूसरा कार्ड निकालता है और फिर एक चाल {type:\"play\", card, target, guess} से एक कार्ड खेलता है, जहाँ target खिलाड़ी id या null है और guess कार्ड का मान या null है। रक्षक: 2 से 8 तक का कोई मान बताएँ (कभी रक्षक नहीं); यदि लक्ष्य के पास वह है, तो वह राउंड से बाहर हो जाता है। पुजारी: आप निजी तौर पर लक्ष्य का कार्ड जान लेते हैं और उसे तब तक याद रखते हैं जब तक उसका हाथ न बदल जाए या राउंड समाप्त न हो जाए। बैरन: आप और लक्ष्य निजी तौर पर अपने बचे हुए कार्डों की तुलना करते हैं; छोटा मान राउंड से बाहर होता है और बराबरी पर कोई बाहर नहीं होता। दासी: आपकी अगली बारी तक आपको लक्ष्य नहीं बनाया जा सकता। राजकुमार: लक्ष्य, जो आप खुद हो सकते हैं, अपना कार्ड फेंकता है और बदले में एक कार्ड निकालता है, डेक खाली होने पर उल्टा हटाया गया कार्ड; राजकुमारी फेंकने वाला बाहर हो जाता है। राजा: लक्ष्य के साथ हाथ बदलें। काउंटेस: खेलने पर कोई प्रभाव नहीं, लेकिन जिसके पास राजा या राजकुमार के साथ काउंटेस हो, उसे काउंटेस ही खेलनी होगी। राजकुमारी: जो उसे खेले या फेंके, वह राउंड से बाहर हो जाता है। लक्ष्य एक सक्रिय, असुरक्षित खिलाड़ी होना चाहिए; यदि बाकी सभी खिलाड़ी सुरक्षित हों, तो दूसरे खिलाड़ी को लक्ष्य बनाने वाला कार्ड target null के साथ और बिना प्रभाव के खेला जा सकता है, जबकि राजकुमार फिर भी खुद को लक्ष्य बना सकता है। राउंड तब समाप्त होता है जब एक खिलाड़ी रह जाए, या जब डेक खाली हो जाए और वर्तमान बारी पूरी हो जाए: तब सबसे बड़ा बचा हुआ कार्ड राउंड जीतता है, बराबरी फेंके गए कार्डों के सबसे बड़े कुल मान से टूटती है, और फिर भी बराबर रहे खिलाड़ियों को प्रत्येक को एक टोकन मिलता है। राउंड विजेता को स्नेह का एक टोकन मिलता है और वह अगला राउंड शुरू करता है। 2-खिलाड़ी मैच में 7 टोकन, 3-खिलाड़ी में 5 या 4-खिलाड़ी में 4 टोकन तक पहुँचने वाला पहला खिलाड़ी मैच जीतता है और पॉट लेता है (पॉट 0 होने पर कोई भुगतान नहीं)। हाथ, डेक का क्रम और उल्टा हटाया गया कार्ड गुप्त हैं; खेले और फेंके गए कार्ड, सामने रखकर हटाए गए कार्ड, टोकन और कौन सुरक्षित है या बाहर है, ये सब सार्वजनिक हैं।",
+   "game_ui_rules": "आपके कार्ड नीचे सामने की ओर दिखते हैं; चुनने के लिए एक कार्ड छुएँ। जिन कार्डों को लक्ष्य नहीं चाहिए वे तुरंत खेले जाते हैं। यदि कार्ड को लक्ष्य चाहिए, तो एक हाइलाइट किया गया खिलाड़ी क्षेत्र छुएँ (राजकुमार खुद को लक्ष्य बनाने वाले चिह्न से आपको लक्ष्य बना सकता है) और रक्षक के लिए, फिर उस मान वाला अनुमान बटन छुएँ जो आपको लगता है कि लक्ष्य के पास है। अपना चयन बदलने के लिए रद्द करें का उपयोग करें। प्रतिद्वंद्वी कार्ड की पीठ के रूप में दिखते हैं, उनके टोकन, सुरक्षा और सार्वजनिक फेंकी गई ढेरियों के साथ; आपके अपने फेंके गए कार्ड, सामने रखकर हटाए गए कार्ड, राउंड संख्या और डेक की गिनती भी दिखाई जाती है। पुजारी या बैरन से देखा गया कार्ड आपके हाथ के नीचे नोट किया जाता है। केवल बारी वाला खिलाड़ी ही लक्ष्य और नियंत्रण देखता है।",
+   "tutorial_strings": {
+    "Draw a card, play a card: outlast the round, or hold the highest card when the deck runs out, to win a token of affection.": "एक कार्ड निकालें, एक कार्ड खेलें: राउंड में टिके रहें, या डेक खत्म होने पर सबसे बड़ा कार्ड रखें, और स्नेह का टोकन जीतें।"
+   },
+   "client_strings": {
+    "title": "Love Letter",
+    "turn": "खिलाड़ी {n} की बारी",
+    "your_turn": "आपकी बारी, खिलाड़ी {n}",
+    "finished": "समाप्त",
+    "winner": "खिलाड़ी {n} मैच जीतता है",
+    "round": "राउंड {n}",
+    "deck": "डेक {n}",
+    "tokens": "टोकन {n}",
+    "you": "आप",
+    "opp": "खिलाड़ी {n}",
+    "protected": "सुरक्षित",
+    "out": "बाहर",
+    "removed": "सामने रखकर हटाए गए",
+    "seen": "देखा: खिलाड़ी {n} के पास {v} है",
+    "hint_card": "खेलने के लिए एक कार्ड छुएँ",
+    "hint_target": "एक लक्षित खिलाड़ी छुएँ",
+    "hint_guess": "रक्षक का अपना अनुमान चुनें",
+    "cancel": "रद्द करें",
+    "play_target": "लक्ष्य: खिलाड़ी {n}",
+    "target_self": "खुद को लक्ष्य बनाएँ",
+    "no_target": "बिना लक्ष्य के खेलें",
+    "guess": "अनुमान: {v}",
+    "server_invalid": "अवैध चाल",
+    "card_1": "1 रक्षक",
+    "card_2": "2 पुजारी",
+    "name_2": "पुजारी",
+    "card_3": "3 बैरन",
+    "name_3": "बैरन",
+    "card_4": "4 दासी",
+    "name_4": "दासी",
+    "card_5": "5 राजकुमार",
+    "name_5": "राजकुमार",
+    "card_6": "6 राजा",
+    "name_6": "राजा",
+    "card_7": "7 काउंटेस",
+    "name_7": "काउंटेस",
+    "card_8": "8 राजकुमारी",
+    "name_8": "राजकुमारी"
+   }
+  },
+  "ar": {
+   "display_name": "رسالة حب (تصريحية)",
+   "short_description": "رسالة حب، لعبة الاستنتاج والمخاطرة المكونة من 16 بطاقة: اسحب بطاقة والعب بطاقة وأخرج منافسيك من الجولة وكن أول من يصل إلى هدف الرموز - 7 رموز مع لاعبين اثنين و5 مع ثلاثة و4 مع أربعة.",
+   "game_logic_rules": "رسالة حب لـ2-4 لاعبين، تُلعب على جولات بمجموعة من 16 بطاقة: حارس (1) x5، كاهن (2) x2، بارون (3) x2، خادمة (4) x2، أمير (5) x2، ملك (6) x1، كونتيسة (7) x1 وأميرة (8) x1. في كل جولة تُخلط المجموعة ببذرة المباراة، وتُزال بطاقة واحدة مقلوبة دون رؤيتها، وفي جولات اللاعبين الاثنين تُزال ثلاث بطاقات أخرى مكشوفة. يحصل كل لاعب على بطاقة واحدة؛ ويسحب اللاعب صاحب الدور بطاقة ثانية ثم يلعب بطاقة بحركة {type:\"play\", card, target, guess}، حيث target هو معرّف لاعب أو null وguess هو قيمة بطاقة أو null. الحارس: سمِّ قيمة من 2 إلى 8 (ليست الحارس أبدا)؛ فإذا كان الهدف يحملها خرج من الجولة. الكاهن: تعرف بطاقة الهدف سرا وتتذكرها حتى تتغير يده أو تنتهي الجولة. البارون: تقارن أنت والهدف بطاقتيكما المتبقيتين سرا؛ فتخرج القيمة الأصغر من الجولة ولا يخرج أحد عند التعادل. الخادمة: لا يمكن استهدافك حتى دورك التالي. الأمير: يتخلص الهدف، وقد يكون أنت، من بطاقته ويسحب بديلا، وهو البطاقة المزالة المقلوبة إذا كانت المجموعة فارغة؛ ومن يتخلص من الأميرة يخرج. الملك: بدّل يدك مع الهدف. الكونتيسة: لا تأثير عند لعبها، لكن من يحمل الكونتيسة مع الملك أو أمير يجب أن يلعب الكونتيسة. الأميرة: من يلعبها أو يتخلص منها يخرج من الجولة. يجب أن يكون الهدف لاعبا نشطا غير محمي؛ فإذا كان جميع اللاعبين الآخرين محميين، يمكن لعب بطاقة تستهدف لاعبا آخر بقيمة target تساوي null وبلا تأثير، بينما لا يزال بإمكان الأمير استهداف نفسك. تنتهي الجولة عندما يبقى لاعب واحد، أو عندما تفرغ المجموعة وينتهي الدور الحالي: عندئذ تفوز أعلى بطاقة متبقية بالجولة، ويُحسم التعادل بأعلى مجموع لقيم البطاقات المتخلص منها، ويحصل اللاعبون المتعادلون بعد ذلك على رمز لكل منهم. يحصل الفائز بالجولة على رمز مودة ويبدأ الجولة التالية. أول لاعب يصل إلى 7 رموز في مباراة من لاعبين أو 5 في مباراة من ثلاثة أو 4 في مباراة من أربعة يفوز بالمباراة ويأخذ الرهان (لا دفع عندما يكون الرهان 0). الأيدي وترتيب المجموعة والبطاقة المزالة المقلوبة سرية؛ والبطاقات الملعوبة والمتخلص منها والبطاقات المزالة المكشوفة والرموز ومن هو محمي أو خارج الجولة كلها علنية.",
+   "game_ui_rules": "بطاقاتك مكشوفة في الأسفل؛ المس بطاقة لاختيارها. البطاقات التي لا تحتاج إلى هدف تُلعب فورا. إذا احتاجت البطاقة إلى هدف، المس منطقة لاعب مميزة (يمكن للأمير أن يستهدف نفسك بعلامة استهداف النفس) ثم، بالنسبة إلى الحارس، المس زر تخمين يسمي القيمة التي تعتقد أن الهدف يحملها. استخدم إلغاء لتغيير اختيارك. يظهر الخصوم كظهور بطاقات مع رموزهم وحمايتهم وأكوام التخلص العلنية الخاصة بهم؛ وتظهر أيضا بطاقاتك المتخلص منها والبطاقات المزالة المكشوفة ورقم الجولة وعدد بطاقات المجموعة. تُدوَّن البطاقة التي رأيتها بالكاهن أو البارون تحت يدك. اللاعب صاحب الدور وحده يرى الأهداف وأدوات التحكم.",
+   "tutorial_strings": {
+    "Draw a card, play a card: outlast the round, or hold the highest card when the deck runs out, to win a token of affection.": "اسحب بطاقة والعب بطاقة: اصمد في الجولة، أو احمل أعلى بطاقة عندما تفرغ المجموعة، لتفوز برمز مودة."
+   },
+   "client_strings": {
+    "title": "رسالة حب",
+    "turn": "دور اللاعب {n}",
+    "your_turn": "دورك، اللاعب {n}",
+    "finished": "انتهت",
+    "winner": "اللاعب {n} يفوز بالمباراة",
+    "round": "الجولة {n}",
+    "deck": "المجموعة {n}",
+    "tokens": "الرموز {n}",
+    "you": "أنت",
+    "opp": "اللاعب {n}",
+    "protected": "محمي",
+    "out": "خارج",
+    "removed": "أزيلت مكشوفة",
+    "seen": "شوهد: اللاعب {n} يحمل {v}",
+    "hint_card": "المس بطاقة للعبها",
+    "hint_target": "المس لاعبا مستهدفا",
+    "hint_guess": "اختر تخمين الحارس",
+    "cancel": "إلغاء",
+    "play_target": "الهدف: اللاعب {n}",
+    "target_self": "استهدف نفسك",
+    "no_target": "العب بلا هدف",
+    "guess": "تخمين: {v}",
+    "server_invalid": "حركة غير قانونية",
+    "card_1": "1 حارس",
+    "card_2": "2 كاهن",
+    "name_2": "كاهن",
+    "card_3": "3 بارون",
+    "name_3": "بارون",
+    "card_4": "4 خادمة",
+    "name_4": "خادمة",
+    "card_5": "5 أمير",
+    "name_5": "أمير",
+    "card_6": "6 ملك",
+    "name_6": "ملك",
+    "card_7": "7 كونتيسة",
+    "name_7": "كونتيسة",
+    "card_8": "8 أميرة",
+    "name_8": "أميرة"
+   }
+  }
+ }
+}

@@ -140,6 +140,24 @@ wedges (then most correct answers, then earliest seat) wins. Its bank holds
 60 original questions, ten per category. Select it for publication with
 `--kinds trivial_pursuit`.
 
+Love Letter is a two- to four-player game of deduction over a 16-card deck
+(Guard ×5, Priest ×2, Baron ×2, Handmaid ×2, Prince ×2, King, Countess,
+Princess). Each round one card is set aside face down (plus three face up in
+two-player rounds), every player is dealt one card, and the player to move
+draws a second card and plays one: the Guard guesses at a rival's card, the
+Priest peeks, the Baron compares, the Handmaid protects, the Prince forces a
+discard (fatal if it is the Princess), the King swaps hands, the Countess
+must be played when held with the King or a Prince, and playing the Princess
+eliminates the player who plays her. A round ends when one player remains or
+the deck runs out, when the highest remaining card wins (ties broken by
+discarded-card totals, then shared). Round winners take a token of affection
+and start the next round; first to 7 tokens (2 players), 5 (3 players) or 4
+(4 players) wins the match and the pot. Hands, the deck order and the
+face-down card are hidden information — views show only the viewer's own
+hand, public discards and token counts — so the package declares
+`all_state_public: false`. Select it for publication with
+`--kinds love_letter`.
+
 Quarto is a two-player game on a 4-by-4 board with sixteen unique pieces:
 every combination of tall/short, light/dark, round/square and solid/hollow
 (piece id 0–15 is the 4-bit attribute vector: bit0 tall, bit1 dark, bit2
