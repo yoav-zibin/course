@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { validateSpec, validateScene, position, pieceActions, assetURI, contentBounds } from '../src/game/validation';
 import { canMove, historyChanges, hitPiece, hitTarget, pieceName, validEvent, animateUpdate, presentationSteps } from '../src/game/interactions';
 import { presentationSource, rulesSource } from '../src/game/runtimeSource';
-import type { GameSpec, Scene, StateMessage } from '../src/game/types';
+import type { GameSpec, Json, Scene, StateMessage } from '../src/game/types';
 
 const repo=resolve(import.meta.dirname,'../../..');
 const spec=():GameSpec=>({format:'buildplay-ui',version:1,viewport:{width:300,height:300},boards:[{id:'board',kind:'grid',x:0,y:0,width:300,height:300,rows:3,columns:3}],piece_types:{token:{shape:'circle',width:60,height:60}},ui_code:'const gameUI={reduce(){return {scene:{}}}}'});
@@ -102,7 +102,7 @@ test('native QuickJS executes portable rules with fresh bounded JSON-only contex
     const parsed=JSON.parse(result.text);assert.equal(parsed.local_state.counter,1);assert.deepEqual(parsed.local_state.secret,{emoji:'🎲 שלום'});
     assert.deepEqual(parsed.local_state.io,['undefined','undefined','undefined']);
     const paths='const gameUI={reduce(){return {scene:{pieces:[]}}},getLastMoveAnimations(view,scene){return view.paths}}';
-    const declared=[{piece_id:'disc',path:[{board:'board',position:{x:50,y:0}},{board:'board',position:{cell:'0'}}]}];
+    const declared:Json=[{piece_id:'disc',path:[{board:'board',position:{x:50,y:0}},{board:'board',position:{cell:'0'}}]}];
     assert.deepEqual(JSON.parse(run(presentationSource(paths,message({view:{paths:declared}}),null)).text).last_move_animations,declared);
     assert.equal(JSON.parse(run(presentationSource(code,message(),null)).text).local_state.counter,1);
     assert.equal(run(presentationSource('const gameUI={reduce(){while(true){}}}',message(),null)).failed,true);
