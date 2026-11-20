@@ -39,6 +39,27 @@ const gameUI = {
         target(keyOf(move), 'main', {x: pos[a][0] + (pos[b][0] - pos[a][0]) * 0.36, y: pos[a][1] + (pos[b][1] - pos[a][1]) * 0.36},
           t('edge', {a: a + 1, b: b + 1}));
       });
+    } else if (KIND === 'dots_boxes') {
+      const ox = 20, oy = 100, gap = 90, start = 30;
+      const dot = (r, c) => [start + c * gap, start + r * gap];
+      const ends = edge => edge < 20 ? [dot(Math.floor(edge / 4), edge % 4), dot(Math.floor(edge / 4), edge % 4 + 1)]
+        : [dot(Math.floor((edge - 20) / 5), (edge - 20) % 5), dot(Math.floor((edge - 20) / 5) + 1, (edge - 20) % 5)];
+      s.edges.forEach((owner, edge) => {
+        const [a, b] = ends(edge);
+        paths.push({id: 'line_' + edge, points: [{x: ox + a[0], y: oy + a[1]}, {x: ox + b[0], y: oy + b[1]}],
+          color: owner === -1 ? '#3d4d6b' : COLORS[owner], width: owner === -1 ? 3 : 8});
+      });
+      s.boxes.forEach((owner, box) => {
+        if (owner < 0) return;
+        const [x, y] = dot(Math.floor(box / 4), box % 4);
+        pieces.push({id: 'box_' + box, type: 'box' + owner, board: 'main', position: {x: x + gap / 2, y: y + gap / 2}, text: String(owner + 1)});
+      });
+      for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) { const [x, y] = dot(r, c); pieces.push({id: 'dot_' + (r * 5 + c), type: 'dot', board: 'main', position: {x, y}}); }
+      labels.push({id: 'score', text: t('score', {a: s.boxes.filter(v => v === 0).length, b: s.boxes.filter(v => v === 1).length}), x: 300, y: 46, font_size: 17});
+      legal.forEach(move => {
+        const [a, b] = ends(move.edge);
+        target(keyOf(move), 'main', {x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2}, t('side', {n: move.edge + 1}));
+      });
     } else if (KIND === 'paper_soccer') {
       const ox = 20, oy = 90, W = 9, H = 11;
       const xy = p => p === 99 ? [4, -1] : p === 100 ? [4, H] : [p % W, Math.floor(p / W)];

@@ -1,4 +1,4 @@
-"""Build the edge-target declarative games: Sim, Paper Soccer, Hackenbush and Cartographers.
+"""Build the edge-target declarative games: Sim, Paper Soccer, Hackenbush, Cartographers and Dots and Boxes.
 
 Run from the package parent: python -m game_platform.tools.build_edge_games.
 These games offer lines, points and shape placements as explicit scene targets. The
@@ -17,7 +17,7 @@ from game_platform.game_logic import GameLogic
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / 'games' / 'declarative'
 LOCALES = ['en', 'es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar']
-KINDS = ('sim', 'paper_soccer', 'hackenbush', 'cartographers')
+KINDS = ('sim', 'paper_soccer', 'hackenbush', 'cartographers', 'dots_boxes')
 ENGINE_KIND = {'cartographers': 'cartographers'}
 
 GEO = {
@@ -60,6 +60,7 @@ TITLES = {
                      '砍树游戏', 'हैकेनबुश', 'هاكنبوش'),
     'cartographers': tr('Cartographers', 'Cartógrafos', 'Cartographes', 'Kartografen', 'Cartógrafos',
                         '制图师', 'मानचित्रकार', 'رسامو الخرائط'),
+    'dots_boxes': tr('Dots and Boxes', 'Puntos y cajas', 'Points et carrés', 'Käsekästchen', 'Pontinhos', '点格棋', 'डॉट्स एंड बॉक्सेस', 'النقاط والمربعات'),
 }
 RULES = {
     'sim': tr(
@@ -98,6 +99,15 @@ RULES = {
         '双人改编版。十二张牌各自指定一种地形和一个形状。你和对手把该形状放在各自的 7×7 地图上，然后翻开下一张牌。放置前可旋转或翻转形状；山脉和已占格会阻挡它。每三张牌结算一个季节，四个季节后星数最多者获胜。',
         'दो खिलाड़ियों के लिए रूपांतरण। बारह कार्डों में से हर एक एक भूभाग और एक आकार बताता है। आप और प्रतिद्वंद्वी उस आकार को अपने-अपने 7×7 नक्शे पर रखते हैं, फिर अगला कार्ड खुलता है। रखने से पहले आकार को घुमाएँ या पलटें; पहाड़ और भरे हुए खाने उसे रोकते हैं। हर तीन कार्ड के बाद एक मौसम के अंक जुड़ते हैं, और चार मौसमों के बाद सबसे ज्यादा सितारों वाला जीतता है।',
         'تكييف للاعبَين. تحدد كل بطاقة من البطاقات الاثنتي عشرة تضاريس وشكلًا. تضع أنت وخصمك الشكل على خريطتكما الخاصة بحجم 7×7 ثم تُسحب البطاقة التالية. دوّر الشكل أو اقلبه قبل وضعه؛ تمنعه الجبال والمربعات المشغولة. بعد كل ثلاث بطاقات يُحتسب فصل، ويفوز صاحب أكبر عدد من النجوم بعد أربعة فصول.'),
+    'dots_boxes': tr(
+        "A grid of five by five dots makes sixteen boxes. Players take turns drawing one line between two neighbouring dots. Drawing the fourth side of a box claims it in your colour and gives you another turn. When every box is claimed, the player with more boxes wins.",
+        "Una cuadrícula de cinco por cinco puntos forma dieciséis cajas. Por turnos, cada jugador traza una línea entre dos puntos vecinos. Trazar el cuarto lado de una caja la reclama con tu color y te da otro turno. Cuando todas las cajas están reclamadas, gana quien tenga más.",
+        "Une grille de cinq par cinq points forme seize carrés. À tour de rôle, chacun trace une ligne entre deux points voisins. Tracer le quatrième côté d'un carré le gagne dans votre couleur et vous redonne la main. Quand tous les carrés sont pris, celui qui en a le plus gagne.",
+        "Ein Gitter aus fünf mal fünf Punkten ergibt sechzehn Kästchen. Abwechselnd zieht jede Person eine Linie zwischen zwei benachbarten Punkten. Wer die vierte Seite eines Kästchens zieht, erhält es in der eigenen Farbe und ist noch einmal dran. Sind alle Kästchen vergeben, gewinnt, wer mehr hat.",
+        "Uma grade de cinco por cinco pontos forma dezesseis quadrados. Em turnos, cada jogador traça uma linha entre dois pontos vizinhos. Traçar o quarto lado de um quadrado o conquista na sua cor e dá outra jogada. Quando todos os quadrados forem conquistados, vence quem tiver mais.",
+        '5×5 的点阵形成十六个方格。双方轮流在相邻两点之间画一条线。画出方格的第四条边就能用自己的颜色占下该格，并再走一步。所有方格被占完后，占格多者获胜。',
+        'पाँच गुणा पाँच बिंदुओं की ग्रिड में सोलह खाने बनते हैं। खिलाड़ी बारी-बारी से दो पड़ोसी बिंदुओं के बीच एक रेखा खींचते हैं। किसी खाने की चौथी भुजा खींचने पर वह खाना आपके रंग में आपका हो जाता है और आपको एक और बारी मिलती है। सभी खाने भर जाने पर जिसके ज्यादा खाने हों वह जीतता है।',
+        'تشكّل شبكة من خمس في خمس نقاط ستة عشر مربعًا. يتناوب اللاعبان على رسم خط بين نقطتين متجاورتين. رسم الضلع الرابع لمربع يمنحك المربع بلونك ويعطيك دورًا إضافيًا. عند اكتمال المربعات يفوز صاحب العدد الأكبر.'),
 }
 UI_RULES = {
     'sim': tr(
@@ -127,6 +137,15 @@ UI_RULES = {
         '点击自己某根树枝上的标记即可剪断。蓝色是玩家 1，红色是玩家 2。只有你颜色的树枝带有标记。',
         'अपनी किसी शाखा पर निशान दबाकर उसे काटें। नीला खिलाड़ी 1 और लाल खिलाड़ी 2 है। केवल आपके रंग की शाखाओं पर निशान होते हैं।',
         'اضغط علامة على أحد فروعك لقطعه. الأزرق هو اللاعب 1 والأحمر هو اللاعب 2. فقط فروع لونك عليها علامات.'),
+    'dots_boxes': tr(
+        'Tap a highlighted marker in the middle of a side to draw that line. Completed boxes are filled with the colour of whoever closed them, and that player moves again.',
+        'Toca el marcador resaltado en medio de un lado para trazar esa línea. Las cajas completas se rellenan con el color de quien las cerró, y esa persona juega otra vez.',
+        "Touchez le repère surligné au milieu d'un côté pour tracer cette ligne. Les carrés fermés prennent la couleur de celui qui les a fermés, et il rejoue.",
+        'Tippe auf die markierte Stelle in der Mitte einer Seite, um die Linie zu ziehen. Geschlossene Kästchen werden in der Farbe der Person gefüllt, die sie geschlossen hat; sie ist noch einmal dran.',
+        'Toque no marcador destacado no meio de um lado para traçar a linha. Os quadrados fechados são preenchidos com a cor de quem os fechou, e essa pessoa joga de novo.',
+        '点击某条边中间高亮的标记即可画出这条线。封闭的方格会染上封口者的颜色，并由其再走一步。',
+        'किसी भुजा के बीच में चमकते निशान को दबाकर वह रेखा खींचें। पूरे हुए खाने उसी के रंग में भर जाते हैं जिसने उन्हें बंद किया, और वही फिर से खेलता है।',
+        'اضغط العلامة المميزة في منتصف الضلع لرسم الخط. تمتلئ المربعات المكتملة بلون من أغلقها، ويلعب هذا اللاعب مرة أخرى.'),
     'cartographers': tr(
         'Use Rotate / flip to change the shape, then tap a highlighted square on your map. On a touch screen, tap once to preview the shape and tap again to place it.',
         'Usa Girar / voltear para cambiar la forma y toca una casilla resaltada de tu mapa. En una pantalla táctil, toca una vez para ver la vista previa y otra vez para colocarla.',
@@ -161,6 +180,10 @@ HINTS = {
                         'Placez la forme de la carte sur votre carte.', 'Lege die Form der Karte auf deine Karte.',
                         'Coloque a forma da carta no seu mapa.', '把牌上的形状放到你的地图上。',
                         'कार्ड का आकार अपने नक्शे पर रखें।', 'ضع شكل البطاقة على خريطتك.'),
+    'dots_boxes': tr('Close boxes. Closing one earns another turn.', 'Cierra cajas. Cerrar una da otro turno.',
+                     'Fermez des carrés. En fermer un redonne la main.', 'Schließe Kästchen. Wer eins schließt, ist noch einmal dran.',
+                     'Feche quadrados. Fechar um dá outra jogada.', '封闭方格，封口后可再走一步。',
+                     'खाने बंद करें। एक बंद करने पर एक और बारी मिलती है।', 'أغلق المربعات. إغلاق مربع يمنحك دورًا آخر.'),
 }
 EXTRA = {
     'sim': {
@@ -173,6 +196,10 @@ EXTRA = {
         'blue_turn': tr('Blue to cut', 'Corta Azul', 'Bleu coupe', 'Blau schneidet', 'Azul corta', '蓝方剪枝', 'नीला काटे', 'دور الأزرق'),
         'red_turn': tr('Red to cut', 'Corta Rojo', 'Rouge coupe', 'Rot schneidet', 'Vermelho corta', '红方剪枝', 'लाल काटे', 'دور الأحمر'),
         'cut': tr('Cut branch {n}', 'Cortar rama {n}', 'Couper la branche {n}', 'Ast {n} abschneiden', 'Cortar galho {n}', '剪断树枝 {n}', 'शाखा {n} काटें', 'اقطع الفرع {n}'),
+    },
+    'dots_boxes': {
+        'side': tr('Side {n}', 'Lado {n}', 'Côté {n}', 'Seite {n}', 'Lado {n}', '第 {n} 边', 'भुजा {n}', 'الضلع {n}'),
+        'score': tr('Boxes {a} : {b}', 'Cajas {a} : {b}', 'Carrés {a} : {b}', 'Kästchen {a} : {b}', 'Quadrados {a} : {b}', '方格 {a} : {b}', 'खाने {a} : {b}', 'المربعات {a} : {b}'),
     },
     'cartographers': {
         'card': tr('Card {n} of {total}: {terrain}', 'Carta {n} de {total}: {terrain}', 'Carte {n} sur {total} : {terrain}', 'Karte {n} von {total}: {terrain}',
@@ -211,6 +238,11 @@ def schemas(kind):
                  'trail': {'type': 'array', 'minItems': 1, 'maxItems': 500, 'items': point},
                  'mover': {'type': 'array', 'maxItems': 500, 'items': {'enum': [0, 1]}}, **base}
         move = {'type': 'object', 'required': ['to'], 'additionalProperties': False, 'properties': {'to': point}}
+    elif kind == 'dots_boxes':
+        props = {'edges': {'type': 'array', 'minItems': 40, 'maxItems': 40, 'items': {'enum': [-1, 0, 1]}},
+                 'boxes': {'type': 'array', 'minItems': 16, 'maxItems': 16, 'items': {'enum': [-1, 0, 1]}}, **base}
+        move = {'type': 'object', 'required': ['edge'], 'additionalProperties': False,
+                'properties': {'edge': {'type': 'integer', 'minimum': 0, 'maximum': 39}}}
     elif kind == 'hackenbush':
         props = {'alive': {'type': 'array', 'minItems': 17, 'maxItems': 17, 'items': {'enum': [0, 1]}}, **base}
         move = {'type': 'object', 'required': ['edge'], 'additionalProperties': False,
@@ -232,7 +264,7 @@ def schemas(kind):
 
 
 def points(kind):
-    return {'sim': 15, 'paper_soccer': 101, 'hackenbush': 17, 'cartographers': 49}[kind]
+    return {'sim': 15, 'paper_soccer': 101, 'hackenbush': 17, 'cartographers': 49, 'dots_boxes': 40}[kind]
 
 
 def specification(kind):
@@ -240,6 +272,12 @@ def specification(kind):
     if kind == 'sim':
         boards = [{'id': 'main', 'kind': 'free', 'x': 20, 'y': 100, 'width': 420, 'height': 420, 'color': '#172743', 'line_color': '#5c7190'}]
         types = {'dot': {**flat('#e8f0ff'), 'width': 34, 'height': 34}}
+        viewport = {'width': 460, 'height': 540, 'camera_enabled': False}
+    elif kind == 'dots_boxes':
+        boards = [{'id': 'main', 'kind': 'free', 'x': 20, 'y': 100, 'width': 420, 'height': 420, 'color': '#172743', 'line_color': '#5c7190'}]
+        types = {'dot': {**flat('#e8f0ff'), 'width': 22, 'height': 22},
+                 'box0': {'shape': 'rect', 'color': '#a7f070', 'text_color': '#102039', 'width': 70, 'height': 70},
+                 'box1': {'shape': 'rect', 'color': '#ff9dca', 'text_color': '#102039', 'width': 70, 'height': 70}}
         viewport = {'width': 460, 'height': 540, 'camera_enabled': False}
     elif kind == 'paper_soccer':
         cells = [{'id': str(y * 9 + x), 'x': 20 + x * 40, 'y': 20 + (y + 1) * 40} for y in range(11) for x in range(9)]
@@ -283,6 +321,17 @@ def illustration(kind, view, caption):
             color = '#51607a' if owner < 0 else ('#a7f070', '#ff9dca')[owner]
             parts.append(f'<path d="M{pos[a][0]:.0f} {pos[a][1]:.0f}L{pos[b][0]:.0f} {pos[b][1]:.0f}" stroke="{color}" stroke-width="{2 if owner < 0 else 6}"/>')
         parts += [f'<circle cx="{x:.0f}" cy="{y:.0f}" r="9" fill="#e8f0ff"/>' for x, y in pos]
+    elif kind == 'dots_boxes':
+        for r in range(5):
+            for c in range(5):
+                parts.append(f'<circle cx="{60 + c * 70}" cy="{70 + r * 70}" r="6" fill="#e8f0ff"/>')
+        for i, owner in enumerate(view['edges']):
+            if owner < 0:
+                continue
+            r, c = (i // 4, i % 4) if i < 20 else ((i - 20) // 5, (i - 20) % 5)
+            x1, y1 = 60 + c * 70, 70 + r * 70
+            x2, y2 = (x1 + 70, y1) if i < 20 else (x1, y1 + 70)
+            parts.append(f'<path d="M{x1} {y1}L{x2} {y2}" stroke="{("#a7f070", "#ff9dca")[owner]}" stroke-width="6"/>')
     elif kind == 'paper_soccer':
         parts.append('<rect x="60" y="60" width="280" height="300" fill="none" stroke="#e8f0ff" stroke-width="3"/>')
         trail = []

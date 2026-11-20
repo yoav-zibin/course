@@ -1,4 +1,4 @@
-// Rules for the edge-target games: Sim, Paper Soccer, Hackenbush and Cartographers.
+// Rules for the edge-target games: Sim, Paper Soccer, Hackenbush, Cartographers and Dots and Boxes.
 // The generated package prefixes this file with a constant KIND. These games
 // offer lines, points and shape placements as explicit targets, never freehand
 // input. No rendering, network or device APIs are used.
@@ -17,6 +17,16 @@ function simTriangle(edges, seat) {
   }
   return false;
 }
+
+// ---- Dots and Boxes: five by five dots, forty sides, sixteen boxes ----------
+// Sides 0-19 are horizontal (row * 4 + column); sides 20-39 are vertical (row * 5 + column).
+function dbSides(box) { const r = Math.floor(box / 4), c = box % 4; return [r * 4 + c, (r + 1) * 4 + c, 20 + r * 5 + c, 20 + r * 5 + c + 1]; }
+function dbBoxesOf(edge) {
+  const out = [];
+  for (let box = 0; box < 16; box++) if (dbSides(box).includes(edge)) out.push(box);
+  return out;
+}
+function dbOpen(edges, box) { return dbSides(box).filter(side => edges[side] === -1).length; }
 
 // ---- Paper Soccer: a 9 by 11 pitch plus one goal point at each end ---------
 const SOCCER_W = 9, SOCCER_H = 11, TOP_GOAL = 99, BOTTOM_GOAL = 100, SOCCER_TURNS = 120;
@@ -143,6 +153,7 @@ function seasonScore(map, rule) {
 
 function fresh(ctx) {
   if (KIND === 'sim') return {edges: Array(15).fill(-1), turn: 0, winner: -1, over: false, turns: 0};
+  if (KIND === 'dots_boxes') return {edges: Array(40).fill(-1), boxes: Array(16).fill(-1), turn: 0, winner: -1, over: false, turns: 0};
   if (KIND === 'paper_soccer') return {ball: 5 * SOCCER_W + 4, used: [], trail: [5 * SOCCER_W + 4], mover: [], turn: 0, winner: -1, over: false, turns: 0};
   if (KIND === 'hackenbush') return {alive: HACK_EDGES.map(() => 1), turn: 0, winner: -1, over: false, turns: 0};
   const deck = DECK.map(card => card.slice());
@@ -155,7 +166,7 @@ function fresh(ctx) {
 }
 function legal(s) {
   if (s.over) return [];
-  if (KIND === 'sim') return s.edges.flatMap((owner, edge) => owner === -1 ? [{edge}] : []);
+  if (KIND === 'sim' || KIND === 'dots_boxes') return s.edges.flatMap((owner, edge) => owner === -1 ? [{edge}] : []);
   if (KIND === 'paper_soccer') return soccerMoves(s);
   if (KIND === 'hackenbush') return HACK_EDGES.flatMap(([, , colour], edge) => s.alive[edge] && colour === s.turn ? [{edge}] : []);
   return mapMoves(s);
@@ -175,6 +186,16 @@ function apply(s, move) {
     if (simTriangle(s.edges, seat)) finish(s, 1 - seat);
     else if (s.edges.every(owner => owner !== -1)) finish(s, -1);
     else s.turn = 1 - seat;
+    return;
+  }
+  if (KIND === 'dots_boxes') {
+    s.edges[move.edge] = seat;
+    let claimed = 0;
+    for (const box of dbBoxesOf(move.edge)) if (s.boxes[box] === -1 && dbOpen(s.edges, box) === 0) { s.boxes[box] = seat; claimed++; }
+    if (s.boxes.every(owner => owner !== -1)) {
+      const mine = s.boxes.filter(owner => owner === 0).length, theirs = 16 - mine;
+      finish(s, mine === theirs ? -1 : mine > theirs ? 0 : 1);
+    } else if (!claimed) s.turn = 1 - seat;
     return;
   }
   if (KIND === 'paper_soccer') {
@@ -238,6 +259,14 @@ const game = {
       const near = options.filter(m => Math.abs(soccerXY(m.to)[1] - goalY) === best && m.to !== (s.turn === 0 ? BOTTOM_GOAL : TOP_GOAL));
       const pool = near.length && ctx.random() < 0.75 ? near : options.filter(m => m.to !== (s.turn === 0 ? BOTTOM_GOAL : TOP_GOAL));
       return (pool.length ? pool : options)[Math.floor(ctx.random() * (pool.length ? pool : options).length)];
+    }
+    if (KIND === 'dots_boxes') {
+      // Close a box when possible, otherwise avoid handing the opponent a box.
+      const closes = options.filter(m => dbBoxesOf(m.edge).some(box => s.boxes[box] === -1 && dbOpen(s.edges, box) === 1));
+      if (closes.length) return closes[Math.floor(ctx.random() * closes.length)];
+      const safe = options.filter(m => dbBoxesOf(m.edge).every(box => dbOpen(s.edges, box) > 2));
+      const pool = safe.length ? safe : options;
+      return pool[Math.floor(ctx.random() * pool.length)];
     }
     return options[Math.floor(ctx.random() * options.length)];
   }

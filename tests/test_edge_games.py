@@ -10,7 +10,7 @@ from game_platform.game_logic import GameLogic, InvalidMoveError
 from game_platform.tools.publish_declarative_games import scene_event
 
 EXAMPLES = Path(__file__).resolve().parents[1] / 'games' / 'declarative'
-KINDS = ('sim', 'paper_soccer', 'hackenbush', 'cartographers')
+KINDS = ('sim', 'paper_soccer', 'hackenbush', 'cartographers', 'dots_boxes')
 CTX = {'players': [{'id': 'a', 'kind': 'human', 'display_name': 'A', 'picture_url': '', 'max_loss': 0, 'active': True},
                    {'id': 'b', 'kind': 'human', 'display_name': 'B', 'picture_url': '', 'max_loss': 0, 'active': True}],
        'pot': 10, 'move_count': 0}
@@ -194,3 +194,35 @@ def test_cartographers_blocked_players_pass_and_malformed_moves_are_rejected():
     for bad in ({'cell': 0, 'rot': 9}, {'cell': 99, 'rot': 0}, {'cell': 0}, {'rot': 0}):
         with pytest.raises(InvalidMoveError):
             play(game, fresh, 'a', bad)
+
+
+def test_dots_boxes_closing_a_box_claims_it_and_keeps_the_turn():
+    game, ui = engine('dots_boxes')
+    state = start(game)
+    # Box 0 has sides 0 (top), 4 (bottom), 20 (left) and 21 (right).
+    result = {'state': state}
+    for who, edge in [('a', 0), ('b', 4), ('a', 20)]:
+        result = play(game, result['state'], who, {'edge': edge})
+    assert result['state']['turn'] == 1 and result['state']['boxes'][0] == -1
+    result = play(game, result['state'], 'b', {'edge': 21})
+    assert result['state']['boxes'][0] == 1 and result['state']['turn'] == 1 and result['turn'] == ['b']
+    scene = frame(game, ui, result['state'], 'b')[0]['scene']
+    assert len(scene['targets']) == 36 and any(piece['id'] == 'box_0' for piece in scene['pieces'])
+    with pytest.raises(InvalidMoveError):
+        play(game, result['state'], 'b', {'edge': 21})
+    with pytest.raises(InvalidMoveError):
+        play(game, result['state'], 'a', {'edge': 1})
+
+
+def test_dots_boxes_game_ends_with_the_larger_box_count():
+    game, _ = engine('dots_boxes')
+    result = {'state': start(game)}
+    for step in range(80):
+        who = 'a' if result['state']['turn'] == 0 else 'b'
+        result = play(game, result['state'], who, game.call('computerMove', result['state'], who, ctx=dict(CTX), seed=step + 1), seed=step + 1)
+        if result['turn'] is None:
+            break
+    boxes = result['state']['boxes']
+    assert result['state']['over'] and -1 not in boxes
+    mine = boxes.count(0)
+    assert result['state']['winner'] == (-1 if mine == 8 else 0 if mine > 8 else 1)

@@ -477,7 +477,7 @@ filtered state, including when building spectator scenes and replay.
 ## Lines, points and shapes as flexible targets
 
 A target is any destination the reducer offers, so it need not be a grid
-square. Four packages use targets for geometry that is not a cell, and show the
+square. Five packages use targets for geometry that is not a cell, and show the
 patterns to copy:
 
 | Game | Target is | Pattern |
@@ -485,14 +485,14 @@ patterns to copy:
 | `sim` | one of fifteen lines between six dots | Lines cross at the hexagon's centre, so each marker sits a third of the way along its line and crossing lines never share a hit box. Claimed lines are `paths`. |
 | `paper_soccer` | a reachable point on a graph board | Legal destinations are the free neighbours of the ball; the move adds a drawn line, so repeated lines and the pitch's walls are simply absent. The ball's trail is drawn as `paths`. |
 | `hackenbush` | one branch of your own colour | Each marker sits at the branch midpoint. A cut removes everything no longer attached to the ground, so the next scene omits those branches. |
+| `dots_boxes` | one of forty sides between a five by five grid of dots | A marker sits at each side's midpoint, and closing a box fills it with a piece and keeps the turn. Drawn sides are `paths`. |
 | `cartographers` | the anchor cell of a shape placement | Rotate/flip is a button that keeps the orientation in `local_state`; every legal anchor for that orientation is a target carrying a `preview` of the covered cells. |
 
 Keep target IDs distinct from path and piece IDs (a line's path and its target
 cannot both be `edge_3`). Give crowded markers an explicit `hit_area` no larger
 than the spacing between them. A turn-based adaptation of a drawing game is a
 documented change: these packages offer only predefined lines, points and
-placements, never freehand strokes. Dots and Boxes is not duplicated here
-because a separate declarative package for it is already live.
+placements, never freehand strokes.
 
 ## A small presentation example
 
