@@ -1160,7 +1160,7 @@ def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId) ->
 
 @router.get("/matches/{match_id}/game")
 def get_match_game(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> GameOut:
-    """The retained game package used to render this public match."""
+    """The retained game package, subject to the match's viewing permissions."""
     return GameOut.of(platform.get_match_game(match_id, caller_id=caller_id))
 
 

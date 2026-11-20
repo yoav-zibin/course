@@ -111,8 +111,8 @@ def test_joining_cannot_take_over_a_single_player_computer(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game = api.new_game(owner=alice, allows_join_mid_match=True)
     mid = api.new_match(owner=alice, game_id=game, num_computer_opponents=1, start=True)
-    assert api.request("POST", f"/matches/{mid}/join", as_user=bob).status_code == 409
-    assert api.match_summary(mid)["players"] == ["alice", "computer"]
+    assert api.request("POST", f"/matches/{mid}/join", as_user=bob).status_code == 403
+    assert api.match_summary(mid, as_user=alice)["players"] == ["alice", "computer"]
 
 
 def test_joining_mid_match_adds_seats_up_to_the_games_maximum(api: Api) -> None:
@@ -136,7 +136,7 @@ def test_cannot_join_a_match_that_is_over(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game_id = api.new_game(owner=alice, allows_join_mid_match=True)
     match_id = api.new_match(
-        owner=alice, game_id=game_id, num_computer_opponents=1, start=True
+        owner=alice, game_id=game_id, joiners=[api.new_user("carol")], start=True
     )
     api.move(match_id, as_user=alice, next_turn=None)
     assert error(api.request("POST", f"/matches/{match_id}/join", as_user=bob)) == (

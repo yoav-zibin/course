@@ -339,6 +339,36 @@ def test_errors_carry_the_values_they_mention(api: Api) -> None:
     }
 
 
+@pytest.mark.parametrize("locale", i18n.LOCALE_CODES)
+def test_private_match_privacy_and_revision_errors_have_localized_stable_codes(
+    api: Api, locale: str,
+) -> None:
+    from game_platform.tests.test_single_player_cloud import snapshot, sync
+
+    owner, other = api.new_user("Owner"), api.new_user("Other")
+    game = api.new_game(owner=owner)
+    value = snapshot(owner, game)
+    assert sync(api, owner, value).status_code == 200
+
+    def headers(user: str) -> dict[str, str]:
+        return {"X-User-Id": user, "X-User-Password": api.passwords_by_user_id[user],
+                "Accept-Language": locale}
+
+    responses = [
+        (api.client.post(f"/matches/{value['id']}/join", headers=headers(other)),
+         403, "single_player_join_forbidden"),
+        (api.client.post(f"/matches/{value['id']}/invites", headers=headers(owner), json={}),
+         403, "single_player_share_forbidden"),
+        (api.client.post("/matches/single-player-sync", headers=headers(owner),
+                         json={"match": snapshot(owner, game, turns=1), "expected_revision": 0}),
+         409, "single_player_revision_changed"),
+    ]
+    for response, status, code in responses:
+        assert response.status_code == status, response.text
+        assert response.headers["content-language"] == locale
+        assert response.json() == {"detail": i18n.translate(f"error.{code}", locale), "code": code}
+
+
 def test_missing_credentials_are_reported_in_the_callers_language(api: Api) -> None:
     response = _get(api, "/matches", accept_language="zh")
     assert response.status_code == 401

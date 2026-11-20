@@ -365,8 +365,8 @@ class Api:
             "state": match["state"],
         }
 
-    def match_summary(self, match_id: str) -> dict[str, Any]:
-        return self.summary(self.ok("GET", f"/matches/{match_id}"))
+    def match_summary(self, match_id: str, *, as_user: str | None = None) -> dict[str, Any]:
+        return self.summary(self.ok("GET", f"/matches/{match_id}", as_user=as_user))
 
 
 def error(response: httpx.Response) -> tuple[int, Any]:

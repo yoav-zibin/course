@@ -187,7 +187,7 @@ def test_start_is_rejected_when_it_does_not_make_sense(api: Api) -> None:
     alone = api.new_match(owner=alice, game_id=game_id)
     assert error(start(alone)) == (
         409,
-        "the match has 1 players but the game allows [2, 4]",
+        "multiplayer matches need at least two human players",
     )
 
     three = api.new_match(owner=alice, game_id=game_id, joiners=[bob, carol])

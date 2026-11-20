@@ -2844,10 +2844,10 @@ class GamePlatform:
 
     def _join(self, match: Match, *, caller_id: str) -> Match:
         """Seats [caller_id] in [match]. The caller holds the lock."""
-        if match.effective_match_kind != "multiplayer":
-            raise ForbiddenError("single-player matches cannot be joined or shared")
         if not self._match_is_declarative(match):
             raise NotFoundError("match not found")
+        if match.effective_match_kind != "multiplayer":
+            raise ForbiddenError("single-player matches cannot be joined or shared")
         if match.seat_of(caller_id) is not None:
             raise ConflictError("you are already a player in this match")
         if caller_id in match.removed_user_ids:

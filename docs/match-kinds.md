@@ -59,7 +59,8 @@ subsequent writes use the last acknowledged `cloud_revision`. The snapshot's
 `id` remains stable through retries. Responses and owner `GET /matches/{id}`
 include `single_player_state`, which contains the complete portable snapshot.
 Other accounts and anonymous callers cannot read it. List/detail responses expose
-`match_kind`; full list responses remain compact rather than embedding histories.
+`match_kind`. `GET /matches` returns compact summaries without portable histories;
+`GET /v2/matches` retains detailed owner responses for existing paginated clients.
 
 During a rollout, a native app may precede the matching server. A missing sync
 route or rejection of newly introduced creation fields keeps the durable outbox

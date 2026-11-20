@@ -115,7 +115,7 @@ def test_seeded_malformed_move_payloads_never_crash_or_mutate(seed: int) -> None
     owner = api.new_user("owner")
     game = api.new_game(owner=owner, allowed_player_counts=[1])
     match = api.new_match(owner=owner, game_id=game, start=True)
-    before = api.ok("GET", f"/matches/{match}")
+    before = api.ok("GET", f"/matches/{match}", as_user=owner)
     bad_turns = [[], [-1], [10], [0, 0], [None], ["not-a-seat"], {}, "bad", [[], 0]]
     for step in range(30):
         payload = {"move": {"state": {"x": rng.randrange(1000)},
@@ -123,5 +123,5 @@ def test_seeded_malformed_move_payloads_never_crash_or_mutate(seed: int) -> None
                    "expected_move_count": 0}
         response = api.request("POST", f"/matches/{match}/moves", as_user=owner, json=payload)
         assert 400 <= response.status_code < 500, (seed, step, payload, response.text)
-        assert persistent(api.ok("GET", f"/matches/{match}")) == persistent(before), (seed, step, payload)
+        assert persistent(api.ok("GET", f"/matches/{match}", as_user=owner)) == persistent(before), (seed, step, payload)
         assert_store_valid(store, (seed, step))

@@ -143,9 +143,9 @@ test('anonymous saved matches are adopted by one login without copying them to l
   assert.ok((await repository.read('visitor')).local['local-anonymous']);
 });
 
-for(const status of [404,405])test(`an older backend's ${status} save route retries automatically after deployment`,async()=>{
+for(const [status,reason] of [[404,'Not Found'],[405,'Method Not Allowed'],[404,'Não encontrado'],[404,'未找到'],[404,'नहीं मिला']] as const)test(`an older backend's ${status} ${reason} save route retries automatically after deployment`,async()=>{
   const {repository}=await fixture();let deployed=false,posts=0;
-  const api=mockApi(body=>{posts++;if(!deployed)throw new ApiError(status,status===404?'Not Found':'Method Not Allowed');return cloud(body.match,1);});
+  const api=mockApi(body=>{posts++;if(!deployed)throw new ApiError(status,reason);return cloud(body.match,1);});
   await assert.rejects(syncSinglePlayerMatches(api,repository,account,{guard(){}}),RetryableSyncCompatibilityError);
   const pending=await repository.read('alice');assert.equal(pending.conflicts['local-offline'],undefined);assert.ok(pending.local['local-offline'].cloud_inflight);
   assert.deepEqual(pending.local['local-offline'].logicState,local().logicState);
@@ -153,7 +153,7 @@ for(const status of [404,405])test(`an older backend's ${status} save route retr
   const saved=await repository.read('alice');assert.equal(posts,2);assert.equal(needsCloudSave(saved.local['local-offline']),false);assert.equal(saved.conflicts['local-offline'],undefined);
 });
 
-for(const reason of ['Not Found','Method Not Allowed','לא נמצא'])test(`a legacy initial-save conflict for ${reason} resumes after backend deployment`,async()=>{
+for(const reason of ['Not Found','Method Not Allowed','לא נמצא','Não encontrado','Método não permitido','未找到','不允许的请求方法','नहीं मिला','विधि की अनुमति नहीं है'])test(`a legacy initial-save conflict for ${reason} resumes after backend deployment`,async()=>{
   const {repository}=await fixture();await repository.mutate('alice',data=>{data.conflicts['local-offline']={message:`Cloud saving needs attention: ${reason}. Your saved turns are preserved.`};});
   let posts=0;await syncSinglePlayerMatches(mockApi(body=>{posts++;return cloud(body.match,1);}),repository,account,{guard(){}});
   const saved=await repository.read('alice');assert.equal(posts,1);assert.equal(saved.conflicts['local-offline'],undefined);assert.equal(needsCloudSave(saved.local['local-offline']),false);

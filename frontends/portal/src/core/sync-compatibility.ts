@@ -8,6 +8,7 @@ export class RetryableSyncCompatibilityError extends Error {
 
 const missingRouteReasons=new Set(['not found','method not allowed','nicht gefunden','methode nicht erlaubt',
   'introuvable','méthode non autorisée','no encontrado','método no permitido','לא נמצא','השיטה אינה מותרת',
+  'não encontrado','método não permitido','未找到','不允许的请求方法','नहीं मिला','विधि की अनुमति नहीं है',
   'غير موجود','الطريقة غير مسموح بها','не найдено','метод не разрешен']);
 export function missingRouteReason(message:string):boolean {return missingRouteReasons.has(message.trim().toLowerCase());}
 export function isMissingSaveRoute(error:ApiError):boolean {
