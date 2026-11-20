@@ -100,7 +100,9 @@ test('online matches have human-only controls and stay selected after reload',as
   await expect(page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true})).toBeVisible();
   const creation=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/matches');
   await page.getByTestId('play-online').getByRole('button',{name:'Invite your friends to play',exact:true}).click();
-  expect((await creation).postDataJSON()).toEqual({game_id:created.id,bet_per_player:0,turn_seconds:null});
+  const body=(await creation).postDataJSON();
+  expect(body).toMatchObject({game_id:created.id,match_kind:'multiplayer',num_computer_opponents:0,bet_per_player:0,turn_seconds:null});
+  expect(body.client_match_id).toEqual(expect.any(String));
   await expect(page.getByRole('button',{name:'Share link',exact:true})).toBeVisible();
   await expect(page).toHaveURL(/#match=/);
   await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);

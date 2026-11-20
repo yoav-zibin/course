@@ -61,6 +61,11 @@ include `single_player_state`, which contains the complete portable snapshot.
 Other accounts and anonymous callers cannot read it. List/detail responses expose
 `match_kind`; full list responses remain compact rather than embedding histories.
 
+During a rollout, a native app may precede the matching server. A missing sync
+route or rejection of newly introduced creation fields keeps the durable outbox
+pending and retries after backoff. These compatibility responses must not turn
+valid unsent work into a permanent conflict.
+
 The client snapshot includes `game_id`, `game_version`, `owner_user_id`,
 `match_kind`, `players`, `status`, `state` (the displayed view), `logicState`
 (full rules state), `practiceSeed`, `initialState`, `initialTurn`, `moves`,

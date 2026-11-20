@@ -6,10 +6,20 @@ test.beforeEach(async({baseURL,page,request})=>{
   await loginAs(page,await createUser(request,uniqueName('Practice owner')));
   // These renderer/seat fixtures deliberately have no catalog records. Keep the
   // cloud transport explicit; real persistence is covered by cloud-single-player.
+  const cloud=new Map<string,any>();
   await page.route('**/matches/single-player-sync',async route=>{
     const body=route.request().postDataJSON(),snapshot=body.match;
-    await route.fulfill({json:{...snapshot,cloud_revision:body.expected_revision+1,single_player_state:snapshot}});
+    const fields=['id','game_id','game_version','owner_user_id','match_kind','players','status','state','turn_of_player_indices','move_count','created_at','end_reason','last_move_player_index'];
+    const saved={...Object.fromEntries(fields.filter(key=>key in snapshot).map(key=>[key,snapshot[key]])),
+      updated_at:snapshot.created_at,cloud_revision:body.expected_revision+1,single_player_state:snapshot,
+      invite_code:null,bet_per_player:0,max_loss:0,token_pot:0,token_payouts:null,rematch_match_id:null};
+    cloud.set(snapshot.id,saved);await route.fulfill({json:saved});
   });
+  await page.route(url=>/^\/matches\/local-[\w-]+$/.test(url.pathname),async route=>{
+    const saved=cloud.get(new URL(route.request().url()).pathname.split('/').at(-1)!);
+    if(saved&&route.request().method()==='GET')await route.fulfill({json:saved});else await route.continue();
+  });
+  await page.route(url=>url.pathname==='/matches',route=>route.fulfill({json:[...cloud.values()].map(({state,single_player_state,last_move_player_index,...summary})=>summary)}));
 });
 
 // A private host fixture: one round in seat order, with a private viewer marker.
@@ -28,6 +38,15 @@ async function savedMatch(page:Page,id:string){
     const key=Object.keys(localStorage).find(key=>key.startsWith('buildplay.shared.v1.')&&key.endsWith('.'+localStorage.getItem('game-platform.current-account.v1')));
     return key?JSON.parse(localStorage.getItem(key)!).local[matchId]:null;
   },id);
+}
+
+async function reloadMatch(page:Page,id:string){
+  // The restored board appears before bootstrap finishes its route selection.
+  // Observe that read and the first ordinary refresh before exercising controls.
+  let reads=0;
+  const refreshed=page.waitForResponse(response=>response.request().method()==='GET'
+    &&new URL(response.url()).pathname===`/matches/${id}`&&++reads===2);
+  await page.reload();await (await refreshed).finished();
 }
 
 async function randomSeat(page:Page,value:number){
@@ -97,7 +116,7 @@ test('computer batch playback keeps the full host queue outside the twelve-entry
   expect((await savedMatch(page,id)).moves).toHaveLength(13);
 });
 
-test('pass-and-play replay keeps each private hand attributed to its frame viewer after reload',async({page},info)=>{
+test('pass-and-play replay keeps each private hand attributed to its frame viewer after reload',async({page,isMobile},info)=>{
   await page.route(url=>/^\/games\/practice-seat-fixture(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:fixture}));
   await page.goto('/portal#game=practice-seat-fixture');const pass=page.getByTestId('play-pass');await pass.getByRole('button',{name:'Players: 4',exact:true}).click();
   await pass.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
@@ -106,7 +125,7 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
   for(let seat=0;seat<4;seat++){
     if(seat){
       await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();await expect(page.getByTestId('game-stage')).toHaveCount(0);
-      if(seat===1){await page.reload();await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();await expect(page.getByTestId('game-stage')).toHaveCount(0);}
+      if(seat===1){await reloadMatch(page,id);await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();await expect(page.getByTestId('game-stage')).toHaveCount(0);}
       await page.getByRole('button',{name:'I’m ready',exact:true}).click();
     }
     await expect(page.getByText(`Your seat ${seat+1}`,{exact:true})).toBeVisible();
@@ -114,7 +133,8 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
   }
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');await page.reload();
   for(let frame=3;frame>=0;frame--){
-    await page.getByRole('button',{name:'← Previous',exact:true}).click();
+    const previous=page.getByRole('button',{name:'← Previous',exact:true});
+    if(isMobile)await previous.tap();else await previous.click();
     await expect(page.getByText(`Replay · move ${frame} of 4`,{exact:true})).toBeVisible();
     await expect(page.getByText(`Your seat ${frame+1}`,{exact:true})).toBeVisible();
     await expect(page.getByText(`Hand belongs to local-player-${frame}`,{exact:true})).toBeVisible();
@@ -142,7 +162,7 @@ for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer pract
   await page.getByRole('button',{name:'Advance',exact:true}).click();
   await expect(page.getByTestId('match-outcome')).toHaveText(humanSeat===count-1?'You won':'You lost');
   expect((await savedMatch(page,id)).move_count).toBe(count);
-  await page.reload();await expect(page.getByTestId('match-outcome')).toHaveText(humanSeat===count-1?'You won':'You lost');
+  await reloadMatch(page,id);await expect(page.getByTestId('match-outcome')).toHaveText(humanSeat===count-1?'You won':'You lost');
   expect((await savedMatch(page,id)).players[humanSeat].kind).toBe('human');
   await page.getByRole('button',{name:'← Previous',exact:true}).click();await expect(page.getByText(`Replay · move ${count-1} of ${count}`,{exact:true})).toBeVisible();
   await expect(page.getByText(`Your seat ${humanSeat+1}`,{exact:true})).toBeVisible();

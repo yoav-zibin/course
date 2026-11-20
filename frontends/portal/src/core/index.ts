@@ -7,6 +7,7 @@ import {gameSearchPrefix,gameSuggestions} from './game-search';
 import {isValidDownloadedGame, presentationHistoryPath} from './offline-match-data';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
+import {RetryableSyncCompatibilityError} from './sync-compatibility';
 import {hydrateSinglePlayer, localRevision, needsCloudSave, singlePlayerKind} from './single-player';
 import {handsTurnToOpponent, pendingNotifications} from './notifications';
 import { importNativeLegacy, finishNativeImport } from './native-migration';
@@ -57,6 +58,7 @@ export class PortalStore {
   private observations = new Map<string, any[]>();
   private selectedInvite: {matchId: string; token: string} | null = null;
   private retryAfter = 0;
+  private syncCompatibilityRetryAfter = 0;
   private api = new PortalApi('', getLocale);
   private repository = new AccountRepository();
   private cacheErrorPath: string | null = null;
@@ -747,11 +749,11 @@ export class PortalStore {
     return result;
   }
   private async sync(freshRequestId?: string, matchId?: string): Promise<void> {
-    if (this.localOnly || !this.state.account || !isOnline() || (!freshRequestId && Date.now() < this.retryAfter)) return;
+    if (this.localOnly || !this.state.account || !isOnline() || (!freshRequestId && Date.now() < Math.max(this.retryAfter,this.syncCompatibilityRetryAfter))) return;
     if (this.syncPromise) { await this.syncPromise; return this.sync(freshRequestId,matchId); }
     const account = this.state.account; const guard = this.capture();
     const confirmed: {before: Match; after: Match}[] = [];
-    const pending = syncAccount(this.api, this.repository, account, { paginated: this.paginated, guard, freshRequestId, matchId, onConfirmed: (before, after) => confirmed.push({before, after}) }).then(async data => { guard(); const previous = this.state.selectedMatch; this.patch({ network: isOnline() }); this.publishData(data); const selected = this.state.selectedMatch; if (selected && selected.move_count !== previous?.move_count) { await this.recoverPresentation(selected, previous || undefined).catch(() => {}); guard(); await this.refreshProfile().catch(() => {}); } for (const {before, after} of confirmed) {guard(); await this.offerNotificationPrompt(before, after);} }).catch(error => { guard(); if (!(error instanceof ApiError) && !isQuotaError(error) && (error instanceof TypeError || /network|fetch|offline|connection|abort/i.test(error.message || ''))) { this.retryAfter = Date.now() + 10000; this.patch({ network: false }); } throw error; }).finally(() => { if (this.syncPromise === pending) this.syncPromise = null; }); this.syncPromise = pending; return pending;
+    const pending = syncAccount(this.api, this.repository, account, { paginated: this.paginated, guard, freshRequestId, matchId, onConfirmed: (before, after) => confirmed.push({before, after}) }).then(async data => { guard(); const previous = this.state.selectedMatch; this.syncCompatibilityRetryAfter=0;this.patch({ network: isOnline() }); this.publishData(data); const selected = this.state.selectedMatch; if (selected && selected.move_count !== previous?.move_count) { await this.recoverPresentation(selected, previous || undefined).catch(() => {}); guard(); await this.refreshProfile().catch(() => {}); } for (const {before, after} of confirmed) {guard(); await this.offerNotificationPrompt(before, after);} }).catch(error => { guard(); if(error instanceof RetryableSyncCompatibilityError)this.syncCompatibilityRetryAfter=Date.now()+10000;else if (!(error instanceof ApiError) && !isQuotaError(error) && (error instanceof TypeError || /network|fetch|offline|connection|abort/i.test(error.message || ''))) { this.retryAfter = Date.now() + 10000; this.patch({ network: false }); } throw error; }).finally(() => { if (this.syncPromise === pending) this.syncPromise = null; }); this.syncPromise = pending; return pending;
   }
   async submitMove(move: any) {
     const match = this.state.selectedMatch; if (!match) return;

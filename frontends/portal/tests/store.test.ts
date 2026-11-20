@@ -58,6 +58,20 @@ test('signed-out users must sign in before creating any match',async()=>{
   } finally {restore();}
 });
 
+test('a not-yet-deployed save route backs off without parking the save or marking working networking offline',async()=>{
+  browserStorage(true);let deployed=false,posts=0;const restore=mockedFetch(url=>{
+    if(url.pathname==='/matches/single-player-sync'){posts++;if(!deployed)throw new ApiError(404,'Not Found');}
+  });
+  try {
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');await store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0});
+    await store.actions.refresh();await store.actions.refresh();
+    const id=store.getSnapshot().selectedMatch!.id,data=await new AccountRepository('https://local.test').read('visitor');
+    assert.equal(posts,1);assert.equal(data.conflicts[id],undefined);assert.ok(data.local[id].cloud_inflight);assert.equal(store.getSnapshot().network,true);
+    deployed=true;(store as any).syncCompatibilityRetryAfter=0;await store.actions.refresh();
+    assert.equal(posts,2);assert.equal(store.getSnapshot().selectedMatch!.cloud_pending,false);
+  } finally {restore();}
+});
+
 test('multiplayer creation is durable before POST and retries a lost acknowledgement using the same match id',async()=>{
   browserStorage(true);const repository=new AccountRepository('https://local.test');let remote:any,first=true;const ids:string[]=[];
   const restore=mockedFetch(async(url,init)=>{

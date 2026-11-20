@@ -2,6 +2,7 @@ import {ApiError, type PortalApi} from './api';
 import {type AccountRepository, equal} from './repository';
 import {localRevision, needsCloudSave, singlePlayerKind, singlePlayerSnapshot} from './single-player';
 import type {Account, Match} from './types';
+import {isMissingSaveRoute, missingRouteReason, RetryableSyncCompatibilityError} from './sync-compatibility';
 
 function isTransferredAncestor(remote:Match, snapshot:Match):boolean {
   const saved=remote.single_player_state;
@@ -30,6 +31,13 @@ export async function syncSinglePlayerMatches(api: PortalApi, repository: Accoun
       options.guard();
       const data = await repository.read(account.id); options.guard();
       const local = data.local[id];
+      const conflict=data.conflicts[id],legacyReason=conflict?.message.match(/^Cloud saving needs attention: (.+)\. Your saved turns are preserved\.$/)?.[1];
+      if(local && !local.cloud_revision && conflict && !conflict.remote && legacyReason && missingRouteReason(legacyReason)) {
+        await repository.mutate(account.id,current=>{
+          options.guard();if(current.local[id] && !current.local[id].cloud_revision && equal(current.conflicts[id],conflict))delete current.conflicts[id];
+        });
+        continue;
+      }
       if (!local || !needsCloudSave(local) || data.conflicts[id]) break;
       const kind = singlePlayerKind(local), humans = local.players?.filter(player => player.kind === 'human').length || 0,
         computers = local.players?.filter(player => player.kind === 'computer').length || 0;
@@ -66,6 +74,7 @@ export async function syncSinglePlayerMatches(api: PortalApi, repository: Accoun
       } catch (error) {
         options.guard();
         if (!(error instanceof ApiError) || error.status >= 500) throw error;
+        if(isMissingSaveRoute(error))throw new RetryableSyncCompatibilityError(error);
         let server: Match | undefined;
         if (error.status === 409) try {server = await api.request('GET', `/matches/${encodeURIComponent(id)}`, undefined, account); options.guard();} catch {options.guard();}
         // Account merge advances the cloud revision. Rebase only this known

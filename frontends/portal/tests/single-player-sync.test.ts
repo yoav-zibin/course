@@ -5,6 +5,7 @@ import {AccountRepository, emptyAccountData, equal, type StorageAdapter} from '.
 import {syncSinglePlayerMatches} from '../src/core/single-player-sync';
 import {hydrateSinglePlayer, needsCloudSave, singlePlayerSnapshot} from '../src/core/single-player';
 import type {Account, LocalMatch, Match} from '../src/core/types';
+import {RetryableSyncCompatibilityError} from '../src/core/sync-compatibility';
 
 class MemoryStorage implements StorageAdapter {
   values=new Map<string,string>();
@@ -140,4 +141,31 @@ test('anonymous saved matches are adopted by one login without copying them to l
   await repository.preserveMergedAccounts('alice',['visitor']);assert.ok((await repository.read('alice')).local['local-anonymous']);
   await repository.preserveMergedAccounts('bob',['visitor']);assert.equal((await repository.read('bob')).local['local-anonymous'],undefined);
   assert.ok((await repository.read('visitor')).local['local-anonymous']);
+});
+
+for(const status of [404,405])test(`an older backend's ${status} save route retries automatically after deployment`,async()=>{
+  const {repository}=await fixture();let deployed=false,posts=0;
+  const api=mockApi(body=>{posts++;if(!deployed)throw new ApiError(status,status===404?'Not Found':'Method Not Allowed');return cloud(body.match,1);});
+  await assert.rejects(syncSinglePlayerMatches(api,repository,account,{guard(){}}),RetryableSyncCompatibilityError);
+  const pending=await repository.read('alice');assert.equal(pending.conflicts['local-offline'],undefined);assert.ok(pending.local['local-offline'].cloud_inflight);
+  assert.deepEqual(pending.local['local-offline'].logicState,local().logicState);
+  deployed=true;await syncSinglePlayerMatches(api,repository,account,{guard(){}});
+  const saved=await repository.read('alice');assert.equal(posts,2);assert.equal(needsCloudSave(saved.local['local-offline']),false);assert.equal(saved.conflicts['local-offline'],undefined);
+});
+
+for(const reason of ['Not Found','Method Not Allowed','לא נמצא'])test(`a legacy initial-save conflict for ${reason} resumes after backend deployment`,async()=>{
+  const {repository}=await fixture();await repository.mutate('alice',data=>{data.conflicts['local-offline']={message:`Cloud saving needs attention: ${reason}. Your saved turns are preserved.`};});
+  let posts=0;await syncSinglePlayerMatches(mockApi(body=>{posts++;return cloud(body.match,1);}),repository,account,{guard(){}});
+  const saved=await repository.read('alice');assert.equal(posts,1);assert.equal(saved.conflicts['local-offline'],undefined);assert.equal(needsCloudSave(saved.local['local-offline']),false);
+});
+
+test('compatibility recovery preserves genuine validation and previously synced missing-match conflicts',async()=>{
+  for(const scenario of [{revision:0,message:'Cloud saving needs attention: game version not found. Your saved turns are preserved.'},
+    {revision:1,message:'Cloud saving needs attention: Not Found. Your saved turns are preserved.'},
+    {revision:0,message:'This match changed on another device. Your saved turns are preserved; review them before using the cloud version.'}]) {
+    const snapshot=local();snapshot.cloud_revision=scenario.revision;const {repository}=await fixture(snapshot);
+    await repository.mutate('alice',data=>{data.conflicts['local-offline']={message:scenario.message};});let posts=0;
+    await syncSinglePlayerMatches(mockApi(body=>{posts++;return cloud(body.match,2);}),repository,account,{guard(){}});
+    assert.equal(posts,0);assert.equal((await repository.read('alice')).conflicts['local-offline'].message,scenario.message);
+  }
 });
