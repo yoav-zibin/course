@@ -204,7 +204,8 @@ var gameUI = {
                         hit_area: {x: -56, y: -56, width: 112, height: 112}, aria_label: fill(S.gate_label, {square: squareName(local.square), side: S['side_' + p]})});
           pieces.push({id: 'ghost-gate-' + g, type: 'lantern', board: 'board', position: lanternXY(ltGatePos(g)), asset: 'lantern_' + PLAYER_KEYS[view.cur],
                        opacity: 0.6, z: 4, actions: [], text: String(i + 1), aria_label: fill(S.gate_label, {square: squareName(local.square), side: S['side_' + p]})});
-          labels.push({id: 'gate-num-' + i, text: String(i + 1), x: 30 + at.x - 50, y: 150 + at.y - 54, font_size: 18, color: '#fff1c4'});
+          // Above the picker, not on it (text on top would swallow the tap).
+          labels.push({id: 'gate-num-' + i, text: String(i + 1), x: 30 + at.x - 6, y: 150 + at.y - 80, font_size: 18, color: '#fff1c4'});
         });
         hint = S.hint_gate;
       } else hint = S.hint_square;

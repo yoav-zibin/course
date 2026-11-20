@@ -10,6 +10,7 @@
 // Squares are drawn upright (crowns never turn); only their places change.
 var PLAYER_KEYS = ['amber', 'jade', 'rose', 'sky'];
 var PLAYER_HEX = ['#ffb347', '#3fd6a0', '#ff6f91', '#5cc8ff'];
+var TAB_DIM = ['#b98d5a', '#5fa68a', '#b9707f', '#6d9ab8'];
 var TERRAIN_KEYS = ['wheat', 'forest', 'lake', 'meadow', 'marsh', 'mine'];
 var TERRAIN_HEX = ['#f3d27a', '#7fd39e', '#7cc4ff', '#b8f0a8', '#c9d29a', '#c9ccd2'];
 var STAGE_Y = 112;
@@ -101,9 +102,11 @@ var gameUI = {
     // ---- score tabs (tap to show a realm) ----
     for (var seat = 0; seat < n; seat++) {
       var tx = 72 + seat * 140;
-      targets.push({id: 'roster-' + seat, board: 'hud', position: {x: tx, y: 86}, asset: shown === seat && !over ? 'tab_on' : 'tab',
+      // The name and score are the tab's own label, so the whole tab takes
+      // the tap (a separate text on top would swallow it).
+      targets.push({id: 'roster-' + seat, board: 'hud', position: {x: tx, y: 86}, color: shown === seat && !over ? PLAYER_HEX[seat] : TAB_DIM[seat],
+                    label: colorName(seat) + ' ' + view.live_scores[seat],
                     hit_area: {x: -62, y: -22, width: 124, height: 44}, aria_label: fill(S.show_realm, {name: name(seat)})});
-      labels.push({id: 'score-' + seat, text: colorName(seat) + ' ' + view.live_scores[seat], x: tx - 50, y: 76, font_size: 18, color: PLAYER_HEX[seat]});
     }
     var status, hint = '';
     if (!over) {

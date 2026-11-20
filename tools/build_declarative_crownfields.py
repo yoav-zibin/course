@@ -282,7 +282,7 @@ def specification():
     assets.update({'grid': asset(GRID), 'endframe': asset(END_FRAME), 'lay_ok': asset(LAY_OK)})
     assets.update({'pick': asset(PICK), 'pick_on': asset(PICK_ON), 'spot': asset(SPOT),
                    'fit_ok': asset(frame_svg('#7dff8a', 5)), 'fit_bad': asset(frame_svg('#ff5d5d', 5, ' stroke-dasharray="10 6"')),
-                   'rot_cw': asset(arrow_svg(True)), 'rot_ccw': asset(arrow_svg(False)), 'tab': asset(TAB), 'tab_on': asset(TAB_ON)})
+                   'rot_cw': asset(arrow_svg(True)), 'rot_ccw': asset(arrow_svg(False))})
     server = (DEST / f'{KIND}.server.js').read_text()
     shared = server[server.index('// ---- shared geometry'):server.index('// ---- end shared geometry ----')]
     return {'format': 'buildplay-ui', 'version': 1, 'viewport': {'width': 600, 'height': 790},
