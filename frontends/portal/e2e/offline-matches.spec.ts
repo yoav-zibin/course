@@ -29,7 +29,8 @@ test('match names and playable packages download without catalog entries and sur
   });
   await loginAs(page,host);await page.goto('/portal#matches');
   await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible({timeout:30000});
+  const cardTitle=page.getByTestId(`match-card-${match.id}`).getByRole('heading',{name:`${name} against ${opponent.display_name}`,exact:true});
+  await expect(cardTitle).toBeVisible({timeout:30000});
 
   const downloaded=()=>page.evaluate(({userId,matchId,gameId,version})=>{
     const key=Object.keys(localStorage).find(key=>key.startsWith('buildplay.shared.v1.')&&key.endsWith(`.${userId}`));
@@ -49,7 +50,7 @@ test('match names and playable packages download without catalog entries and sur
 
   offline=true;await context.setOffline(true);await page.reload();
   await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+  await expect(cardTitle).toBeVisible();
   await page.getByRole('button',{name:'Open match',exact:true}).click();
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
