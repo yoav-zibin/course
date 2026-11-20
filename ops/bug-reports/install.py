@@ -49,6 +49,23 @@ def with_owner_google_user_id(config, previous, *, owner_google_user_id=None,
     return result
 
 
+def with_student_user_ids(config, previous, *, student_user_ids=None,
+                          validate_student_ids):
+    """Preserve private student pins only for the same repository/API origin."""
+    candidate = student_user_ids
+    if candidate is None and isinstance(previous, dict):
+        origin = api_origin(config.get("api_base"))
+        if (previous.get("repository") == config.get("repository") and
+                origin is not None and origin == api_origin(previous.get("api_base"))):
+            candidate = previous.get("student_user_ids")
+    students = validate_student_ids(candidate)
+    result = dict(config)
+    result.pop("student_user_ids", None)
+    if students:
+        result["student_user_ids"] = students
+    return result
+
+
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
@@ -59,6 +76,8 @@ def main():
     parser.add_argument("--api-base", default="https://buildplay.fun")
     parser.add_argument("--owner-google-user-id",
                         help="Canonical UUID of the verified Google owner account")
+    parser.add_argument("--student-user-ids-file", type=Path,
+                        help="Private JSON array of at most 24 verified account UUIDs for the 12 students")
     args = parser.parse_args()
     uuid.UUID(args.thread_id)
     password_file = args.password_file.resolve(strict=True)
@@ -71,11 +90,22 @@ def main():
               "api_base": args.api_base, "password_file": str(password_file),
               "repository_path": str(REPOSITORY)}
     sys.path.insert(0, str(ROOT))
-    from review import BugAPI, save_json, validate_owner_google_user_id
+    from review import BugAPI, save_json, validate_owner_google_user_id, validate_student_user_ids
     previous = json.loads((state / "config.json").read_text()) if (state / "config.json").exists() else None
     config = with_owner_google_user_id(
         config, previous, owner_google_user_id=args.owner_google_user_id,
         validate_owner_id=validate_owner_google_user_id,
+    )
+    students = None
+    if args.student_user_ids_file is not None:
+        if args.student_user_ids_file.stat().st_mode & 0o077:
+            raise ValueError("The student user-ID file must be private (mode 600)")
+        students = json.loads(args.student_user_ids_file.read_text())
+        if not isinstance(students, list):
+            raise ValueError("The student user-ID file must contain a JSON array")
+    config = with_student_user_ids(
+        config, previous, student_user_ids=students,
+        validate_student_ids=validate_student_user_ids,
     )
     BugAPI(config)
     save_json(state / "config.json", config)

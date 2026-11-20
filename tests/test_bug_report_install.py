@@ -112,3 +112,40 @@ def test_help_exposes_the_optional_owner_argument_without_installing():
     )
     assert result.returncode == 0
     assert "--owner-google-user-id" in result.stdout
+    assert "--student-user-ids-file" in result.stdout
+
+
+def configured_students(previous=None, explicit=None, **changes):
+    return install.with_student_user_ids(
+        {**CONFIG, **changes}, previous, student_user_ids=explicit,
+        validate_student_ids=review.validate_student_user_ids,
+    )
+
+
+def test_student_pins_are_optional_preserved_and_explicitly_replaceable():
+    assert configured_students() == CONFIG
+    previous = {**CONFIG, "student_user_ids": [OWNER]}
+    assert configured_students(previous)["student_user_ids"] == [OWNER]
+    assert configured_students(previous, [REPLACEMENT])["student_user_ids"] == [REPLACEMENT]
+    assert "student_user_ids" not in configured_students(previous, [])
+    assert previous["student_user_ids"] == [OWNER]
+
+
+@pytest.mark.parametrize("origin", ["https://buildplay.fun/", "https://BUILDPLAY.fun:443/"])
+def test_equivalent_origin_keeps_student_pins(origin):
+    assert configured_students({**CONFIG, "api_base": origin, "student_user_ids": [OWNER]})["student_user_ids"] == [OWNER]
+
+
+@pytest.mark.parametrize("changes", [
+    {"api_base": "https://another.test"}, {"api_base": "https://buildplay.fun:8443"},
+    {"repository": "another/repository"},
+])
+def test_scope_changes_drop_student_pins_without_validating_unrelated_data(changes):
+    previous = {**CONFIG, "student_user_ids": "malformed old roster"}
+    assert "student_user_ids" not in configured_students(previous, **changes)
+
+
+@pytest.mark.parametrize("value", ["not a list", [OWNER, OWNER], [OWNER.upper()], [True], list(range(13))])
+def test_invalid_student_rosters_fail_without_echoing_identifiers(value):
+    with pytest.raises(ValueError, match="Invalid student user IDs"):
+        configured_students(explicit=value)

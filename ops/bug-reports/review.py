@@ -3,6 +3,7 @@
 
 import argparse
 import base64
+from contextlib import contextmanager
 import fcntl
 import json
 import os
@@ -25,6 +26,7 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # still fit, including when the text needs more space than four-byte Unicode.
 PAGE_LIMIT = 20
 STATUSES = ("open", "handling", "escalated", "handled")
+MAX_STUDENT_ACCOUNTS = 24  # Twelve people can each have multiple verified accounts.
 
 
 def save_json(path, value):
@@ -48,6 +50,7 @@ def configuration(state_dir):
     if not Path(config["repository_path"]).is_dir():
         raise ValueError("The configured repository must exist")
     validate_owner_google_user_id(config.get("owner_google_user_id"))
+    validate_student_user_ids(config.get("student_user_ids"))
     return config
 
 
@@ -74,11 +77,192 @@ def owner_suggestion_authorized(config, report):
             and "google" in providers)
 
 
-def with_review_policy(config, report):
+def validate_student_user_ids(value):
+    if value is None:
+        return []
+    try:
+        if not isinstance(value, list) or len(value) > MAX_STUDENT_ACCOUNTS:
+            raise ValueError
+        if any(validate_owner_google_user_id(identifier) is None for identifier in value):
+            raise ValueError
+        if len(set(value)) != len(value):
+            raise ValueError
+    except (ValueError, TypeError):
+        raise ValueError("Invalid student user IDs") from None
+    return list(value)
+
+
+def reporter_identity(report):
+    """Return consistent server context, distinguishing anonymous from malformed."""
+    identifier, user = report.get("reporter_user_id"), report.get("user")
+    if identifier is None and user is None:
+        return True, None
+    return (isinstance(identifier, str) and isinstance(user, dict)
+            and user.get("id") == identifier), identifier
+
+
+def student_suggestion_authorized(config, report):
+    consistent, identifier = reporter_identity(report)
+    return (consistent and identifier is not None
+            and identifier != config.get("owner_google_user_id")
+            and identifier in validate_student_user_ids(config.get("student_user_ids")))
+
+
+def authorization_scope(config):
+    parsed = urllib.parse.urlsplit(config["api_base"].rstrip("/"))
+    return {"repository": config["repository"], "branch": config["branch"],
+            "thread_id": str(uuid.UUID(config["thread_id"])),
+            "api_origin": [parsed.scheme, parsed.hostname, parsed.port if parsed.port is not None else 443]}
+
+
+def authorizations(state_dir, config):
+    empty = {"scope": authorization_scope(config), "approved": {}, "declined": {}, "pending": None}
+    path = state_dir / "authorizations.json"
+    if not path.exists():
+        return empty
+    if path.stat().st_mode & 0o077:
+        raise RuntimeError("The authorization state must be private (mode 600)")
+    value = json.loads(path.read_text())
+    if not isinstance(value, dict):
+        raise ValueError("Invalid private authorization state")
+    if value.get("scope") != empty["scope"]:
+        return empty  # A different server, repository or conversation grants no approval.
+    if (not isinstance(value.get("approved"), dict) or not isinstance(value.get("declined"), dict)
+            or (value.get("pending") is not None and not isinstance(value["pending"], dict))):
+        raise ValueError("Invalid private authorization state")
+    for decisions in (value["approved"], value["declined"]):
+        for identifier, decision in decisions.items():
+            report_id(identifier)
+            if not isinstance(decision, dict) or not isinstance(decision.get("user_response"), str):
+                raise ValueError("Invalid private authorization state")
+    if value["pending"] is not None:
+        report_id(value["pending"].get("report_id"))
+    return value
+
+
+@contextmanager
+def authorization_lock(state_dir):
+    with (state_dir / "authorizations.lock").open("a") as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def with_review_policy(config, report, authorization=None):
     # Always overwrite incoming flags. Submitted evidence cannot grant approval.
+    authorization = authorization or {"approved": {}, "declined": {}, "pending": None}
+    owner = owner_suggestion_authorized(config, report)
+    student = student_suggestion_authorized(config, report)
+    consistent, identifier = reporter_identity(report)
+    approval = authorization["approved"].get(report["id"], {})
+    explicit = (consistent and bool(approval) and approval.get("reporter_user_id") == identifier)
+    declined = report["id"] in authorization["declined"]
+    pending = authorization["pending"]
     return {**report, "_review_policy": {
-        "owner_suggestion_authorized": owner_suggestion_authorized(config, report),
+        "owner_suggestion_authorized": owner,
+        "student_suggestion_authorized": student,
+        "preauthorized": owner or student,
+        "explicitly_authorized": explicit,
+        "authorization_required": declined or not (owner or student or explicit),
+        "authorization_declined": declined,
+        "authorization_pending": bool(pending and pending["report_id"] == report["id"]),
+        "pending_authorization_report_id": pending["report_id"] if pending else None,
     }}
+
+
+def review_ids(api, authorization):
+    identifiers = set(api.pending_ids())
+    identifiers.update(identifier for identifier, decision in authorization["approved"].items()
+                       if decision.get("active") is True)
+    if authorization["pending"]:
+        identifiers.add(authorization["pending"]["report_id"])
+    return identifiers
+
+
+def authorization_status(state_dir):
+    state = authorizations(state_dir, configuration(state_dir))
+    return {"private_authorizations": str(state_dir / "authorizations.json"),
+            "pending_report_id": state["pending"]["report_id"] if state["pending"] else None,
+            "approved_reports": len(state["approved"])}
+
+
+def request_authorization(state_dir, identifier, *, summary_file):
+    """Reserve the sole question; no report status or approval changes here."""
+    report_id(identifier)
+    summary = " ".join(summary_file.read_text().split())
+    if not 5 <= len(summary) <= 500:
+        raise ValueError("A concise 5–500 character behavior summary is required")
+    config = configuration(state_dir)
+    with authorization_lock(state_dir):
+        state = authorizations(state_dir, config)
+        if state["pending"]:
+            if state["pending"]["report_id"] != identifier:
+                raise RuntimeError("Another report is awaiting Yoav's decision; do not ask a second question")
+            return authorization_status(state_dir)
+        report = BugAPI(config).get(identifier)
+        if report["status"] == "handled":
+            raise ValueError("A handled report does not need authorization")
+        policy = with_review_policy(config, report, state)["_review_policy"]
+        if not policy["authorization_required"]:
+            raise ValueError("This report is already authorized")
+        if policy["authorization_declined"]:
+            raise ValueError("Yoav already declined this report; await his explicit decision to reconsider")
+        consistent, user_id = reporter_identity(report)
+        if not consistent:
+            raise ValueError("The server-derived reporter identity is inconsistent")
+        user = report.get("user") or {}
+        name = user.get("display_name")
+        name = " ".join(name.split())[:160] if isinstance(name, str) and name.strip() else "Signed-out reporter" if user_id is None else "Unnamed signed-in reporter"
+        state["pending"] = {"report_id": identifier, "reporter_user_id": user_id,
+                            "reporter_name": name, "summary": summary, "requested_at": time.time()}
+        save_json(state_dir / "authorizations.json", state)
+    return authorization_status(state_dir)
+
+
+def decide_authorization(state_dir, identifier, *, decision, user_response_file,
+                         confirmed_direct_reply=False):
+    """Call only after Yoav's direct reply in the configured conversation."""
+    report_id(identifier)
+    if confirmed_direct_reply is not True:
+        raise PermissionError("A direct reply from Yoav in this conversation is required")
+    if decision not in ("approved", "declined"):
+        raise ValueError("Invalid authorization decision")
+    response = user_response_file.read_text().strip()
+    if not response or len(response) > 10_000:
+        raise ValueError("Private notes quoting Yoav's direct response are required")
+    config = configuration(state_dir)
+    with authorization_lock(state_dir):
+        state = authorizations(state_dir, config)
+        pending = state["pending"]
+        pending_matches = bool(pending and pending["report_id"] == identifier)
+        subject = pending if pending_matches else (state["declined"].get(identifier) or state["approved"].get(identifier))
+        if not subject:
+            raise ValueError("The decision must match the sole pending report or update its recorded decision")
+        report = BugAPI(config).get(identifier)
+        consistent, user_id = reporter_identity(report)
+        if not consistent or user_id != subject["reporter_user_id"]:
+            raise ValueError("The server-derived reporter identity changed")
+        state[decision][identifier] = {"reporter_user_id": user_id, "user_response": response,
+                                        "decided_at": time.time(), "active": decision == "approved" and report["status"] != "handled"}
+        state["declined" if decision == "approved" else "approved"].pop(identifier, None)
+        if pending_matches:
+            state["pending"] = None
+        save_json(state_dir / "authorizations.json", state)
+    return {**authorization_status(state_dir), "id": identifier, "decision": decision}
+
+
+def complete_authorization(state_dir, config, identifier):
+    with authorization_lock(state_dir):
+        state = authorizations(state_dir, config)
+        changed = False
+        if state["approved"].get(identifier, {}).get("active") is True:
+            state["approved"][identifier]["active"] = False
+            changed = True
+        if state["pending"] and state["pending"]["report_id"] == identifier:
+            state["pending"] = None  # Another reviewer resolved it; this grants no permission.
+            changed = True
+        if changed:
+            save_json(state_dir / "authorizations.json", state)
 
 
 def report_id(value):
@@ -159,7 +343,7 @@ class BugAPI:
 
 def watch(state_dir, *, dry_run=False, now=None):
     config = configuration(state_dir)
-    identifiers = BugAPI(config).pending_ids()
+    identifiers = review_ids(BugAPI(config), authorizations(state_dir, config))
     receipt = state_dir / "pending.json"
     if not identifiers:
         if not dry_run:
@@ -202,15 +386,22 @@ def snapshot(state_dir):
     """Save full pending evidence privately; stdout contains only the path and count."""
     config = configuration(state_dir)
     api = BugAPI(config)
+    authorization = authorizations(state_dir, config)
     directory = state_dir / "snapshots"
     directory.mkdir(mode=0o700, exist_ok=True)
     count = 0
     with tempfile.NamedTemporaryFile(mode="w", dir=directory, suffix=".jsonl", delete=False) as handle:
         path = Path(handle.name)
         try:
-            for identifier in sorted(api.pending_ids()):
-                body = with_review_policy(config, api.get(identifier))
-                if body["status"] not in ("open", "handling"):
+            for identifier in sorted(review_ids(api, authorization)):
+                body = with_review_policy(config, api.get(identifier), authorization)
+                if body["status"] == "handled":
+                    complete_authorization(state_dir, config, identifier)
+                    authorization = authorizations(state_dir, config)
+                    continue
+                if body["status"] == "escalated" and not (
+                        body["_review_policy"]["explicitly_authorized"] or
+                        body["_review_policy"]["authorization_pending"]):
                     continue
                 handle.write(json.dumps(body, ensure_ascii=False) + "\n")
                 count += 1
@@ -225,7 +416,10 @@ def snapshot(state_dir):
 def get_report(state_dir, identifier):
     """Retrieve even a resolved report privately, for lost-response confirmation."""
     config = configuration(state_dir)
-    body = with_review_policy(config, BugAPI(config).get(identifier))
+    report = BugAPI(config).get(identifier)
+    if report["status"] == "handled":
+        complete_authorization(state_dir, config, identifier)
+    body = with_review_policy(config, report, authorizations(state_dir, config))
     directory = state_dir / "snapshots"
     directory.mkdir(mode=0o700, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="w", dir=directory, suffix=".json", delete=False) as handle:
@@ -239,7 +433,7 @@ def get_report(state_dir, identifier):
             path.unlink(missing_ok=True)
             raise
     return {"id": identifier, "status": body["status"], "private_report": str(path),
-            "owner_suggestion_authorized": body["_review_policy"]["owner_suggestion_authorized"]}
+            **body["_review_policy"]}
 
 
 def set_status(state_dir, identifier, *, status, notes_file, commit=None,
@@ -248,6 +442,16 @@ def set_status(state_dir, identifier, *, status, notes_file, commit=None,
     notes = notes_file.read_text().strip()
     if not notes:
         raise ValueError("Resolution or escalation notes are required")
+    if expected_status is None or not expected_updated_at:
+        raise ValueError("Both expected status and updated-at guards are required")
+    config = configuration(state_dir)
+    api = BugAPI(config)
+    current = api.get(identifier)
+    if current["status"] != expected_status or current.get("updated_at") != expected_updated_at:
+        raise RuntimeError("The report changed; fetch it before updating its status")
+    policy = with_review_policy(config, current, authorizations(state_dir, config))["_review_policy"]
+    if status in ("open", "handling", "handled") and policy["authorization_required"]:
+        raise PermissionError("Yoav's explicit authorization is required before working on this report")
     body = {"status": status, "resolution": notes}
     if commit is not None:
         body["commit"] = commit
@@ -255,12 +459,14 @@ def set_status(state_dir, identifier, *, status, notes_file, commit=None,
         body["expected_status"] = expected_status
     if expected_updated_at is not None:
         body["expected_updated_at"] = expected_updated_at
-    result = BugAPI(configuration(state_dir)).request(
+    result = api.request(
         "/admin/bug-reports/" + urllib.parse.quote(identifier, safe="") + "/status",
         method="POST", body=body,
     )
     if not isinstance(result, dict) or result.get("id") != identifier or result.get("status") != status:
         raise RuntimeError("The API did not confirm the status; fetch the report before retrying")
+    if status == "handled":
+        complete_authorization(state_dir, config, identifier)
     return {"id": identifier, "status": status}
 
 
@@ -272,6 +478,15 @@ def main():
     watcher = commands.add_parser("watch")
     watcher.add_argument("--dry-run", action="store_true")
     commands.add_parser("snapshot")
+    commands.add_parser("authorizations")
+    permission = commands.add_parser("request-authorization")
+    permission.add_argument("id")
+    permission.add_argument("--summary-file", type=Path, required=True)
+    decision = commands.add_parser("decide-authorization", description="Record only Yoav's direct reply in this conversation")
+    decision.add_argument("id")
+    decision.add_argument("--decision", choices=("approved", "declined"), required=True)
+    decision.add_argument("--user-response-file", type=Path, required=True)
+    decision.add_argument("--from-yoav-in-this-thread", action="store_true", required=True)
     detail = commands.add_parser("get")
     detail.add_argument("id")
     change = commands.add_parser("status")
@@ -288,6 +503,14 @@ def main():
         result = snapshot(args.state_dir)
     elif args.command == "get":
         result = get_report(args.state_dir, args.id)
+    elif args.command == "authorizations":
+        result = authorization_status(args.state_dir)
+    elif args.command == "request-authorization":
+        result = request_authorization(args.state_dir, args.id, summary_file=args.summary_file)
+    elif args.command == "decide-authorization":
+        result = decide_authorization(args.state_dir, args.id, decision=args.decision,
+                                      user_response_file=args.user_response_file,
+                                      confirmed_direct_reply=args.from_yoav_in_this_thread)
     else:
         result = set_status(args.state_dir, args.id, status=args.status, notes_file=args.notes_file,
                             commit=args.commit, expected_status=args.expected_status,
