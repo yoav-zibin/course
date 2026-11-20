@@ -35,7 +35,11 @@ async function point(page:Page,name:string):Promise<number[]>{
   });
 }
 async function settled(page:Page,name:string,at:number[]){
-  await expect.poll(()=>point(page,name),{timeout:10000}).toEqual(at);
+  // Equivalent scene coordinates can differ by floating point rounding.
+  await expect.poll(async()=>{
+    const actual=await point(page,name);
+    return actual.length===at.length?Math.max(...at.map((value,index)=>Math.abs(actual[index]-value))):Infinity;
+  },{timeout:10000}).toBeLessThan(1e-6);
 }
 type Frame={t:number;positions:Record<string,number[]>};
 async function watch(page:Page,names:string[],selectors:Record<string,{label:string;index?:number}>={}){
