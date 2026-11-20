@@ -45,28 +45,32 @@
         "width": 38,
         "height": 38,
         "color": "#f2d492",
-        "text_color": "#20242b"
+        "text_color": "#20242b",
+        "action_outline": "ellipse"
       },
       "q1": {
         "shape": "circle",
         "width": 54,
         "height": 54,
         "color": "#f2d492",
-        "text_color": "#20242b"
+        "text_color": "#20242b",
+        "action_outline": "ellipse"
       },
       "q2": {
         "shape": "circle",
         "width": 38,
         "height": 38,
         "color": "#5b3a29",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "q3": {
         "shape": "circle",
         "width": 54,
         "height": 54,
         "color": "#5b3a29",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "q4": {
         "shape": "rect",
@@ -101,28 +105,32 @@
         "width": 38,
         "height": 38,
         "color": "#f2d492",
-        "text_color": "#20242b"
+        "text_color": "#20242b",
+        "action_outline": "ellipse"
       },
       "q9": {
         "shape": "circle",
         "width": 54,
         "height": 54,
         "color": "#f2d492",
-        "text_color": "#20242b"
+        "text_color": "#20242b",
+        "action_outline": "ellipse"
       },
       "q10": {
         "shape": "circle",
         "width": 38,
         "height": 38,
         "color": "#5b3a29",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "q11": {
         "shape": "circle",
         "width": 54,
         "height": 54,
         "color": "#5b3a29",
-        "text_color": "#ffffff"
+        "text_color": "#ffffff",
+        "action_outline": "ellipse"
       },
       "q12": {
         "shape": "rect",
@@ -156,7 +164,8 @@
         "shape": "text",
         "width": 70,
         "height": 70,
-        "text_color": "#7ee787"
+        "text_color": "#7ee787",
+        "action_outline": "none"
       }
     },
     "strings": {
@@ -175,7 +184,13 @@
       "piece": "Piece {n}",
       "server_invalid": "Illegal move"
     },
-    "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Quarto\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"draw\": \"Draw - pot split\", \"winner\": \"Player {n} wins\", \"hand\": \"In hand\", \"pool\": \"Pool - tap a piece to give\", \"hint_give\": \"Choose a piece for your opponent\", \"hint_cell\": \"Tap a cell to place your piece\", \"hint_next\": \"Now tap a pool piece to hand over\", \"finish\": \"Place and finish\", \"cell\": \"Cell {n}\", \"piece\": \"Piece {n}\", \"server_invalid\": \"Illegal move\"};\nconst LINES=[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15],[0,4,8,12],[1,5,9,13],[2,6,10,14],[3,7,11,15],[0,5,10,15],[3,6,9,12]];\nfunction uiWins(board,cell,piece){\n  const b=board.slice(); b[cell]=piece;\n  for(const line of LINES){\n    if(line.indexOf(cell)===-1) continue;\n    const ps=line.map(c=>b[c]);\n    if(ps.some(p=>p===-1)) continue;\n    for(let bit=0;bit<4;bit++){\n      const v=(ps[0]>>bit)&1;\n      if(ps.every(p=>((p>>bit)&1)===v)) return true;\n    }\n  }\n  return false;\n}\nfunction pieceLabel(p){\n  return ((p&1)?'T':'s')+((p&8)?'\\u25cb':'\\u25cf');\n}\nconst gameUI={\n  getLastMoveAnimations(view,scene){\n    if(!Object.prototype.hasOwnProperty.call(view,'last_move')) return null;\n    const move=view.last_move;\n    if(!move||move.kind!=='place') return [];\n    const piece=(scene.pieces||[]).find(pc=>pc.id===move.piece_id);\n    if(!piece||!move.from) return [];\n    return [{piece_id:move.piece_id,duration_ms:700,path:[move.from,{board:piece.board,position:piece.position}]}];\n  },\n  reduce(message,localState){\n    const m=message.type==='ui_event'?message.state_changed:message;\n    const s=m.view||m.state;\n    const strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    const t=(key,args)=>(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String((args||{})[k]===undefined?'':(args||{})[k]));\n    const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined&&!s.over;\n    let staged=null;\n    if(localState&&localState.mc===m.move_count&&Number.isInteger(localState.cell)) staged=localState.cell;\n    if(message.type!=='ui_event') staged=null;\n    // Apply a tap to the staged selection BEFORE building the scene, so the\n    // scene returned for a cell tap already offers the follow-up choices:\n    // give targets for the hand-over, or the finish control when the staged\n    // placement ends the game. Pieces themselves never declare actions;\n    // every interaction is a target or a control.\n    let makeMove=null;\n    if(message.type==='ui_event'&&active&&message.event&&message.event.type==='tap'){\n      let eid=message.event.id||'';\n      if(eid.indexOf('cell_')===0) eid='cell-'+eid.slice(5);\n      if(eid.indexOf('pool_')===0) eid='give-'+eid.slice(5);\n      if(s.phase==='give'&&eid.indexOf('give-')===0){\n        const p=parseInt(eid.slice(5),10);\n        if(s.pool.indexOf(p)!==-1) makeMove={type:'give',piece:p};\n      } else if(s.phase==='place'&&eid.indexOf('cell-')===0){\n        const c=parseInt(eid.slice(5),10);\n        if(c>=0&&c<16&&s.board[c]===-1) staged=staged===c?null:c;\n      } else if(s.phase==='place'&&eid.indexOf('give-')===0&&staged!==null){\n        const p=parseInt(eid.slice(5),10);\n        if(s.pool.indexOf(p)!==-1&&s.pool.length>0&&!uiWins(s.board,staged,s.hand)) makeMove={type:'turn',cell:staged,give:p};\n      } else if(s.phase==='place'&&eid==='finish'&&staged!==null&&(s.pool.length===0||uiWins(s.board,staged,s.hand))){\n        makeMove={type:'turn',cell:staged,give:null};\n      }\n    }\n    const endsGame=staged!==null&&(s.pool.length===0||uiWins(s.board,staged,s.hand));\n    const pieces=[],targets=[],controls=[];\n    let statusText;\n    if(s.over) statusText=s.winner>=0?t('winner',{n:s.winner+1}):t('draw');\n    else statusText=t('turn',{n:s.turn+1});\n    const labels=[\n      {id:'title',text:t('title'),x:24,y:16,font_size:26},\n      {id:'turn',text:statusText,x:24,y:50,font_size:18},\n      {id:'handlabel',text:t('hand'),x:24,y:436,font_size:16},\n      {id:'poollabel',text:t('pool'),x:170,y:436,font_size:16}\n    ];\n    if(active&&!s.over){\n      labels.push({id:'hint',text:s.phase==='give'?t('hint_give'):(staged===null?t('hint_cell'):t('hint_next')),x:330,y:50,font_size:15});\n    }\n    // Board pieces (passive).\n    s.board.forEach((p,cell)=>{\n      if(p!==-1) pieces.push({id:'piece_'+p,type:'q'+p,board:'main',position:{cell:String(cell)},text:pieceLabel(p),actions:[]});\n    });\n    if(staged!==null) pieces.push({id:'stage_mark',type:'mark',board:'main',position:{cell:String(staged)},text:'+',actions:[]});\n    // In-hand piece, shown large on the tray (passive).\n    if(s.hand!==-1) pieces.push({id:'piece_'+s.hand,type:'q'+s.hand,board:'tray',position:{x:70,y:90},text:pieceLabel(s.hand),scale:1.5,actions:[]});\n    // Pool pieces on the tray: two rows of eight (passive). When a piece may\n    // be handed over -- the opening give, or a staged non-final placement --\n    // a transparent target with the piece's id overlays it.\n    const canGive=active&&(s.phase==='give'||(s.phase==='place'&&staged!==null&&!endsGame));\n    s.pool.forEach((p,i)=>{\n      const pos={x:200+(i%8)*52,y:80+Math.floor(i/8)*95};\n      pieces.push({id:'piece_'+p,type:'q'+p,board:'tray',position:pos,text:pieceLabel(p),actions:[]});\n      if(canGive) targets.push({id:'give-'+p,board:'tray',position:pos,color:'#00000000',aria_label:t('piece',{n:p+1})});\n    });\n    // Placement targets only for the acting viewer.\n    if(active&&s.phase==='place'){\n      for(let cell=0;cell<16;cell++) if(s.board[cell]===-1)\n        targets.push({id:'cell-'+cell,board:'main',position:{cell:String(cell)},label:t('cell',{n:cell+1})});\n    }\n    // Finish control: only when the staged placement ends the game\n    // (a win, or the pool is empty so this is the final placement).\n    if(active&&s.phase==='place'&&endsGame)\n      controls.push({id:'finish',kind:'button',label:t('finish')});\n    const scene={pieces:pieces,targets:targets,controls:controls,labels:labels};\n    const out={scene:scene,local_state:staged===null?{}:{cell:staged,mc:m.move_count}};\n    if(makeMove) out.make_move=makeMove;\n    return out;\n  }\n};\n"
+    "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Quarto\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"draw\": \"Draw - pot split\", \"winner\": \"Player {n} wins\", \"hand\": \"In hand\", \"pool\": \"Pool - tap a piece to give\", \"hint_give\": \"Choose a piece for your opponent\", \"hint_cell\": \"Tap a cell to place your piece\", \"hint_next\": \"Now tap a pool piece to hand over\", \"finish\": \"Place and finish\", \"cell\": \"Cell {n}\", \"piece\": \"Piece {n}\", \"server_invalid\": \"Illegal move\"};\nconst LINES=[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15],[0,4,8,12],[1,5,9,13],[2,6,10,14],[3,7,11,15],[0,5,10,15],[3,6,9,12]];\nfunction uiWins(board,cell,piece){\n  const b=board.slice(); b[cell]=piece;\n  for(const line of LINES){\n    if(line.indexOf(cell)===-1) continue;\n    const ps=line.map(c=>b[c]);\n    if(ps.some(p=>p===-1)) continue;\n    for(let bit=0;bit<4;bit++){\n      const v=(ps[0]>>bit)&1;\n      if(ps.every(p=>((p>>bit)&1)===v)) return true;\n    }\n  }\n  return false;\n}\nfunction pieceLabel(p){\n  return ((p&1)?'T':'s')+((p&8)?'\\u25cb':'\\u25cf');\n}\nconst gameUI={\n  getLastMoveAnimations(view,scene){\n    if(!Object.prototype.hasOwnProperty.call(view,'last_move')) return null;\n    const move=view.last_move;\n    if(!move||move.kind!=='place') return [];\n    const piece=(scene.pieces||[]).find(pc=>pc.id===move.piece_id);\n    if(!piece||!move.from) return [];\n    return [{piece_id:move.piece_id,duration_ms:700,path:[move.from,{board:piece.board,position:piece.position}]}];\n  },\n  reduce(message,localState){\n    const m=message.type==='ui_event'?message.state_changed:message;\n    const s=m.view||m.state;\n    const strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    const t=(key,args)=>(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String((args||{})[k]===undefined?'':(args||{})[k]));\n    const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined&&!s.over;\n    let staged=null;\n    if(localState&&localState.mc===m.move_count&&Number.isInteger(localState.cell)) staged=localState.cell;\n    if(message.type!=='ui_event') staged=null;\n    // Apply a tap to the staged selection BEFORE building the scene, so the\n    // scene returned for a cell tap already offers the follow-up choices:\n    // give targets for the hand-over, or the finish control when the staged\n    // placement ends the game. Pieces themselves never declare actions;\n    // every interaction is a target or a control.\n    let makeMove=null;\n    if(message.type==='ui_event'&&active&&message.event&&message.event.type==='tap'){\n      let eid=message.event.id||'';\n      if(eid.indexOf('cell_')===0) eid='cell-'+eid.slice(5);\n      if(eid.indexOf('pool_')===0) eid='give-'+eid.slice(5);\n      if(s.phase==='give'&&eid.indexOf('give-')===0){\n        const p=parseInt(eid.slice(5),10);\n        if(s.pool.indexOf(p)!==-1) makeMove={type:'give',piece:p};\n      } else if(s.phase==='place'&&eid.indexOf('cell-')===0){\n        const c=parseInt(eid.slice(5),10);\n        if(c>=0&&c<16&&s.board[c]===-1) staged=staged===c?null:c;\n      } else if(s.phase==='place'&&eid.indexOf('give-')===0&&staged!==null){\n        const p=parseInt(eid.slice(5),10);\n        if(s.pool.indexOf(p)!==-1&&s.pool.length>0&&!uiWins(s.board,staged,s.hand)) makeMove={type:'turn',cell:staged,give:p};\n      } else if(s.phase==='place'&&eid==='finish'&&staged!==null&&(s.pool.length===0||uiWins(s.board,staged,s.hand))){\n        makeMove={type:'turn',cell:staged,give:null};\n      }\n    }\n    const endsGame=staged!==null&&(s.pool.length===0||uiWins(s.board,staged,s.hand));\n    const pieces=[],targets=[],controls=[];\n    let statusText;\n    if(s.over) statusText=s.winner>=0?t('winner',{n:s.winner+1}):t('draw');\n    else statusText=t('turn',{n:s.turn+1});\n    const labels=[\n      {id:'title',text:t('title'),x:24,y:16,font_size:26},\n      {id:'turn',text:statusText,x:24,y:50,font_size:18},\n      {id:'handlabel',text:t('hand'),x:24,y:436,font_size:16},\n      {id:'poollabel',text:t('pool'),x:170,y:436,font_size:16}\n    ];\n    if(active&&!s.over){\n      labels.push({id:'hint',text:s.phase==='give'?t('hint_give'):(staged===null?t('hint_cell'):t('hint_next')),x:330,y:50,font_size:15});\n    }\n    // Board pieces (passive).\n    s.board.forEach((p,cell)=>{\n      if(p!==-1) pieces.push({id:'piece_'+p,type:'q'+p,board:'main',position:{cell:String(cell)},text:pieceLabel(p),actions:[]});\n    });\n    if(staged!==null) pieces.push({id:'stage_mark',type:'mark',board:'main',position:{cell:String(staged)},text:'+',actions:[]});\n    // In-hand piece, shown large on the tray (passive).\n    if(s.hand!==-1) pieces.push({id:'piece_'+s.hand,type:'q'+s.hand,board:'tray',position:{x:70,y:90},text:pieceLabel(s.hand),scale:1.5,actions:[]});\n    // Pool pieces on the tray: two rows of eight (passive). When a piece may\n    // be handed over -- the opening give, or a staged non-final placement --\n    // a transparent target with the piece's id overlays it.\n    const canGive=active&&(s.phase==='give'||(s.phase==='place'&&staged!==null&&!endsGame));\n    s.pool.forEach((p,i)=>{\n      const pos={x:200+(i%8)*52,y:80+Math.floor(i/8)*95};\n      pieces.push({id:'piece_'+p,type:'q'+p,board:'tray',position:pos,text:pieceLabel(p),actions:[]});\n      if(canGive) targets.push({id:'give-'+p,board:'tray',position:pos,color:'#00000000',aria_label:t('piece',{n:p+1})});\n    });\n    // Placement targets only for the acting viewer.\n    if(active&&s.phase==='place'){\n      for(let cell=0;cell<16;cell++) if(s.board[cell]===-1)\n        targets.push({id:'cell-'+cell,board:'main',position:{cell:String(cell)},label:t('cell',{n:cell+1})});\n    }\n    // Finish control: only when the staged placement ends the game\n    // (a win, or the pool is empty so this is the final placement).\n    if(active&&s.phase==='place'&&endsGame)\n      controls.push({id:'finish',kind:'button',label:t('finish')});\n    const scene={pieces:pieces,targets:targets,controls:controls,labels:labels};\n    const out={scene:scene,local_state:staged===null?{}:{cell:staged,mc:m.move_count}};\n    if(makeMove) out.make_move=makeMove;\n    return out;\n  }\n};\n",
+    "motion": {
+      "move_ms": 700,
+      "turn_pause_ms": 400,
+      "animate_own": true,
+      "easing": "ease-in-out-quad"
+    }
   },
   "rules": "Quarto for 2 players on a 4x4 board with 16 unique pieces. Each piece combines tall or short, light or dark, round or square, and solid or hollow; piece id 0-15 is the 4-bit attribute vector (bit0: 1=tall, bit1: 1=dark, bit2: 1=square, bit3: 1=hollow). You never choose your own piece: seat 0 opens with a give-only move {type:\"give\", piece} that hands a pool piece to seat 1. Every later turn is one combined move {type:\"turn\", cell, give}: place the piece in your hand on an empty cell, then choose an unplayed pool piece to hand to your opponent. give is required unless the placement ends the game or the pool is empty (the final placement), when give must be null. After a placement, any row, column or main diagonal whose four pieces share at least one attribute value (all tall, all short, all light, all dark, all round, all square, all solid or all hollow) wins immediately for the player who placed. The winner takes the pot. If all 16 pieces are placed with no winning line, the game is a draw and the pot is split equally. Illegal moves (occupied cell, giving a played or in-hand piece, giving on the final move, or acting in the wrong phase) are rejected. All state is public.",
   "ui_instructions": "4x4 board on top; below it the piece in hand (large) and the pool of unplayed pieces. Pieces are legible at a glance: round or square shape, tall pieces are larger than short ones, dark pieces are brown and light pieces cream, and each label repeats height and top - T or s for tall/short plus a filled dot for solid or an open circle for hollow (for example T with a filled dot is tall and solid). On the opening move, tap a pool piece to hand it to your opponent. On your turn, tap an empty cell, then tap a pool piece to hand over; if the placement wins or is the last piece, use the Place and finish button instead. Only the player to move sees targets and controls.",
