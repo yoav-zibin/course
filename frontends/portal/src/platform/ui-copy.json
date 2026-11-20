@@ -3301,5 +3301,86 @@
     "zh": "暂无本地对局。选择一款游戏，在此设备上游玩。",
     "hi": "अभी कोई स्थानीय मैच नहीं है। इस डिवाइस पर खेलने के लिए कोई गेम चुनें।",
     "ar": "لا توجد مباريات محلية بعد. اختر لعبة للعب على هذا الجهاز."
+  },
+  "No local matches yet. Choose a game and select Pass and play or Practice with computers.": {
+    "es": "Todavía no hay partidas locales. Elige un juego y selecciona Pasa y juega o Practica con ordenadores.",
+    "fr": "Aucune partie locale pour le moment. Choisissez un jeu, puis Jouer à tour de rôle ou S’entraîner contre l’ordinateur.",
+    "de": "Noch keine lokalen Partien. Wähle ein Spiel und dann Weitergeben und spielen oder Gegen Computer üben.",
+    "pt": "Ainda não há partidas locais. Escolha um jogo e selecione Passe e jogue ou Praticar com computadores.",
+    "zh": "还没有本地对局。选择游戏，然后选择传递设备游玩或与电脑练习。",
+    "hi": "अभी कोई स्थानीय मैच नहीं है। खेल चुनें, फिर बारी-बारी खेलना या कंप्यूटर के साथ अभ्यास चुनें।",
+    "ar": "لا توجد مباريات محلية بعد. اختر لعبة ثم اللعب بالتناوب أو التدريب مع الكمبيوتر."
+  },
+  "Jump back into your matches.": {
+    "es": "Vuelve a tus partidas.",
+    "fr": "Reprenez vos parties.",
+    "de": "Setze deine Spiele fort.",
+    "pt": "Volte às suas partidas.",
+    "zh": "继续你的对局。",
+    "hi": "अपने मैचों में वापस जाएँ।",
+    "ar": "عُد إلى مبارياتك."
+  },
+  "Invite friends": {
+    "es": "Invitar amigos",
+    "fr": "Inviter des amis",
+    "de": "Freunde einladen",
+    "pt": "Convidar amigos",
+    "zh": "邀请好友",
+    "hi": "दोस्तों को आमंत्रित करें",
+    "ar": "دعوة الأصدقاء"
+  },
+  "Copy code": {
+    "es": "Copiar código",
+    "fr": "Copier le code",
+    "de": "Code kopieren",
+    "pt": "Copiar código",
+    "zh": "复制代码",
+    "hi": "कोड कॉपी करें",
+    "ar": "نسخ الرمز"
+  },
+  "Share link": {
+    "es": "Compartir enlace",
+    "fr": "Partager le lien",
+    "de": "Link teilen",
+    "pt": "Compartilhar link",
+    "zh": "分享链接",
+    "hi": "लिंक साझा करें",
+    "ar": "مشاركة الرابط"
+  },
+  "Invite code copied.": {
+    "es": "Código de invitación copiado.",
+    "fr": "Code d’invitation copié.",
+    "de": "Einladungscode kopiert.",
+    "pt": "Código de convite copiado.",
+    "zh": "邀请码已复制。",
+    "hi": "आमंत्रण कोड कॉपी किया गया।",
+    "ar": "تم نسخ رمز الدعوة."
+  },
+  "Friends who open this link join an available seat or watch the match.": {
+    "es": "Los amigos que abran este enlace ocuparán un asiento disponible o verán la partida.",
+    "fr": "Les amis qui ouvrent ce lien rejoignent une place disponible ou regardent la partie.",
+    "de": "Freunde, die diesen Link öffnen, nehmen einen freien Platz ein oder schauen zu.",
+    "pt": "Os amigos que abrirem este link entram em uma vaga disponível ou assistem à partida.",
+    "zh": "好友打开此链接后会加入空位，或观看对局。",
+    "hi": "यह लिंक खोलने वाले दोस्त उपलब्ध सीट पर शामिल होते हैं या मैच देखते हैं।",
+    "ar": "ينضم الأصدقاء الذين يفتحون هذا الرابط إلى مقعد متاح أو يشاهدون المباراة."
+  },
+  "Log in or continue as a guest to join this match.": {
+    "es": "Inicia sesión o continúa como invitado para unirte a esta partida.",
+    "fr": "Connectez-vous ou continuez en tant qu’invité pour rejoindre cette partie.",
+    "de": "Melde dich an oder fahre als Gast fort, um diesem Spiel beizutreten.",
+    "pt": "Entre ou continue como visitante para participar desta partida.",
+    "zh": "登录或以访客身份继续，即可加入此对局。",
+    "hi": "इस मैच में शामिल होने के लिए लॉग इन करें या अतिथि के रूप में जारी रखें।",
+    "ar": "سجّل الدخول أو تابع كضيف للانضمام إلى هذه المباراة."
+  },
+  "Watch match": {
+    "es": "Ver partida",
+    "fr": "Regarder la partie",
+    "de": "Spiel ansehen",
+    "pt": "Assistir à partida",
+    "zh": "观看对局",
+    "hi": "मैच देखें",
+    "ar": "مشاهدة المباراة"
   }
 }

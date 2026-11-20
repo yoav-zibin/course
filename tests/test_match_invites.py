@@ -1,5 +1,10 @@
 from game_platform.tests.helpers import TEST_DECLARATIVE_UI
 from pathlib import Path
+import datetime as dt
+import re
+from dataclasses import replace
+
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -27,8 +32,10 @@ def test_an_invite_link_seats_someone_in_a_public_match(api: Api) -> None:
     )["id"]
     invite = _invite(api, match_id, as_user=alice)
     token = invite["token"]
-    assert invite["url"] == f"http://testserver/portal#invite={token}"
-    assert invite["qr_code_url"] == f"http://testserver/invites/{token}/qr.svg"
+    assert re.fullmatch(r"[a-z]{4}", token)
+    assert api.ok("GET", f"/matches/{match_id}")["invite_code"] == token
+    assert invite["url"] == f"http://testserver/invite/{token}"
+    assert "qr_code_url" not in invite
 
     view = api.ok("GET", f"/invites/{token}")
     assert view["match"]["id"] == match_id
@@ -46,15 +53,16 @@ def test_an_invite_link_seats_someone_in_a_public_match(api: Api) -> None:
     assert [a["user_id"] for a in mine["acceptances"]] == [bob]
 
 
-def test_an_invite_link_is_also_a_qr_code(api: Api) -> None:
+def test_invite_code_exists_at_match_creation_and_is_shared_by_players(api: Api) -> None:
     alice = api.new_user("alice")
     match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
-    token = _invite(api, match_id, as_user=alice)["token"]
-    response = api.request("GET", f"/invites/{token}/qr.svg")
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "image/svg+xml"
-    assert response.text.startswith("<svg")
-    assert error(api.request("GET", "/invites/nope/qr.svg")) == (404, "invite not found")
+    token = api.ok("GET", f"/matches/{match_id}")["invite_code"]
+    assert re.fullmatch(r"[a-z]{4}", token)
+    assert _invite(api, match_id, as_user=alice)["token"] == token
+    assert _invite(api, match_id, as_user=alice, max_uses=1, expires_in_seconds=60)["token"] == token
+    bob = api.new_user("bob")
+    api.ok("POST", f"/invites/{token}/accept", as_user=bob)
+    assert _invite(api, match_id, as_user=bob)["token"] == token
 
 
 def test_links_use_the_configured_public_address() -> None:
@@ -81,38 +89,82 @@ def test_links_use_the_configured_public_address() -> None:
     ).model_dump(mode="json")
     match = client.post("/matches", headers=headers, json={"game_id": game["id"]}).json()
     invite = client.post(f"/matches/{match['id']}/invites", headers=headers).json()
-    assert invite["url"] == f"https://play.example.com/portal#invite={invite['token']}"
+    assert invite["url"] == f"https://play.example.com/invite/{invite['token']}"
 
 
-def test_unusable_invites_say_why_in_the_callers_language(api: Api) -> None:
+def test_full_match_invite_opens_as_a_viewer_without_adding_a_seat(api: Api) -> None:
+    alice, bob, carol = [api.new_user(name) for name in ("alice", "bob", "carol")]
+    match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice, allowed_player_counts=(2,)), joiners=[bob])
+    token = api.ok("GET", f"/matches/{match_id}")["invite_code"]
+    view = api.ok("GET", f"/invites/{token}")
+    assert not view["usable"]
+    spectator = api.ok("POST", f"/invites/{token}/accept", as_user=carol)
+    assert spectator["id"] == match_id
+    assert [player["user_id"] for player in spectator["players"]] == [alice, bob]
+    assert api.platform._store.get_invite(token).acceptances == ()
+
+
+def test_week_old_codes_are_unusable_even_before_daily_cleanup(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
-    revoked = _invite(api, match_id, as_user=alice)["token"]
-    api.ok("POST", f"/invites/{revoked}/revoke", as_user=alice)
-    # The test clock advances a minute per reading, so a one-minute link expires.
-    expired = _invite(api, match_id, as_user=alice, expires_in_seconds=60)["token"]
-    single_use = _invite(api, match_id, as_user=alice, max_uses=1)["token"]
-    api.ok("POST", f"/invites/{single_use}/accept", as_user=bob)
+    token = api.ok("GET", f"/matches/{match_id}")["invite_code"]
+    invite = api.platform._store.get_invite(token)
+    api.platform._clock = lambda: invite.created_at + dt.timedelta(days=7)
+    assert api.request("GET", f"/invites/{token}").status_code == 404
+    assert api.request("POST", f"/invites/{token}/accept", as_user=bob).status_code == 404
 
-    for token, message, code in [
-        (revoked, "this invite link was revoked", "invite_revoked"),
-        (expired, "this invite link has expired", "invite_expired"),
-        (single_use, "this invite link has been used up", "invite_used_up"),
-    ]:
-        view = api.ok("GET", f"/invites/{token}")
-        assert (view["usable"], view["unusable_reason"], view["unusable_code"]) == (
-            False,
-            message,
-            code,
-        )
-        carol = api.new_user("carol")
-        assert error(api.request("POST", f"/invites/{token}/accept", as_user=carol)) == (
-            409,
-            message,
-        )
 
-    spanish = api.ok("GET", f"/invites/{revoked}", params={"lang": "es"})
-    assert spanish["unusable_reason"] == "este enlace de invitación fue revocado"
+@pytest.mark.parametrize("query", [False, True])
+def test_codes_are_unique_and_released_on_start_end_and_delete(query: bool) -> None:
+    from game_platform.tests.fake_firestore import query_store
+
+    api = Api(store=query_store() if query else None)
+    if query:
+        from game_platform.scaling_service import ScalablePlatform
+        api.platform = ScalablePlatform(store=api.platform._store, clock=api.platform._clock,
+                                       computer_move_delay_seconds=0)
+        api.client.app.state.platform = api.platform
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game = api.new_game(owner=alice)
+    codes = iter(["aaaa", "aaaa", "bbbb", "aaaa", "cccc"])
+    api.platform._new_invite_token = lambda: next(codes)
+    first = api.new_match(owner=alice, game_id=game, joiners=[bob])
+    second = api.new_match(owner=alice, game_id=game)
+    assert api.ok("GET", f"/matches/{first}")["invite_code"] == "aaaa"
+    assert api.ok("GET", f"/matches/{second}")["invite_code"] == "bbbb"
+    if query:
+        assert api.platform._store.counts()["invites_codes_total"] == 2
+    started = api.ok("POST", f"/matches/{first}/start", as_user=alice)
+    assert started["invite_code"] is None
+    assert api.request("GET", "/invites/aaaa").status_code == 404
+    third = api.new_match(owner=alice, game_id=game)
+    assert api.ok("GET", f"/matches/{third}")["invite_code"] == "aaaa"
+    # Ending the old match must never release the code now assigned to another.
+    assert api.move(first, as_user=alice, next_turn=None).is_success
+    assert api.ok("GET", "/invites/aaaa")["match"]["id"] == third
+    api.ok("DELETE", f"/matches/{second}", as_user=alice)
+    assert api.request("GET", "/invites/bbbb").status_code == 404
+    if query:
+        assert api.platform._store.counts()["invites_codes_total"] == 1
+
+
+def test_solo_matches_do_not_reserve_invite_codes(api: Api) -> None:
+    alice = api.new_user("alice")
+    match = api.new_match(owner=alice, game_id=api.new_game(owner=alice, allowed_player_counts=(1,)))
+    assert api.ok("GET", f"/matches/{match}")["invite_code"] is None
+    assert api.platform._store.list_invites() == []
+
+
+def test_code_allocation_failure_does_not_collect_a_stake(api: Api) -> None:
+    alice = api.new_user("alice", tokens=20)
+    game = api.new_game(owner=alice)
+    api.platform._new_invite_token = lambda: "busy"
+    api.new_match(owner=alice, game_id=game)
+    response = api.request("POST", "/matches", as_user=alice,
+                           json={"game_id": game, "bet_per_player": 5})
+    assert response.status_code == 409
+    assert api.platform._store.get_user(alice).token_balance == 20
+    assert len(api.platform._store.list_matches_involving(alice)) == 1
 
 
 def test_only_players_create_invites_and_only_creators_or_owners_revoke(

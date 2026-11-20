@@ -15,6 +15,7 @@ import datetime as dt
 import hashlib
 import json
 import logging
+import re
 import threading
 from dataclasses import replace
 
@@ -896,6 +897,8 @@ class QueryStore:
             result["moves_total"] = data.get("move_count", 0)
         if kind == "games":
             result["games_deleted" if data.get("deleted") else "games_live"] = 1
+        if kind == "invites" and data.get("short_code"):
+            result["invites_codes_total"] = 1
         return result
 
     def _update_counts(self, kind, identity, old, new):
@@ -1411,7 +1414,8 @@ class QueryStore:
                 *(a.user_id for a in invite.acceptances),
                 *([invite.recipient_user_id] if invite.recipient_user_id else [])})
             self.assert_account_write_allowed(participants, match_id=invite.match_id)
-            self._put("invites", invite.token, invite, participants=participants)
+            self._put("invites", invite.token, invite, participants=participants,
+                      short_code=bool(re.fullmatch(r"[a-z]{4}", invite.token)))
 
     def get_invite(self, token):
         return self._get("invites", token)

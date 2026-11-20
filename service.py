@@ -251,8 +251,12 @@ def _new_password() -> str:
 
 
 def _new_invite_token() -> str:
-    # 96 random bits: short enough for a QR code, impossible to guess.
-    return secrets.token_urlsafe(12)
+    return "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(INVITE_CODE_LENGTH))
+
+
+INVITE_CODE_LENGTH: Final = 4
+INVITE_CODE_CAPACITY: Final = 26 ** INVITE_CODE_LENGTH
+INVITE_MAX_AGE: Final = dt.timedelta(days=7)
 
 
 def _new_verification_code() -> str:
@@ -2630,6 +2634,9 @@ class GamePlatform:
             seed_version=seed_version,
         )
         if game.server_code and bet_per_player:
+            self._check_can_stake(caller_id, bet_per_player)
+        match = self._assign_match_invite(match, game)
+        if game.server_code and bet_per_player:
             # A v2 match takes each human's stake as they join — the
             # creator now, everyone else in _join — so the pot is real
             # from the start, leaving the waiting room refunds it, and
@@ -2639,7 +2646,8 @@ class GamePlatform:
         self._store.put_match(match)
         return match
 
-    def get_match(self, match_id: str, *, caller_id: str | None = None) -> Match:
+    def get_match(self, match_id: str, *, caller_id: str | None = None,
+                  invite_token: str | None = None) -> Match:
         with self._lock:
             match = self._get_match(match_id)
             game = self._get_game(match.game_id)
@@ -2648,7 +2656,11 @@ class GamePlatform:
             ):
                 raise NotFoundError("match not found")
             if match.private and (caller_id is None or not match.involves(caller_id)):
-                raise NotFoundError("match not found")
+                invite = self._store.get_invite(invite_token) if invite_token else None
+                if (invite is None or invite.match_id != match.id or invite.revoked
+                        or (invite.expires_at is not None and self._clock() >= invite.expires_at)
+                        or (invite.max_uses is not None and len(invite.acceptances) >= invite.max_uses)):
+                    raise NotFoundError("match not found")
             return match
 
     def list_matches(
@@ -2821,6 +2833,7 @@ class GamePlatform:
                 # the last one before the opponent comes back.
                 reserved_for_user_ids=frozenset(match.human_user_ids),
             )
+            rematch = self._assign_match_invite(rematch, game_version)
             self._store.put_match(rematch)
             self._save(replace(match, rematch_match_id=rematch.id))
             requester = self._require_user(caller_id)
@@ -4112,7 +4125,39 @@ class GamePlatform:
                 )
             )
 
-    # Invites: links (and QR codes) to a match, which also track referrals
+    # Each waiting multiplayer match owns one short URL code.
+
+    def _assign_match_invite(self, match: Match, game: Game) -> Match:
+        """Reserve an unused code inside the match creation transaction.
+
+        QueryStore includes the absent code document in its read set, so two
+        processes choosing the same code cannot overwrite one another's match.
+        """
+        if match.invite_code is not None or game.rules.max_players < 2:
+            return match
+        for _ in range(128):
+            code = self._new_invite_token()
+            if re.fullmatch(r"[a-z]{4}", code) is None:
+                raise InvalidRequestError("invite codes must be four lowercase letters")
+            if self._store.get_invite(code) is not None:
+                continue
+            self._store.put_invite(Invite(
+                token=code,
+                match_id=match.id,
+                created_by_user_id=match.owner_user_id,
+                created_at=match.created_at,
+                expires_at=match.created_at + INVITE_MAX_AGE,
+            ))
+            return replace(match, invite_code=code)
+        raise ConflictError("invite codes are busy; please try again")
+
+    def _release_match_invite(self, match: Match) -> Match:
+        if match.invite_code is not None:
+            invite = self._store.get_invite(match.invite_code)
+            if invite is not None and invite.match_id == match.id:
+                self._store.delete_invite(invite.token)
+            match = replace(match, invite_code=None)
+        return match
 
     def create_invite(
         self,
@@ -4123,42 +4168,25 @@ class GamePlatform:
         max_uses: int | None = None,
         recipient_user_id: str | None = None,
     ) -> Invite:
-        """Any player in the match (or its owner) can create invites to it."""
+        """Compatibility endpoint: return the lobby's shared URL code.
+
+        Codes belong to matches, so old per-invite expiration and use options
+        no longer create independent allocations.
+        """
         with self._lock:
             match = self._get_match(match_id)
             if not match.involves(caller_id):
                 raise ForbiddenError("you are not a player in this match")
-            if match.status == "over":
-                raise ConflictError("the match is over")
-            recipient = None
+            if match.status != "waiting_for_players":
+                raise ConflictError("the match has already started")
             if recipient_user_id is not None:
-                resolved_id = self._referrer_id(recipient_user_id)
-                if resolved_id is None:
-                    raise NotFoundError("user not found")
-                recipient = self._require_user(resolved_id)
-                if match.involves(recipient.id):
-                    raise ConflictError("this player is already in the match")
-            now = self._clock()
-            invite = Invite(
-                token=self._new_invite_token(),
-                match_id=match.id,
-                created_by_user_id=caller_id,
-                recipient_user_id=recipient.id if recipient else None,
-                created_at=now,
-                expires_at=None
-                if expires_in_seconds is None
-                else now + dt.timedelta(seconds=expires_in_seconds),
-                max_uses=max_uses,
-            )
-            self._store.put_invite(invite)
-            if recipient is not None:
-                inviter = self._require_user(caller_id)
-                self._notify_match_event(
-                    "notify.invite_request", match=match,
-                    recipient_ids=[recipient.id], actor_name=inviter.display_name,
-                    tag_suffix="invite", url=f"/i/{invite.token}",
-                )
-            return invite
+                raise InvalidRequestError("targeted invites are no longer supported; share the match URL")
+            if match.invite_code is None:
+                match = self._assign_match_invite(match, self._get_game(match.game_id))
+                self._store.put_match(match)
+            if match.invite_code is None:
+                raise ConflictError("this match has no human opponents")
+            return self._get_invite(match.invite_code)
 
     def view_invite(self, token: str) -> InviteView:
         """Shows a match through its invite capability and reports usability.
@@ -4196,14 +4224,20 @@ class GamePlatform:
             self._get_invite(token)
 
     def accept_invite(self, *, caller_id: str, token: str) -> Match:
-        """Takes a seat through an invite. Players already in the match just get
-        it back, so opening your own link is harmless."""
+        """Join when a seat is available; otherwise open the match as a viewer."""
         with self._lock:
             invite = self._get_invite(token)
             match = self._get_match(invite.match_id)
             if match.seat_of(caller_id) is not None:
                 return match
-            self._check_invite_usable(invite)
+            # A valid but full lobby remains viewable, including rematches
+            # whose remaining seats are reserved for their original players.
+            if (match.status == "waiting_for_players"
+                    and (len(match.seats) >= self._rules_of(match).max_players
+                         or (caller_id not in match.reserved_for_user_ids
+                             and len(match.seats) + match.held_seats() >= self._rules_of(match).max_players))):
+                return match
+            self._check_invite_usable(invite, caller_id=caller_id)
             joined = self._join(match, caller_id=caller_id)
             user = self._store.get_user(caller_id)
             acceptance = InviteAcceptance(
@@ -4254,11 +4288,12 @@ class GamePlatform:
 
     def _get_invite(self, token: str) -> Invite:
         invite = self._store.get_invite(token)
-        if invite is None:
+        if (invite is None or invite.revoked
+                or (invite.expires_at is not None and self._clock() >= invite.expires_at)):
             raise NotFoundError("invite not found")
         return invite
 
-    def _check_invite_usable(self, invite: Invite) -> None:
+    def _check_invite_usable(self, invite: Invite, *, caller_id: str | None = None) -> None:
         """Raises unless someone new could take a seat with [invite] now."""
         if invite.revoked:
             raise ConflictError("this invite link was revoked")
@@ -4269,6 +4304,9 @@ class GamePlatform:
         match = self._get_match(invite.match_id)
         if match.status == "over":
             raise ConflictError("the match is over")
+        held = 0 if caller_id in match.reserved_for_user_ids else match.held_seats()
+        if match.status == "waiting_for_players" and len(match.seats) + held >= self._rules_of(match).max_players:
+            raise ConflictError("the match is full")
 
     def _delete_match_and_invites(self, match_id: str) -> None:
         """Deletes a match and its invites, first giving back any tokens it still
@@ -4563,7 +4601,7 @@ class GamePlatform:
         for key in ("match", "rematch"):
             if values.get(key):
                 return values[key][0]
-        invite_path = re.fullmatch(r"/i/([^/]+)", target.path)
+        invite_path = re.fullmatch(r"/(?:i|invite)/([^/]+)", target.path)
         if invite_path:
             invite = self._store.get_invite(invite_path.group(1))
             return invite.match_id if invite is not None else None
@@ -5254,5 +5292,7 @@ class GamePlatform:
 
     def _save(self, match: Match) -> Match:
         match = replace(match, updated_at=self._clock())
+        if match.status != "waiting_for_players" or match.num_computer_opponents:
+            match = self._release_match_invite(match)
         self._store.put_match(match)
         return match

@@ -433,6 +433,8 @@ class Match:
     private: bool = False
     # The match created as a replay of this match, if any.
     rematch_match_id: str | None = None
+    # Reserved only while a multiplayer lobby is waiting for people to join.
+    invite_code: str | None = None
 
     # None turn means this legacy match has no recorded starting snapshot.
     initial_state: JsonValue = None
@@ -550,7 +552,7 @@ class InviteAcceptance:
 
 @dataclass(frozen=True, kw_only=True)
 class Invite:
-    """A shareable link (or QR code) for joining a match and tracking referrals."""
+    """A match's active URL code, with legacy referral metadata."""
 
     token: str
     match_id: str

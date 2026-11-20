@@ -91,28 +91,20 @@ test('a rejected enrollment from the previous account stays out of the next acco
   expect(JSON.stringify(report)).not.toContain(marker);
 });
 
-test('a direct invite appears in-app with push disabled and opens its match invitation',async({page,browser,request})=>{
-  const alice=await createUser(request,uniqueName('Invite host')),bob=await createUser(request,uniqueName('Invite recipient'));
+test('a turn update appears in-app with push disabled and opens its match',async({page,request})=>{
+  const alice=await createUser(request,uniqueName('Match host')),bob=await createUser(request,uniqueName('Match opponent'));
   await request.patch(`/users/${bob.id}`,{headers:headers(bob),data:{notifications_enabled:false}});
-  const match=await createMatch(request,alice,await createGame(request,uniqueName('Invitation game')));
+  const match=await createMatch(request,alice,await createGame(request,uniqueName('Turn notification game')));
+  await joinAndStart(request,alice,bob,match.id);
   await loginAs(page,bob);await page.goto('/portal');
-  const senderContext=await browser.newContext(),sender=await senderContext.newPage();
-  try{
-    await loginAs(sender,alice);await sender.goto(new URL(`/portal#match=${match.id}`,page.url()).href);
-    await sender.getByRole('button',{name:'Share match',exact:true}).click();
-    await sender.getByRole('textbox',{name:'Player code or ID',exact:true}).fill(bob.referral_code);
-    await sender.getByRole('button',{name:'Send invitation',exact:true}).click();
-    await expect(sender.getByText('Invitation sent.',{exact:true})).toBeVisible();
-    const entry=(await inbox(request,bob)).items.find((item:any)=>item.event==='invite_request');expect(entry).toBeTruthy();
-    await page.getByRole('button',{name:'Notifications',exact:true}).click();
-    const notification=page.getByTestId(`notification-${entry.id}`);await expect(notification).toBeVisible();await notification.click();
-    await expect(page.getByText(`${alice.display_name} invited you to play`,{exact:true})).toBeVisible();
-    await expect(page.getByRole('heading',{name:'Notifications',exact:true})).toHaveCount(0);
-    expect((await inbox(request,bob)).items.some((item:any)=>item.id===entry.id)).toBe(false);
-    await page.getByRole('button',{name:'Join match',exact:true}).click();
-    await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));
-    const joined=await request.get(`/matches/${match.id}`,{headers:headers(bob)});expect((await joined.json()).players.some((player:any)=>player.user_id===bob.id)).toBe(true);
-  }finally{await senderContext.close();}
+  await move(request,alice,match.id,0,0);
+  const entry=(await inbox(request,bob)).items.find((item:any)=>item.event==='turn');expect(entry).toBeTruthy();
+  await page.getByRole('button',{name:'Notifications',exact:true}).click();
+  const notification=page.getByTestId(`notification-${entry.id}`);await expect(notification).toBeVisible();await notification.click();
+  await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));
+  await expect(page.getByRole('heading',{name:'Notifications',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
+  expect((await inbox(request,bob)).items.some((item:any)=>item.id===entry.id)).toBe(false);
 });
 
 test('a rematch request lets the reserved opponent join a rematch from the inbox',async({page,request})=>{
@@ -126,7 +118,7 @@ test('a rematch request lets the reserved opponent join a rematch from the inbox
   await loginAs(page,bob);await page.goto('/portal');await page.getByRole('button',{name:'Notifications',exact:true}).click();
   await page.getByTestId(`notification-${entry.id}`).click();
   await expect(page).toHaveURL(new RegExp(`#match=${next.id}$`));
-  await expect(page.getByRole('button',{name:'Share match',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Share link',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Notifications',exact:true})).toHaveCount(0);
   expect((await inbox(request,bob)).items.some((item:any)=>item.id===entry.id)).toBe(false);
   const joined=await request.get(`/matches/${next.id}`,{headers:headers(bob)});expect((await joined.json()).players.some((player:any)=>player.user_id===bob.id)).toBe(true);

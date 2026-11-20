@@ -212,6 +212,29 @@ def test_legacy_purge_checkpoint_skips_ledger_and_still_clears_later_private_pha
     assert store.get_bug_report("later-private-report") is None
 
 
+def test_purge_checkpoint_preserves_a_short_code_reused_by_another_match():
+    api, store, _ = setup()
+    target, other = api.new_user("Erase"), api.new_user("Keep")
+    game = api.new_game(owner=other)
+    original = api.new_match(owner=target, game_id=game)
+    code = store.get_match(original).invite_code
+    due = schedule(api, target)
+    job_ref = store.ref("account_deletions", target)
+    assert _claim(api.platform, job_ref, due)
+    with store.atomic():
+        store.delete_invite(code)
+        store.raw_put(job_ref, {**store.raw_get(job_ref), "tree": {
+            "kind": "invites", "doc": store.ref("invites", code).id,
+            "identity": code}})
+    api.platform._new_invite_token = lambda: code
+    new_match = api.new_match(owner=other, game_id=game)
+    drain(api.platform, due)
+    assert store.get_user(target) is None
+    assert store.get_match(original) is None
+    assert store.get_match(new_match).invite_code == code
+    assert store.get_invite(code).match_id == new_match
+
+
 def test_json_store_restart_resumes_an_irreversible_partial_purge(tmp_path):
     from game_platform.json_file_store import JsonFileStore
     path = tmp_path / "accounts.json"
@@ -301,14 +324,21 @@ def test_invite_inbox_copies_are_erased_even_for_a_recipient_outside_the_match(q
     target, recipient = api.new_user("Erase inviter"), api.new_user("Keep recipient")
     game = api.new_game(owner=target)
     match = api.new_match(owner=target, game_id=game)
-    invite = api.ok("POST", f"/matches/{match}/invites", as_user=target,
-                    json={"recipient_user_id": recipient})
+    # Per-recipient invites were retired. Seed a historical record and its
+    # notification so old inbox copies still get erased with their inviter.
+    invite = replace(store.get_invite(store.get_match(match).invite_code),
+                     recipient_user_id=recipient)
+    store.put_invite(invite)
+    api.platform._notify_match_event(
+        "notify.invite_request", match=store.get_match(match),
+        recipient_ids=[recipient], actor_name="Erase inviter", tag_suffix="invite",
+        url=f"/invite/{invite.token}")
     user = store.get_user(recipient)
     assert len(user.notifications) == 1
     notification = user.notifications[0]
-    assert notification.url.endswith("/i/" + invite["token"])
+    assert notification.url.endswith("/invite/" + invite.token)
     if legacy:
-        notification = replace(notification, match_id=None)
+        notification = replace(notification, match_id=None, url=f"/i/{invite.token}")
     keep = replace(notification, id="unrelated", match_id="other-match", url="/i/unrelated-token", body="Keep this")
     store.put_user(replace(user, notifications=(notification, keep)))
     drain(api.platform, schedule(api, target), steps=10)

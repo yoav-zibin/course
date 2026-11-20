@@ -100,7 +100,7 @@ test('online matches have human-only public controls and stay selected after rel
   const creation=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/matches');
   await page.getByTestId('play-online').getByRole('button',{name:'Invite your friends to play',exact:true}).click();
   expect((await creation).postDataJSON()).toEqual({game_id:created.id,bet_per_player:0,turn_seconds:null});
-  await expect(page.getByRole('button',{name:'Share match',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Share link',exact:true})).toBeVisible();
   await expect(page).toHaveURL(/#match=/);
   await expect(page.getByText('Public match',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Add a computer',exact:true})).toHaveCount(0);
@@ -112,7 +112,7 @@ test('online matches have human-only public controls and stay selected after rel
   const resumed=page.waitForResponse(response=>new URL(response.url()).pathname===(selected?`/matches/${selected}`:`/games/${created.id}`));
   await page.reload();
   await resumed;
-  await expect(page.getByRole('button',{name:'Share match',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Share link',exact:true})).toBeVisible();
   const opened:string[]=[];page.on('request',request=>opened.push(new URL(request.url()).pathname));
   await page.goto('/portal#matches');
   await expect(page.getByText('Open matches you can join',{exact:true})).toHaveCount(0);
@@ -163,18 +163,18 @@ test('full localized instructions remain available between public turns, at game
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
 });
 
-test('a delayed browser Back response cannot replace newer Invites navigation',async({page,request})=>{
+test('a delayed browser Back response cannot replace newer Matches navigation',async({page,request})=>{
   const created=await game(request,uniqueName('Delayed history game'));await page.goto(`/portal#game=${created.id}`);
   await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
   let release!:()=>void,started!:()=>void;
   const held=new Promise<void>(resolve=>{release=resolve;}),requested=new Promise<void>(resolve=>{started=resolve;});
   await page.route(`**/games/${created.id}`,async route=>{started();await held;await route.continue();});
   await page.goBack();await requested;
-  await page.getByRole('button',{name:'Matches',exact:true}).click();await page.getByRole('button',{name:'Invites',exact:true}).click();await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Matches',exact:true}).click();await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
   const response=page.waitForResponse(response=>new URL(response.url()).pathname===`/games/${created.id}`);
   release();await (await response).finished();
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-  await expect(page).toHaveURL(/#invites$/);await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/#matches$/);await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
 });
 
 test('campaign arrival persists before login and attributes the guest signup',async({page,request})=>{
@@ -216,11 +216,11 @@ for(const savedLayout of ['hamburger','left'])test(`navigation stays directly ac
   await expect(page.getByRole('button',{name:'Navigation menu',exact:true})).toHaveCount(0);
   await expect(page.getByText('☰',{exact:true})).toHaveCount(0);
   for(const name of ['Games','Matches'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(1);
-  await expect(page.getByRole('button',{name:'Invites',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'On this device',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Matches',exact:true}).click();await page.getByRole('button',{name:'Invites',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Log in',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Invites',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Matches',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Log in',exact:true}).first().click();
   await expect(page.getByRole('button',{name:'Close dialog',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
   await expect(page.getByRole('button',{name:'Preferences',exact:true})).toHaveCount(0);
@@ -231,8 +231,8 @@ for(const savedLayout of ['hamburger','left'])test(`navigation stays directly ac
     await page.setViewportSize({width,height:850});
     await page.getByRole('button',{name:'Matches',exact:true}).click();
     await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'Invites',exact:true}).click();
-    await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Matches',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'Navigation menu',exact:true})).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   }
@@ -348,22 +348,40 @@ test('a genuinely finished local draw stays translated offline in detail and mat
   await page.goto('/portal#local');await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
 });
 
-test('invitation survives guest sign-in and creates a usable shared link and QR code',async({page,request})=>{
+test('short invitation autojoins after guest sign-in and offers code copying and system sharing',async({page,request})=>{
   test.setTimeout(120000);
   const owner=await account(request,'Invite host'),created=await game(request,`Shared invite ${Date.now()}`),headers={'X-User-Id':owner.id,'X-User-Password':owner.password};
   const response=await request.post('/matches',{headers,data:{game_id:created.id}});expect(response.ok()).toBeTruthy();const match=await response.json();
-  const inviteResponse=await request.post(`/matches/${match.id}/invites`,{headers,data:{}});expect(inviteResponse.ok()).toBeTruthy();const invite=await inviteResponse.json();
-  await page.goto(`/portal#invite=${invite.token}`);await page.getByRole('button',{name:'Log in to join',exact:true}).click();
+  expect(match.invite_code).toMatch(/^[a-z]{4}$/);
+  await page.addInitScript(()=>{
+    Object.defineProperty(navigator,'share',{configurable:true,value:async(value:any)=>{(window as any).__sharedInvite=value;}});
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(value:string)=>{(window as any).__copiedInvite=value;}}});
+  });
+  await page.goto(`/invite/${match.invite_code}`);await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+  await expect(page.getByRole('textbox',{name:/Invite link|Player code or ID|Open a match or invite link/})).toHaveCount(0);
+  await page.getByRole('button',{name:'Log in to join',exact:true}).click();
   await page.getByRole('textbox',{name:/Your name|Display name/}).fill('Invited guest');await page.getByRole('button',{name:'Continue as guest',exact:true}).click();
   await expect(page.getByRole('button',{name:'Close dialog'})).toHaveCount(0);
-  await page.getByRole('button',{name:'Join match',exact:true}).click();await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
-  // Acceptance finishes loading the pinned game before removing the invite banner.
-  // Wait for that navigation so its layout change cannot move Share during the press.
   await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));
   await expect(page.getByRole('button',{name:'Join match',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:/^(Share match|Share)$/}).click();await expect(page.getByRole('textbox',{name:'Invite link'})).toHaveValue(/invite=/,{timeout:20000});
-  const qr=page.getByLabel('Match invite QR code');await expect(qr).toBeVisible();
-  await page.getByRole('button',{name:'Close dialog'}).click();await page.reload();await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+  await expect(page.getByLabel('Match invite QR code')).toHaveCount(0);
+  await page.getByRole('button',{name:'Copy code',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__copiedInvite)).toBe(match.invite_code);
+  await page.getByRole('button',{name:'Share link',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__sharedInvite?.url)).toBe(new URL(`/invite/${match.invite_code}`,page.url()).href);
+  const detail=await(await request.get(`/matches/${match.id}`,{headers})).json();expect(detail.players).toHaveLength(2);
+  await page.reload();await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+});
+
+test('a signed-in player opening a full invitation watches without taking a seat',async({page,request})=>{
+  const host=await account(request,'Full invite host'),opponent=await account(request,'Full invite opponent'),viewer=await account(request,'Full invite spectator'),created=await game(request,uniqueName('Full invite'));
+  const headers={'X-User-Id':host.id,'X-User-Password':host.password};
+  const response=await request.post('/matches',{headers,data:{game_id:created.id}});expect(response.ok()).toBeTruthy();const match=await response.json();
+  expect((await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password}})).ok()).toBeTruthy();
+  await restore(page,viewer);await page.goto(`/invite/${match.invite_code}`);
+  await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Join match',exact:true})).toHaveCount(0);
+  const detail=await(await request.get(`/matches/${match.id}`,{headers})).json();expect(detail.players).toHaveLength(2);expect(detail.players.some((player:any)=>player.user_id===viewer.id)).toBe(false);
 });
 
 test('two browser players share turns, a lost reply cannot duplicate a move, and offline actions sync',async({page,browser,request,baseURL})=>{

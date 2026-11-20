@@ -34,13 +34,17 @@ RATE_LIMIT_SECONDS = {"minor": 600, "major": 300}
 #        request_very_slow, request_stuck, http_5xx, unexpected_exception,
 #        game_function_timeout/memory/error, computer_illegal_move, illegal_move_spike,
 #        ai_generation_timeout, data_save_failed (first two failures)
+#        invite_code_capacity_high (more than half of four-letter codes reserved),
+#        invite_code_cleanup_incomplete
 # major: signup_flood, server_overloaded, memory_critical, latency_critical,
 #        event_loop_blocked (5 s or more),
 #        error_rate_critical, data_save_failed (three in a row)
+#        invite_code_cleanup_failed
 
 
 # The label Google shows in the alert's email subject ("[ALERT - Critical] ...").
 SEVERITY = {"minor": "WARNING", "major": "CRITICAL"}
+INVITE_POLICY_NAME = "BuildPlay: invite code capacity and cleanup"
 
 
 def _documentation(title: str, body: str) -> dict[str, str]:
@@ -68,6 +72,37 @@ def _log_policy(tier: str, channels: list[str]) -> dict[str, Any]:
         "alertStrategy": {
             "notificationRateLimit": {"period": f"{RATE_LIMIT_SECONDS[tier]}s"},
             "autoClose": "1800s",
+        },
+        "notificationChannels": channels,
+    }
+
+
+def invite_code_policy(channels: list[str]) -> dict[str, Any]:
+    """An enabled policy independent of the broad server-alert policy's state."""
+    return {
+        "displayName": INVITE_POLICY_NAME,
+        "enabled": True,
+        "documentation": _documentation(
+            "Match invite codes need attention",
+            "The daily invite cleanup worker found more than 50% of the 456,976 "
+            "four-letter codes reserved, could not finish its sweep, or failed. "
+            "Inspect game-platform-invite-codes.service and the event totals. "
+            "Consider more aggressive cleanup or longer codes. "
+            "Runbook: docs/invite-code-cleanup.md"),
+        "combiner": "OR",
+        "severity": "WARNING",
+        "conditions": [{
+            "displayName": "Invite capacity or cleanup needs attention",
+            "conditionMatchedLog": {
+                "filter": f'log_id("{LOG_ID}") AND '
+                          '(jsonPayload.event="invite_code_capacity_high" OR '
+                          'jsonPayload.event="invite_code_cleanup_incomplete" OR '
+                          'jsonPayload.event="invite_code_cleanup_failed")',
+            },
+        }],
+        "alertStrategy": {
+            "notificationRateLimit": {"period": "3600s"},
+            "autoClose": "86400s",
         },
         "notificationChannels": channels,
     }

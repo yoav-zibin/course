@@ -261,12 +261,15 @@ freed yet; a deleted account's code becomes free again.) The code appears as
 `referral_code` only in responses about your own account: `POST /users`, the
 `/auth/*` logins, and `GET`/`PATCH /users/{id}` when you're that user.
 
-Every invite link names the person who shared it: `/r/<code>` (for example
-`https://buildplay.fun/r/48213`), or `/r/<code>#match=<id>` from a match's Invite
-friends button. Match invitation links (`/portal#invite=<token>`, created with
-`POST /matches/{id}/invites`) open a dialog with the inviter and game, let visitors
-log in or continue as a guest, and then take a seat. "Copy my invite link" in the
-account menu copies your own referral link. `/r/<code>`
+Match invitations are URLs such as `https://buildplay.fun/invite/wxyz`. Each
+waiting multiplayer match automatically receives one unique four-letter lowercase
+code. The lobby offers Copy code and Share link; opening the URL joins a logged-in
+player if a seat is available, otherwise it opens a spectator view. Visitors can
+log in or continue as a guest before joining. Codes are released on start, end,
+deletion, or daily cleanup after seven days. There is no invite-management page.
+
+Personal referral links remain `/r/<code>` (for example
+`https://buildplay.fun/r/48213`). `/r/<code>`
 redirects to `/portal?ref=<code>`; the code goes in the query so the browser keeps the
 link's `#match=` part. Older links name the user id instead (`/portal#ref=<userId>`,
 `/portal#match=<id>&ref=<userId>`) and still work, and so does the long form for an
@@ -284,15 +287,14 @@ it had none (unless that would make someone their own inviter), and deleting a u
 (`DELETE /admin/users/{id}`) passes the people they invited up to their own inviter.
 
 A user's *total* invites count everyone they brought in transitively: the people they
-invited, the people those people invited, and so on. See `/invites` under
+invited, the people those people invited, and so on. See `/admin/referrals` under
 [Pages](#pages).
 
 ### Notifications
 
 Web, Android and iOS share a private in-app notification inbox with unread counts.
-It records turns, match endings, players joining or leaving, direct match invitations,
-and rematch requests. A timeout uses the ordinary match-ended notification; there is
-no separate timer alert. Opening an invitation previews it before joining; opening a
+It records turns, match endings, players joining or leaving, and rematch requests. A timeout uses the ordinary match-ended notification; there is
+no separate timer alert. Opening an invitation joins when a seat is available; opening a
 rematch request joins the reserved rematch through the existing rematch API.
 
 Push is optional and controlled in the account profile. Turning it off stops push
@@ -303,8 +305,9 @@ that passes its turn to another human opponent. Local practice, computer-only
 opponents, failed moves and retaining the turn never trigger this prompt. The choice
 is retained on the account, including after reinstalling or merging accounts.
 
-Direct invitations use `POST /matches/{id}/invites` with optional `recipient_user_id`
-(a player ID or their five-digit invite code). An undirected share link sends no push.
+Match invite links are shared through the device's usual sharing flow. The legacy
+`POST /matches/{id}/invites` endpoint returns the match's existing link; targeted
+recipient options are no longer supported. Sharing sends no platform notification.
 `GET /users/me/notifications?limit=20&cursor=...` returns the newest entries, an exact
 unread count and the next cursor; `POST /users/me/notifications/{id}/read` marks one
 read. The inbox retains the latest 100 entries per account and works independently of
@@ -395,11 +398,10 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `GET /users/me/saved-games` | yes | The caller's saved games, most recently saved first |
 | `PUT /users/me/saved-games/{game_id}` | yes | Save a game (idempotent); returns the library |
 | `DELETE /users/me/saved-games/{game_id}` | yes | Unsave a game (idempotent); returns the library |
-| `POST /matches/{id}/invites` | yes | Create an invite link + QR code `{expires_in_seconds?, max_uses?}` (players only) |
+| `POST /matches/{id}/invites` | yes | Return the lobby's automatically assigned invite URL (compatibility endpoint) |
 | `GET /users/me/invites?match_id=` | yes | The caller's match invites, with views and who accepted |
 | `GET /invites/{token}` |  | What an invite opens: the match, game and inviter, and whether it's still usable (counts a view) |
-| `GET /invites/{token}/qr.svg` |  | The invite link as an SVG QR code |
-| `POST /invites/{token}/accept` | yes | Take a seat through the invite |
+| `POST /invites/{token}/accept` | yes | Join an available seat, or return the full lobby as a spectator |
 | `POST /invites/{token}/revoke` | yes | Stop the link working (its creator or the match's owner) |
 | `GET /users/me/referrals` | yes | The caller's referral stats: invites, views, acceptances, sign-ups and referred users |
 | `GET /push/config` |  | Whether web push is set up, and the VAPID public key to subscribe with |
@@ -536,22 +538,23 @@ Rematches keep the setting.
 
 ### Public matches and invites
 
-All matches can be opened directly through their match link. The portal lists your
-own matches and invitations; it does not offer open-match discovery or random matchmaking.
+All new matches are public and can be opened through their match link. The portal
+lists your own matches; invitations open directly from URLs.
 
-- **Invites** are links of the form `<public_base_url>/portal#invite=<token>`, also
-  served as a QR code at `/invites/{token}/qr.svg`. The 16-character token is the
-  secret (96 random bits), so anyone holding the link can see the match and take a
-  seat. Any player in the match can create one, optionally expiring
-  (`expires_in_seconds`, 60s to 30 days) or limited (`max_uses`). A link stops seating
-  people when it's revoked, expired, used up, or the match is over.
-  Unusable links report `usable: false` from `GET /invites/{token}` with a localized
-  `unusable_reason` and a stable `unusable_code`. Deleting a match deletes its invites.
+- **Invites** use `<public_base_url>/invite/abcd`. `MatchOut.invite_code` is the
+  automatically assigned reservation, or null after release. Full lobbies remain
+  viewable through their active invite. Four-letter codes are unique among active
+  reservations, with transactional allocation across API instances. A released or
+  expired code is no longer usable and may later identify another match.
+  [Daily maintenance](docs/invite-code-cleanup.md) reclaims week-old reservations
+  and alerts when more than half of the 456,976 available codes are reserved.
+  Native Universal Links/App Links configuration and public domain associations
+  are documented in the [portal guide](frontends/portal/README.md).
 - **Referrals**: every match invite records how often it was opened (`views`) and who
   took a seat with it (`acceptances`). A newcomer who signs up with
   `POST /users {invite_token}` gets the invite's creator as their `invited_by_user_id`,
   the same field personal invite links set (see
-  [Invite links](#invite-links-referrals)), so they count in `/invites` and
+  [Invite links](#invite-links-referrals)), so they count in `/admin/referrals` and
   `GET /admin/invites` too. An explicit `invited_by_user_id` wins over the token, and
   an unknown or dead token is ignored rather than blocking sign-up. Their acceptance is
   flagged `signed_up`. `GET /users/me/referrals` sums up a user's own invites and
@@ -659,7 +662,7 @@ stop the server at startup with an error naming the field.
 | `server.port`                     | `8000`                                   | Port to listen on |
 | `server.keep_alive_timeout_seconds` | `3600`                                 | How long an idle connection is kept open; see below |
 | `server.cors_allow_origins`       | `["*"]`                                  | Origins whose pages may call the API from a browser. Use `[]` when a reverse proxy (Caddy, nginx) already adds CORS headers: if both do, responses carry two `Access-Control-Allow-Origin` headers and browsers reject them |
-| `server.public_base_url`          | `""`                                     | The site's public address (e.g. `"https://buildplay.fun"`) that invite links and QR codes point to. Empty uses the address each request came to, which behind a load balancer (e.g. Google Cloud) or reverse proxy may be `http://` or an internal host, so set it in production |
+| `server.public_base_url`          | `""`                                     | The site's public address (e.g. `"https://buildplay.fun"`) that invite links point to. Empty uses the address each request came to, which behind a load balancer (e.g. Google Cloud) or reverse proxy may be `http://` or an internal host, so set it in production |
 | `data_file.path`                  | `"~/.local/share/game-platform/data.json"` | Where all data is saved. `~` is expanded, and a relative path is relative to the config file's directory |
 | `data_file.save_interval_seconds` | `1.0`                                    | After a change, the data file is rewritten at most once per this many seconds. `0` writes after every change |
 | `data_file.backup_interval_seconds` | `3600.0`                               | Copy the data file to `<path>.backups/data-<UTC time>.json` at most this often (checked when the file is written). `0` turns backups off |
@@ -889,7 +892,7 @@ Once the server is running, open these pages in a browser:
   a texted or emailed code, or as a guest — and switch between accounts, log
   out, or link more logins to your account from the account menu (see [Third-party
   login](#third-party-login)). The left side lists your matches (your move, ongoing,
-  waiting for players, over) and invitations. Create a public match for friends on
+  waiting for players, over). Create a public match for friends on
   a game's page, or practice locally against computers. The selected match shows
   its players and the actions you can take (join and start if you own it,
   leave, delete or hide), and renders its declarative scene with platform-owned
@@ -915,7 +918,7 @@ Once the server is running, open these pages in a browser:
   deleted, versions, matches per game), matches (by status, moves,
   computer seats, ended by leaving) and 14-day charts of new users, games and matches.
   The numbers come from `GET /admin/stats`.
-- `/invites`: referral dashboard (needs the [master password](#master-password)): who
+- `/admin/referrals`: referral dashboard (needs the [master password](#master-password)): who
   brought the most users (a leaderboard by total invites, direct and transitive, with
   each user's referral code shown as a small `#48213`), a
   search by name, id or referral code that shows a user's invite chain ("Yoav → Marcelle → Ana") and
@@ -939,7 +942,7 @@ don't need a user's credentials:
 | Endpoint | Description |
 |----------|-------------|
 | `GET /admin/stats` | The statistics behind `/stats` |
-| `GET /admin/invites` | The invite tree behind `/invites`: a summary, and per user their inviter, direct and total (transitive) invites and depth, sorted by total |
+| `GET /admin/invites` | The invite tree behind `/admin/referrals`: a summary, and per user their inviter, direct and total (transitive) invites and depth, sorted by total |
 | `GET /admin/feedback?kind=&target_type=&target_id=&status=` | Users' [feedback](#feedback), newest first (up to 200), and the 20 targets with the most "problem" reports |
 | `GET /admin/bug-reports?status=open&limit=50&cursor=` | Private report headers and next cursor; `status=all` includes handled and escalated reports |
 | `GET /admin/bug-reports/{id}` | Complete report with screenshot and diagnostic evidence |
@@ -960,7 +963,7 @@ filter (bulk).
   those users (passwords equal to ids; real users' are random) with their games and
   matches, and exits. At startup the server warns when such users exist or when the
   debug tools have no master password.
-- **Set `master_password`.** `/browse`, `/stats`, `/invites` and `/admin/*` show or change everything.
+- **Set `master_password`.** `/browse`, `/stats` and `/admin/*` show or change everything.
 - **CORS behind a proxy.** If Caddy adds `Access-Control-Allow-Origin`, set
   `"server": {"cors_allow_origins": []}`; otherwise remove the proxy's header. Check with
   `curl -si -H 'Origin: https://x.github.io' https://<host>/games | grep -i allow-origin`:

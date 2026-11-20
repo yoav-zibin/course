@@ -167,28 +167,30 @@ def test_partial_payout_cannot_be_replaced_by_a_player_refund(api):
     assert sum(store.get_user(uid).token_balance for uid in (alice, bob)) == 20
 
 
-@pytest.mark.parametrize("reason", ["revoked", "expired", "consumed"])
-def test_unusable_invites_keep_public_views_and_never_expose_hidden_cards(api, reason):
+@pytest.mark.parametrize("reason", ["revoked", "expired", "started"])
+def test_released_invites_cannot_open_matches_and_public_views_hide_cards(api, reason):
     alice, bob, outsider = [api.new_user(name) for name in ("alice", "bob", "outsider")]
     game_id = _create_game(api, alice)
     match_id = api.ok("POST", "/matches", as_user=alice,
                       json={"game_id": game_id})["id"]
-    invite = api.ok("POST", f"/matches/{match_id}/invites", as_user=alice,
-                    json={"max_uses": 1} if reason == "consumed" else {})
+    invite = api.ok("POST", f"/matches/{match_id}/invites", as_user=alice)
     token = invite["token"]
     api.ok("POST", f"/invites/{token}/accept", as_user=bob)
-    api.ok("POST", f"/matches/{match_id}/start", as_user=alice)
     if reason == "revoked":
         api.ok("POST", f"/invites/{token}/revoke", as_user=alice)
     elif reason == "expired":
         stored = api.platform._store.get_invite(token)
         api.platform._store.put_invite(replace(stored, expires_at=dt.datetime(2000, 1, 1, tzinfo=dt.timezone.utc)))
+    else:
+        api.ok("POST", f"/matches/{match_id}/start", as_user=alice)
     for caller in (None, outsider):
-        response = api.request("GET", f"/invites/{token}", as_user=caller)
+        assert api.request("GET", f"/invites/{token}", as_user=caller).status_code == 404
+        response = api.request("GET", f"/matches/{match_id}", as_user=caller)
         assert response.status_code == 200
-        assert response.json()["match"]["id"] == match_id
-        assert response.json()["usable"] is False
+        assert response.json()["id"] == match_id
         assert "secret-of-" not in response.text
-    assert api.request("POST", f"/invites/{token}/accept", as_user=outsider).status_code == 409
+    assert api.request("POST", f"/invites/{token}/accept", as_user=outsider).status_code == 404
     # A seated player retains their own authenticated view independently of the link.
+    if reason != "started":
+        api.ok("POST", f"/matches/{match_id}/start", as_user=alice)
     assert api.ok("GET", f"/matches/{match_id}", as_user=bob)["state"]["your_secret"] == f"secret-of-{bob}"

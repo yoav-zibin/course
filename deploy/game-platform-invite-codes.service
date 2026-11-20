@@ -1,0 +1,21 @@
+[Unit]
+Description=Reclaim expired BuildPlay match invite codes and check capacity
+Wants=network-online.target
+After=network-online.target game-platform.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/game-platform
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=DD_INJECT_NATIVE=never
+Environment=DD_INSTRUMENT_SERVICE_WITH_APM=false
+ExecStart=/opt/game-platform/.venv/bin/python -m game_platform.invite_code_cleanup --config /opt/game-platform/config.json
+TimeoutStartSec=35min
+UMask=0077
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/log/game-platform

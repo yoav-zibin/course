@@ -27,8 +27,8 @@ class ServerConfig(_Section):
     # do, every response carries two Access-Control-Allow-Origin headers and browsers
     # reject it.
     cors_allow_origins: tuple[str, ...] = ("*",)
-    # The site's public address, e.g. "https://buildplay.fun", for invite links and
-    # QR codes. Empty uses the address each request came to, which can be wrong
+    # The site's public address, e.g. "https://buildplay.fun", for invite links.
+    # Empty uses the address each request came to, which can be wrong
     # behind a load balancer or reverse proxy (http instead of https, internal host).
     public_base_url: str = ""
 

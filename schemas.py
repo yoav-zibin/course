@@ -713,6 +713,7 @@ class MatchOut(BaseModel):
     game_version: int
     owner_user_id: str
     status: MatchStatus
+    invite_code: str | None = None
     end_reason: EndReason | None
     players: list[PlayerOut]
     turn_of_player_indices: list[int] | None
@@ -769,6 +770,7 @@ class MatchOut(BaseModel):
             game_version=match.game_version,
             owner_user_id=match.owner_user_id,
             status=match.status,
+            invite_code=match.invite_code,
             end_reason=match.end_reason,
             players=[
                 PlayerOut.of(seat, player_id=match.player_id_of(seat))
@@ -843,6 +845,7 @@ class MatchSummaryOut(BaseModel):
     game_version: int
     owner_user_id: str
     status: MatchStatus
+    invite_code: str | None = None
     end_reason: EndReason | None
     players: list[PlayerOut]
     turn_of_player_indices: list[int] | None
@@ -998,16 +1001,17 @@ _MAX_INVITE_LIFETIME_SECONDS: Final = 30 * 24 * 3600
 
 
 class InviteCreate(_Request):
-    model_config = _example({"expires_in_seconds": 86400, "max_uses": 1})
+    model_config = _example({})
 
-    # Omit for a link that never expires (it still stops working when the match ends).
+    # Accepted for older clients; shared match codes have a fixed lifecycle.
     expires_in_seconds: Annotated[
         int, Field(ge=60, le=_MAX_INVITE_LIFETIME_SECONDS)
     ] | None = None
-    # Omit for unlimited uses.
     max_uses: Annotated[int, Field(ge=1, le=MAX_PLAYERS)] | None = None
-    # An existing account ID or its five-digit player code. Omit for a share link.
-    recipient_user_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)] | None = None
+    recipient_user_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)] | None = Field(
+        default=None, json_schema_extra={"deprecated": True},
+        description="Unsupported. Share the match URL using your device's sharing dialog.",
+    )
 
 
 class InviteAcceptanceOut(BaseModel):
@@ -1026,18 +1030,15 @@ class InviteAcceptanceOut(BaseModel):
 
 
 class InviteLinks(BaseModel):
-    """Where an invite leads: [url] opens the portal at the invite; [qr_code_url] is an
-    SVG QR code of [url], for showing on a screen or printing."""
+    """The shareable URL that opens a match and joins when a seat is available."""
 
     url: str
-    qr_code_url: str
 
     @classmethod
     def of(cls, token: str, base_url: str) -> "InviteLinks":
         base_url = base_url.rstrip("/")
         return cls(
-            url=f"{base_url}/portal#invite={token}",
-            qr_code_url=f"{base_url}/invites/{token}/qr.svg",
+            url=f"{base_url}/invite/{token}",
         )
 
 

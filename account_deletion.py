@@ -149,6 +149,14 @@ def _tree_step(store, job):
     ref = store.collection(tree["kind"]).document(tree["doc"])
     parent = store.raw_get(ref)
     if parent and not parent.get("tombstone"):
+        if tree["kind"] == "invites":
+            # Short codes may be reserved by a different match between this
+            # purge's tombstone and physical cleanup. The old account cannot
+            # write past its deletion fence; this live row is a new allocation.
+            # Drop only our stale checkpoint/marker, preserving the new invite.
+            if tree.get("identity") is not None:
+                store.raw_put(store.ref("cleanup", "invites:" + tree["identity"]), None)
+            return {k: v for k, v in job.items() if k != "tree"}
         from game_platform.service import ConflictError
         raise ConflictError("purge target changed unexpectedly")
     remaining = False
@@ -202,7 +210,8 @@ def _clear_match_inbox(store, user_id, match_id, *, invite_token=None):
         return
     kept = tuple(n for n in user.notifications
                  if n.match_id != match_id and _message_match_id(n.url) != match_id
-                 and (not invite_token or urlsplit(n.url).path != f"/i/{invite_token}"))
+                 and (not invite_token or urlsplit(n.url).path not in
+                      (f"/i/{invite_token}", f"/invite/{invite_token}")))
     if kept != user.notifications:
         store.put_user(replace(user, notifications=kept))
 

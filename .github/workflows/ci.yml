@@ -142,6 +142,8 @@ jobs:
             "sudo ln -sfnT /opt/game-platform/web-builds/$GITHUB_SHA/app /opt/game-platform/game_platform/static/app && rm -f /tmp/buildplay-web-$GITHUB_SHA.tar.gz"
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" \
             "sudo bash /opt/game-platform/game_platform/deploy/install-account-deletion-timer.sh"
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" \
+            "sudo bash /opt/game-platform/game_platform/deploy/install-invite-code-timer.sh"
       - name: Verify deployed service health
         if: steps.revision.outputs.current == 'true'
         env:

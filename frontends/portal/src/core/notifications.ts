@@ -31,8 +31,8 @@ export function handsTurnToOpponent(before: Match, after: Match, userId: string)
 export function notificationTarget(raw: string, baseUrl: string): {kind: 'match' | 'invite' | 'rematch'; id: string} | null {
   try {
     const base = new URL(baseUrl), url = new URL(raw, base);
-    if (url.origin !== base.origin) return null;
-    const invitePath = /^\/i\/([^/]+)$/.exec(url.pathname);
+    if (url.origin !== base.origin || url.username || url.password) return null;
+    const invitePath = /^\/invite\/([a-z]{4})\/?$/.exec(url.pathname) || /^\/i\/([^/]+)$/.exec(url.pathname);
     if (invitePath) return {kind: 'invite', id: decodeURIComponent(invitePath[1])};
     if (!['/', '/portal', '/static/portal.html', '/static/app/', '/static/app/index.html'].includes(url.pathname)) return null;
     const fragment = new URLSearchParams(url.hash.slice(1));

@@ -86,11 +86,11 @@ function MatchCard({match,local=false}: {match: Match;local?: boolean}) {
 }
 
 export function Matches() {
-  const {p,run,openAccount,openMatch,navigate}=useApp(),t=useText();const [link,setLink]=useState('');
+  const {p,run,openAccount}=useApp(),t=useText();
   const groups=[{title:copyText("Your turn"),matches:p.myMatches.filter(m=>m.status==='ongoing'&&m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{title:copyText("Ongoing"),matches:p.myMatches.filter(m=>m.status==='ongoing'&&!m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{title:copyText("Waiting for players"),matches:p.myMatches.filter(m=>m.status==='waiting_for_players')},{title:copyText("Finished"),matches:p.myMatches.filter(m=>m.status==='over')}];
-  return <><Row><Title>{t('ui.portal.nav_matches','Matches')}</Title><View style={{flex:1}}/><Button secondary compact onPress={()=>navigate('invites')}>{t('ui.invite.title','Invites')}</Button></Row><Copy muted>{t('ui.matches.subtitle','Jump back into your matches or open an invitation.')}</Copy>
+  return <><Title>{t('ui.portal.nav_matches','Matches')}</Title><Copy muted>{copyText('Jump back into your matches.')}</Copy>
     {!p.account&&<Button onPress={openAccount}>{t('ui.auth.log_in','Log in to see your matches')}</Button>}
-    <Card><Field label={t('ui.match.paste_link','Open a match or invite link')} value={link} onChangeText={setLink} autoCapitalize="none" autoCorrect={false}/><Button secondary disabled={!link.trim()} onPress={()=>run(async()=>{const url=new URL(link,p.baseUrl);if(!['https:','http:','buildplay:'].includes(url.protocol)||(['https:','http:'].includes(url.protocol)&&url.origin!==new URL(p.baseUrl).origin))throw new Error('Use a match link from this server.');const hash=new URLSearchParams(url.hash.slice(1));const invite=hash.get('invite')||url.searchParams.get('invite'),id=hash.get('match')||url.searchParams.get('match');if(invite)await p.actions.acceptInvite(invite);else if(id)await openMatch(id);else throw new Error('This link has no match or invite.');})}>{t('ui.action.open','Open link')}</Button></Card>
+
     {groups.map(group=><View key={group.title} style={{gap:12}}><Title small>{group.title} · {group.matches.length}</Title>{group.matches.map(match=><MatchCard key={match.id} match={match}/>)}{!group.matches.length&&<Empty>{copyText("No matches here yet.")}</Empty>}</View>)}
     {p.cursors.myMatches&&<Button secondary onPress={()=>run(()=>p.actions.loadMore('myMatches'))}>{copyText("Load more matches")}</Button>}
   </>;
@@ -101,16 +101,6 @@ export function LocalMatches() {
   const start=async(computers:number)=>{const match=await p.actions.startPractice('bundled-tictactoe',{humans:2-computers,computers,humanSeat:computers?Math.floor(Math.random()*2):0});await openMatch(match.id);};
   return <><Title>{t('ui.practice.local_matches','On this device')}</Title><Copy muted>{copyText("Local games are saved here, including after you close the app. Download a game once to play without internet.")}</Copy><Card><Title small>{copyText("Tic-tac-toe")}</Title><Copy muted>{copyText("A bundled game, ready to play offline on a fresh installation.")}</Copy><Row><Button onPress={()=>run(()=>start(0))}>{copyText("Pass and play")}</Button><Button secondary onPress={()=>run(()=>start(1))}>{copyText("Practice with a computer")}</Button></Row></Card>{p.localMatches.map(match=><MatchCard key={match.id} match={match} local/>)}{!p.localMatches.length&&<Empty>{copyText("No local matches yet. Choose a game to play on this device.")}</Empty>}
     {p.archived.length>0&&<Card><Title small>{copyText("Preserved previous app data")}</Title><Copy muted>{copyText("Saved games and pending branches from the previous app are preserved for review. Retired HTML moves cannot be submitted to current online matches.")}</Copy><Copy small>{p.archived.length} {copyText("saved records")}</Copy><Button secondary onPress={()=>run(async()=>{await Clipboard.setStringAsync(JSON.stringify(p.archived,null,2));})}>{copyText("Copy preserved data")}</Button></Card>}
-  </>;
-}
-
-export function Invitations() {
-  const {p,run,openAccount}=useApp(),t=useText();const [token,setToken]=useState('');
-  return <><Title>{t('ui.invite.title','Invites')}</Title><Copy muted>{copyText("Invite links let friends join a match.")}</Copy>{!p.account&&<Button onPress={openAccount}>{copyText("Log in to use an invite")}</Button>}
-    <Card><Field label={copyText("Invite link or token")} value={token} onChangeText={setToken} autoCapitalize="none" autoCorrect={false}/><Button disabled={!token.trim()||!p.account} onPress={()=>run(async()=>{let value=token.trim();if(value.includes('://')){const url=new URL(value);if(url.origin!==new URL(p.baseUrl).origin)throw new Error('Use an invite from this server.');value=new URLSearchParams(url.hash.slice(1)).get('invite')||url.searchParams.get('invite')||'';}if(!value)throw new Error('This link has no invite token.');await p.actions.acceptInvite(value);})}>{copyText("Join match")}</Button></Card>
-    {p.invites.map(invite=><Card key={invite.token}><Copy selectable>{invite.url}</Copy><Copy small muted>{invite.revoked?copyText("Revoked"):copyText("{v0} accepted",{v0:invite.acceptances?.length||0})}{invite.expires_at?copyText(" · Expires {v0}",{v0:new Date(invite.expires_at).toLocaleString()}):''}</Copy><Row><Button secondary compact onPress={()=>run(async()=>{await Clipboard.setStringAsync(invite.url);})}>{copyText("Copy invite")}</Button>{!invite.revoked&&<Button danger compact onPress={()=>run(()=>p.actions.revokeInvite(invite.token))}>{copyText("Revoke invite")}</Button>}</Row></Card>)}
-    {!p.invites.length&&<Empty>{copyText("No invites yet. Open a match and choose Share match.")}</Empty>}
-    {p.cursors.invites&&<Button secondary onPress={()=>run(()=>p.actions.loadMore('invites'))}>{copyText("Load more invites")}</Button>}
   </>;
 }
 

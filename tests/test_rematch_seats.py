@@ -36,6 +36,18 @@ def test_a_public_rematch_holds_the_seat_for_the_original_opponent() -> None:
     api.ok("POST", f"/matches/{rematch['id']}/join", as_user=bob)
 
 
+def test_invite_seats_a_reserved_opponent_and_only_shows_strangers_the_rematch() -> None:
+    api = Api()
+    match_id, _, alice, bob = finished_match(api)
+    rematch = api.ok("POST", f"/matches/{match_id}/rematch", as_user=alice)
+    token = rematch["invite_code"]
+    stranger = api.new_user("stranger")
+    spectator = api.ok("POST", f"/invites/{token}/accept", as_user=stranger)
+    assert [player["user_id"] for player in spectator["players"]] == [alice]
+    joined = api.ok("POST", f"/invites/{token}/accept", as_user=bob)
+    assert [player["user_id"] for player in joined["players"]] == [alice, bob]
+
+
 def test_legacy_private_rematch_retains_its_audience_and_reserved_rejoin():
     api = Api()
     match_id, _, alice, bob = finished_match(api)

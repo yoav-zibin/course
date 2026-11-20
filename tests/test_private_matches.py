@@ -70,6 +70,8 @@ def test_unusable_legacy_private_invites_cannot_reveal_match(api: Api, unusable)
     store.put_match(replace(store.get_match(match_id), private=True))
     invite = api.ok("POST", f"/matches/{match_id}/invites", as_user=alice, json={"max_uses": 1})
     if unusable == "consumed":
+        # Older stored capabilities may still carry a per-invite use limit.
+        store.put_invite(replace(store.get_invite(invite["token"]), max_uses=1))
         api.ok("POST", f"/invites/{invite['token']}/accept", as_user=bob)
     else:
         record = store.get_invite(invite["token"])

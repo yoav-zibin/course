@@ -1,5 +1,6 @@
 import * as deviceStorage from '../platform/storage';
 import type { Account } from './types';
+import {playerLink} from './links';
 export const INVITER_KEY='game-platform.invited-by.v1';
 export const CAMPAIGN_KEY='game-platform.experiment-campaign.v1';
 export const INVITE_KEY='game-platform.invite-token.v1';
@@ -17,8 +18,9 @@ export async function rememberUrlAttribution(raw:string,base:string,accounts:rea
   const url=trustedUrl(raw,base);if(!url)return;
   const hash=new URLSearchParams(url.hash.slice(1)),query=url.searchParams;
   const ref=hash.get('ref')||query.get('ref'),campaign=query.get('campaign')||hash.get('campaign');
-  let invite=hash.get('invite')||query.get('invite');
-  if(!invite){const next=query.get('next');const target=next?trustedUrl(next,base):null;if(target)invite=new URLSearchParams(target.hash.slice(1)).get('invite')||target.searchParams.get('invite');}
+  const incoming=playerLink(raw,base);
+  let invite=incoming?.kind==='invite'?incoming.id:hash.get('invite')||query.get('invite');
+  if(!invite){const next=query.get('next');const target=next?trustedUrl(next,base):null;if(target){const link=playerLink(target.href,base);invite=link?.kind==='invite'?link.id:new URLSearchParams(target.hash.slice(1)).get('invite')||target.searchParams.get('invite');}}
   const remember=async()=>{
     let first=await storage.getItem(INVITER_KEY);
     if(first&&(!validIdentifier(first)||ownRef(first,accounts)||knownCredential(first,accounts))){await storage.removeItem(INVITER_KEY);first=null;}

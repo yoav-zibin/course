@@ -85,14 +85,14 @@ def test_notification_inbox_rolls_back_and_reloads_without_collection_queries(st
 
 
 def test_notification_opt_out_history_and_directed_invites_survive_query_merge(store):
+    from game_platform.tests.test_notification_inbox import legacy_directed_invite
+
     api = api_for(store)
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game = api.new_game(owner=alice)
     match = api.new_match(owner=alice, game_id=game)
-    code = api.ok("GET", f"/users/{bob}", as_user=bob)["referral_code"]
-    invite = api.ok("POST", f"/matches/{match}/invites", as_user=alice,
-                    json={"recipient_user_id": code})
-    assert invite["recipient_user_id"] == bob
+    invite = legacy_directed_invite(api, match, sender=alice, recipient=bob)
+    assert invite.recipient_user_id == bob
     api.ok("PATCH", f"/users/{bob}", as_user=bob,
            json={"notifications_enabled": False, "notification_prompt_seen": True})
     merged = api.ok("POST", f"/users/{bob}/merge", as_user=bob,
@@ -102,7 +102,7 @@ def test_notification_opt_out_history_and_directed_invites_survive_query_merge(s
     cold = QueryStore(store.client, namespace=store.namespace)
     assert cold.get_user(alice).notifications[0].event == "invite_request"
     assert cold.get_user(bob).notifications == ()
-    assert cold.get_invite(invite["token"]).recipient_user_id == alice
+    assert cold.get_invite(invite.token).recipient_user_id == alice
 
 
 def test_native_delivery_receipt_survives_restart_and_removes_invalid_token(store, monkeypatch):
@@ -573,6 +573,51 @@ def test_two_instances_can_claim_a_game_proposal_only_once(store):
         assert gp.delete_proposal(store, proposal["id"]) is True
     # The creator still has its cached copy; even that retry must lose.
     assert gp.delete_proposal(store, proposal["id"]) is False
+
+
+def test_two_instances_cannot_allocate_the_same_invite_code(store):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+
+    api = api_for(store)
+    alice = api.new_user("alice")
+    game = api.new_game(owner=alice)
+    barrier = threading.Barrier(2)
+
+    def attempt(_):
+        other = QueryStore(store.client, namespace=store.namespace)
+        platform = ScalablePlatform(store=other, new_invite_token=lambda: "race")
+        original = other.get_invite
+
+        def read_code(code):
+            invite = original(code)
+            if invite is None:
+                barrier.wait(timeout=10)
+            return invite
+
+        other.get_invite = read_code
+        try:
+            return platform.create_match(caller_id=alice, game_id=game).id
+        except ConflictError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(attempt, [1, 2]))
+    committed = [result for result in results if result is not None]
+    assert len(committed) <= 1
+    cold = QueryStore(store.client, namespace=store.namespace)
+    assert len(cold.list_matches_involving(alice)) == len(committed)
+    # Pessimistic locking can abort both contenders. A fresh semantic retry must
+    # still be able to reserve the code without any orphaned match or stake.
+    if not committed:
+        retry = ScalablePlatform(store=cold, new_invite_token=lambda: "race")
+        committed.append(retry.create_match(caller_id=alice, game_id=game).id)
+    winner, = committed
+    invite = cold.get_invite("race")
+    assert invite.match_id == winner
+    assert cold.get_match(winner).invite_code == "race"
+    assert cold.counts()["invites_codes_total"] == 1
+    assert [match.id for match in cold.list_matches_involving(alice)] == [winner]
 
 
 def test_two_instances_racing_a_move_commit_only_once(store):
@@ -1769,9 +1814,9 @@ def test_partial_payout_delete_retries_conserve_tokens_on_query_backend(store):
     test_partial_payout_cannot_be_replaced_by_a_player_refund(api)
 
 
-@pytest.mark.parametrize("reason", ["revoked", "expired", "consumed"])
-def test_unusable_invite_keeps_public_spectator_view_on_query_backend(store, reason):
-    from game_platform.tests.test_daily_match_security import test_unusable_invites_keep_public_views_and_never_expose_hidden_cards
+@pytest.mark.parametrize("reason", ["revoked", "expired", "started"])
+def test_released_invite_keeps_public_spectator_view_on_query_backend(store, reason):
+    from game_platform.tests.test_daily_match_security import test_released_invites_cannot_open_matches_and_public_views_hide_cards
     api = api_for(store)
     api.platform = api.client.app.state.platform
-    test_unusable_invites_keep_public_views_and_never_expose_hidden_cards(api, reason)
+    test_released_invites_cannot_open_matches_and_public_views_hide_cards(api, reason)

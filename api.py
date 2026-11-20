@@ -3,10 +3,10 @@
 import asyncio
 import hashlib
 import html
-import io
 import json
 import logging
 import mimetypes
+import re
 import secrets
 import threading
 import time
@@ -22,7 +22,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
-import segno
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -58,7 +57,6 @@ from game_platform.schemas import (
     GoogleLogin,
     HealthOut,
     InviteCreate,
-    InviteLinks,
     InviteOut,
     InviteViewOut,
     MatchCreate,
@@ -1141,9 +1139,9 @@ def list_matches(
 
 
 @router.get("/matches/{match_id}")
-def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchOut:
+def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId, invite: str | None = None) -> MatchOut:
     return _match_out(
-        platform, platform.get_match(match_id, caller_id=caller_id),
+        platform, platform.get_match(match_id, caller_id=caller_id, invite_token=invite),
         caller_id=caller_id,
     )
 
@@ -1235,19 +1233,19 @@ def remove_player(
 
 
 @router.get("/matches/{match_id}/history")
-def get_match_history(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchHistoryOut:
+def get_match_history(platform: Platform, match_id: str, caller_id: OptionalCallerId, invite: str | None = None) -> MatchHistoryOut:
     # One match's moves: the query store reads them in bounded chunks behind
     # the lazy history, so the full list costs no dataset-sized read. Every
     # state is the caller's own view of it (see GamePlatform.view_history):
     # a full state never leaves the server.
-    match = platform.get_match(match_id, caller_id=caller_id)
+    match = platform.get_match(match_id, caller_id=caller_id, invite_token=invite)
     initial_view, move_views = platform.view_history(match, caller_id)
     return MatchHistoryOut.of(match, initial_view, move_views, caller_id=caller_id)
 
 
 @router.get("/matches/{match_id}/moves")
-def list_moves(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> list[MoveOut]:
-    match = platform.get_match(match_id, caller_id=caller_id)
+def list_moves(platform: Platform, match_id: str, caller_id: OptionalCallerId, invite: str | None = None) -> list[MoveOut]:
+    match = platform.get_match(match_id, caller_id=caller_id, invite_token=invite)
     _, move_views = platform.view_history(match, caller_id)
     return [
         MoveOut.of(move, caller_id=caller_id).model_copy(update={"new_state": view})
@@ -1255,7 +1253,7 @@ def list_moves(platform: Platform, match_id: str, caller_id: OptionalCallerId) -
     ]
 
 
-# Invites: shareable links and QR codes to a match, which also track referrals.
+# Each waiting multiplayer match has one shareable invite URL.
 
 
 def _public_base_url(request: Request) -> str:
@@ -1272,8 +1270,7 @@ def create_invite(
     match_id: str,
     body: InviteCreate | None = None,
 ) -> InviteOut:
-    """Creates a link (and QR code) for joining a match. Any player in the match
-    may create one; who uses it is recorded for the creator's referral stats."""
+    """Returns the match's automatically assigned invite link."""
     body = body if body is not None else InviteCreate()
     invite = platform.create_invite(
         caller_id=caller_id,
@@ -1289,7 +1286,7 @@ def create_invite(
 def list_invites(
     platform: Platform, request: Request, caller_id: CallerId, match_id: str | None = None
 ) -> list[InviteOut]:
-    """The match invites the caller created, optionally for one match. (/invites is
+    """The match invites the caller created, optionally for one match. (/admin/referrals is
     the backoffice's referral dashboard page.)"""
     base_url = _public_base_url(request)
     return [
@@ -1316,24 +1313,6 @@ def view_invite(platform: Platform, request: Request, token: str) -> InviteViewO
         usable=view.problem is None,
         unusable_reason=reason,
         unusable_code=code,
-    )
-
-
-@router.get(
-    "/invites/{token}/qr.svg",
-    response_class=Response,
-    responses={HTTPStatus.OK: {"content": {"image/svg+xml": {}}}},
-)
-def invite_qr_code(platform: Platform, request: Request, token: str) -> Response:
-    """The invite link as an SVG QR code, e.g. for an <img> tag or for printing."""
-    platform.check_invite_exists(token)
-    url = InviteLinks.of(token, _public_base_url(request)).url
-    svg = io.BytesIO()
-    segno.make(url, error="m").save(svg, kind="svg", scale=8, border=4, xmldecl=False)
-    return Response(
-        svg.getvalue(),
-        media_type="image/svg+xml",
-        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 
@@ -1608,6 +1587,26 @@ def portal() -> FileResponse:
     return FileResponse(_STATIC_DIR / "app/index.html")
 
 
+@debug_router.get("/invite/{code}")
+def match_invite_link(code: str) -> FileResponse:
+    """Keep the invite path intact for browser routing and native app links."""
+    if re.fullmatch(r"[a-z]{4}", code) is None:
+        raise HTTPException(404, "invite not found")
+    return FileResponse(_STATIC_DIR / "app/index.html", headers={"Cache-Control": "no-store"})
+
+
+@debug_router.get("/.well-known/apple-app-site-association")
+def apple_app_site_association() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "app-links/apple-app-site-association",
+                        media_type="application/json", headers={"Cache-Control": "public, max-age=3600"})
+
+
+@debug_router.get("/.well-known/assetlinks.json")
+def android_asset_links() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "app-links/assetlinks.json",
+                        media_type="application/json", headers={"Cache-Control": "public, max-age=3600"})
+
+
 @debug_router.get("/static/portal.html")
 @debug_router.get("/static/welcome.html")
 def legacy_portal_entry() -> FileResponse:
@@ -1646,7 +1645,7 @@ def stats_page() -> FileResponse:
     return FileResponse(_STATIC_DIR / "stats.html")
 
 
-@debug_router.get("/invites", dependencies=[MasterPassword])
+@debug_router.get("/admin/referrals", dependencies=[MasterPassword])
 def invites_page() -> FileResponse:
     return FileResponse(_STATIC_DIR / "invites.html")
 
@@ -2241,7 +2240,7 @@ def create_app(
     empty adds no CORS headers, for when a reverse proxy already adds them (two
     `Access-Control-Allow-Origin` headers make browsers reject the response).
 
-    [public_base_url] is where invite links and QR codes point; empty uses the
+    [public_base_url] is where invite links point; empty uses the
     address each request came to.
 
     [monitor] counts requests and raises alerts (see docs/monitoring.md); every request

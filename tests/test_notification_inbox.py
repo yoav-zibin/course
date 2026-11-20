@@ -15,6 +15,20 @@ def _feed(api, user, **params):
                   params={key: str(value) for key, value in params.items()})
 
 
+def legacy_directed_invite(api, match_id, *, sender, recipient):
+    """Seed a historical directed invite; new clients only share match URLs."""
+    platform = api.client.app.state.platform
+    with platform._lock:
+        store = platform._store
+        match = store.get_match(match_id)
+        invite = replace(store.get_invite(match.invite_code), recipient_user_id=recipient)
+        store.put_invite(invite)
+        platform._notify_match_event("notify.invite_request", match=match,
+            recipient_ids=[recipient], actor_name=store.get_user(sender).display_name,
+            tag_suffix="invite", url=f"/i/{invite.token}")
+        return invite
+
+
 def test_inbox_works_without_push_and_is_private_and_idempotently_read():
     api = Api()
     alice, bob, other = (api.new_user(name) for name in ("alice", "bob", "other"))
@@ -70,7 +84,7 @@ def test_profile_opt_out_suppresses_push_but_keeps_inbox():
     assert message.notification_id == _feed(api, bob)["items"][0]["id"]
 
 
-def test_directed_invite_resolves_player_code_and_preserves_share_links():
+def test_targeted_invites_are_rejected_without_notifications_or_code_changes():
     notifier = FakeNotifier()
     api = Api(push_notifier=notifier)
     alice, bob, outsider = (api.new_user(name) for name in ("alice", "bob", "outsider"))
@@ -78,24 +92,20 @@ def test_directed_invite_resolves_player_code_and_preserves_share_links():
     game = api.new_game(owner=alice)
     match = api.new_match(owner=alice, game_id=game)
     code = api.ok("GET", f"/users/{bob}", as_user=bob)["referral_code"]
-    invite = api.ok("POST", f"/matches/{match}/invites", as_user=alice,
-                    json={"recipient_user_id": code})
-    assert invite["recipient_user_id"] == bob
-    entry, = _feed(api, bob)["items"]
-    assert entry["event"] == "invite_request"
-    assert entry["url"] == "/i/" + invite["token"]
-    assert notifier.messages[0].notification_id == entry["id"]
-    # Opening the link shows the public match and permits invite acceptance.
-    assert api.ok("GET", f"/invites/{invite['token']}")["match"]["id"] == match
-    assert api.ok("POST", f"/invites/{invite['token']}/accept", as_user=bob)["id"] == match
-    before = len(_feed(api, outsider)["items"])
+    original = api.ok("GET", f"/matches/{match}")["invite_code"]
+    for recipient in (code, bob, alice, "nobody"):
+        response = api.request("POST", f"/matches/{match}/invites", as_user=alice,
+                               json={"recipient_user_id": recipient})
+        assert response.status_code == 400
+        assert response.json()["detail"] == "targeted invites are no longer supported; share the match URL"
+    assert notifier.messages == []
+    assert _feed(api, bob)["items"] == []
     shared = api.ok("POST", f"/matches/{match}/invites", as_user=alice)
+    assert shared["token"] == original
     assert shared["recipient_user_id"] is None
-    assert len(_feed(api, outsider)["items"]) == before
-    assert api.request("POST", f"/matches/{match}/invites", as_user=alice,
-                       json={"recipient_user_id": "nobody"}).status_code == 404
-    assert api.request("POST", f"/matches/{match}/invites", as_user=alice,
-                       json={"recipient_user_id": alice}).status_code == 409
+    assert api.ok("GET", f"/invites/{original}")["match"]["id"] == match
+    assert api.ok("POST", f"/invites/{original}/accept", as_user=bob)["id"] == match
+    assert _feed(api, outsider)["items"] == []
     assert api.request("POST", f"/matches/{match}/invites", as_user=outsider,
                        json={"recipient_user_id": bob}).status_code == 403
 
@@ -197,8 +207,7 @@ def test_legacy_invites_and_match_links_group_and_dismiss_without_match_id(monke
     game = api.new_game(owner=alice)
     match_id = api.new_match(owner=alice, game_id=game)
     for _ in range(2):
-        api.ok("POST", f"/matches/{match_id}/invites", as_user=alice,
-               json={"recipient_user_id": bob})
+        legacy_directed_invite(api, match_id, sender=alice, recipient=bob)
     match = api.platform._store.get_match(match_id)
     api.platform._notify_match_event("notify.turn", match=match,
                                     recipient_ids=[bob], tag_suffix="turn")
@@ -231,8 +240,7 @@ def test_notification_preferences_inbox_and_native_subscription_survive_disk_and
     alice, bob = api.new_user("alice"), api.new_user("bob")
     game = api.new_game(owner=alice)
     match = api.new_match(owner=alice, game_id=game)
-    api.ok("POST", f"/matches/{match}/invites", as_user=alice,
-           json={"recipient_user_id": bob})
+    legacy_directed_invite(api, match, sender=alice, recipient=bob)
     api.ok("PATCH", f"/users/{bob}", as_user=bob,
            json={"notifications_enabled": False, "notification_prompt_seen": True})
     _native(api, bob)

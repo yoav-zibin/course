@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily BuildPlay invite code cleanup and capacity alert
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15min
+AccuracySec=1min
+Unit=game-platform-invite-codes.service
+
+[Install]
+WantedBy=timers.target

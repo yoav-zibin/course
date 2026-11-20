@@ -123,8 +123,8 @@ test('Games and Matches share one header row and replace the redundant game retu
     await page.goBack();await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
     await page.getByTestId('header-matches').click();
     await expect(page).toHaveURL(/#matches$/);await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'Invites',exact:true}).click();
-    await expect(page).toHaveURL(/#invites$/);await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Invites',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('textbox',{name:'Open a match or invite link',exact:true})).toHaveCount(0);
     await expect(page.getByTestId('header-matches')).toHaveAttribute('aria-current','page');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   }

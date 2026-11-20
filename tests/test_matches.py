@@ -20,6 +20,7 @@ def test_create_a_human_match(api: Api) -> None:
         "game_version": 1,
         "owner_user_id": alice,
         "status": "waiting_for_players",
+        "invite_code": match["invite_code"],
         "end_reason": None,
         "players": [
             {"player_index": 0, "kind": "human", "user_id": alice, "id": alice, "active": True},

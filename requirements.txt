@@ -14,8 +14,6 @@ cryptography>=42
 # Needed to run games' server-side logic (game_logic.py): QuickJS bindings with
 # per-context time and memory limits.
 quickjs>=1.19,<2
-# Draws invite links as QR codes (api.py). Pure Python, no dependencies.
-segno>=1.6,<2
 # Query-backed Firestore persistence when firestore.enabled is set (query_store.py).
 google-cloud-firestore>=2.34,<3
 

@@ -190,7 +190,7 @@ class Api:
         # tests use client directly to control every credential themselves.
         master = self.client.app.state.master_password
         use_master = path.startswith(("/admin/", "/v2/admin/")) or (
-            method == "GET" and path in ("/admin", "/browse", "/stats", "/invites", "/feedback")
+            method == "GET" and path in ("/admin", "/browse", "/stats", "/admin/referrals", "/feedback")
         )
         parts = path.split("/")
         if len(parts) >= 3 and parts[1] == "games" and method in ("PATCH", "DELETE", "POST"):

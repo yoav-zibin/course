@@ -6,7 +6,7 @@ import {StatusBar} from 'expo-status-bar';
 import {usePortal} from './core';
 import {Button, Card, Copy, Notice, Row, Title, colors} from './ui/components';
 import {Context, Screen, text} from './ui/context';
-import {Catalog, GameDetail, Matches, LocalMatches, Invitations} from './ui/screens';
+import {Catalog, GameDetail, Matches, LocalMatches} from './ui/screens';
 import {AccountDialog} from './ui/AccountDialog';
 import {AccountDeletionBanner} from './ui/AccountDeletion';
 import {MatchStage} from './ui/MatchStage';
@@ -20,6 +20,7 @@ import {configureReporter,createReporter,reportClientIssue} from './core/reporti
 import {ErrorBoundary} from './ui/ErrorBoundary';
 import {readLocalUiTest} from './platform/legacy';
 import {notificationTarget} from './core/notifications';
+import {playerLink} from './core/links';
 import type {InAppNotification} from './core/types';
 import {useNotificationDelivery} from './ui/useNotificationDelivery';
 import {NotificationInbox, NotificationItem, NotificationPrompt} from './ui/Notifications';
@@ -36,6 +37,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const observedNotifications = useRef<{scope:string; ids:Set<string>; initialized:boolean}>({scope:'',ids:new Set(),initialized:false});
   const [appSession,setAppSession] = useState('');
   const [pendingInvite,setPendingInvite]=useState(''),[invitePreview,setInvitePreview]=useState<any>(null);
+  const navigation = useRef(0), acceptingInvite = useRef('');
   const knownPasswords=useRef(new Set<string>());
   const notificationScope = useRef(''); notificationScope.current = JSON.stringify([p.baseUrl,p.account?.id]);
   for(const saved of p.accounts)knownPasswords.current.add(saved.password);
@@ -44,16 +46,34 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   useEffect(()=>{if(!p.selectedMatch)setFocus(false);},[p.selectedMatch?.id]);
   const t = (key: string, fallback: string) => text(p,key,fallback);
   const run = useCallback(async (task: () => Promise<unknown>) => {try { await task(); } catch (error) {setNotice(error instanceof Error ? error.message : String(error));}}, []);
-  const writeRoute = (fragment: string) => { if (Platform.OS === 'web') {const url = new URL(window.location.href); url.hash = fragment; window.history.pushState(null, '', url);}};
-  const navigate = (next: Screen) => {if(next==='games')p.actions.clearGame();else p.actions.clearMatch(); setScreen(next); writeRoute(next);};
-  const openGame = async (id: string) => {await p.actions.selectGame(id); setScreen('games'); writeRoute(`game=${encodeURIComponent(id)}`);};
-  const openMatch = async (id: string) => {await p.actions.selectMatch(id); setScreen('matches'); writeRoute(`match=${encodeURIComponent(id)}`);};
-  const openInvite=async(token:string)=>{setPendingInvite(token);setInvitePreview(await p.actions.request('GET',`/invites/${encodeURIComponent(token)}`));};
+  const routeBase = Platform.OS === 'web' ? window.location.origin : process.env.EXPO_PUBLIC_API_URL || 'https://buildplay.fun';
+  const writeRoute = (fragment: string) => { if (Platform.OS === 'web') {const url = new URL(window.location.href); if(url.pathname==='/portal'&&!url.search&&url.hash.slice(1)===fragment)return; url.pathname = '/portal'; url.search = ''; url.hash = fragment; window.history.pushState(null, '', url);}};
+  const clearInvite = () => {navigation.current++; acceptingInvite.current=''; setPendingInvite(''); setInvitePreview(null);};
+  const navigate = (next: Screen) => {clearInvite();if(next==='games')p.actions.clearGame();else p.actions.clearMatch(); setScreen(next); writeRoute(next);};
+  const openGame = async (id: string) => {clearInvite();setScreen('games');writeRoute(`game=${encodeURIComponent(id)}`);await p.actions.selectGame(id);};
+  const openMatch = async (id: string) => {clearInvite();setScreen('matches');writeRoute(`match=${encodeURIComponent(id)}`);await p.actions.selectMatch(id);};
+  const openInvite = async (token: string) => {
+    const epoch=++navigation.current;acceptingInvite.current='';setPendingInvite('');setInvitePreview(null);setScreen('matches');
+    const preview=await p.actions.openInvite(token);
+    if(epoch!==navigation.current||!preview)return;
+    setPendingInvite(token);setInvitePreview(preview);
+  };
+  const receiveLink = async (raw: string | null) => {
+    if(!raw)return;
+    await p.actions.rememberAttribution(raw);
+    const target=playerLink(raw,routeBase);if(!target)return;
+    if(target.kind==='app-login'){setAppSession(target.id);return;}
+    if(target.kind==='invite')await openInvite(target.id);
+    else if(target.kind==='match')await openMatch(target.id);
+    else if(target.kind==='game')await openGame(target.id);
+    else if(target.kind==='rematch'){const next=await p.actions.request('POST',`/matches/${encodeURIComponent(target.id)}/rematch`);await openMatch(next.id);}
+    else if(target.kind==='screen') {clearInvite();p.actions.clearGame();setScreen(target.id);}
+  };
 
   const openNotificationUrl = async (raw: string) => {
     const scope = notificationScope.current, guard = () => {if (scope !== notificationScope.current) throw new Error('Account changed; refresh to continue.');};
     const target = notificationTarget(raw, p.baseUrl); if (!target) throw new Error(copyText('This notification link is unavailable.'));
-    if (target.kind === 'invite') {const preview = await p.actions.request('GET', `/invites/${encodeURIComponent(target.id)}`); guard(); setPendingInvite(target.id); setInvitePreview(preview);}
+    if (target.kind === 'invite') {await openInvite(target.id); guard();}
     else if (target.kind === 'rematch') {const next = await p.actions.request('POST', `/matches/${encodeURIComponent(target.id)}/rematch`); guard(); await openMatch(next.id);}
     else await openMatch(target.id);
   };
@@ -98,37 +118,27 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
     const initialUrl=Platform.OS==='web'?window.location.href:(await Linking.getInitialURL())??null;
     await p.actions.bootstrap(undefined,localOnly,initialUrl??undefined);
     if (Platform.OS === 'web') installWebApp();
-    const receive = async (raw: string | null) => {
-      if (!raw) return;
-      const url = new URL(raw, 'https://buildplay.fun');
-      const hash = new URLSearchParams(url.hash.slice(1)), query = url.searchParams;
-      const id = hash.get('match') || query.get('match');
-      const game = hash.get('game') || query.get('game');
-      const invite = hash.get('invite') || query.get('invite') || /^\/i\/([^/]+)$/.exec(url.pathname)?.[1];
-      const rematch = hash.get('rematch') || query.get('rematch');
-      const appLogin = hash.get('app-login');
-      if(appLogin){setAppSession(appLogin);return;}
-      if (rematch) {const next = await p.actions.request('POST', `/matches/${encodeURIComponent(rematch)}/rematch`); await openMatch(next.id);}
-      else if (id) await openMatch(id);
-      else if (game) await openGame(game);
-      else if (invite) await openInvite(invite);
-      else if (['games','matches','local','invites'].includes(url.hash.slice(1))) {p.actions.clearGame();setScreen(url.hash.slice(1) as Screen);}
-      else if (url.hash) {p.actions.clearGame();setScreen('games');}
-    };
-    await receive(initialUrl);
+    await receiveLink(initialUrl);
   });}, []);
   useEffect(() => {
-    const subscription = Linking.addEventListener('url', ({url}) => {void run(async () => {
-      await p.actions.rememberAttribution(url);
-      const parsed = new URL(url), hash = new URLSearchParams(parsed.hash.slice(1));
-      const match = hash.get('match') || parsed.searchParams.get('match'), game = hash.get('game') || parsed.searchParams.get('game'), invite = hash.get('invite') || parsed.searchParams.get('invite') || /^\/i\/([^/]+)$/.exec(parsed.pathname)?.[1], rematch = hash.get('rematch') || parsed.searchParams.get('rematch');
-      if (rematch) {const next = await p.actions.request('POST', `/matches/${encodeURIComponent(rematch)}/rematch`); await openMatch(next.id);} else if (match) await openMatch(match); else if (game) await openGame(game); else if (invite) await openInvite(invite);
-    });});
+    const subscription = Linking.addEventListener('url', ({url}) => {void run(()=>receiveLink(url));});
     const resume = AppState.addEventListener('change', state => {if (state === 'active') void run(() => p.actions.refresh());});
-    const pop = () => {void run(async () => {await p.actions.rememberAttribution(window.location.href);const hash = new URLSearchParams(window.location.hash.slice(1)); const id=hash.get('match'), game=hash.get('game'), invite=hash.get('invite'), rematch=hash.get('rematch'); if(rematch) {const next=await p.actions.request('POST',`/matches/${encodeURIComponent(rematch)}/rematch`);await openMatch(next.id);} else if(invite) await openInvite(invite); else if(id) {setScreen('matches');await p.actions.selectMatch(id);} else {p.actions.clearGame(); if(game) {setScreen('games');await p.actions.selectGame(game);} else setScreen((['games','matches','local','invites'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'games') as Screen);}});};
-    if (Platform.OS === 'web') window.addEventListener('popstate',pop);
-    return () => {subscription.remove(); resume.remove(); if (Platform.OS === 'web') window.removeEventListener('popstate',pop);};
+    const pop = () => {void run(()=>receiveLink(window.location.href));};
+    if (Platform.OS === 'web') {window.addEventListener('popstate',pop);window.addEventListener('hashchange',pop);}
+    return () => {subscription.remove(); resume.remove(); if (Platform.OS === 'web') {window.removeEventListener('popstate',pop);window.removeEventListener('hashchange',pop);}};
   }, []);
+  useEffect(()=>{
+    if(!p.ready||!p.account||!pendingInvite||!invitePreview)return;
+    const key=JSON.stringify([p.baseUrl,p.account.id,pendingInvite]);
+    if(acceptingInvite.current===key)return;
+    acceptingInvite.current=key;
+    const epoch=navigation.current;
+    void run(async()=>{
+      const match=await p.actions.acceptInvite(pendingInvite);
+      if(epoch!==navigation.current||!match)return;
+      setPendingInvite('');setInvitePreview(null);setScreen('matches');writeRoute(`match=${encodeURIComponent(match.id)}`);
+    });
+  },[p.ready,p.baseUrl,p.account?.id,pendingInvite,invitePreview]);
   useEffect(()=>{
     if(!p.ready)return;
     let stopped=false,timer:ReturnType<typeof setTimeout>;
@@ -180,13 +190,12 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
           {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {t('ui.offline.pending_moves','pending moves')}. {p.pending ? t('ui.offline.move_saved','Your move is saved on this device and will sync when connected.') : t('ui.offline.downloaded_play','Downloaded games are available on this device.')}</Notice>}
           {notificationBanner&&!inbox&&<View style={{gap:10}}><NotificationItem item={notificationBanner} onOpen={openNotification}/><Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button></View>}
           {appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
-          {pendingInvite&&<Card><Title small>{invitePreview?.created_by_display_name?copyText("{v0} invited you to play",{v0:invitePreview.created_by_display_name}):copyText("You’re invited to play")}</Title><Copy muted>{p.account?copyText("Join the match with your current account."):copyText("Log in or continue as a guest, then join this match.")}</Copy><Row><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const joined=await p.actions.acceptInvite(pendingInvite);setPendingInvite('');setInvitePreview(null);setScreen('matches');writeRoute(`match=${encodeURIComponent(joined.id)}`);})}>{p.account?copyText("Join match"):copyText("Log in to join")}</Button><Button secondary onPress={()=>{setPendingInvite('');setInvitePreview(null);writeRoute('games');}}>{copyText("Not now")}</Button></Row></Card>}
+          {pendingInvite&&!p.account&&invitePreview?.usable&&<Card><Title small>{copyText('You’re invited to play')}</Title><Copy muted>{copyText('Log in or continue as a guest to join this match.')}</Copy><Row><Button onPress={()=>setAccount(true)}>{copyText('Log in to join')}</Button><Button secondary onPress={()=>{clearInvite();writeRoute(`match=${encodeURIComponent(invitePreview.match.id)}`);}}>{copyText('Watch match')}</Button></Row></Card>}
           {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
             : gameVisible ? <MatchStage />
             : screen==='games' ? p.selectedGameId ? <GameDetail /> : <Catalog />
             : screen==='matches' ? <Matches />
-            : screen==='local' ? <LocalMatches />
-            : <Invitations />}
+            : <LocalMatches />}
         </ScrollView>
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />

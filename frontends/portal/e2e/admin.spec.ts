@@ -33,7 +33,7 @@ test('query-mode referrals browse branches and search without a global export',a
     if(query.get('q'))items=items.filter(user=>user.id.startsWith(query.get('q')!.toLowerCase()));
     return route.fulfill({json:{items,next_cursor:null}});
   });
-  await page.goto('/invites');
+  await page.goto('/admin/referrals');
   await page.locator('#leaderboard').getByRole('button',{name:'Alice',exact:true}).click();
   await expect(page.locator('#detail')).toContainText('2 total invited');
   await page.locator('#detail').getByRole('button',{name:'Bob',exact:true}).click();

@@ -159,3 +159,28 @@ installation signed with a different old key cannot be upgraded in place by a
 new key; do not uninstall an existing guest installation to work around that
 without preserving its data. The new generated debug signing identity is stable
 for future CI builds. iOS updates retain the configured bundle identifier/team.
+
+Match invitations use `https://buildplay.fun/invite/abcd`. The lobby shows its
+automatically assigned four-letter code, with Copy code and Share link actions.
+Opening a link shows the match, joins a signed-in player when a seat is available,
+and otherwise leaves them watching. Visitors can log in or continue as a guest.
+The code is released when play starts, ends, or the match is deleted; daily
+[maintenance](../../docs/invite-code-cleanup.md) also reclaims week-old codes.
+
+The Expo configuration claims `/invite/` HTTPS links through iOS Associated
+Domains and Android verified App Links. The API serves the public association
+files from `static/app-links/` at their `/.well-known/` URLs without redirects.
+The Apple app identifier was verified from the existing distribution profile;
+the Android production fingerprint was read from Google Play's generated APK
+metadata for version 501, and the debug fingerprint from the published rolling
+APK, on November 20, 2026. These files contain public signing identities only.
+Apple's `ASSOCIATED_DOMAINS` capability is enabled for `fun.buildplay.sample`.
+New native builds must be installed before HTTPS links open the app; automatic
+distribution signing must refresh the profile to include the new entitlement.
+If signing identities change, update the matching domain association file.
+
+Verify installed Android builds with `adb shell pm verify-app-links --re-verify
+fun.buildplay` and `adb shell pm get-app-links fun.buildplay` (use
+`fun.buildplay.debug` for the rolling APK). For iOS, tap an invite from Messages
+or Notes after installing the new TestFlight build. The web fallback remains
+available when an app is not installed.

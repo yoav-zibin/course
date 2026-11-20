@@ -185,5 +185,8 @@ jobs:
           if [ -f deploy/install-account-deletion-timer.sh ]; then
             bash deploy/install-account-deletion-timer.sh
           fi
+          if [ -f deploy/install-invite-code-timer.sh ]; then
+            bash deploy/install-invite-code-timer.sh
+          fi
           rm -rf "$staging"
           REMOTE

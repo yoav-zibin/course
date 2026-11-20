@@ -52,7 +52,7 @@ export function notificationData(value: unknown, baseUrl: string, accountId: str
     try {
       const base = new URL(baseUrl), url = new URL(raw.url, base);
       if (!['https:', 'http:'].includes(url.protocol) || url.origin !== base.origin || url.username || url.password) return null;
-      if (!['/portal', '/static/portal.html'].includes(url.pathname) && !/^\/i\/[A-Za-z0-9_-]+$/.test(url.pathname)) return null;
+      if (!['/portal', '/static/portal.html'].includes(url.pathname) && !/^\/i\/[A-Za-z0-9_-]+$/.test(url.pathname) && !/^\/invite\/[a-z]{4}\/?$/.test(url.pathname)) return null;
       data.url = url.href;
     } catch {return null;}
   } else if (data.match_id) data.url = `${new URL(baseUrl).origin}/portal#match=${encodeURIComponent(data.match_id)}`;
