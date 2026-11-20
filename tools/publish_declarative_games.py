@@ -76,6 +76,71 @@ def _move_tokens(value):
     return {str(value).lower()}
 
 
+def _dos_match_event(ui, message, frame, move):
+    def tap(ident):
+        nonlocal frame
+        event = {"type": "tap", "id": ident}
+        if event not in offered_events(frame["scene"]):
+            raise ValueError(f"Dos did not offer {ident}")
+        frame = ui.reduce({"type": "ui_event", "event": event,
+                           "state_changed": message}, frame.get("local_state"))
+
+    def page_to(key, index):
+        target = index // 14
+        prefix = "dos_hand" if key == "handPage" else "dos_center"
+        while frame["local_state"][key] != target:
+            direction = "next" if frame["local_state"][key] < target else "previous"
+            tap(f"{prefix}_{direction}")
+
+    for placement in move["placements"]:
+        for ref in sorted(placement["cards"], key=lambda item: item["i"]):
+            page_to("handPage", ref["i"])
+            tap(f"dos_hand_{ref['i']}")
+        page_to("centerPage", placement["pile"])
+        tap(f"dos_pile_{placement['pile']}")
+        edit = frame["local_state"]["dosEdit"]
+        if edit:
+            for index, ref in enumerate(edit["placement"]["cards"]):
+                desired = next(item for item in placement["cards"] if item["i"] == ref["i"])
+                for key in ("num", "color"):
+                    if key in ref:
+                        for _ in range(10):
+                            if frame["local_state"]["dosEdit"]["placement"]["cards"][index][key] == desired[key]:
+                                break
+                            tap(f"dos_cycle_{key}_{index}")
+                        else:
+                            raise ValueError("Dos declaration was not reachable")
+            for key, suffix in (("centerNum", "num"), ("centerColor", "color")):
+                if key in edit["placement"]:
+                    for _ in range(10):
+                        if frame["local_state"]["dosEdit"]["placement"][key] == placement[key]:
+                            break
+                        tap(f"dos_cycle_center_{suffix}")
+                    else:
+                        raise ValueError("Dos center declaration was not reachable")
+            tap("dos_add_match")
+    if move.get("bonus"):
+        tap("dos_bonus_mode")
+        for ref in move["bonus"]:
+            page_to("handPage", ref["i"])
+            tap(f"dos_hand_{ref['i']}")
+            index = len(frame["local_state"]["dosBonus"]) - 1
+            for key in ("num", "color"):
+                if key in ref:
+                    for _ in range(10):
+                        if frame["local_state"]["dosBonus"][index][key] == ref[key]:
+                            break
+                        tap(f"dos_cycle_bonus_{index}")
+                    else:
+                        raise ValueError("Dos bonus declaration was not reachable")
+    for event in offered_events(frame["scene"]):
+        result = ui.reduce({"type": "ui_event", "event": event,
+                            "state_changed": message}, frame.get("local_state"))
+        if canonical_json(result.get("make_move")) == canonical_json(move):
+            return result
+    raise ValueError(f"Dos did not offer the completed move {move!r}")
+
+
 def scene_event(ui, message, frame, move, *, budget=4000, depth=8):
     """Find real offered UI actions producing the chosen authoritative move.
 
@@ -84,6 +149,9 @@ def scene_event(ui, message, frame, move, *, budget=4000, depth=8):
     best-first search over distinct local states. Events whose IDs mention the
     move's values are tried first; the reducer must still emit the exact move.
     """
+    if (isinstance(move, dict) and move.get("type") == "match" and
+            any(event["id"].startswith("dos_hand_") for event in offered_events(frame["scene"]))):
+        return _dos_match_event(ui, message, frame, move)
     likely_ids = set()
     if isinstance(move, dict):
         likely_ids.add("_".join(f"{key}_{value}" for key, value in move.items()))

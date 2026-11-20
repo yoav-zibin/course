@@ -27,8 +27,8 @@ const gameUI = {
       if (!active) return null;
       const id = `intent_${offers.length}`;
       offers.push(move);
-      if (mode === 'hit' || mode === 'mau_hit' || mode === 'suit_hit') {
-        const dimensions = mode === 'hit' ? [92,126] : mode === 'mau_hit' ? [70,96] : [60,60];
+      if (mode === 'hit' || mode === 'mau_hit' || mode === 'dos_hit' || mode === 'suit_hit') {
+        const dimensions = mode === 'hit' ? [92,126] : mode === 'dos_hit' ? [76,96] : mode === 'mau_hit' ? [70,96] : [60,60];
         scene.targets.push({id, board, position, color:'#00000000',
           hit_area:{x:-dimensions[0]/2,y:-dimensions[1]/2,width:dimensions[0],height:dimensions[1]},
           ...(aria_label ? {aria_label} : {})});
@@ -56,9 +56,8 @@ const gameUI = {
       }
       return String(card ?? '');
     };
-    const cardPos = i => ({x:36 + (i % 8) * 67,y:125 + Math.floor(i / 8) * 94});
     const boardCell = (i, columns) => ({cell:String(i)});
-    if (KIND !== 'six_mens_morris' && KIND !== 'thirty_one' && KIND !== 'kisolo' && KIND !== 'mau_mau')
+    if (KIND !== 'six_mens_morris' && KIND !== 'thirty_one' && KIND !== 'kisolo' && KIND !== 'mau_mau' && KIND !== 'dos')
       label('title', title, 22, 16, 25);
     if (Number.isInteger(s.to_move) || Number.isInteger(s.toMove) ||
         Number.isInteger(s.turn) || Number.isInteger(s.turnSeat) ||
@@ -70,8 +69,8 @@ const gameUI = {
       label('status', m.status === 'over' ? text('Game over') :
         (active ? text('Your turn · {name}', {name:playerName(turn)}) :
           text('{name} to play', {name:playerName(turn)})),
-        KIND === 'thirty_one' || KIND === 'kisolo' || KIND === 'mau_mau' ? 220 : 22,
-        KIND === 'six_mens_morris' ? 22 : KIND === 'thirty_one' || KIND === 'mau_mau' ? 55 : 52, 16);
+        KIND === 'thirty_one' || KIND === 'kisolo' || KIND === 'mau_mau' || KIND === 'dos' ? 220 : 22,
+        KIND === 'six_mens_morris' ? 22 : KIND === 'thirty_one' || KIND === 'mau_mau' || KIND === 'dos' ? 55 : 52, 16);
     }
 
     let selectedSize = localValid ? localState.selectedSize : null;
@@ -82,6 +81,10 @@ const gameUI = {
     let dosPlacements = localValid && Array.isArray(localState.dosPlacements)
       ? localState.dosPlacements.slice() : [];
     let dosBonus = localValid && Array.isArray(localState.dosBonus) ? localState.dosBonus.slice() : [];
+    let dosSelected = localValid && Array.isArray(localState.dosSelected) ? localState.dosSelected.slice() : [];
+    let dosEdit = localValid && localState.dosEdit ? JSON.parse(JSON.stringify(localState.dosEdit)) : null;
+    let dosBonusMode = localValid && localState.dosBonusMode === true;
+    let centerPage = localValid && Number.isInteger(localState.centerPage) ? localState.centerPage : 0;
     if (KIND === 'gobblet') {
       const reserve = /^reserve_(\d+)$/.exec(click);
       const source = /^source_(\d+)$/.exec(click);
@@ -100,26 +103,6 @@ const gameUI = {
         if (matching.length > 1) selectedTo = selectedTo === to ? null : to;
       }
     }
-    if (KIND === 'dos') {
-      const selected = /^dos_pick_(\d+)_/.exec(click);
-      if (selected) {
-        const placement = s.legal_placements?.[Number(selected[1])];
-        const usedPiles = new Set(dosPlacements.map(item => item.pile));
-        const usedCards = new Set(dosPlacements.flatMap(item => (item.cards || []).map(card => card.i)));
-        if (placement && !usedPiles.has(placement.pile) &&
-            !(placement.cards || []).some(card => usedCards.has(card.i))) {
-          dosPlacements.push(placement);
-          const nowUsed = new Set(dosPlacements.flatMap(item => (item.cards || []).map(card => card.i)));
-          dosBonus = dosBonus.filter(index => !nowUsed.has(index));
-        }
-      }
-      const bonus = /^dos_bonus_(\d+)$/.exec(click);
-      if (bonus) {
-        const index = Number(bonus[1]);
-        dosBonus = dosBonus.includes(index) ? dosBonus.filter(item => item !== index) : [...dosBonus,index];
-      }
-    }
-
     if (KIND === 'mau_mau') {
       const hand = Array.isArray(s.hand) ? s.hand : [];
       const playable = new Set((s.legal_plays || []).filter(card =>
@@ -178,51 +161,170 @@ const gameUI = {
         230, 565, 14);
     } else if (KIND === 'dos') {
       const hand = Array.isArray(s.hand) ? s.hand : [];
-      const centerRef = index => {
-        const card = String(hand[index] || '');
-        return card.endsWith('#') ? {i:index,num:1} : card === 'WD' ? {i:index,color:'R'} : {i:index};
+      const center = s.center || [];
+      const colors = ['R','B','G','Y'];
+      const centerRef = i => hand[i]?.endsWith('#') ? {i,num:1} :
+        hand[i] === 'WD' ? {i,color:'R'} : {i};
+      const value = card => card === 'WD' ? 'DOS' : String(card).slice(1);
+      const cardType = card => `dos_${card === 'WD' ? 'W' : card[0]}`;
+      const usedPiles = () => new Set(dosPlacements.map(item => item.pile));
+      const usedCards = () => new Set(dosPlacements.flatMap(item => item.cards.map(card => card.i)));
+      const matches = placement => {
+        const top = center[placement.pile], refs = placement.cards;
+        if (!top || !refs?.length) return false;
+        const num = top.id.endsWith('#') ? placement.centerNum : top.id === 'WD' ? 2 : top.num;
+        const nums = refs.map(ref => hand[ref.i] === 'WD' ? 2 :
+          hand[ref.i]?.endsWith('#') ? ref.num : Number(hand[ref.i]?.slice(1)));
+        return Number.isInteger(num) && num >= 1 && num <= 10 &&
+          nums.every(n => Number.isInteger(n) && n >= 1 && n <= 10) &&
+          nums.reduce((a,b) => a+b,0) === num;
       };
-      (s.center || []).forEach((card, i) =>
-        staticPiece(`center_${i}`, 'played', 'table', {x:250 + i * 70,y:100},
-          {text:cardText(card.id || card)}));
-      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i),
-        {text:cardText(card)}));
+      const colorMatch = placement => {
+        const top = center[placement.pile];
+        const color = top.id === 'WD' ? placement.centerColor : top.color;
+        return placement.cards.every(ref => (hand[ref.i] === 'WD' ? ref.color : hand[ref.i][0]) === color);
+      };
+      const cycle = (obj,key,values) => { obj[key] = values[(values.indexOf(obj[key]) + 1) % values.length]; };
+      const numbers = [1,2,3,4,5,6,7,8,9,10];
       const placements = s.legal_placements || [];
-      const usedPiles = new Set(dosPlacements.map(item => item.pile));
-      const usedCards = new Set(dosPlacements.flatMap(item => (item.cards || []).map(card => card.i)));
-      const selectable = placements.map((placement,index) => ({placement,index})).filter(({placement}) =>
-        !usedPiles.has(placement.pile) &&
-        !(placement.cards || []).some(card => usedCards.has(card.i)));
-      const colorMatches = dosPlacements.filter(placement => placement.colorMatch).length;
-      const bonusChoices = hand.map((card,index) => ({card,index})).filter(item =>
-        !usedCards.has(item.index));
-      if (active) selectable.forEach(({placement,index}) => {
-        const selected = (placement.cards || []).map(ref => cardText(hand[ref.i])).join(' + ');
-        const value = `${selected} → ${placement.pile + 1}`;
-        scene.controls.push({id:`dos_pick_${index}_${placement.pile}_${(placement.cards || []).map(card => card.i).join('_')}`,
-          kind:'button',label:text('Play {card}',{card:value})});
-      });
-      if (active && dosPlacements.length) {
-        const bonusRefs = dosBonus.map(centerRef);
-        const movePlacements = dosPlacements.map(placement => ({pile:placement.pile,cards:placement.cards,
-          ...(placement.centerNum !== undefined ? {centerNum:placement.centerNum} : {}),
-          ...(placement.centerColor !== undefined ? {centerColor:placement.centerColor} : {})}));
-        offer({type:'match',placements:movePlacements,bonus:bonusRefs},text('Continue'));
-        if (colorMatches) bonusChoices.forEach(({card,index}) => {
-          if (dosBonus.includes(index) || dosBonus.length < colorMatches)
-            scene.controls.push({id:`dos_bonus_${index}`,kind:'button',
-              label:text('Play {card}',{card:`${dosBonus.includes(index) ? '✓ ' : ''}${cardText(card)}`})});
-        });
-        label('match-selection',`Matches · ${dosPlacements.length}   Bonus discards · ${dosBonus.length}/${Math.min(colorMatches,bonusChoices.length)}`,
-          22,500,14);
+      if (active && click === 'dos_hand_previous') handPage--;
+      if (active && click === 'dos_hand_next') handPage++;
+      if (active && click === 'dos_center_previous') centerPage--;
+      if (active && click === 'dos_center_next') centerPage++;
+      handPage = Math.max(0,Math.min(handPage,Math.max(0,Math.ceil(hand.length/14)-1)));
+      centerPage = Math.max(0,Math.min(centerPage,Math.max(0,Math.ceil(center.length/14)-1)));
+      if (active && click === 'dos_bonus_mode') { dosBonusMode = !dosBonusMode; dosSelected = []; dosEdit = null; }
+      if (active && click === 'dos_undo' && dosPlacements.length) {
+        dosPlacements.pop(); dosBonus = []; dosSelected = []; dosEdit = null; dosBonusMode = false;
       }
-      if (active && s.phase === 'play')
-        offer({type:'draw'}, text('Draw a card ({n} left)', {n:s.deck_count || 0}));
+      const handClick = /^dos_hand_(\d+)$/.exec(click);
+      if (active && handClick && !dosEdit) {
+        const i = Number(handClick[1]);
+        if (i < hand.length && !usedCards().has(i)) {
+          if (s.phase === 'add_center') {
+            dosEdit = {kind:'add',card:centerRef(i)};
+          } else if (dosBonusMode) {
+            const existing = dosBonus.findIndex(ref => ref.i === i);
+            if (existing >= 0) dosBonus.splice(existing,1);
+            else if (dosBonus.length < dosPlacements.filter(colorMatch).length) dosBonus.push(centerRef(i));
+          } else {
+            dosSelected = dosSelected.includes(i) ? dosSelected.filter(n => n !== i) :
+              dosSelected.length < 2 ? [...dosSelected,i].sort((a,b) => a-b) : [i];
+          }
+        }
+      }
+      const pileClick = /^dos_pile_(\d+)$/.exec(click);
+      if (active && pileClick && !dosEdit && !dosBonusMode && dosSelected.length) {
+        const pile = Number(pileClick[1]);
+        const found = placements.find(item => item.pile === pile && !usedPiles().has(pile) &&
+          item.cards.length === dosSelected.length &&
+          item.cards.every(ref => dosSelected.includes(ref.i)));
+        if (found) {
+          const placement = {pile,cards:found.cards.map(ref => ({...ref})),
+            ...(found.centerNum !== undefined ? {centerNum:found.centerNum} : {}),
+            ...(found.centerColor !== undefined ? {centerColor:found.centerColor} : {})};
+          dosBonus = dosBonus.filter(ref => !dosSelected.includes(ref.i));
+          if (placement.cards.some(ref => hand[ref.i] === 'WD' || hand[ref.i].endsWith('#')) ||
+              center[pile].id === 'WD' || center[pile].id.endsWith('#'))
+            dosEdit = {kind:'match',placement};
+          else { dosPlacements.push(placement); dosSelected = []; }
+        }
+      }
+      if (active && dosEdit && click === 'dos_cancel') { dosEdit = null; dosSelected = []; }
+      if (active && dosEdit?.kind === 'match' && click === 'dos_add_match' && matches(dosEdit.placement)) {
+        dosPlacements.push(dosEdit.placement); dosEdit = null; dosSelected = [];
+      }
+      const cycleRef = /^dos_cycle_(num|color)_(\d+)$/.exec(click);
+      if (active && cycleRef && dosEdit) {
+        const refs = dosEdit.kind === 'match' ? dosEdit.placement.cards : [dosEdit.card];
+        const ref = refs[Number(cycleRef[2])];
+        if (ref && cycleRef[1] in ref) cycle(ref,cycleRef[1],cycleRef[1] === 'num' ? numbers : colors);
+      }
+      if (active && dosEdit?.kind === 'match' && click === 'dos_cycle_center_num')
+        cycle(dosEdit.placement,'centerNum',numbers);
+      if (active && dosEdit?.kind === 'match' && click === 'dos_cycle_center_color')
+        cycle(dosEdit.placement,'centerColor',colors);
+      const cycleBonus = /^dos_cycle_bonus_(\d+)$/.exec(click);
+      if (active && cycleBonus) {
+        const ref = dosBonus[Number(cycleBonus[1])];
+        if (ref?.num !== undefined) cycle(ref,'num',numbers);
+        if (ref?.color !== undefined) cycle(ref,'color',colors);
+      }
+
+      const colorMatches = dosPlacements.filter(colorMatch).length;
+      label('title','Dos',295,12,27);
+      staticPiece('stock','deck','table',{x:90,y:110},{text:'DOS'});
+      if (active && s.phase === 'play' && !dosPlacements.length && !dosEdit)
+        offer({type:'draw'}, '', 'table', {x:90,y:110}, 'dos_hit',
+          text('Draw a card ({n} left)', {n:s.deck_count ?? 0}));
+      label('stock-count',String(s.deck_count ?? 0),82,170,15);
+      center.slice(centerPage*14,centerPage*14+14).forEach((card,slot) => {
+        const i = centerPage*14+slot, row = Math.floor(slot/7);
+        const count = Math.min(7,center.length-centerPage*14-row*7);
+        const position = {x:320-(count-1)*40+(slot%7)*80,y:230+row*105};
+        staticPiece(`center_${i}`,cardType(card.id),'table',position,
+          {text:value(card.id),scale:usedPiles().has(i) ? 0.9 : 1});
+        if (active && !dosEdit && !dosBonusMode && !usedPiles().has(i) &&
+            placements.some(item => item.pile === i && item.cards.length === dosSelected.length &&
+              item.cards.every(ref => dosSelected.includes(ref.i)))) {
+          scene.targets.push({id:`dos_pile_${i}`,board:'table',position,color:'#00000000',
+            hit_area:{x:-38,y:-48,width:76,height:96},
+            aria_label:text('Center card {n}: {card}',{n:i+1,card:card.id})});
+        }
+      });
+      hand.slice(handPage*14,handPage*14+14).forEach((card,slot) => {
+        const i = handPage*14+slot, row = Math.floor(slot/7);
+        const count = Math.min(7,hand.length-handPage*14-row*7);
+        const position = {x:320-(count-1)*40+(slot%7)*80,y:515+row*105};
+        const selected = dosSelected.includes(i) || dosBonus.some(ref => ref.i === i) ||
+          dosEdit?.card?.i === i;
+        staticPiece(`hand_${i}`,cardType(card),'table',position,
+          {text:value(card),scale:selected ? 1.08 : usedCards().has(i) ? 0.9 : 1});
+        if (active && !dosEdit && !usedCards().has(i))
+          scene.targets.push({id:`dos_hand_${i}`,board:'table',position,color:'#00000000',
+            hit_area:{x:-38,y:-48,width:76,height:96},
+            aria_label:text('Play {card}',{card})});
+      });
+      label('hint',s.phase === 'over' && Number.isInteger(s.winner) ?
+        text('Winner: {name}',{name:playerName(s.winner)}) :
+        dosEdit ? text(dosEdit.kind === 'add' && dosEdit.card.num === undefined &&
+          dosEdit.card.color === undefined ? 'Continue' : 'Choose number or color') : s.phase === 'add_center' ?
+          text('Choose a card for the center') : dosBonusMode ?
+            text('Bonus cards') : text('Select cards, then a center card'),180,415,16);
+      label('counts',(s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),230,690,14);
+      if (active && handPage > 0) scene.controls.push({id:'dos_hand_previous',kind:'button',label:text('Previous cards')});
+      if (active && (handPage+1)*14 < hand.length) scene.controls.push({id:'dos_hand_next',kind:'button',label:text('Next cards')});
+      if (active && centerPage > 0) scene.controls.push({id:'dos_center_previous',kind:'button',label:text('Previous center cards')});
+      if (active && (centerPage+1)*14 < center.length) scene.controls.push({id:'dos_center_next',kind:'button',label:text('Next center cards')});
+      if (active && dosEdit) {
+        const refs = dosEdit.kind === 'match' ? dosEdit.placement.cards : [dosEdit.card];
+        refs.forEach((ref,i) => {
+          for (const key of ['num','color']) if (ref[key] !== undefined)
+            scene.controls.push({id:`dos_cycle_${key}_${i}`,kind:'button',
+              label:`${hand[ref.i]} · ${ref[key]} ↻`});
+        });
+        if (dosEdit.kind === 'match') {
+          for (const [key,suffix] of [['centerNum','num'],['centerColor','color']])
+            if (dosEdit.placement[key] !== undefined)
+              scene.controls.push({id:`dos_cycle_center_${suffix}`,kind:'button',
+                label:`${center[dosEdit.placement.pile].id} · ${dosEdit.placement[key]} ↻`});
+          if (matches(dosEdit.placement))
+            scene.controls.push({id:'dos_add_match',kind:'button',label:text('Add match')});
+        } else offer({type:'add_center',card:dosEdit.card},text('Continue'));
+        scene.controls.push({id:'dos_cancel',kind:'button',label:text('Cancel')});
+      }
+      if (active && !dosEdit && dosPlacements.length) {
+        offer({type:'match',placements:dosPlacements,bonus:dosBonus},text('Continue'));
+        scene.controls.push({id:'dos_undo',kind:'button',label:text('Undo match')});
+        if (colorMatches) scene.controls.push({id:'dos_bonus_mode',kind:'button',
+          label:`${dosBonusMode ? '✓ ' : ''}${text('Bonus cards')} ${dosBonus.length}/${colorMatches}`});
+        dosBonus.forEach((ref,i) => {
+          if (ref.num !== undefined || ref.color !== undefined)
+            scene.controls.push({id:`dos_cycle_bonus_${i}`,kind:'button',
+              label:`${hand[ref.i]} · ${ref.num ?? ref.color} ↻`});
+        });
+      }
       if (active && s.phase === 'after_draw') offer({type:'pass'}, text('Pass'));
-      if (active && s.phase === 'add_center') hand.forEach((card, i) =>
-        offer({type:'add_center',card:centerRef(i)}, text('Play {card}', {card:cardText(card)})));
-      label('counts', (s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),
-        22, 470, 14);
     } else if (KIND === 'kisolo') {
       const rows = s.rows || [];
       label('title', 'Kisolo', 270, 16, 25);
@@ -468,7 +570,7 @@ const gameUI = {
     const match = /^intent_(\d+)$/.exec(click);
     const move = match && active ? offers[Number(match[1])] : undefined;
     const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,selectedTo,selectedJack,handPage,
-      dosPlacements,dosBonus};
+      dosPlacements,dosBonus,dosSelected,dosEdit,dosBonusMode,centerPage};
     if (message.type === 'ui_event' && move !== undefined)
       return {scene,local_state:nextLocal,make_move:move};
     return {scene,local_state:nextLocal};

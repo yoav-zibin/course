@@ -173,6 +173,62 @@ def test_dos_wild_card_added_to_center_has_a_valid_declaration(card, declaration
     assert result['state']['center'][-1]['id'] == card
 
 
+@pytest.mark.parametrize(('hand','center','move'), [
+    (['R#','B#','WD'], [{'id':'Y5','num':5,'color':'Y'}],
+     {'type':'match','placements':[{'pile':0,'cards':[{'i':0,'num':2},{'i':1,'num':3}]}],'bonus':[]}),
+    (['R#','WD','B#'], [{'id':'R#','num':None,'color':'R'}],
+     {'type':'match','placements':[{'pile':0,'cards':[{'i':0,'num':8}],'centerNum':8}],
+      'bonus':[{'i':1,'color':'Y'}]}),
+    (['WD','R5'], [{'id':'WD','num':2,'color':None}],
+     {'type':'match','placements':[{'pile':0,'cards':[{'i':0,'color':'G'}],'centerColor':'B'}],'bonus':[]}),
+])
+def test_dos_ui_can_choose_noncanonical_wild_declarations(hand, center, move):
+    body = load('dos')
+    case = body.unit_tests['cases'][0]
+    state = case['state']
+    state['phase'], state['turn'], state['hands'][0], state['center'] = 'play', 0, hand, center
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    view = rules.call('viewFor',state,case['player_id'],ctx=case['ctx'],seed=17)
+    ui = DeclarativeLogic(body.declarative_ui)
+    message = {'type':'state_changed','view':view,'status':'ongoing',
+               'acting_for_player_index':0,'my_player_index':0,'move_count':0}
+    emitted = scene_event(ui,message,ui.reduce(message),move)['make_move']
+    rules.call('applyMove',state,case['player_id'],emitted,ctx=case['ctx'],seed=17)
+
+
+def test_dos_add_center_can_declare_any_wild_number():
+    body = load('dos')
+    case = body.unit_tests['cases'][0]
+    state = case['state']
+    state['phase'] = 'add_center'
+    index = state['hands'][0].index('R#')
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    view = rules.call('viewFor',state,case['player_id'],ctx=case['ctx'],seed=17)
+    ui = DeclarativeLogic(body.declarative_ui)
+    message = {'type':'state_changed','view':view,'status':'ongoing',
+               'acting_for_player_index':0,'my_player_index':0,'move_count':0}
+    frame = ui.reduce(message)
+    for event_id in [f'dos_hand_{index}'] + ['dos_cycle_num_0'] * 9 + ['intent_0']:
+        frame = ui.reduce({'type':'ui_event','event':{'type':'tap','id':event_id},
+                           'state_changed':message},frame['local_state'])
+    assert frame['make_move'] == {'type':'add_center','card':{'i':index,'num':10}}
+    result = rules.call('applyMove',state,case['player_id'],frame['make_move'],ctx=case['ctx'],seed=17)
+    assert result['state']['center'][-1]['num'] == 10
+
+
+def test_dos_centers_cards_and_offers_direct_card_targets():
+    body = load('dos')
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = body.unit_tests['cases'][0]['view_of_mover']
+    message = {'type':'state_changed','view':view,'status':'ongoing',
+               'acting_for_player_index':0,'my_player_index':0,'move_count':0}
+    scene = ui.reduce(message)['scene']
+    center = [piece for piece in scene['pieces'] if piece['id'].startswith('center_')]
+    assert [piece['position']['x'] for piece in center] == [280,360]
+    assert len([target for target in scene['targets'] if target['id'].startswith('dos_hand_')]) == len(view['hand'])
+    assert not [control for control in scene['controls'] if control['id'].startswith('dos_pick_')]
+
+
 def test_thirty_one_direct_pile_and_card_actions_and_revealed_hands():
     body = load('thirty_one')
     ui = DeclarativeLogic(body.declarative_ui)

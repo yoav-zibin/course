@@ -26,7 +26,17 @@ const EXTRA_STRINGS = {
   'Pit row {r}, column {c} · {n} seeds':['Hoyo fila {r}, columna {c} · {n} semillas','Trou rangée {r}, colonne {c} · {n} graines','Mulde Reihe {r}, Spalte {c} · {n} Samen','Buraco linha {r}, coluna {c} · {n} sementes','第 {r} 行第 {c} 列的坑 · {n} 颗种子','गड्ढा पंक्ति {r}, स्तंभ {c} · {n} बीज','حفرة الصف {r}، العمود {c} · {n} بذور'],
   'Previous cards':['Cartas anteriores','Cartes précédentes','Vorherige Karten','Cartas anteriores','上一组牌','पिछले पत्ते','الأوراق السابقة'],
   'Next cards':['Más cartas','Cartes suivantes','Nächste Karten','Próximas cartas','下一组牌','अगले पत्ते','الأوراق التالية'],
-  'Reset guess':['Reiniciar intento','Réinitialiser la proposition','Tipp zurücksetzen','Reiniciar palpite','重置猜测','अनुमान रीसेट करें','إعادة تعيين التخمين']
+  'Reset guess':['Reiniciar intento','Réinitialiser la proposition','Tipp zurücksetzen','Reiniciar palpite','重置猜测','अनुमान रीसेट करें','إعادة تعيين التخمين'],
+  'Select cards, then a center card':['Elige cartas y después una carta central','Choisissez des cartes puis une carte centrale','Handkarten und dann eine Mittelkarte wählen','Escolha cartas e depois uma carta central','选择手牌，再选择中央牌','पत्ते और फिर बीच का पत्ता चुनें','اختر أوراقًا ثم ورقة من الوسط'],
+  'Bonus cards':['Cartas extra','Cartes bonus','Bonuskarten','Cartas bônus','奖励牌','बोनस पत्ते','أوراق المكافأة'],
+  'Choose number or color':['Elige número o color','Choisissez un nombre ou une couleur','Zahl oder Farbe wählen','Escolha número ou cor','选择数字或颜色','संख्या या रंग चुनें','اختر رقمًا أو لونًا'],
+  'Add match':['Añadir combinación','Ajouter la combinaison','Kombination hinzufügen','Adicionar combinação','添加匹配','मिलान जोड़ें','أضف المطابقة'],
+  'Undo match':['Deshacer combinación','Annuler la combinaison','Kombination zurücknehmen','Desfazer combinação','撤销匹配','मिलान हटाएँ','تراجع عن المطابقة'],
+  'Center card {n}: {card}':['Carta central {n}: {card}','Carte centrale {n} : {card}','Mittelkarte {n}: {card}','Carta central {n}: {card}','中央牌 {n}：{card}','बीच का पत्ता {n}: {card}','ورقة الوسط {n}: {card}'],
+  'Previous center cards':['Cartas centrales anteriores','Cartes centrales précédentes','Vorherige Mittelkarten','Cartas centrais anteriores','上一组中央牌','पिछले बीच के पत्ते','أوراق الوسط السابقة'],
+  'Next center cards':['Más cartas centrales','Cartes centrales suivantes','Weitere Mittelkarten','Próximas cartas centrais','下一组中央牌','अगले बीच के पत्ते','أوراق الوسط التالية'],
+  'Choose a card for the center':['Elige una carta para el centro','Choisissez une carte pour le centre','Karte für die Mitte wählen','Escolha uma carta para o centro','选择一张牌放到中央','बीच के लिए एक पत्ता चुनें','اختر ورقة للوسط'],
+  Cancel:['Cancelar','Annuler','Abbrechen','Cancelar','取消','रद्द करें','إلغاء']
 };
 const ALL_STRINGS={...COPY.strings,...EXTRA_STRINGS};
 const STRING_KEYS = Object.fromEntries(Object.keys(ALL_STRINGS).map((text,index) => [text,`text_${index}`]));
@@ -94,6 +104,17 @@ const MAU_MAU_UI = [
   '点击高亮的牌出牌，或点击牌堆抽牌。打出 J 后点击选择的花色。',
   'चमकता पत्ता खेलने या ढेर से पत्ता लेने के लिए टैप करें। जैक खेलने के बाद चुने हुए सूट पर टैप करें।',
   'اضغط على ورقة مضاءة للعبها أو على الرزمة للسحب. بعد لعب الولد اضغط على النوع الذي تختاره.'
+];
+
+const DOS_UI = [
+  'Tap one or two hand cards, then a matching center card. Adjust wild cards if needed, add more matches or bonus cards, and tap Continue. Tap the deck to draw.',
+  'Toca una o dos cartas de tu mano y después una carta central que coincida. Ajusta los comodines si hace falta, añade combinaciones o cartas extra y toca Continuar. Toca el mazo para robar.',
+  'Touchez une ou deux cartes en main, puis une carte centrale correspondante. Réglez les jokers si nécessaire, ajoutez des combinaisons ou des cartes bonus et touchez Continuer. Touchez la pioche pour tirer.',
+  'Tippe auf eine oder zwei Handkarten und dann eine passende Mittelkarte. Stelle Joker ein, ergänze Kombinationen oder Bonuskarten und tippe auf Fortsetzen. Tippe auf den Stapel zum Ziehen.',
+  'Toque em uma ou duas cartas da mão e depois em uma carta central correspondente. Ajuste os curingas se necessário, adicione combinações ou cartas bônus e toque em Continuar. Toque no monte para comprar.',
+  '点击一张或两张手牌，再点击匹配的中央牌。如有需要调整万能牌，添加其他匹配或奖励牌，然后点击继续。点击牌堆摸牌。',
+  'एक या दो हाथ के पत्ते और फिर मेल खाने वाला बीच का पत्ता दबाएँ। जरूरत पर वाइल्ड बदलें, और मिलान या बोनस पत्ते जोड़ें, फिर जारी रखें दबाएँ। पत्ता उठाने के लिए ढेर दबाएँ।',
+  'اضغط ورقة أو ورقتين من يدك ثم ورقة وسط مطابقة. عدّل الأوراق البرية عند الحاجة وأضف مطابقات أو أوراق مكافأة ثم اضغط متابعة. اضغط الرزمة للسحب.'
 ];
 
 const CUSTOM = {
@@ -261,6 +282,8 @@ function board(kind) {
   const free = {kind:'free',x:0,y:0,width:640,height:740,color:'#145b4e',line_color:'#6ee7b7'};
   if (kind === 'mau_mau') return {viewport:{width:640,height:600},boards:[
     {id:'table',kind:'free',x:0,y:0,width:640,height:600,color:'#174d42',line_color:'#e2c47a'}]};
+  if (kind === 'dos') return {viewport:{width:640,height:720},boards:[
+    {id:'table',kind:'free',x:0,y:0,width:640,height:720,color:'#174d42',line_color:'#e2c47a'}]};
   if (kind === 'thirty_one') return {viewport:{width:640,height:590},boards:[
     {id:'table',kind:'free',x:0,y:0,width:640,height:590,color:'#174d42',line_color:'#e2c47a'}]};
   if (kind === 'table') return {viewport:{width:640,height:720},boards:[{id:'table',...free}]};
@@ -293,6 +316,12 @@ function typesFor(kind) {
       types.suit_black = {shape:'circle',width:56,height:56,color:'#fffdf6',text_color:'#1c2b31',border_color:'#d5c6a9'};
     }
   }
+  if (kind === 'dos') {
+    for (const [key,text] of [['R','#ffffff'],['B','#ffffff'],['G','#ffffff'],
+      ['Y','#26313a'],['W','#26313a']])
+      types[`dos_${key}`] = {shape:'image',asset:`dos_${key}`,width:76,height:96,text_color:text};
+    types.deck = {shape:'image',asset:'dos_deck',width:76,height:96,text_color:'#ffffff'};
+  }
   if (kind === 'kisolo') types.pit = {shape:'circle',width:66,height:54,color:'#70452b',text_color:'#fff3d4',border_color:'#4d2e1d'};
   if (kind === 'gobblet') for (let size=1;size<=4;size++) for (let owner=0;owner<2;owner++)
     types[`goblet_${size}_${owner}`] = {shape:'circle',width:28 + size * 9,height:28 + size * 9,
@@ -316,6 +345,21 @@ function typesFor(kind) {
     types.stone_1 = {shape:'circle',width:48,height:48,color:'#263b4a',text_color:'#ffffff',border_color:'#10232f'};
   }
   return types;
+}
+
+function dosAssets() {
+  const colors = {R:'#bd3846',B:'#2863a6',G:'#23825f',Y:'#f0c84d',W:'#f9f4e8',deck:'#253b59'};
+  return Object.fromEntries(Object.entries(colors).map(([key,color]) => {
+    const body = `<svg xmlns="http://www.w3.org/2000/svg" width="76" height="96" viewBox="0 0 76 96">
+      <rect x="2" y="3" width="72" height="91" rx="9" fill="#061c22" opacity=".32"/>
+      <rect x="1" y="1" width="72" height="91" rx="9" fill="${color}" stroke="#f4e3b2" stroke-width="2"/>
+      <path d="M7 17Q21 5 38 7T67 17M7 76Q21 88 38 86T67 76" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="2"/>
+      <ellipse cx="37" cy="47" rx="27" ry="33" fill="#fff" fill-opacity=".12" stroke="#fff" stroke-opacity=".5" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="2" fill="#fff" fill-opacity=".7"/><circle cx="62" cy="81" r="2" fill="#fff" fill-opacity=".7"/>
+    </svg>`;
+    return [`dos_${key}`,{media_type:'image/svg+xml',width:76,height:96,
+      uri:`data:image/svg+xml;base64,${Buffer.from(body).toString('base64')}`}];
+  }));
 }
 
 const HINT_CODE = {
@@ -463,7 +507,8 @@ function build(entry) {
     entry.kind === 'thirty_one' ? THIRTY_ONE_UI[0] :
       entry.kind === 'gobblet' ? GOBBLET_UI[0] :
         entry.kind === 'kisolo' ? KISOLO_UI[0] :
-          entry.kind === 'mau_mau' ? MAU_MAU_UI[0] : custom?.ui || source.ui_instructions;
+          entry.kind === 'mau_mau' ? MAU_MAU_UI[0] :
+            entry.kind === 'dos' ? DOS_UI[0] : custom?.ui || source.ui_instructions;
   const description=custom?.description || source.description;
   const title=`${entry.title} (Declarative)`;
   const translations={};
@@ -485,12 +530,14 @@ function build(entry) {
       ...(entry.kind === 'gobblet' ? {game_ui_rules:GOBBLET_UI[LOCALES.indexOf(locale)+1]} : {}),
       ...(entry.kind === 'kisolo' ? {game_ui_rules:KISOLO_UI[LOCALES.indexOf(locale)+1]} : {}),
       ...(entry.kind === 'mau_mau' ? {game_ui_rules:MAU_MAU_UI[LOCALES.indexOf(locale)+1]} : {}),
+      ...(entry.kind === 'dos' ? {game_ui_rules:DOS_UI[LOCALES.indexOf(locale)+1]} : {}),
       client_strings:translatedStrings(locale,displayName,entry.kind)};
   }
   const strings={...ENGLISH,title,...serverStrings(entry.kind).english};
-  const layout=board(entry.kind === 'thirty_one' || entry.kind === 'mau_mau' ? entry.kind : entry.board);
+  const layout=board(['thirty_one','mau_mau','dos'].includes(entry.kind) ? entry.kind : entry.board);
   const spec={format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
     piece_types:typesFor(entry.kind),strings,
+    ...(entry.kind === 'dos' ? {assets:dosAssets()} : {}),
     ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n`+UI};
   const tutorial=custom ? {text:rules,html:`<meta name="viewport" content="width=device-width,initial-scale=1"><main><h1>How to play</h1><p>${rules}</p><p>${ui}</p></main>`} : source.tutorial;
   if(custom) {
