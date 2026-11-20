@@ -215,6 +215,42 @@ def test_kisolo_pit_targets_preserve_visible_seed_counts():
     assert not ui.reduce({**m, 'acting_for_player_index':None})['scene']['targets']
 
 
+def test_mau_mau_cards_jack_suits_and_restricted_turns():
+    body = load('mau_mau')
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = body.unit_tests['cases'][0]['view_of_mover']
+    m = {'type':'state_changed', 'view':view, 'status':'ongoing',
+         'acting_for_player_index':0, 'my_player_index':0, 'move_count':0}
+    frame = ui.reduce(m)
+    for move in ({'type':'play','card':'9H'}, {'type':'draw'},
+                 *({'type':'play','card':'JC','suit':s} for s in 'SHDC')):
+        assert scene_event(ui, m, frame, move)['make_move'] == move
+
+    penalty_view = body.unit_tests['cases'][1]['view_of_mover']
+    penalty = {**m, 'view':penalty_view}
+    frame = ui.reduce(penalty)
+    assert {t['aria_label'] for t in frame['scene']['targets']} == {
+        'Play 7♥', 'Draw a card (37 left)'}
+    assert scene_event(ui, penalty, frame, {'type':'play','card':'7H'})['make_move'] == {
+        'type':'play','card':'7H'}
+
+    drawn = {**m, 'view':{**view, 'drew':'9H', 'stock_count':0}}
+    frame = ui.reduce(drawn)
+    assert {t['aria_label'] for t in frame['scene']['targets']} == {'Play 9♥'}
+    assert [c['label'] for c in frame['scene']['controls']] == ['Pass']
+    empty_stock = {**m, 'view':{**view, 'stock_count':0}}
+    frame = ui.reduce(empty_stock)
+    assert scene_event(ui, empty_stock, frame, {'type':'draw'})['make_move'] == {'type':'draw'}
+
+    large_hand = [f'{rank}S' for rank in ('2','3','4','5','6','7','8','9','10','Q','K','A')] + ['2H','3H','JC']
+    long = {**m, 'view':{**view, 'hand':large_hand, 'legal_plays':['JC']}}
+    frame = ui.reduce(long)
+    assert [c['label'] for c in frame['scene']['controls']] == ['Next cards']
+    assert scene_event(ui, long, frame, {'type':'play','card':'JC','suit':'D'})['make_move'] == {
+        'type':'play','card':'JC','suit':'D'}
+    assert not ui.reduce({**m, 'acting_for_player_index':None})['scene']['targets']
+
+
 def test_morris_package_and_single_game_generator_are_consistent(tmp_path):
     prepare(load('six_mens_morris'))
     root = EXAMPLES.parents[1]

@@ -27,9 +27,10 @@ const gameUI = {
       if (!active) return null;
       const id = `intent_${offers.length}`;
       offers.push(move);
-      if (mode === 'hit') {
+      if (mode === 'hit' || mode === 'mau_hit' || mode === 'suit_hit') {
+        const dimensions = mode === 'hit' ? [92,126] : mode === 'mau_hit' ? [70,96] : [60,60];
         scene.targets.push({id, board, position, color:'#00000000',
-          hit_area:{x:-46,y:-63,width:92,height:126},
+          hit_area:{x:-dimensions[0]/2,y:-dimensions[1]/2,width:dimensions[0],height:dimensions[1]},
           ...(aria_label ? {aria_label} : {})});
       } else if (mode === 'clear') {
         scene.targets.push({id, board, position, color:'#00000000',
@@ -57,7 +58,7 @@ const gameUI = {
     };
     const cardPos = i => ({x:36 + (i % 8) * 67,y:125 + Math.floor(i / 8) * 94});
     const boardCell = (i, columns) => ({cell:String(i)});
-    if (KIND !== 'six_mens_morris' && KIND !== 'thirty_one' && KIND !== 'kisolo')
+    if (KIND !== 'six_mens_morris' && KIND !== 'thirty_one' && KIND !== 'kisolo' && KIND !== 'mau_mau')
       label('title', title, 22, 16, 25);
     if (Number.isInteger(s.to_move) || Number.isInteger(s.toMove) ||
         Number.isInteger(s.turn) || Number.isInteger(s.turnSeat) ||
@@ -69,13 +70,15 @@ const gameUI = {
       label('status', m.status === 'over' ? text('Game over') :
         (active ? text('Your turn · {name}', {name:playerName(turn)}) :
           text('{name} to play', {name:playerName(turn)})),
-        KIND === 'thirty_one' || KIND === 'kisolo' ? 220 : 22,
-        KIND === 'six_mens_morris' ? 22 : KIND === 'thirty_one' ? 55 : 52, 16);
+        KIND === 'thirty_one' || KIND === 'kisolo' || KIND === 'mau_mau' ? 220 : 22,
+        KIND === 'six_mens_morris' ? 22 : KIND === 'thirty_one' || KIND === 'mau_mau' ? 55 : 52, 16);
     }
 
     let selectedSize = localValid ? localState.selectedSize : null;
     let selectedFrom = localValid ? localState.selectedFrom : null;
     let selectedTo = localValid && Number.isInteger(localState.selectedTo) ? localState.selectedTo : null;
+    let selectedJack = localValid && typeof localState.selectedJack === 'string' ? localState.selectedJack : null;
+    let handPage = localValid && Number.isInteger(localState.handPage) ? localState.handPage : 0;
     let dosPlacements = localValid && Array.isArray(localState.dosPlacements)
       ? localState.dosPlacements.slice() : [];
     let dosBonus = localValid && Array.isArray(localState.dosBonus) ? localState.dosBonus.slice() : [];
@@ -119,26 +122,60 @@ const gameUI = {
 
     if (KIND === 'mau_mau') {
       const hand = Array.isArray(s.hand) ? s.hand : [];
-      const playable = new Set(s.legal_plays || []);
-      label('discard', text('Top card {card} · suit {suit} · {n} cards to draw',
-        {card:cardText(s.discard_top), suit:s.top_suit || '', n:s.stock_count || 0}), 22, 92, 15);
-      hand.forEach((card, i) => {
-        const value = cardText(card);
-        if (playable.has(card)) {
-          if (/^J/.test(card)) {
-            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text:value});
-            for (const suit of ['S','H','D','C'])
-              offer({type:'play',card,suit}, text('Play {card} as {suit}',
-                {card:value,suit:{S:'♠',H:'♥',D:'♦',C:'♣'}[suit]}));
-          } else offer({type:'play',card}, text('Play {card}', {card:value}),
-            'table', cardPos(i), 'piece');
-        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text:value});
-      });
-      if (active && s.drew == null && s.stock_count > 0)
-        offer({type:'draw'}, text('Draw a card ({n} left)', {n:s.stock_count}));
+      const playable = new Set((s.legal_plays || []).filter(card =>
+        s.pending_draw > 0 ? /^7/.test(card) : s.drew != null ? card === s.drew : true));
+      const pages = Math.max(1, Math.ceil(hand.length / 14));
+      handPage = Math.max(0, Math.min(handPage, pages - 1));
+      if (active && click === 'hand_previous') { handPage = Math.max(0, handPage - 1); selectedJack = null; }
+      if (active && click === 'hand_next') { handPage = Math.min(pages - 1, handPage + 1); selectedJack = null; }
+      const jack = /^jack_(\d+)$/.exec(click);
+      if (active && jack) {
+        const card = hand[Number(jack[1])];
+        if (card && /^J/.test(card) && playable.has(card))
+          selectedJack = selectedJack === card ? null : card;
+      }
+      if (!playable.has(selectedJack)) selectedJack = null;
+      const cardType = card => /[HD]$/.test(card) ? 'red_card' : 'black_card';
+      const suits = {S:'♠',H:'♥',D:'♦',C:'♣'};
+      label('title', 'Mau-Mau', 260, 12, 27);
+      staticPiece('stock', 'deck', 'table', {x:245,y:180}, {text:'◆'});
+      if (s.discard_top)
+        staticPiece('discard', cardType(s.discard_top), 'table', {x:395,y:180},
+          {text:cardText(s.discard_top)});
+      label('stock-count', String(s.stock_count ?? 0), 237, 245, 15);
+      label('suit', suits[s.top_suit] || '', 385, 245, 22);
+      if (s.pending_draw > 0) label('penalty', `+${s.pending_draw}`, 220, 100, 19);
+      if (active && s.drew == null)
+        offer({type:'draw'}, '', 'table', {x:245,y:180}, 'mau_hit',
+          text('Draw a card ({n} left)', {n:s.stock_count ?? 0}));
       if (active && s.drew != null) offer({type:'pass'}, text('Pass'));
+      hand.slice(handPage * 14, handPage * 14 + 14).forEach((card, slot) => {
+        const i = handPage * 14 + slot, value = cardText(card);
+        const position = {x:80 + (slot % 7) * 80,y:390 + Math.floor(slot / 7) * 105};
+        staticPiece(`hand_${i}`, cardType(card), 'table', position,
+          {text:value,scale:selectedJack === card ? 1.08 : 1});
+        if (active && playable.has(card)) {
+          if (/^J/.test(card))
+            scene.targets.push({id:`jack_${i}`,board:'table',position,color:'#00000000',
+              hit_area:{x:-35,y:-48,width:70,height:96},
+              aria_label:text('Play {card}', {card:value})});
+          else offer({type:'play',card}, '', 'table', position, 'mau_hit',
+            text('Play {card}', {card:value}));
+        }
+      });
+      if (active && selectedJack) Object.entries(suits).forEach(([suit, symbol], i) => {
+        const position = {x:200 + i * 80,y:300};
+        staticPiece(`suit_${suit}`, suit === 'H' || suit === 'D' ? 'suit_red' : 'suit_black',
+          'table', position, {text:symbol});
+        offer({type:'play',card:selectedJack,suit}, '', 'table', position, 'suit_hit',
+          text('Play {card} as {suit}', {card:cardText(selectedJack),suit:symbol}));
+      });
+      if (active && handPage > 0)
+        scene.controls.push({id:'hand_previous',kind:'button',label:text('Previous cards')});
+      if (active && handPage + 1 < pages)
+        scene.controls.push({id:'hand_next',kind:'button',label:text('Next cards')});
       label('hand-counts', (s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),
-        22, 470, 14);
+        230, 565, 14);
     } else if (KIND === 'dos') {
       const hand = Array.isArray(s.hand) ? s.hand : [];
       (s.center || []).forEach((card, i) =>
@@ -414,7 +451,7 @@ const gameUI = {
 
     const match = /^intent_(\d+)$/.exec(click);
     const move = match && active ? offers[Number(match[1])] : undefined;
-    const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,selectedTo,
+    const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,selectedTo,selectedJack,handPage,
       dosPlacements,dosBonus};
     if (message.type === 'ui_event' && move !== undefined)
       return {scene,local_state:nextLocal,make_move:move};

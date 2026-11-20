@@ -24,6 +24,8 @@ const EXTRA_STRINGS = {
   'Take {card}':['Tomar {card}','Prendre {card}','{card} nehmen','Pegar {card}','拿取 {card}','{card} लें','خذ {card}'],
   'Select size {n} · {count} remaining':['Seleccionar tamaño {n} · quedan {count}','Choisir la taille {n} · {count} restantes','Größe {n} wählen · {count} übrig','Selecionar tamanho {n} · restam {count}','选择大小 {n} · 剩余 {count}','आकार {n} चुनें · {count} बाकी','اختر الحجم {n} · المتبقي {count}'],
   'Pit row {r}, column {c} · {n} seeds':['Hoyo fila {r}, columna {c} · {n} semillas','Trou rangée {r}, colonne {c} · {n} graines','Mulde Reihe {r}, Spalte {c} · {n} Samen','Buraco linha {r}, coluna {c} · {n} sementes','第 {r} 行第 {c} 列的坑 · {n} 颗种子','गड्ढा पंक्ति {r}, स्तंभ {c} · {n} बीज','حفرة الصف {r}، العمود {c} · {n} بذور'],
+  'Previous cards':['Cartas anteriores','Cartes précédentes','Vorherige Karten','Cartas anteriores','上一组牌','पिछले पत्ते','الأوراق السابقة'],
+  'Next cards':['Más cartas','Cartes suivantes','Nächste Karten','Próximas cartas','下一组牌','अगले पत्ते','الأوراق التالية'],
   'Reset guess':['Reiniciar intento','Réinitialiser la proposition','Tipp zurücksetzen','Reiniciar palpite','重置猜测','अनुमान रीसेट करें','إعادة تعيين التخمين']
 };
 const ALL_STRINGS={...COPY.strings,...EXTRA_STRINGS};
@@ -81,6 +83,17 @@ const KISOLO_UI = [
   '点击高亮的坑进行播种或吃子。',
   'बीज बाँटने या पकड़ने के लिए चमकते गड्ढे पर टैप करें।',
   'اضغط على حفرة مضاءة لتوزيع البذور أو أسرها.'
+];
+
+const MAU_MAU_UI = [
+  'Tap a highlighted card to play it, or tap the deck to draw. After playing a Jack, tap the suit you choose.',
+  'Toca una carta resaltada para jugarla o el mazo para robar. Después de jugar una jota, toca el palo que elijas.',
+  'Touchez une carte surlignée pour la jouer ou la pioche pour tirer. Après un valet, touchez la couleur choisie.',
+  'Tippe auf eine markierte Karte zum Spielen oder auf den Stapel zum Ziehen. Tippe nach einem Buben auf die gewünschte Farbe.',
+  'Toque em uma carta destacada para jogá-la ou no monte para comprar. Após jogar um valete, toque no naipe escolhido.',
+  '点击高亮的牌出牌，或点击牌堆抽牌。打出 J 后点击选择的花色。',
+  'चमकता पत्ता खेलने या ढेर से पत्ता लेने के लिए टैप करें। जैक खेलने के बाद चुने हुए सूट पर टैप करें।',
+  'اضغط على ورقة مضاءة للعبها أو على الرزمة للسحب. بعد لعب الولد اضغط على النوع الذي تختاره.'
 ];
 
 const CUSTOM = {
@@ -246,6 +259,8 @@ const COLORS = {
 
 function board(kind) {
   const free = {kind:'free',x:0,y:0,width:640,height:740,color:'#145b4e',line_color:'#6ee7b7'};
+  if (kind === 'mau_mau') return {viewport:{width:640,height:600},boards:[
+    {id:'table',kind:'free',x:0,y:0,width:640,height:600,color:'#174d42',line_color:'#e2c47a'}]};
   if (kind === 'thirty_one') return {viewport:{width:640,height:590},boards:[
     {id:'table',kind:'free',x:0,y:0,width:640,height:590,color:'#174d42',line_color:'#e2c47a'}]};
   if (kind === 'table') return {viewport:{width:640,height:720},boards:[{id:'table',...free}]};
@@ -268,10 +283,15 @@ function typesFor(kind) {
     card:{shape:'card',width:60,height:82,color:COLORS.card,text_color:'#172033',border_color:'#667085'},
     played:{shape:'card',width:58,height:78,color:COLORS.played,text_color:'#172033',border_color:'#667085'}
   };
-  if (kind === 'thirty_one') {
-    types.red_card = {shape:'card',width:92,height:126,color:'#fffdf6',text_color:'#b02e35',border_color:'#d5c6a9'};
-    types.black_card = {shape:'card',width:92,height:126,color:'#fffdf6',text_color:'#1c2b31',border_color:'#d5c6a9'};
-    types.deck = {shape:'card',width:92,height:126,color:'#982f39',text_color:'#f5d894',border_color:'#f5d894'};
+  if (kind === 'thirty_one' || kind === 'mau_mau') {
+    const [width,height] = kind === 'thirty_one' ? [92,126] : [70,96];
+    types.red_card = {shape:'card',width,height,color:'#fffdf6',text_color:'#b02e35',border_color:'#d5c6a9'};
+    types.black_card = {shape:'card',width,height,color:'#fffdf6',text_color:'#1c2b31',border_color:'#d5c6a9'};
+    types.deck = {shape:'card',width,height,color:'#982f39',text_color:'#f5d894',border_color:'#f5d894'};
+    if (kind === 'mau_mau') {
+      types.suit_red = {shape:'circle',width:56,height:56,color:'#fffdf6',text_color:'#b02e35',border_color:'#d5c6a9'};
+      types.suit_black = {shape:'circle',width:56,height:56,color:'#fffdf6',text_color:'#1c2b31',border_color:'#d5c6a9'};
+    }
   }
   if (kind === 'kisolo') types.pit = {shape:'circle',width:66,height:54,color:'#70452b',text_color:'#fff3d4',border_color:'#4d2e1d'};
   if (kind === 'gobblet') for (let size=1;size<=4;size++) for (let owner=0;owner<2;owner++)
@@ -443,7 +463,8 @@ function build(entry) {
   const ui=entry.kind === 'six_mens_morris' ? MORRIS_UI[0] :
     entry.kind === 'thirty_one' ? THIRTY_ONE_UI[0] :
       entry.kind === 'gobblet' ? GOBBLET_UI[0] :
-        entry.kind === 'kisolo' ? KISOLO_UI[0] : custom?.ui || source.ui_instructions;
+        entry.kind === 'kisolo' ? KISOLO_UI[0] :
+          entry.kind === 'mau_mau' ? MAU_MAU_UI[0] : custom?.ui || source.ui_instructions;
   const description=custom?.description || source.description;
   const title=`${entry.title} (Declarative)`;
   const translations={};
@@ -464,10 +485,11 @@ function build(entry) {
       ...(entry.kind === 'thirty_one' ? {game_ui_rules:THIRTY_ONE_UI[LOCALES.indexOf(locale)+1]} : {}),
       ...(entry.kind === 'gobblet' ? {game_ui_rules:GOBBLET_UI[LOCALES.indexOf(locale)+1]} : {}),
       ...(entry.kind === 'kisolo' ? {game_ui_rules:KISOLO_UI[LOCALES.indexOf(locale)+1]} : {}),
+      ...(entry.kind === 'mau_mau' ? {game_ui_rules:MAU_MAU_UI[LOCALES.indexOf(locale)+1]} : {}),
       client_strings:translatedStrings(locale,displayName,entry.kind)};
   }
   const strings={...ENGLISH,title,...serverStrings(entry.kind).english};
-  const layout=board(entry.kind === 'thirty_one' ? entry.kind : entry.board);
+  const layout=board(entry.kind === 'thirty_one' || entry.kind === 'mau_mau' ? entry.kind : entry.board);
   const spec={format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
     piece_types:typesFor(entry.kind),strings,
     ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n`+UI};
