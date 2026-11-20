@@ -31,7 +31,10 @@ NOW = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
 @pytest.mark.parametrize("entry", CATALOG, ids=[g["name"] for g in CATALOG])
 @pytest.mark.parametrize("mode", ["direct", "preview", "solo"])
 def test_every_published_game_leaves_through_the_shared_api(api, entry, mode):
-    body = GameImport.model_validate(entry)
+    body = GameImport.model_validate({
+        "game_addition_request_id_and_secret": "test-only-published-leave-fixture",
+        **entry,
+    })
     count = (min if mode == "direct" else max)(entry["allowed_player_counts"])
     human_count = 1 if mode == "solo" else count
     users = [api.new_user(f"player-{i}", tokens=0 if mode == "solo" else 10) for i in range(human_count)]

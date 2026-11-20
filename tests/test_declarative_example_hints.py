@@ -34,10 +34,13 @@ def test_examples_declare_only_real_piece_actions(kind):
         elif kind=='mancala':
             pit=int(piece['id'].split('_')[1])
             assert piece['actions']==(['tap']if {'pit':pit}in message['view']['legal']else [])
+        elif kind=='ataxx':
+            cell=int(piece['id'].split('_')[1])
+            assert piece['actions']==(['tap']if any(move['from']==cell for move in message['view']['legal'])else [])
         elif kind=='domineering'and piece['id']=='domino':
             assert piece['actions']==['move']
             assert set(piece['move_targets'])=={target['id']for target in scene['targets']}
-        elif kind in ('crazy_eights','hearts','spades','guess_who') and piece['id'].startswith('intent_'):
+        elif kind in ('crazy_eights','mau_mau','hearts','spades','guess_who') and piece['id'].startswith('intent_'):
             assert piece['actions']==['tap']
         else:
             assert piece['actions']==[]
