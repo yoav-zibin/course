@@ -1,4 +1,4 @@
-// Shared presentation reducer for Hex, Chinese Checkers, Abalone, Havannah and Catan.
+// Shared presentation reducer for Chinese Checkers, Abalone and Havannah.
 // Every scene is a fresh snapshot; all choices are server-provided legal moves.
 const gameUI={reduce(message,localState){
   const m=message.type==='ui_event'?message.state_changed:message;
@@ -13,7 +13,7 @@ const gameUI={reduce(message,localState){
   }:{board:Array.isArray(s.board)?s.board.slice():null};
   let local=localState&&localState.move_count===m.move_count?localState:{};
   let selected=Array.isArray(local.selected)?local.selected.slice():[];
-  const addTarget=(move,board,position,label,size)=>targets.push({id:moveKey(move),board,position,label:label||'',size});
+  const addTarget=(move,board,position,label,size)=>targets.push({id:moveKey(move),board,position,label:label||'',hit_area:{x:-size/2,y:-size/2,width:size,height:size}});
   const playerNames=(m.players||[]).map(p=>p.name||('Player '+(p.player_index+1)));
   const labels=[{id:'title',text:t('title'),x:24,y:22,font_size:26},
     {id:'status',text:statusText(),x:24,y:58,font_size:17}];
@@ -30,7 +30,7 @@ const gameUI={reduce(message,localState){
     const tileBoard=GEOMETRY.tile_cells;
     const board=GEOMETRY.board;
     (s.roads||[]).forEach((owner,edge)=>{if(owner<0)return;const [a,b]=GEOMETRY.edges[edge],na=GEOMETRY.nodes[a],nb=GEOMETRY.nodes[b];paths.push({id:'road_'+edge,points:[{x:board.x+na.x,y:board.y+na.y},{x:board.x+nb.x,y:board.y+nb.y}],color:GEOMETRY.player_colors[owner],width:8});});
-    (s.settlements||[]).forEach((owner,node)=>{if(owner<0)return;const p=GEOMETRY.nodes[node];const priorOwner=previousSnapshot&&previousSnapshot.settlements&&previousSnapshot.settlements[node];const priorCity=previousSnapshot&&previousSnapshot.cities&&previousSnapshot.cities[node];const popIn=Boolean(previousSnapshot&&((priorOwner!==owner)||(!priorCity&&s.cities[node])));piece('settlement_'+node,s.cities[node]?'city':'settlement','island',{x:p.x,y:p.y},{text:s.cities[node]?'C':'',color:GEOMETRY.player_colors[owner],accessibility_label:s.cities[node]?'City':'Settlement',pop_in:popIn});});
+    (s.settlements||[]).forEach((owner,node)=>{if(owner<0)return;const p=GEOMETRY.nodes[node];const priorOwner=previousSnapshot&&previousSnapshot.settlements&&previousSnapshot.settlements[node];const priorCity=previousSnapshot&&previousSnapshot.cities&&previousSnapshot.cities[node];const popIn=Boolean(previousSnapshot&&((priorOwner!==owner)||(!priorCity&&s.cities[node])));piece('settlement_'+node,s.cities[node]?'city':'settlement','island',{x:p.x,y:p.y},{text:s.cities[node]?'C':'',aria_label:s.cities[node]?'City':'Settlement',...(popIn?{animation:{kind:'pulse',key:`catan-${m.move_count}-${node}-${s.cities[node]?'city':'settlement'}`}}:{})});});
     (s.tileData||[]).forEach((tile,index)=>{if(index===s.robber)piece('robber','robber','island',{cell:String(index)},{text:'R',actions:[]});});
     for(const move of legal){
       if(move.action==='settle'){
@@ -49,7 +49,8 @@ const gameUI={reduce(message,localState){
     const legalFrom=move=>Array.isArray(move.from)?move.from:[move.from];
     for(let cell=0;cell<s.board.length;cell++)if(s.board[cell]>=0){
       const fromLegal=legal.some(move=>legalFrom(move).includes(cell));
-      piece('piece_'+cell,'p'+s.board[cell],'main',{cell:String(cell)},{selected:selected.includes(cell),actions:active&&s.board[cell]===s.turn&&fromLegal?['tap']:[],accessibility_label:t('marble',{n:s.board[cell]+1,cell:cell+1}),pop_in:Boolean(previousSnapshot&&previousSnapshot.board&&previousSnapshot.board[cell]===-1)});
+      const popIn=Boolean(previousSnapshot&&previousSnapshot.board&&previousSnapshot.board[cell]===-1);
+      piece('piece_'+cell,'p'+s.board[cell],'main',{cell:String(cell)},{selected:selected.includes(cell),actions:active&&s.board[cell]===s.turn&&fromLegal?['tap']:[],aria_label:t('marble',{n:s.board[cell]+1,cell:cell+1}),...(popIn?{animation:{kind:'pulse',key:`${KIND}-${m.move_count}-${cell}`}}:{})});
     }
     if(selected.length){
       const matches=legal.filter(move=>{
@@ -63,7 +64,7 @@ const gameUI={reduce(message,localState){
     }
     if(KIND==='chinese_checkers')for(const move of legal)if(move.action==='pass')controls.push({id:moveKey(move),kind:'button',label:t('pass_turn')});
   }else if(KIND==='havannah'){
-    for(let cell=0;cell<s.board.length;cell++)if(s.board[cell]>=0)piece('piece_'+cell,'p'+s.board[cell],'main',{cell:String(cell)},{accessibility_label:t('stone',{n:s.board[cell]+1}),pop_in:Boolean(previousSnapshot&&previousSnapshot.board&&previousSnapshot.board[cell]===-1)});
+    for(let cell=0;cell<s.board.length;cell++)if(s.board[cell]>=0){const popIn=Boolean(previousSnapshot&&previousSnapshot.board&&previousSnapshot.board[cell]===-1);piece('piece_'+cell,'p'+s.board[cell],'main',{cell:String(cell)},{aria_label:t('stone',{n:s.board[cell]+1}),...(popIn?{animation:{kind:'pulse',key:`${KIND}-${m.move_count}-${cell}`}}:{})});}
     for(const move of legal)addTarget(move,'main',{cell:String(move.cell)},'',42);
   }
 
