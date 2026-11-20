@@ -38,13 +38,6 @@ function sheddableLocalMatch(data: AccountData, id: string): boolean {
   if (data.queues[id]?.length || data.conflicts[id] || data.creations?.[id]) return false;
   return data.selectedId !== id;
 }
-/** The raw platform quota exception never reaches the app. Callers already
- * treat a quota failure as recoverable and keep the previously stored copy. */
-function storageQuotaError(): Error {
-  const failure = new Error('Saved data no longer fits in this device\'s storage quota. The previous saved copy was kept.');
-  failure.name = 'QuotaExceededError';
-  return failure;
-}
 function validRecency(value: unknown): number { return Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : 0; }
 function touchResponse(data: AccountData, path: string): void {
   const entries = data.responseRecency && typeof data.responseRecency === 'object' && !Array.isArray(data.responseRecency) ? data.responseRecency : {};
@@ -143,10 +136,13 @@ export class AccountRepository {
       try {await this.adapter.setItem(this.key(id), JSON.stringify(data));return;}
       catch (error) {
         if (!isQuotaError(error)) throw error;
-        if (attempt > 200) throw storageQuotaError();
+        if (attempt > 200) throw error;
         if (!candidates) candidates = await buildStage();
         while (!candidates.length) {
-          if (stage >= 3) throw storageQuotaError();
+          // Nothing sheddable remains: the durable core alone exceeds the
+          // device quota. Propagate the original failure; the previously
+          // stored copy is untouched because the write never succeeded.
+          if (stage >= 3) throw error;
           stage++; candidates = await buildStage();
         }
         const batch = [];let freed=0;
