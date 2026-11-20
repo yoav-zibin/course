@@ -1564,8 +1564,8 @@ class GamePlatform:
         into_user_id: str,
         into_password: str,
     ) -> User:
-        """Merges [from_user_id] into [into_user_id]: games (all versions), matches
-        (owner, seats, hidden flags and move authors), and linked accounts move over,
+        """Merges [from_user_id] into [into_user_id]: matches (owner, seats,
+        hidden flags and move authors) and linked accounts move over,
         then the source user is marked as replaced by the surviving user instead of
         being deleted, so its old credentials keep working as an alias of the
         survivor. The stronger login method always survives (google > phone >
@@ -1621,7 +1621,7 @@ class GamePlatform:
         """Moves everything of [source] into [into], then marks [source] as replaced
         by [into] instead of deleting it. The source keeps its password and display
         name (so old credentials still authenticate and resolve to the survivor)
-        but holds no games, matches, seats, moves, or linked accounts afterwards.
+        but holds no matches, seats, moves, or linked accounts afterwards.
         Everyone [source] had replaced is repointed directly at [into] too, so
         there are never replacement chains. The caller holds the lock.
         """
@@ -2647,6 +2647,8 @@ class GamePlatform:
                 caller_id is None or not match.involves(caller_id)
             ):
                 raise NotFoundError("match not found")
+            if match.private and (caller_id is None or not match.involves(caller_id)):
+                raise NotFoundError("match not found")
             return match
 
     def list_matches(
@@ -2668,6 +2670,8 @@ class GamePlatform:
     def join_match(self, *, caller_id: str, match_id: str) -> Match:
         with self._lock:
             match = self._get_match(match_id)
+            if match.private and match.seat_of(caller_id) is None:
+                raise NotFoundError("match not found")
             return self._join(match, caller_id=caller_id)
 
     def _join(self, match: Match, *, caller_id: str) -> Match:
@@ -2812,6 +2816,7 @@ class GamePlatform:
                 created_at=now,
                 updated_at=now,
                 turn_seconds=match.turn_seconds,
+                private=match.private,
                 # Hold a seat for every original player, so a stranger can't take
                 # the last one before the opponent comes back.
                 reserved_for_user_ids=frozenset(match.human_user_ids),
@@ -4156,11 +4161,17 @@ class GamePlatform:
             return invite
 
     def view_invite(self, token: str) -> InviteView:
-        """Shows the public match, inviter and any reason the link cannot be used.
+        """Shows a match through its invite capability and reports usability.
         Counted as a view in the creator's referral stats."""
         with self._lock:
             invite = self._get_invite(token)
             match = self._get_match(invite.match_id)
+            if match.private and (
+                invite.revoked
+                or (invite.expires_at is not None and self._clock() >= invite.expires_at)
+                or (invite.max_uses is not None and len(invite.acceptances) >= invite.max_uses)
+            ):
+                raise NotFoundError("invite not found")
             invite = replace(invite, views=invite.views + 1)
             self._store.put_invite(invite)
             game = self._store.get_game_version(match.game_id, match.game_version)
@@ -4897,7 +4908,7 @@ class GamePlatform:
                 raise missing
             return record.id, record.name, {"game_version": record.version}
         if target_type == "match":
-            if not isinstance(record, Match):
+            if not isinstance(record, Match) or (record.private and not record.involves(caller.id)):
                 raise missing
             # A match's name needs its game: the admin page looks the games up, so
             # sending feedback doesn't need another read.

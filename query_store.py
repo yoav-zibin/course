@@ -1050,6 +1050,7 @@ class QueryStore:
                 visible_to=[
                     u for u in participants if u not in match.hidden_for_user_ids
                 ],
+                private=match.private,
             )
 
     def get_match(self, match_id):

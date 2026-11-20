@@ -428,9 +428,11 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   `game_version` it was created with, and that version's rules apply for the whole match,
   even if the game is later updated or deleted. Clients load that version's `code` from
   `GET /games/{game_id}/versions/{game_version}`.
-- All online matches are public and contain human players in join order. Starting
+- New online matches are public and contain human players in join order. Starting
   requires the number of seats to be in the game's `allowed_player_counts`.
   Computer opponents are available in local practice.
+  Previously private matches retain their participant/valid-invite audience,
+  including on rematch. Requests to create a new private match are rejected.
 - A move is accepted from any player whose turn it is. The client sends the game's
   own move object; the server runs `applyMove`, whose result names the set of seats
   that may move next (`turn_of_player_indices`), and a `null` turn ends the match

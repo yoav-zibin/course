@@ -294,6 +294,27 @@ def test_generated_match_inbox_copies_are_removed_without_touching_unrelated_mes
     assert store.get_user(other).notifications == (keep,)
 
 
+@pytest.mark.parametrize("query", [False, True])
+@pytest.mark.parametrize("legacy", [False, True])
+def test_invite_inbox_copies_are_erased_even_for_a_recipient_outside_the_match(query, legacy):
+    api, store, _ = setup(query)
+    target, recipient = api.new_user("Erase inviter"), api.new_user("Keep recipient")
+    game = api.new_game(owner=target)
+    match = api.new_match(owner=target, game_id=game)
+    invite = api.ok("POST", f"/matches/{match}/invites", as_user=target,
+                    json={"recipient_user_id": recipient})
+    user = store.get_user(recipient)
+    assert len(user.notifications) == 1
+    notification = user.notifications[0]
+    assert notification.url.endswith("/i/" + invite["token"])
+    if legacy:
+        notification = replace(notification, match_id=None)
+    keep = replace(notification, id="unrelated", match_id="other-match", url="/i/unrelated-token", body="Keep this")
+    store.put_user(replace(user, notifications=(notification, keep)))
+    drain(api.platform, schedule(api, target), steps=10)
+    assert store.get_user(recipient).notifications == (keep,)
+
+
 def test_full_worker_scrubs_completed_referral_snapshot_before_removing_account():
     from game_platform.scaling_referrals import _node, rebuild
     api, store, _ = setup()

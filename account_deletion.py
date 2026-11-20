@@ -8,6 +8,7 @@ import contextlib
 import datetime as dt
 import json
 from dataclasses import replace
+from urllib.parse import urlsplit
 
 GRACE = dt.timedelta(hours=24)
 
@@ -192,14 +193,16 @@ def _tombstone(store, job, kind, doc, record=None):
     return {**job, "tree": {"kind": kind, "doc": doc.id, "identity": identity}}
 
 
-def _clear_match_inbox(store, user_id, match_id):
+def _clear_match_inbox(store, user_id, match_id, *, invite_token=None):
     if not user_id or not match_id:
         return
     from game_platform.scaling_service import _message_match_id
     user = store.get_user(user_id)
     if user is None:
         return
-    kept = tuple(n for n in user.notifications if _message_match_id(n.url) != match_id)
+    kept = tuple(n for n in user.notifications
+                 if n.match_id != match_id and _message_match_id(n.url) != match_id
+                 and (not invite_token or urlsplit(n.url).path != f"/i/{invite_token}"))
     if kept != user.notifications:
         store.put_user(replace(user, notifications=kept))
 
@@ -230,7 +233,7 @@ def _match_step(platform, job, doc):
             child = children[0]
             record = store._decode(kind, child.to_dict(), child.reference) if kind == "invites" else None
             if record is not None:
-                _clear_match_inbox(store, record.recipient_user_id, match_id)
+                _clear_match_inbox(store, record.recipient_user_id, match_id, invite_token=record.token)
             return _tombstone(store, job, kind, child, record)
     if match_id:
         feedback = store._query("feedback", [("target_type", "==", "match"),
@@ -365,7 +368,7 @@ def _memory_run(platform, now, limit, max_steps):
                     for participant in related:
                         _clear_match_inbox(store, participant, match.id)
                     for invite in store.list_invites(match_id=match.id):
-                        _clear_match_inbox(store, invite.recipient_user_id, match.id)
+                        _clear_match_inbox(store, invite.recipient_user_id, match.id, invite_token=invite.token)
                     platform._delete_match_and_invites(match.id)
                     processed += 1
                     if processed >= max_steps:

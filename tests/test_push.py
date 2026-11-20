@@ -144,6 +144,9 @@ def test_a_new_login_on_the_same_browser_takes_over_its_endpoint(api: Api) -> No
     assert response.status_code == 200, response.text
     assert api.ok("GET", "/push/subscriptions", as_user=alice) == []
     assert api.ok("GET", "/push/subscriptions", as_user=bob) == [response.json()]
+    assert api.request("DELETE", "/push/subscriptions", as_user=alice,
+                       params={"endpoint": response.json()["endpoint"]}).status_code == 403
+    assert api.ok("GET", "/push/subscriptions", as_user=bob) == [response.json()]
 
 
 def test_subscribe_validates_the_browser_values(api: Api) -> None:

@@ -8,7 +8,7 @@
   "all_state_public": false,
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
-  "server_code": "const distances=[25,50,75,100,200];\nconst hazard=c=>c>=5&&c<=9, remedy=c=>c>=10&&c<=14;\nfunction choices(s){\n const i=s.seat;\n if(!s.drawn)return [{draw:true}];\n return s.hands[i].flatMap((c,index)=>{\n  const out=[{discard:index}];\n  if(c<5&&s.running[i]&&(!s.limited[i]||c<2)&&s.miles[i]+distances[c]<=1000&&(c!==4||s.large[i]<2))out.unshift({play:index});\n  if(remedy(c)&&(c===14?s.limited[i]:c===13?!s.running[i]&&s.block[i]<0:s.block[i]===c-10))out.unshift({play:index});\n  if(c>=15&&!s.safety[i].includes(c-15))out.unshift({play:index});\n  if(hazard(c))for(let j=0;j<s.hands.length;j++)if(j!==i&&!s.safety[j].includes(c-5)&&(c===9?!s.limited[j]:s.running[j]))out.unshift({attack:[index,j]});\n  return out;\n });\n}\nfunction finish(s,ctx){\n const high=Math.max(...s.miles);s.winners=s.miles.flatMap((v,i)=>v===high?[i]:[]);\n const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false),w=humans.filter(p=>s.winners.includes(ctx.players.indexOf(p))),paid=w.length?w:humans;\n return {state:s,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,Math.floor(ctx.pot/paid.length)+Number(i<ctx.pot%paid.length)]))};\n}\nconst game={\n newMatch(ctx){\n const n=ctx.players.length,deck=[10,10,10,12,4,2,2,2,4,3,6,6,6,14,6,1,1,1,1].flatMap((q,c)=>Array(q).fill(c));\n let seed=2166136261;for(const p of ctx.players)for(const c of p.id)seed=Math.imul(seed^c.charCodeAt(0),16777619);\n for(let i=deck.length-1;i>0;i--){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const j=seed%(i+1);[deck[i],deck[j]]=[deck[j],deck[i]];}\n const hands=ctx.players.map(()=>deck.splice(0,6));\n const state={hands,stock:deck,miles:Array(n).fill(0),block:Array(n).fill(-1),running:Array(n).fill(false),limited:Array(n).fill(false),large:Array(n).fill(0),safety:hands.map(()=>[]),seat:0,drawn:false,winners:[]};\n return {state,turn:[ctx.players[0].id]};\n },\n applyMove(s,id,m,ctx){\n if(!m||s.winners.length||ctx.players[s.seat].id!==id||!choices(s).some(o=>JSON.stringify(o)===JSON.stringify(m)))throw new InvalidMove(\"Choose a legal move on your turn.\");\n const i=s.seat,n=s.hands.length,state={...s,hands:s.hands.map(h=>[...h]),stock:[...s.stock],miles:[...s.miles],block:[...s.block],running:[...s.running],limited:[...s.limited],large:[...s.large],safety:s.safety.map(a=>[...a])};\n if(m.draw){if(!state.stock.length)return finish(state,ctx);state.hands[i].push(state.stock.shift());state.drawn=true;}\n else{\n const [c]=state.hands[i].splice(m.attack?m.attack[0]:m.play??m.discard,1);\n if(m.attack){const j=m.attack[1];if(c===9)state.limited[j]=true;else{state.running[j]=false;state.block[j]=c===8?-1:c-5;}}\n else if(m.play!==undefined){\n if(c<5){state.miles[i]+=distances[c];if(c===4)state.large[i]++;}\n else if(c===14)state.limited[i]=false;\n else if(c===13)state.running[i]=true;\n else if(c>=15){state.safety[i].push(c-15);if(state.block[i]===c-15)state.block[i]=-1;if(c===18){state.limited[i]=false;state.running[i]=state.block[i]<0;state.safety[i].push(4);}}\n else {state.block[i]=-1;if(state.safety[i].includes(3))state.running[i]=true;}\n }\n if(state.miles[i]===1000)return finish(state,ctx);\n state.seat=(i+1)%n;state.drawn=false;\n }\n return {state,turn:[ctx.players[state.seat].id]};\n },\n viewFor(s,id,ctx){const {hands,stock,...pub}=s,i=ctx.players.findIndex(p=>p.id===id);return {...pub,hand:hands[i]??[],choices:i===s.seat?choices(s):[]};},\n computerMove(s){const opts=choices(s);return opts.find(m=>m.play!==undefined)??opts.find(m=>m.attack)??opts[0];},\n randomMove(s,id,ctx){return this.computerMove(s);}\n};\n",
+  "server_code": "const distances=[25,50,75,100,200];\nconst hazard=c=>c>=5&&c<=9, remedy=c=>c>=10&&c<=14;\nfunction choices(s){\n const i=s.seat;\n if(!s.drawn)return [{draw:true}];\n return s.hands[i].flatMap((c,index)=>{\n  const out=[{discard:index}];\n  if(c<5&&s.running[i]&&(!s.limited[i]||c<2)&&s.miles[i]+distances[c]<=1000&&(c!==4||s.large[i]<2))out.unshift({play:index});\n  if(remedy(c)&&(c===14?s.limited[i]:c===13?!s.running[i]&&s.block[i]<0:s.block[i]===c-10))out.unshift({play:index});\n  if(c>=15&&!s.safety[i].includes(c-15))out.unshift({play:index});\n  if(hazard(c))for(let j=0;j<s.hands.length;j++)if(j!==i&&!s.safety[j].includes(c-5)&&(c===9?!s.limited[j]:s.running[j]))out.unshift({attack:[index,j]});\n  return out;\n });\n}\nfunction finish(s,ctx){\n const high=Math.max(...s.miles);s.winners=s.miles.flatMap((v,i)=>v===high?[i]:[]);\n const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false),w=humans.filter(p=>s.winners.includes(ctx.players.indexOf(p))),paid=w.length?w:humans;\n return {state:s,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,Math.floor(ctx.pot/paid.length)+Number(i<ctx.pot%paid.length)]))};\n}\nconst game={\n newMatch(ctx){\n const n=ctx.players.length,deck=[10,10,10,12,4,2,2,2,4,3,6,6,6,14,6,1,1,1,1].flatMap((q,c)=>Array(q).fill(c));\n for(let i=deck.length-1;i>0;i--){\n      const j=Math.floor(ctx.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}\n const hands=ctx.players.map(()=>deck.splice(0,6));\n const state={hands,stock:deck,miles:Array(n).fill(0),block:Array(n).fill(-1),running:Array(n).fill(false),limited:Array(n).fill(false),large:Array(n).fill(0),safety:hands.map(()=>[]),seat:0,drawn:false,winners:[]};\n return {state,turn:[ctx.players[0].id]};\n },\n applyMove(s,id,m,ctx){\n if(!m||s.winners.length||ctx.players[s.seat].id!==id||!choices(s).some(o=>JSON.stringify(o)===JSON.stringify(m)))throw new InvalidMove(\"Choose a legal move on your turn.\");\n const i=s.seat,n=s.hands.length,state={...s,hands:s.hands.map(h=>[...h]),stock:[...s.stock],miles:[...s.miles],block:[...s.block],running:[...s.running],limited:[...s.limited],large:[...s.large],safety:s.safety.map(a=>[...a])};\n if(m.draw){if(!state.stock.length)return finish(state,ctx);state.hands[i].push(state.stock.shift());state.drawn=true;}\n else{\n const [c]=state.hands[i].splice(m.attack?m.attack[0]:m.play??m.discard,1);\n if(m.attack){const j=m.attack[1];if(c===9)state.limited[j]=true;else{state.running[j]=false;state.block[j]=c===8?-1:c-5;}}\n else if(m.play!==undefined){\n if(c<5){state.miles[i]+=distances[c];if(c===4)state.large[i]++;}\n else if(c===14)state.limited[i]=false;\n else if(c===13)state.running[i]=true;\n else if(c>=15){state.safety[i].push(c-15);if(state.block[i]===c-15)state.block[i]=-1;if(c===18){state.limited[i]=false;state.running[i]=state.block[i]<0;state.safety[i].push(4);}}\n else {state.block[i]=-1;if(state.safety[i].includes(3))state.running[i]=true;}\n }\n if(state.miles[i]===1000)return finish(state,ctx);\n state.seat=(i+1)%n;state.drawn=false;\n }\n return {state,turn:[ctx.players[state.seat].id]};\n },\n viewFor(s,id,ctx){const {hands,stock,...pub}=s,i=ctx.players.findIndex(p=>p.id===id);return {...pub,hand:hands[i]??[],choices:i===s.seat?choices(s):[]};},\n computerMove(s){const opts=choices(s);return opts.find(m=>m.play!==undefined)??opts.find(m=>m.attack)??opts[0];},\n randomMove(s,id,ctx){return this.computerMove(s);}\n};\n",
   "declarative_ui": {
     "format": "buildplay-ui",
     "version": 1,
@@ -359,150 +359,182 @@
         },
         "description": "Apply the selected legal card move.",
         "expected_state": {
-          "block": [
-            -1,
-            -1
-          ],
-          "drawn": true,
           "hands": [
             [
-              11,
               0,
               11,
-              13,
               1,
-              3,
-              0
+              13,
+              14,
+              17,
+              2
             ],
             [
-              1,
-              6,
-              4,
+              10,
+              5,
+              3,
+              13,
               7,
-              0,
               1
             ]
           ],
-          "large": [
+          "stock": [
+            13,
+            12,
+            1,
+            4,
+            12,
+            5,
+            18,
+            11,
+            8,
+            2,
+            11,
+            13,
+            13,
+            14,
+            13,
+            2,
+            10,
+            13,
+            12,
+            13,
+            1,
+            15,
+            1,
+            16,
             0,
-            0
-          ],
-          "limited": [
-            false,
-            false
+            0,
+            3,
+            3,
+            3,
+            2,
+            3,
+            9,
+            3,
+            8,
+            1,
+            13,
+            11,
+            13,
+            12,
+            9,
+            0,
+            10,
+            0,
+            13,
+            4,
+            0,
+            1,
+            2,
+            2,
+            0,
+            12,
+            12,
+            11,
+            7,
+            3,
+            6,
+            13,
+            8,
+            14,
+            6,
+            13,
+            2,
+            10,
+            4,
+            3,
+            0,
+            1,
+            2,
+            10,
+            3,
+            0,
+            13,
+            1,
+            2,
+            3,
+            1,
+            4,
+            3,
+            14,
+            3,
+            11,
+            9,
+            2,
+            14,
+            14,
+            8,
+            0,
+            10
           ],
           "miles": [
             0,
             0
           ],
+          "block": [
+            -1,
+            -1
+          ],
           "running": [
             false,
             false
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "large": [
+            0,
+            0
           ],
           "safety": [
             [],
             []
           ],
           "seat": 0,
-          "stock": [
-            11,
-            3,
-            13,
-            1,
-            2,
-            13,
-            13,
-            4,
-            13,
-            2,
-            2,
-            2,
-            13,
-            1,
-            7,
-            1,
-            9,
-            2,
-            13,
-            10,
-            6,
-            8,
-            16,
-            3,
-            11,
-            12,
-            14,
-            12,
-            9,
-            0,
-            0,
-            5,
-            12,
-            2,
-            18,
-            2,
-            2,
-            3,
-            13,
-            9,
-            3,
-            3,
-            13,
-            12,
-            12,
-            4,
-            10,
-            1,
-            4,
-            0,
-            3,
-            3,
-            10,
-            0,
-            14,
-            10,
-            1,
-            10,
-            14,
-            0,
-            0,
-            3,
-            1,
-            8,
-            13,
-            14,
-            0,
-            3,
-            11,
-            1,
-            13,
-            13,
-            2,
-            8,
-            14,
-            14,
-            15,
-            12,
-            2,
-            3,
-            17,
-            3,
-            11,
-            5,
-            13,
-            8,
-            13,
-            10
-          ],
+          "drawn": true,
           "winners": []
         },
         "expected_turn": [
           "u1"
         ],
         "expected_view_of_mover": {
+          "miles": [
+            0,
+            0
+          ],
           "block": [
             -1,
             -1
+          ],
+          "running": [
+            false,
+            false
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "large": [
+            0,
+            0
+          ],
+          "safety": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "drawn": true,
+          "winners": [],
+          "hand": [
+            0,
+            11,
+            1,
+            13,
+            14,
+            17,
+            2
           ],
           "choices": [
             {
@@ -524,82 +556,53 @@
               "discard": 4
             },
             {
+              "play": 5
+            },
+            {
               "discard": 5
             },
             {
               "discard": 6
             }
-          ],
-          "drawn": true,
-          "hand": [
-            11,
-            0,
-            11,
-            13,
-            1,
-            3,
-            0
-          ],
-          "large": [
-            0,
-            0
-          ],
-          "limited": [
-            false,
-            false
-          ],
+          ]
+        },
+        "expected_view_of_other": {
           "miles": [
             0,
             0
           ],
-          "running": [
-            false,
-            false
-          ],
-          "safety": [
-            [],
-            []
-          ],
-          "seat": 0,
-          "winners": []
-        },
-        "expected_view_of_other": {
           "block": [
             -1,
             -1
           ],
-          "choices": [],
-          "drawn": true,
-          "hand": [
-            1,
-            6,
-            4,
-            7,
-            0,
-            1
-          ],
-          "large": [
-            0,
-            0
+          "running": [
+            false,
+            false
           ],
           "limited": [
             false,
             false
           ],
-          "miles": [
+          "large": [
             0,
             0
-          ],
-          "running": [
-            false,
-            false
           ],
           "safety": [
             [],
             []
           ],
           "seat": 0,
-          "winners": []
+          "drawn": true,
+          "winners": [],
+          "hand": [
+            10,
+            5,
+            3,
+            13,
+            7,
+            1
+          ],
+          "choices": []
         },
         "images": [
           {
@@ -627,222 +630,222 @@
         "other_player_id": "u2",
         "player_id": "u1",
         "state": {
-          "block": [
-            -1,
-            -1
-          ],
-          "drawn": false,
           "hands": [
             [
-              11,
               0,
               11,
-              13,
               1,
-              3
+              13,
+              14,
+              17
             ],
             [
-              1,
-              6,
-              4,
+              10,
+              5,
+              3,
+              13,
               7,
-              0,
               1
             ]
           ],
-          "large": [
+          "stock": [
+            2,
+            13,
+            12,
+            1,
+            4,
+            12,
+            5,
+            18,
+            11,
+            8,
+            2,
+            11,
+            13,
+            13,
+            14,
+            13,
+            2,
+            10,
+            13,
+            12,
+            13,
+            1,
+            15,
+            1,
+            16,
             0,
-            0
-          ],
-          "limited": [
-            false,
-            false
+            0,
+            3,
+            3,
+            3,
+            2,
+            3,
+            9,
+            3,
+            8,
+            1,
+            13,
+            11,
+            13,
+            12,
+            9,
+            0,
+            10,
+            0,
+            13,
+            4,
+            0,
+            1,
+            2,
+            2,
+            0,
+            12,
+            12,
+            11,
+            7,
+            3,
+            6,
+            13,
+            8,
+            14,
+            6,
+            13,
+            2,
+            10,
+            4,
+            3,
+            0,
+            1,
+            2,
+            10,
+            3,
+            0,
+            13,
+            1,
+            2,
+            3,
+            1,
+            4,
+            3,
+            14,
+            3,
+            11,
+            9,
+            2,
+            14,
+            14,
+            8,
+            0,
+            10
           ],
           "miles": [
             0,
             0
           ],
+          "block": [
+            -1,
+            -1
+          ],
           "running": [
             false,
             false
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "large": [
+            0,
+            0
           ],
           "safety": [
             [],
             []
           ],
           "seat": 0,
-          "stock": [
-            0,
-            11,
-            3,
-            13,
-            1,
-            2,
-            13,
-            13,
-            4,
-            13,
-            2,
-            2,
-            2,
-            13,
-            1,
-            7,
-            1,
-            9,
-            2,
-            13,
-            10,
-            6,
-            8,
-            16,
-            3,
-            11,
-            12,
-            14,
-            12,
-            9,
-            0,
-            0,
-            5,
-            12,
-            2,
-            18,
-            2,
-            2,
-            3,
-            13,
-            9,
-            3,
-            3,
-            13,
-            12,
-            12,
-            4,
-            10,
-            1,
-            4,
-            0,
-            3,
-            3,
-            10,
-            0,
-            14,
-            10,
-            1,
-            10,
-            14,
-            0,
-            0,
-            3,
-            1,
-            8,
-            13,
-            14,
-            0,
-            3,
-            11,
-            1,
-            13,
-            13,
-            2,
-            8,
-            14,
-            14,
-            15,
-            12,
-            2,
-            3,
-            17,
-            3,
-            11,
-            5,
-            13,
-            8,
-            13,
-            10
-          ],
+          "drawn": false,
           "winners": []
         },
         "view_of_mover": {
+          "miles": [
+            0,
+            0
+          ],
           "block": [
             -1,
             -1
+          ],
+          "running": [
+            false,
+            false
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "large": [
+            0,
+            0
+          ],
+          "safety": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "drawn": false,
+          "winners": [],
+          "hand": [
+            0,
+            11,
+            1,
+            13,
+            14,
+            17
           ],
           "choices": [
             {
               "draw": true
             }
-          ],
-          "drawn": false,
-          "hand": [
-            11,
-            0,
-            11,
-            13,
-            1,
-            3
-          ],
-          "large": [
-            0,
-            0
-          ],
-          "limited": [
-            false,
-            false
-          ],
+          ]
+        },
+        "view_of_other": {
           "miles": [
             0,
             0
           ],
-          "running": [
-            false,
-            false
-          ],
-          "safety": [
-            [],
-            []
-          ],
-          "seat": 0,
-          "winners": []
-        },
-        "view_of_other": {
           "block": [
             -1,
             -1
           ],
-          "choices": [],
-          "drawn": false,
-          "hand": [
-            1,
-            6,
-            4,
-            7,
-            0,
-            1
-          ],
-          "large": [
-            0,
-            0
+          "running": [
+            false,
+            false
           ],
           "limited": [
             false,
             false
           ],
-          "miles": [
+          "large": [
             0,
             0
-          ],
-          "running": [
-            false,
-            false
           ],
           "safety": [
             [],
             []
           ],
           "seat": 0,
-          "winners": []
+          "drawn": false,
+          "winners": [],
+          "hand": [
+            10,
+            5,
+            3,
+            13,
+            7,
+            1
+          ],
+          "choices": []
         }
       },
       {
@@ -987,6 +990,40 @@
             -1,
             -1
           ],
+          "drawn": true,
+          "large": [
+            0,
+            1
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            475
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1
+            ]
+          ],
+          "seat": 1,
+          "winners": [],
+          "hand": [
+            7,
+            13,
+            6,
+            11,
+            14,
+            9,
+            0
+          ],
           "choices": [
             {
               "discard": 0
@@ -1012,17 +1049,14 @@
             {
               "discard": 6
             }
+          ]
+        },
+        "expected_view_of_other": {
+          "block": [
+            -1,
+            -1
           ],
           "drawn": true,
-          "hand": [
-            7,
-            13,
-            6,
-            11,
-            14,
-            9,
-            0
-          ],
           "large": [
             0,
             1
@@ -1046,15 +1080,7 @@
             ]
           ],
           "seat": 1,
-          "winners": []
-        },
-        "expected_view_of_other": {
-          "block": [
-            -1,
-            -1
-          ],
-          "choices": [],
-          "drawn": true,
+          "winners": [],
           "hand": [
             1,
             2,
@@ -1063,30 +1089,7 @@
             12,
             0
           ],
-          "large": [
-            0,
-            1
-          ],
-          "limited": [
-            true,
-            false
-          ],
-          "miles": [
-            325,
-            475
-          ],
-          "running": [
-            false,
-            true
-          ],
-          "safety": [
-            [],
-            [
-              1
-            ]
-          ],
-          "seat": 1,
-          "winners": []
+          "choices": []
         },
         "images": [
           {
@@ -1227,12 +1230,31 @@
             -1,
             -1
           ],
-          "choices": [
-            {
-              "draw": true
-            }
-          ],
           "drawn": false,
+          "large": [
+            0,
+            1
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            475
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1
+            ]
+          ],
+          "seat": 1,
+          "winners": [],
           "hand": [
             7,
             13,
@@ -1241,6 +1263,18 @@
             14,
             9
           ],
+          "choices": [
+            {
+              "draw": true
+            }
+          ]
+        },
+        "view_of_other": {
+          "block": [
+            -1,
+            -1
+          ],
+          "drawn": false,
           "large": [
             0,
             1
@@ -1264,15 +1298,7 @@
             ]
           ],
           "seat": 1,
-          "winners": []
-        },
-        "view_of_other": {
-          "block": [
-            -1,
-            -1
-          ],
-          "choices": [],
-          "drawn": false,
+          "winners": [],
           "hand": [
             1,
             2,
@@ -1281,30 +1307,7 @@
             12,
             0
           ],
-          "large": [
-            0,
-            1
-          ],
-          "limited": [
-            true,
-            false
-          ],
-          "miles": [
-            325,
-            475
-          ],
-          "running": [
-            false,
-            true
-          ],
-          "safety": [
-            [],
-            [
-              1
-            ]
-          ],
-          "seat": 1,
-          "winners": []
+          "choices": []
         }
       },
       {
@@ -1423,6 +1426,43 @@
             -1,
             -1
           ],
+          "drawn": true,
+          "large": [
+            0,
+            2
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            1000
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1,
+              3,
+              4
+            ]
+          ],
+          "seat": 1,
+          "winners": [
+            1
+          ],
+          "hand": [
+            13,
+            12,
+            10,
+            14,
+            1,
+            14
+          ],
           "choices": [
             {
               "discard": 0
@@ -1442,16 +1482,14 @@
             {
               "discard": 5
             }
+          ]
+        },
+        "expected_view_of_other": {
+          "block": [
+            -1,
+            -1
           ],
           "drawn": true,
-          "hand": [
-            13,
-            12,
-            10,
-            14,
-            1,
-            14
-          ],
           "large": [
             0,
             2
@@ -1479,15 +1517,7 @@
           "seat": 1,
           "winners": [
             1
-          ]
-        },
-        "expected_view_of_other": {
-          "block": [
-            -1,
-            -1
           ],
-          "choices": [],
-          "drawn": true,
           "hand": [
             0,
             3,
@@ -1496,34 +1526,7 @@
             10,
             0
           ],
-          "large": [
-            0,
-            2
-          ],
-          "limited": [
-            true,
-            false
-          ],
-          "miles": [
-            325,
-            1000
-          ],
-          "running": [
-            false,
-            true
-          ],
-          "safety": [
-            [],
-            [
-              1,
-              3,
-              4
-            ]
-          ],
-          "seat": 1,
-          "winners": [
-            1
-          ]
+          "choices": []
         },
         "images": [
           {
@@ -1636,6 +1639,42 @@
             -1,
             -1
           ],
+          "drawn": true,
+          "large": [
+            0,
+            2
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            975
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1,
+              3,
+              4
+            ]
+          ],
+          "seat": 1,
+          "winners": [],
+          "hand": [
+            13,
+            12,
+            10,
+            14,
+            1,
+            14,
+            0
+          ],
           "choices": [
             {
               "discard": 0
@@ -1661,17 +1700,14 @@
             {
               "discard": 6
             }
+          ]
+        },
+        "view_of_other": {
+          "block": [
+            -1,
+            -1
           ],
           "drawn": true,
-          "hand": [
-            13,
-            12,
-            10,
-            14,
-            1,
-            14,
-            0
-          ],
           "large": [
             0,
             2
@@ -1697,15 +1733,7 @@
             ]
           ],
           "seat": 1,
-          "winners": []
-        },
-        "view_of_other": {
-          "block": [
-            -1,
-            -1
-          ],
-          "choices": [],
-          "drawn": true,
+          "winners": [],
           "hand": [
             0,
             3,
@@ -1714,32 +1742,7 @@
             10,
             0
           ],
-          "large": [
-            0,
-            2
-          ],
-          "limited": [
-            true,
-            false
-          ],
-          "miles": [
-            325,
-            975
-          ],
-          "running": [
-            false,
-            true
-          ],
-          "safety": [
-            [],
-            [
-              1,
-              3,
-              4
-            ]
-          ],
-          "seat": 1,
-          "winners": []
+          "choices": []
         }
       }
     ],

@@ -245,10 +245,19 @@ def setup_logging(level: str, log_format: Literal["text", "json"], log_file: str
 # "token_pot" and "pass_and_play" are not, and hiding them would hide what to reproduce.
 _SECRET_KEY: Final = re.compile(
     r"password|passwd|passcode|secret|(^|[_-])token$|api[_-]?key|authorization|credential"
-    r"|private[_-]?key|cookie|verification|vapid|smtp|(^|[_-])verifier$|callback[_-]?url",
+    r"|private[_-]?key|cookie|verification|vapid|smtp|(^|[_-])verifier$|callback[_-]?url"
+    r"|(^|[_-])endpoint$|(^|[_-])auth$",
     re.I,
 )
 _MAX_STRING: Final = 400
+
+
+def _redact_capability_paths(value: str) -> str:
+    """Keep useful routes while hiding bearer invites and login handoff IDs."""
+    value = re.sub(r"(/(?:auth/app-sessions|invites|i)/)[^/?#\s\"'<>]+",
+                   r"\1<redacted>", value)
+    return re.sub(r"([#?&](?:invite|app-login)=)[^&#\s\"'<>]+",
+                  r"\1<redacted>", value)
 
 
 def _digest(text: str) -> str:
@@ -262,10 +271,15 @@ def redact(value: Any, *, keep_long_strings: bool = False, _depth: int = 0) -> A
         return "<too deep>"
     if isinstance(value, dict):
         out: dict[str, Any] = {}
+        # Pydantic puts rejected values under "input", rather than their
+        # original field name. Preserve the field location without its secret.
+        validation_secret = isinstance(value.get("loc"), (list, tuple)) and any(
+            _SECRET_KEY.search(str(part)) or part == "code" for part in value["loc"]
+        )
         for key, item in value.items():
             name = str(key)
-            if _SECRET_KEY.search(name) or (
-                name == "code" and isinstance(item, str) and len(item) <= 12
+            if (validation_secret and name == "input") or _SECRET_KEY.search(name) or (
+                name == "code" and (not isinstance(item, str) or len(item) <= 12)
             ):
                 out[name] = "<redacted>"
             else:
@@ -279,8 +293,10 @@ def redact(value: Any, *, keep_long_strings: bool = False, _depth: int = 0) -> A
         if len(value) > 200:
             items.append(f"<{len(value) - 200} more items>")
         return items
-    if isinstance(value, str) and not keep_long_strings and len(value) > _MAX_STRING:
-        return f"<{len(value)} chars, sha256 {_digest(value)}>"
+    if isinstance(value, str):
+        value = _redact_capability_paths(value)
+        if not keep_long_strings and len(value) > _MAX_STRING:
+            return f"<{len(value)} chars, sha256 {_digest(value)}>"
     return value
 
 
@@ -314,13 +330,15 @@ def scrub_text(text: str, limit: int) -> str:
     that looks like a secret (`password=...`, `Bearer ...`, a long random-looking run) hidden, and
     cut to [limit] characters."""
     text = "".join(ch for ch in text if ch.isprintable() or ch in " ")
+    text = _redact_capability_paths(text)
     text = _SECRET_TEXT.sub("<redacted>", text)
     return _OPAQUE_RUN.sub("<redacted>", text)[:limit]
 
 
 def redact_query(query: str) -> dict[str, str]:
     return {
-        key: "<redacted>" if _SECRET_KEY.search(key) else value[:200]
+        key: "<redacted>" if _SECRET_KEY.search(key) or key in {"code", "invite", "app-login"}
+        else _redact_capability_paths(value)[:200]
         for key, value in urllib.parse.parse_qsl(query, keep_blank_values=True)
     }
 
@@ -1273,7 +1291,7 @@ class RequestLogMiddleware:
         }
         request_id = headers.get("x-request-id", "")[:64] or uuid.uuid4().hex[:16]
         client = _client_of(scope, headers)
-        method, path = scope["method"], scope["path"]
+        method, path = scope["method"], _redact_capability_paths(scope["path"])
         keep_bodies = not _omit_request_bodies(scope)
         query = scope.get("query_string", b"").decode("latin-1")
         body = bytearray()

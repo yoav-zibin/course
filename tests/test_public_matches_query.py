@@ -19,7 +19,7 @@ def _api_for(store, previous=None):
     return api
 
 
-def test_query_reload_makes_legacy_private_matches_public_without_exposing_cards():
+def test_query_reload_preserves_legacy_private_audience_and_player_projection():
     store = query_store()
     api = _api_for(store)
     alice, bob = api.new_user("Alice"), api.new_user("Bob")
@@ -37,11 +37,11 @@ def test_query_reload_makes_legacy_private_matches_public_without_exposing_cards
     cold = QueryStore(store.client, namespace=store.namespace)
     restarted = _api_for(cold, api)
     try:
-        public = restarted.ok("GET", f"/matches/{match_id}")
-        assert public["id"] == match_id
-        assert "private" not in public
-        assert "matchmaking_player_count" not in public
-        joined = restarted.ok("POST", f"/matches/{match_id}/join", as_user=bob)
+        assert restarted.request("GET", f"/matches/{match_id}").status_code == 404
+        assert restarted.request("POST", f"/matches/{match_id}/join", as_user=bob).status_code == 404
+        assert restarted.ok("GET", f"/matches/{match_id}", as_user=alice)["id"] == match_id
+        invite = restarted.ok("POST", f"/matches/{match_id}/invites", as_user=alice)
+        joined = restarted.ok("POST", f"/invites/{invite['token']}/accept", as_user=bob)
         assert joined["status"] == "waiting_for_players"
         assert all(player["kind"] == "human" for player in joined["players"])
         restarted.ok("POST", f"/matches/{match_id}/start", as_user=alice)
@@ -50,13 +50,18 @@ def test_query_reload_makes_legacy_private_matches_public_without_exposing_cards
         for path in (f"/matches/{match_id}", f"/matches/{match_id}/history",
                      f"/v2/matches/{match_id}/history"):
             response = restarted.request("GET", path)
-            assert response.status_code == 200
+            assert response.status_code == 404
             assert "secret-of-" not in response.text
+        batch = restarted.ok("GET", "/batch", params={"requests": json.dumps([
+            f"/matches/{match_id}", f"/matches/{match_id}/history", f"/v2/matches/{match_id}/history"])})
+        assert [row["status"] for row in batch] == [404, 404, 404]
         own = restarted.ok("GET", f"/matches/{match_id}", as_user=bob)
         assert own["state"]["your_secret"] == f"secret-of-{bob}"
         persisted = ref.get().to_dict()
-        assert not {"private", "matchmaking_player_count", "joinable"} & persisted.keys()
-        assert not {"private", "matchmaking_player_count"} & json.loads(persisted["json"]).keys()
+        assert persisted["private"] is True
+        assert json.loads(persisted["json"])["private"] is True
+        assert not {"matchmaking_player_count", "joinable"} & persisted.keys()
+        assert "matchmaking_player_count" not in json.loads(persisted["json"])
     finally:
         api.platform.close_workers()
         restarted.platform.close_workers()

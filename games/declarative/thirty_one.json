@@ -7,7 +7,7 @@
   ],
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
-  "server_code": "\"use strict\";\n\n// Thirty-one server code (v2 Game API).\n// 2-player adaptation of Thirty-one (also called Blitz / Scat), the\n// European card game first mentioned in the 15th century (Wikipedia:\n// \"Thirty-one (card game)\"). One fixed variant, documented everywhere in\n// this package:\n//   * Standard 52-card deck. Deal 3 cards each; turn the next card face up\n//     to start the discard pile; the rest is the stock.\n//   * On your turn, either draw the top card of the stock or the top card\n//     of the discard pile, then discard one card from your hand — or knock\n//     instead of drawing. A player who knocks gives the opponent one final\n//     turn (draw and discard, or stand), then hands are compared.\n//   * Hand value: cards of a single suit add up (ace 11, face cards 10,\n//     others face value); only the best suit counts. Three of a kind is\n//     worth 30.5. A hand worth exactly 31 in one suit is a blitz and wins\n//     at once. A blitz dealt in the opening hand wins at once (if both\n//     players were dealt a blitz, the player to move first wins).\n//   * Showdown: the higher hand value wins the round; a tie is a draw.\n//     If the stock runs out, the round ends in a showdown instead.\n//   * A portal match is a single round, so settling is by pot: the round\n//     winner, if human, takes the pot; if the winner is a computer, the\n//     only human gets the pot back; a drawn round splits the pot between\n//     the humans. The classic multi-life knock penalties do not apply to a\n//     single round: the higher hand wins outright, whoever knocked.\n// The opening shuffle is derived deterministically from the player ids\n// and the pot (FNV-1a hash + splitmix-style PRNG), never from\n// ctx.random(), so newMatch is fully verifiable.\n\nconst RANKS = [\"A\", \"K\", \"Q\", \"J\", \"10\", \"9\", \"8\", \"7\", \"6\", \"5\", \"4\", \"3\", \"2\"];\nconst RANK_VALUE = { A: 14, K: 13, Q: 12, J: 11, \"10\": 10, \"9\": 9, \"8\": 8, \"7\": 7, \"6\": 6, \"5\": 5, \"4\": 4, \"3\": 3, \"2\": 2 };\nconst CARD_VALUE = { A: 11, K: 10, Q: 10, J: 10, \"10\": 10, \"9\": 9, \"8\": 8, \"7\": 7, \"6\": 6, \"5\": 5, \"4\": 4, \"3\": 3, \"2\": 2 };\nconst SUITS = [\"S\", \"H\", \"D\", \"C\"];\nconst SUIT_ORDER = { S: 0, H: 1, D: 2, C: 3 };\nconst KNOCK_AT = 27; // computer knocks with a hand worth this much or more\nconst STAND_AT = 26; // computer stands on its final turn with this much or more\n\nfunction rankOf(card) {\n  return card.length === 3 ? card.slice(0, 2) : card[0];\n}\nfunction suitOf(card) {\n  return card[card.length - 1];\n}\nfunction isCard(card) {\n  return typeof card === \"string\" && card.length >= 2 && card.length <= 3 &&\n    Object.prototype.hasOwnProperty.call(RANK_VALUE, rankOf(card)) &&\n    Object.prototype.hasOwnProperty.call(SUIT_ORDER, suitOf(card)) &&\n    (card.length === 2 || rankOf(card) === \"10\");\n}\nfunction sortHand(hand) {\n  return hand.slice().sort(function (a, b) {\n    const s = SUIT_ORDER[suitOf(a)] - SUIT_ORDER[suitOf(b)];\n    if (s !== 0) return s;\n    return RANK_VALUE[rankOf(b)] - RANK_VALUE[rankOf(a)];\n  });\n}\nfunction hashIds(ids, pot) {\n  let h = 2166136261 >>> 0;\n  const s = ids.join(\"|\") + \"|\" + String(pot);\n  for (let i = 0; i < s.length; i++) {\n    h ^= s.charCodeAt(i);\n    h = Math.imul(h, 16777619);\n  }\n  return h >>> 0;\n}\nfunction rngFromSeed(seed) {\n  let a = seed >>> 0;\n  return function () {\n    a |= 0;\n    a = (a + 0x6d2b79f5) | 0;\n    let t = Math.imul(a ^ (a >>> 15), 1 | a);\n    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}\nfunction shuffledDeck(rng) {\n  const deck = [];\n  for (const suit of SUITS) {\n    for (const rank of RANKS) deck.push(rank + suit);\n  }\n  for (let i = deck.length - 1; i > 0; i--) {\n    const j = Math.floor(rng() * (i + 1));\n    const tmp = deck[i];\n    deck[i] = deck[j];\n    deck[j] = tmp;\n  }\n  return deck;\n}\n// Value of exactly three cards: three of a kind is 30.5, otherwise the\n// best single-suit sum.\nfunction threeValue(cards) {\n  if (cards.length !== 3) return -1;\n  const r0 = rankOf(cards[0]);\n  if (rankOf(cards[1]) === r0 && rankOf(cards[2]) === r0) return 30.5;\n  const sums = { S: 0, H: 0, D: 0, C: 0 };\n  for (const c of cards) sums[suitOf(c)] += CARD_VALUE[rankOf(c)];\n  return Math.max(sums.S, sums.H, sums.D, sums.C);\n}\n// Value of a hand of 3 cards, or of a 4-card hand as the best value\n// reachable by discarding one card.\nfunction handValue(hand) {\n  if (hand.length === 3) return threeValue(hand);\n  if (hand.length === 4) {\n    let best = -1;\n    for (let i = 0; i < 4; i++) {\n      const rest = hand.slice(0, i).concat(hand.slice(i + 1));\n      best = Math.max(best, threeValue(rest));\n    }\n    return best;\n  }\n  return -1;\n}\nfunction scoresOf(hands) {\n  return [handValue(hands[0]), handValue(hands[1])];\n}\nfunction copyState(state) {\n  return {\n    hands: [state.hands[0].slice(), state.hands[1].slice()],\n    stock: state.stock.slice(),\n    discard: state.discard.slice(),\n    phase: state.phase,\n    knocker: state.knocker,\n    scores: [state.scores[0], state.scores[1]],\n    winner: state.winner,\n    blitz: state.blitz,\n    reason: state.reason,\n    to_move: state.to_move,\n    drawn: state.drawn,\n    drawn_by: state.drawn_by,\n    last_discard: state.last_discard\n  };\n}\nfunction settle(state, ctx) {\n  if (ctx.pot === 0) return {};\n  const humans = ctx.players.filter(function (p) { return p.kind === \"human\"; });\n  if (humans.length === 0) return {};\n  if (state.winner === -1) {\n    const share = Math.floor(ctx.pot / humans.length);\n    const payouts = {};\n    humans.forEach(function (p, i) {\n      payouts[p.id] = share + (i === 0 ? ctx.pot - share * humans.length : 0);\n    });\n    return payouts;\n  }\n  const winnerPlayer = ctx.players[state.winner];\n  if (winnerPlayer && winnerPlayer.kind === \"human\") {\n    const payouts = {};\n    payouts[winnerPlayer.id] = ctx.pot;\n    return payouts;\n  }\n  const payouts = {};\n  payouts[humans[0].id] = ctx.pot;\n  return payouts;\n}\nfunction showdown(next, ctx, reason) {\n  next.phase = \"over\";\n  next.reason = reason;\n  next.drawn = null;\n  next.drawn_by = null;\n  const s0 = next.scores[0];\n  const s1 = next.scores[1];\n  next.winner = s0 > s1 ? 0 : s1 > s0 ? 1 : -1;\n  return { state: next, turn: null, payouts: settle(next, ctx) };\n}\nfunction blitzWin(next, seat, ctx) {\n  next.phase = \"over\";\n  next.winner = seat;\n  next.blitz = true;\n  next.reason = \"blitz\";\n  next.drawn = null;\n  next.drawn_by = null;\n  return { state: next, turn: null, payouts: settle(next, ctx) };\n}\n// The card to discard from a 4-card hand to keep the best hand value;\n// ties are broken by discarding the lowest-value card.\nfunction bestDiscard(hand) {\n  let bestCard = hand[0];\n  let bestValue = -1;\n  let bestCardValue = Infinity;\n  for (const c of hand) {\n    const rest = hand.filter(function (x) { return x !== c; });\n    const v = threeValue(rest);\n    const cv = CARD_VALUE[rankOf(c)];\n    if (v > bestValue || (v === bestValue && cv < bestCardValue)) {\n      bestValue = v;\n      bestCardValue = cv;\n      bestCard = c;\n    }\n  }\n  return bestCard;\n}\n\nconst game = {\n  newMatch(ctx) {\n    const rng = rngFromSeed(hashIds(ctx.players.map(function (p) { return p.id; }), ctx.pot));\n    const deck = shuffledDeck(rng);\n    const hand0 = sortHand([deck[0], deck[2], deck[4]]);\n    const hand1 = sortHand([deck[1], deck[3], deck[5]]);\n    const discardTop = deck[6];\n    const stock = deck.slice(7);\n    const state = {\n      hands: [hand0, hand1],\n      stock: stock,\n      discard: [discardTop],\n      phase: \"draw\",\n      knocker: null,\n      scores: scoresOf([hand0, hand1]),\n      winner: null,\n      blitz: false,\n      reason: null,\n      to_move: 0,\n      drawn: null,\n      drawn_by: null,\n      last_discard: null\n    };\n    // A blitz dealt in the opening hand wins at once; if both players\n    // were dealt one, the player to move first wins.\n    if (state.scores[0] === 31) {\n      state.phase = \"over\";\n      state.winner = 0;\n      state.blitz = true;\n      state.reason = \"blitz\";\n      return { state: state, turn: null, payouts: settle(state, ctx) };\n    }\n    if (state.scores[1] === 31) {\n      state.phase = \"over\";\n      state.winner = 1;\n      state.blitz = true;\n      state.reason = \"blitz\";\n      return { state: state, turn: null, payouts: settle(state, ctx) };\n    }\n    return { state: state, turn: [ctx.players[0].id] };\n  },\n\n  applyMove(state, playerId, move, ctx) {\n    if (!move || typeof move !== \"object\" || Array.isArray(move) ||\n        typeof move.action !== \"string\" ||\n        [\"draw\", \"discard\", \"knock\", \"stand\"].indexOf(move.action) < 0) {\n      throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n    }\n    // Each action carries exactly its own fields; anything extra is malformed.\n    const keys = Object.keys(move).sort().join(\",\");\n    if (move.action === \"draw\" && keys !== \"action,source\") {\n      throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n    }\n    if (move.action === \"discard\" && keys !== \"action,card\") {\n      throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n    }\n    if ((move.action === \"knock\" || move.action === \"stand\") && keys !== \"action\") {\n      throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n    }\n    if (state.phase === \"over\") {\n      throw new InvalidMove(\"the game is over\");\n    }\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (seat < 0 || seat !== state.to_move) {\n      throw new InvalidMove(\"it is not your turn\");\n    }\n    const next = copyState(state);\n    if (move.action === \"draw\") {\n      if (state.phase !== \"draw\" && state.phase !== \"final_draw\") {\n        throw new InvalidMove(\"you must draw before discarding\");\n      }\n      if (move.source !== \"stock\" && move.source !== \"discard\") {\n        throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n      }\n      let card;\n      if (move.source === \"stock\") {\n        if (next.stock.length === 0) throw new InvalidMove(\"the stock is empty\");\n        card = next.stock.pop();\n      } else {\n        if (next.discard.length === 0) throw new InvalidMove(\"the discard pile is empty\");\n        card = next.discard.pop();\n      }\n      next.hands[seat] = sortHand(next.hands[seat].concat([card]));\n      next.scores = scoresOf(next.hands);\n      next.drawn = card;\n      next.drawn_by = seat;\n      next.phase = state.phase === \"final_draw\" ? \"final_discard\" : \"discard\";\n      return { state: next, turn: [ctx.players[seat].id] };\n    }\n    if (move.action === \"discard\") {\n      if (state.phase !== \"discard\" && state.phase !== \"final_discard\") {\n        throw new InvalidMove(\"you must draw before discarding\");\n      }\n      if (typeof move.card !== \"string\" || !isCard(move.card)) {\n        throw new InvalidMove(\"send a card like AS\");\n      }\n      const hand = next.hands[seat];\n      if (hand.indexOf(move.card) < 0) {\n        throw new InvalidMove(\"that card is not in your hand\");\n      }\n      next.hands[seat] = hand.filter(function (c) { return c !== move.card; });\n      next.discard.push(move.card);\n      next.last_discard = move.card;\n      next.drawn = null;\n      next.drawn_by = null;\n      next.scores = scoresOf(next.hands);\n      if (next.scores[seat] === 31) return blitzWin(next, seat, ctx);\n      if (state.phase === \"final_discard\") return showdown(next, ctx, \"knock\");\n      if (next.stock.length === 0) return showdown(next, ctx, \"stock\");\n      next.phase = \"draw\";\n      next.to_move = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n    if (move.action === \"knock\") {\n      if (state.phase !== \"draw\") {\n        throw new InvalidMove(\"you cannot knock now\");\n      }\n      next.knocker = seat;\n      next.phase = \"final_draw\";\n      next.to_move = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n    // stand\n    if (state.phase !== \"final_draw\") {\n      throw new InvalidMove(\"you cannot stand now\");\n    }\n    return showdown(next, ctx, \"knock\");\n  },\n\n  computerMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    const hand = state.hands[seat];\n    const value = handValue(hand);\n    if (state.phase === \"discard\" || state.phase === \"final_discard\") {\n      return { action: \"discard\", card: bestDiscard(hand) };\n    }\n    if (state.phase === \"draw\" && value >= KNOCK_AT) {\n      return { action: \"knock\" };\n    }\n    // Decide what to draw: taking the discard is good only if it improves\n    // the best hand value after discarding.\n    const top = state.discard.length > 0 ? state.discard[state.discard.length - 1] : null;\n    if (top !== null) {\n      const improved = handValue(hand.concat([top]));\n      if (improved > value) return { action: \"draw\", source: \"discard\" };\n    }\n    if (state.phase === \"final_draw\" && value >= STAND_AT) {\n      return { action: \"stand\" };\n    }\n    return { action: \"draw\", source: \"stock\" };\n  },\n\n  randomMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (state.phase === \"discard\" || state.phase === \"final_discard\") {\n      const hand = state.hands[seat];\n      return { action: \"discard\", card: hand[Math.floor(ctx.random() * hand.length)] };\n    }\n    const options = [];\n    if (state.stock.length > 0) options.push({ action: \"draw\", source: \"stock\" });\n    if (state.discard.length > 0) options.push({ action: \"draw\", source: \"discard\" });\n    if (state.phase === \"draw\") options.push({ action: \"knock\" });\n    if (state.phase === \"final_draw\") options.push({ action: \"stand\" });\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n\n  viewFor(state, playerId, ctx) {\n    const seat = playerId === null ? -1 : ctx.players.findIndex(function (p) { return p.id === playerId; });\n    const over = state.phase === \"over\";\n    return {\n      hand: seat >= 0 ? state.hands[seat].slice() : [],\n      hands: over ? [state.hands[0].slice(), state.hands[1].slice()] : null,\n      hand_counts: [state.hands[0].length, state.hands[1].length],\n      stock_count: state.stock.length,\n      discard_top: state.discard.length > 0 ? state.discard[state.discard.length - 1] : null,\n      scores: seat >= 0\n        ? [state.scores[seat], over ? state.scores[1 - seat] : null]\n        : (over ? [state.scores[0], state.scores[1]] : [null, null]),\n      phase: state.phase,\n      knocker: state.knocker,\n      winner: state.winner,\n      blitz: state.blitz,\n      reason: state.reason,\n      to_move: state.to_move,\n      drawn: state.drawn_by === seat ? state.drawn : null,\n      last_discard: state.last_discard\n    };\n  }\n};\n",
+  "server_code": "\"use strict\";\n\n// Thirty-one server code (v2 Game API).\n// 2-player adaptation of Thirty-one (also called Blitz / Scat), the\n// European card game first mentioned in the 15th century (Wikipedia:\n// \"Thirty-one (card game)\"). One fixed variant, documented everywhere in\n// this package:\n//   * Standard 52-card deck. Deal 3 cards each; turn the next card face up\n//     to start the discard pile; the rest is the stock.\n//   * On your turn, either draw the top card of the stock or the top card\n//     of the discard pile, then discard one card from your hand — or knock\n//     instead of drawing. A player who knocks gives the opponent one final\n//     turn (draw and discard, or stand), then hands are compared.\n//   * Hand value: cards of a single suit add up (ace 11, face cards 10,\n//     others face value); only the best suit counts. Three of a kind is\n//     worth 30.5. A hand worth exactly 31 in one suit is a blitz and wins\n//     at once. A blitz dealt in the opening hand wins at once (if both\n//     players were dealt a blitz, the player to move first wins).\n//   * Showdown: the higher hand value wins the round; a tie is a draw.\n//     If the stock runs out, the round ends in a showdown instead.\n//   * A portal match is a single round, so settling is by pot: the round\n//     winner, if human, takes the pot; if the winner is a computer, the\n//     only human gets the pot back; a drawn round splits the pot between\n//     the humans. The classic multi-life knock penalties do not apply to a\n//     single round: the higher hand wins outright, whoever knocked.\n// The opening shuffle uses the replayable platform private random stream.\n\nconst RANKS = [\"A\", \"K\", \"Q\", \"J\", \"10\", \"9\", \"8\", \"7\", \"6\", \"5\", \"4\", \"3\", \"2\"];\nconst RANK_VALUE = { A: 14, K: 13, Q: 12, J: 11, \"10\": 10, \"9\": 9, \"8\": 8, \"7\": 7, \"6\": 6, \"5\": 5, \"4\": 4, \"3\": 3, \"2\": 2 };\nconst CARD_VALUE = { A: 11, K: 10, Q: 10, J: 10, \"10\": 10, \"9\": 9, \"8\": 8, \"7\": 7, \"6\": 6, \"5\": 5, \"4\": 4, \"3\": 3, \"2\": 2 };\nconst SUITS = [\"S\", \"H\", \"D\", \"C\"];\nconst SUIT_ORDER = { S: 0, H: 1, D: 2, C: 3 };\nconst KNOCK_AT = 27; // computer knocks with a hand worth this much or more\nconst STAND_AT = 26; // computer stands on its final turn with this much or more\n\nfunction rankOf(card) {\n  return card.length === 3 ? card.slice(0, 2) : card[0];\n}\nfunction suitOf(card) {\n  return card[card.length - 1];\n}\nfunction isCard(card) {\n  return typeof card === \"string\" && card.length >= 2 && card.length <= 3 &&\n    Object.prototype.hasOwnProperty.call(RANK_VALUE, rankOf(card)) &&\n    Object.prototype.hasOwnProperty.call(SUIT_ORDER, suitOf(card)) &&\n    (card.length === 2 || rankOf(card) === \"10\");\n}\nfunction sortHand(hand) {\n  return hand.slice().sort(function (a, b) {\n    const s = SUIT_ORDER[suitOf(a)] - SUIT_ORDER[suitOf(b)];\n    if (s !== 0) return s;\n    return RANK_VALUE[rankOf(b)] - RANK_VALUE[rankOf(a)];\n  });\n}\nfunction shuffledDeck(rng) {\n  const deck = [];\n  for (const suit of SUITS) {\n    for (const rank of RANKS) deck.push(rank + suit);\n  }\n  for (let i = deck.length - 1; i > 0; i--) {\n    const j = Math.floor(rng() * (i + 1));\n    const tmp = deck[i];\n    deck[i] = deck[j];\n    deck[j] = tmp;\n  }\n  return deck;\n}\n// Value of exactly three cards: three of a kind is 30.5, otherwise the\n// best single-suit sum.\nfunction threeValue(cards) {\n  if (cards.length !== 3) return -1;\n  const r0 = rankOf(cards[0]);\n  if (rankOf(cards[1]) === r0 && rankOf(cards[2]) === r0) return 30.5;\n  const sums = { S: 0, H: 0, D: 0, C: 0 };\n  for (const c of cards) sums[suitOf(c)] += CARD_VALUE[rankOf(c)];\n  return Math.max(sums.S, sums.H, sums.D, sums.C);\n}\n// Value of a hand of 3 cards, or of a 4-card hand as the best value\n// reachable by discarding one card.\nfunction handValue(hand) {\n  if (hand.length === 3) return threeValue(hand);\n  if (hand.length === 4) {\n    let best = -1;\n    for (let i = 0; i < 4; i++) {\n      const rest = hand.slice(0, i).concat(hand.slice(i + 1));\n      best = Math.max(best, threeValue(rest));\n    }\n    return best;\n  }\n  return -1;\n}\nfunction scoresOf(hands) {\n  return [handValue(hands[0]), handValue(hands[1])];\n}\nfunction copyState(state) {\n  return {\n    hands: [state.hands[0].slice(), state.hands[1].slice()],\n    stock: state.stock.slice(),\n    discard: state.discard.slice(),\n    phase: state.phase,\n    knocker: state.knocker,\n    scores: [state.scores[0], state.scores[1]],\n    winner: state.winner,\n    blitz: state.blitz,\n    reason: state.reason,\n    to_move: state.to_move,\n    drawn: state.drawn,\n    drawn_by: state.drawn_by,\n    last_discard: state.last_discard\n  };\n}\nfunction settle(state, ctx) {\n  if (ctx.pot === 0) return {};\n  const humans = ctx.players.filter(function (p) { return p.kind === \"human\"; });\n  if (humans.length === 0) return {};\n  if (state.winner === -1) {\n    const share = Math.floor(ctx.pot / humans.length);\n    const payouts = {};\n    humans.forEach(function (p, i) {\n      payouts[p.id] = share + (i === 0 ? ctx.pot - share * humans.length : 0);\n    });\n    return payouts;\n  }\n  const winnerPlayer = ctx.players[state.winner];\n  if (winnerPlayer && winnerPlayer.kind === \"human\") {\n    const payouts = {};\n    payouts[winnerPlayer.id] = ctx.pot;\n    return payouts;\n  }\n  const payouts = {};\n  payouts[humans[0].id] = ctx.pot;\n  return payouts;\n}\nfunction showdown(next, ctx, reason) {\n  next.phase = \"over\";\n  next.reason = reason;\n  next.drawn = null;\n  next.drawn_by = null;\n  const s0 = next.scores[0];\n  const s1 = next.scores[1];\n  next.winner = s0 > s1 ? 0 : s1 > s0 ? 1 : -1;\n  return { state: next, turn: null, payouts: settle(next, ctx) };\n}\nfunction blitzWin(next, seat, ctx) {\n  next.phase = \"over\";\n  next.winner = seat;\n  next.blitz = true;\n  next.reason = \"blitz\";\n  next.drawn = null;\n  next.drawn_by = null;\n  return { state: next, turn: null, payouts: settle(next, ctx) };\n}\n// The card to discard from a 4-card hand to keep the best hand value;\n// ties are broken by discarding the lowest-value card.\nfunction bestDiscard(hand) {\n  let bestCard = hand[0];\n  let bestValue = -1;\n  let bestCardValue = Infinity;\n  for (const c of hand) {\n    const rest = hand.filter(function (x) { return x !== c; });\n    const v = threeValue(rest);\n    const cv = CARD_VALUE[rankOf(c)];\n    if (v > bestValue || (v === bestValue && cv < bestCardValue)) {\n      bestValue = v;\n      bestCardValue = cv;\n      bestCard = c;\n    }\n  }\n  return bestCard;\n}\n\nconst game = {\n  newMatch(ctx) {\n    const deck = shuffledDeck(ctx.random);\n    const hand0 = sortHand([deck[0], deck[2], deck[4]]);\n    const hand1 = sortHand([deck[1], deck[3], deck[5]]);\n    const discardTop = deck[6];\n    const stock = deck.slice(7);\n    const state = {\n      hands: [hand0, hand1],\n      stock: stock,\n      discard: [discardTop],\n      phase: \"draw\",\n      knocker: null,\n      scores: scoresOf([hand0, hand1]),\n      winner: null,\n      blitz: false,\n      reason: null,\n      to_move: 0,\n      drawn: null,\n      drawn_by: null,\n      last_discard: null\n    };\n    // A blitz dealt in the opening hand wins at once; if both players\n    // were dealt one, the player to move first wins.\n    if (state.scores[0] === 31) {\n      state.phase = \"over\";\n      state.winner = 0;\n      state.blitz = true;\n      state.reason = \"blitz\";\n      return { state: state, turn: null, payouts: settle(state, ctx) };\n    }\n    if (state.scores[1] === 31) {\n      state.phase = \"over\";\n      state.winner = 1;\n      state.blitz = true;\n      state.reason = \"blitz\";\n      return { state: state, turn: null, payouts: settle(state, ctx) };\n    }\n    return { state: state, turn: [ctx.players[0].id] };\n  },\n\n  applyMove(state, playerId, move, ctx) {\n    if (!move || typeof move !== \"object\" || Array.isArray(move) ||\n        typeof move.action !== \"string\" ||\n        [\"draw\", \"discard\", \"knock\", \"stand\"].indexOf(move.action) < 0) {\n      throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n    }\n    // Each action carries exactly its own fields; anything extra is malformed.\n    const keys = Object.keys(move).sort().join(\",\");\n    if (move.action === \"draw\" && keys !== \"action,source\") {\n      throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n    }\n    if (move.action === \"discard\" && keys !== \"action,card\") {\n      throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n    }\n    if ((move.action === \"knock\" || move.action === \"stand\") && keys !== \"action\") {\n      throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n    }\n    if (state.phase === \"over\") {\n      throw new InvalidMove(\"the game is over\");\n    }\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (seat < 0 || seat !== state.to_move) {\n      throw new InvalidMove(\"it is not your turn\");\n    }\n    const next = copyState(state);\n    if (move.action === \"draw\") {\n      if (state.phase !== \"draw\" && state.phase !== \"final_draw\") {\n        throw new InvalidMove(\"you must draw before discarding\");\n      }\n      if (move.source !== \"stock\" && move.source !== \"discard\") {\n        throw new InvalidMove(\"send a draw, discard, knock or stand move\");\n      }\n      let card;\n      if (move.source === \"stock\") {\n        if (next.stock.length === 0) throw new InvalidMove(\"the stock is empty\");\n        card = next.stock.pop();\n      } else {\n        if (next.discard.length === 0) throw new InvalidMove(\"the discard pile is empty\");\n        card = next.discard.pop();\n      }\n      next.hands[seat] = sortHand(next.hands[seat].concat([card]));\n      next.scores = scoresOf(next.hands);\n      next.drawn = card;\n      next.drawn_by = seat;\n      next.phase = state.phase === \"final_draw\" ? \"final_discard\" : \"discard\";\n      return { state: next, turn: [ctx.players[seat].id] };\n    }\n    if (move.action === \"discard\") {\n      if (state.phase !== \"discard\" && state.phase !== \"final_discard\") {\n        throw new InvalidMove(\"you must draw before discarding\");\n      }\n      if (typeof move.card !== \"string\" || !isCard(move.card)) {\n        throw new InvalidMove(\"send a card like AS\");\n      }\n      const hand = next.hands[seat];\n      if (hand.indexOf(move.card) < 0) {\n        throw new InvalidMove(\"that card is not in your hand\");\n      }\n      next.hands[seat] = hand.filter(function (c) { return c !== move.card; });\n      next.discard.push(move.card);\n      next.last_discard = move.card;\n      next.drawn = null;\n      next.drawn_by = null;\n      next.scores = scoresOf(next.hands);\n      if (next.scores[seat] === 31) return blitzWin(next, seat, ctx);\n      if (state.phase === \"final_discard\") return showdown(next, ctx, \"knock\");\n      if (next.stock.length === 0) return showdown(next, ctx, \"stock\");\n      next.phase = \"draw\";\n      next.to_move = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n    if (move.action === \"knock\") {\n      if (state.phase !== \"draw\") {\n        throw new InvalidMove(\"you cannot knock now\");\n      }\n      next.knocker = seat;\n      next.phase = \"final_draw\";\n      next.to_move = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n    // stand\n    if (state.phase !== \"final_draw\") {\n      throw new InvalidMove(\"you cannot stand now\");\n    }\n    return showdown(next, ctx, \"knock\");\n  },\n\n  computerMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    const hand = state.hands[seat];\n    const value = handValue(hand);\n    if (state.phase === \"discard\" || state.phase === \"final_discard\") {\n      return { action: \"discard\", card: bestDiscard(hand) };\n    }\n    if (state.phase === \"draw\" && value >= KNOCK_AT) {\n      return { action: \"knock\" };\n    }\n    // Decide what to draw: taking the discard is good only if it improves\n    // the best hand value after discarding.\n    const top = state.discard.length > 0 ? state.discard[state.discard.length - 1] : null;\n    if (top !== null) {\n      const improved = handValue(hand.concat([top]));\n      if (improved > value) return { action: \"draw\", source: \"discard\" };\n    }\n    if (state.phase === \"final_draw\" && value >= STAND_AT) {\n      return { action: \"stand\" };\n    }\n    return { action: \"draw\", source: \"stock\" };\n  },\n\n  randomMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (state.phase === \"discard\" || state.phase === \"final_discard\") {\n      const hand = state.hands[seat];\n      return { action: \"discard\", card: hand[Math.floor(ctx.random() * hand.length)] };\n    }\n    const options = [];\n    if (state.stock.length > 0) options.push({ action: \"draw\", source: \"stock\" });\n    if (state.discard.length > 0) options.push({ action: \"draw\", source: \"discard\" });\n    if (state.phase === \"draw\") options.push({ action: \"knock\" });\n    if (state.phase === \"final_draw\") options.push({ action: \"stand\" });\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n\n  viewFor(state, playerId, ctx) {\n    const seat = playerId === null ? -1 : ctx.players.findIndex(function (p) { return p.id === playerId; });\n    const over = state.phase === \"over\";\n    return {\n      hand: seat >= 0 ? state.hands[seat].slice() : [],\n      hands: over ? [state.hands[0].slice(), state.hands[1].slice()] : null,\n      hand_counts: [state.hands[0].length, state.hands[1].length],\n      stock_count: state.stock.length,\n      discard_top: state.discard.length > 0 ? state.discard[state.discard.length - 1] : null,\n      scores: seat >= 0\n        ? [state.scores[seat], over ? state.scores[1 - seat] : null]\n        : (over ? [state.scores[0], state.scores[1]] : [null, null]),\n      phase: state.phase,\n      knocker: state.knocker,\n      winner: state.winner,\n      blitz: state.blitz,\n      reason: state.reason,\n      to_move: state.to_move,\n      drawn: state.drawn_by === seat ? state.drawn : null,\n      last_discard: state.last_discard\n    };\n  }\n};\n",
   "rules": "Thirty-one is a two-player adaptation of the European card game Thirty-one, also called Blitz or Scat, first mentioned in the 15th century (Wikipedia: \"Thirty-one (card game)\"). This package uses one fixed variant, described here. Setup: shuffle a standard 52-card deck and deal three cards to each player; turn the next card face up to start the discard pile; the rest of the deck is the stock. Seat 0 moves first. Hand value: cards of a single suit add up — aces count 11, face cards (kings, queens, jacks) count 10, all other cards count their face value. Only the cards of one suit count together, so a hand is worth the best single-suit total in it. Three cards of the same rank from different suits are worth 30.5 points. A hand worth exactly 31 in one suit is a blitz. Turn: on your turn, either draw the top card of the stock or take the top card of the discard pile, then discard one card from your hand. Instead of drawing, you may knock: your opponent then gets one final turn (draw and discard, or stand), and then the hands are compared. Blitz: a hand worth exactly 31 wins at once. A blitz made by discarding wins immediately; a blitz dealt in the opening hand also wins at once, and if both players were dealt a blitz, the player to move first wins. Showdown: after a knock and the final turn, or when the stock runs out, the higher hand value wins the round; a tie is a draw. Settling: this game is a single round, so there are no lives. If there is a pot, the round winner, if human, takes it; if the winner is a computer, the only human gets the pot back; a drawn round splits the pot between the humans. Players cannot join or leave mid-round. Against the computer, it takes the discard when that improves its hand, otherwise draws from the stock, discards the card that keeps the best hand value, knocks with a hand worth 27 or more, and stands on its final turn with 26 or more.",
   "ui_instructions": "Tap the stock or discard pile to draw, then tap a card in your hand to discard it. Knock or stand using the button.",
   "tutorial": {
@@ -405,71 +405,71 @@
         "state": {
           "hands": [
             [
-              "JH",
-              "10D",
-              "2D"
+              "4H",
+              "8C",
+              "3C"
             ],
             [
-              "AH",
-              "2H",
-              "QD"
+              "6S",
+              "5S",
+              "10H"
             ]
           ],
           "stock": [
-            "QS",
-            "QH",
-            "AS",
-            "7H",
-            "4C",
-            "5C",
-            "9D",
-            "5H",
-            "3C",
+            "JH",
             "KC",
-            "JD",
             "7D",
-            "6S",
-            "8C",
-            "10C",
-            "4S",
-            "4D",
-            "10H",
-            "AD",
-            "6D",
-            "QC",
-            "9S",
-            "3D",
-            "JS",
-            "3S",
-            "JC",
-            "7C",
-            "5D",
-            "8H",
-            "10S",
-            "AC",
-            "8D",
-            "8S",
-            "KD",
-            "KS",
             "6C",
+            "JD",
+            "AC",
+            "QS",
             "2C",
-            "6H",
-            "4H",
-            "5S",
-            "9H",
+            "10C",
+            "QH",
+            "3S",
+            "4C",
+            "5H",
+            "4D",
             "2S",
+            "2D",
+            "KS",
+            "7C",
             "KH",
+            "JC",
+            "QD",
+            "10S",
+            "9S",
+            "KD",
+            "3D",
+            "8D",
+            "5D",
+            "9H",
+            "QC",
+            "AH",
+            "7S",
+            "7H",
+            "10D",
+            "8S",
+            "9C",
+            "9D",
             "3H",
-            "7S"
+            "4S",
+            "6H",
+            "8H",
+            "2H",
+            "6D",
+            "5C",
+            "JS",
+            "AS"
           ],
           "discard": [
-            "9C"
+            "AD"
           ],
           "phase": "draw",
           "knocker": null,
           "scores": [
-            12,
-            13
+            11,
+            11
           ],
           "winner": null,
           "blitz": false,
@@ -487,9 +487,9 @@
         },
         "view_of_mover": {
           "hand": [
-            "JH",
-            "10D",
-            "2D"
+            "4H",
+            "8C",
+            "3C"
           ],
           "hands": null,
           "hand_counts": [
@@ -497,9 +497,9 @@
             3
           ],
           "stock_count": 45,
-          "discard_top": "9C",
+          "discard_top": "AD",
           "scores": [
-            12,
+            11,
             null
           ],
           "phase": "draw",
@@ -513,9 +513,9 @@
         },
         "view_of_other": {
           "hand": [
-            "AH",
-            "2H",
-            "QD"
+            "6S",
+            "5S",
+            "10H"
           ],
           "hands": null,
           "hand_counts": [
@@ -523,9 +523,9 @@
             3
           ],
           "stock_count": 45,
-          "discard_top": "9C",
+          "discard_top": "AD",
           "scores": [
-            13,
+            11,
             null
           ],
           "phase": "draw",
@@ -540,77 +540,77 @@
         "expected_state": {
           "hands": [
             [
-              "7S",
-              "JH",
-              "10D",
-              "2D"
+              "AS",
+              "4H",
+              "8C",
+              "3C"
             ],
             [
-              "AH",
-              "2H",
-              "QD"
+              "6S",
+              "5S",
+              "10H"
             ]
           ],
           "stock": [
-            "QS",
-            "QH",
-            "AS",
-            "7H",
-            "4C",
-            "5C",
-            "9D",
-            "5H",
-            "3C",
+            "JH",
             "KC",
-            "JD",
             "7D",
-            "6S",
-            "8C",
-            "10C",
-            "4S",
-            "4D",
-            "10H",
-            "AD",
-            "6D",
-            "QC",
-            "9S",
-            "3D",
-            "JS",
-            "3S",
-            "JC",
-            "7C",
-            "5D",
-            "8H",
-            "10S",
-            "AC",
-            "8D",
-            "8S",
-            "KD",
-            "KS",
             "6C",
+            "JD",
+            "AC",
+            "QS",
             "2C",
-            "6H",
-            "4H",
-            "5S",
-            "9H",
+            "10C",
+            "QH",
+            "3S",
+            "4C",
+            "5H",
+            "4D",
             "2S",
+            "2D",
+            "KS",
+            "7C",
             "KH",
-            "3H"
+            "JC",
+            "QD",
+            "10S",
+            "9S",
+            "KD",
+            "3D",
+            "8D",
+            "5D",
+            "9H",
+            "QC",
+            "AH",
+            "7S",
+            "7H",
+            "10D",
+            "8S",
+            "9C",
+            "9D",
+            "3H",
+            "4S",
+            "6H",
+            "8H",
+            "2H",
+            "6D",
+            "5C",
+            "JS"
           ],
           "discard": [
-            "9C"
+            "AD"
           ],
           "phase": "discard",
           "knocker": null,
           "scores": [
-            12,
-            13
+            11,
+            11
           ],
           "winner": null,
           "blitz": false,
           "reason": null,
           "to_move": 0,
-          "drawn": "7S",
+          "drawn": "AS",
           "drawn_by": 0,
           "last_discard": null
         },
@@ -619,10 +619,10 @@
         ],
         "expected_view_of_mover": {
           "hand": [
-            "7S",
-            "JH",
-            "10D",
-            "2D"
+            "AS",
+            "4H",
+            "8C",
+            "3C"
           ],
           "hands": null,
           "hand_counts": [
@@ -630,9 +630,9 @@
             3
           ],
           "stock_count": 44,
-          "discard_top": "9C",
+          "discard_top": "AD",
           "scores": [
-            12,
+            11,
             null
           ],
           "phase": "discard",
@@ -641,14 +641,14 @@
           "blitz": false,
           "reason": null,
           "to_move": 0,
-          "drawn": "7S",
+          "drawn": "AS",
           "last_discard": null
         },
         "expected_view_of_other": {
           "hand": [
-            "AH",
-            "2H",
-            "QD"
+            "6S",
+            "5S",
+            "10H"
           ],
           "hands": null,
           "hand_counts": [
@@ -656,9 +656,9 @@
             3
           ],
           "stock_count": 44,
-          "discard_top": "9C",
+          "discard_top": "AD",
           "scores": [
-            13,
+            11,
             null
           ],
           "phase": "discard",

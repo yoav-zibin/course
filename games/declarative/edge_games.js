@@ -244,6 +244,9 @@ const game = {
   },
   viewFor(state, id, ctx) {
     const s = JSON.parse(JSON.stringify(state));
+    // Exploration cards become public when drawn. The shuffled future order
+    // remains authoritative private state, including for spectators/history.
+    if (KIND === 'cartographers') s.deck = s.deck.slice(0, s.round + 1);
     // Only the active viewer receives interactive affordances; the public board is identical for everyone.
     s.legal = id === ctx.players[state.turn].id && !state.over ? legal(state) : [];
     return s;

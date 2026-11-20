@@ -27,24 +27,25 @@ export function useNotificationDelivery(p: Portal, onOpen: (url: string) => Prom
     const account = {...p.account}, base = p.baseUrl;
     const api = new PortalApi(base, () => latest.current.locale);
     let active = true;
+    const stillCurrent = () => active && latest.current.account?.id === account.id && latest.current.baseUrl === base;
     const manager = createNotifications({
       baseUrl: base, accountId: account.id,
       request: (method, path, body) => api.request(method, path, body, account),
-      onForeground: () => {if (active) void latest.current.actions.refreshNotifications().catch(() => {});},
-      onOpen: payload => {if (active && payload.url) void (async () => {
+      onForeground: () => {if (stillCurrent()) void latest.current.actions.refreshNotifications().catch(() => {});},
+      onOpen: payload => {if (stillCurrent() && payload.url) void (async () => {
         await open.current(payload.url!);
-        if (!active || latest.current.account?.id !== account.id || latest.current.baseUrl !== base) return;
+        if (!stillCurrent()) return;
         if (payload.notification_id) await latest.current.actions.readNotification(payload.notification_id);
-        if (active) await latest.current.actions.refreshNotifications();
-      })().catch(reason => {if (active) error.current(reason instanceof Error ? reason.message : String(reason));});},
+        if (stillCurrent()) await latest.current.actions.refreshNotifications();
+      })().catch(reason => {if (stillCurrent()) error.current(reason instanceof Error ? reason.message : String(reason));});},
     });
     current.current = manager;
     const refresh = async () => {
       try {
         if ((latest.current.profile?.notifications_enabled ?? latest.current.account?.notifications_enabled) !== false) await manager.reconcile();
         else await manager.disable();
-        const result = await manager.status(); if (active) setStatus(result);
-      } catch {if (active) setStatus({permission: 'unavailable', subscribed: false});}
+        const result = await manager.status(); if (stillCurrent()) setStatus(result);
+      } catch {if (stillCurrent()) setStatus({permission: 'unavailable', subscribed: false});}
     };
     void refresh();
     const resume = AppState.addEventListener('change', value => {if (value === 'active') void refresh();});
@@ -88,7 +89,11 @@ export function useNotificationDelivery(p: Portal, onOpen: (url: string) => Prom
         if (!stillCurrent()) return;
         await manager.disable();
       }
-      if (stillCurrent()) setStatus(await manager.status());
+      if (stillCurrent()) {const result = await manager.status(); if (stillCurrent()) setStatus(result);}
+    } catch (reason) {
+      // Enrollment/removal uses the captured account's API directly. Keep its
+      // late failures out of the next account's notices and report screenshots.
+      if (stillCurrent()) throw reason;
     } finally {if (stillCurrent()) setBusy(false);}
   }, []);
   const enableDevice = useCallback(async () => {
@@ -101,6 +106,8 @@ export function useNotificationDelivery(p: Portal, onOpen: (url: string) => Prom
       setStatus(result);
       if (['granted','denied'].includes(result.permission)) await latest.current.actions.updateProfile({notification_prompt_seen:true,...(result.subscribed ? {notifications_enabled:true} : {})});
       if (result.permission !== 'granted' || !result.subscribed) throw new Error(copyText(result.reason || (result.permission === 'denied' ? 'Notifications are blocked. Allow them in your browser or device settings.' : 'Push notifications are unavailable on this device.')));
+    } catch (reason) {
+      if (stillCurrent()) throw reason;
     } finally {if (stillCurrent()) setBusy(false);}
   }, []);
   return {status, busy, setEnabled, enableDevice};

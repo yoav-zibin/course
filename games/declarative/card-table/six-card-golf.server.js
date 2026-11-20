@@ -122,7 +122,13 @@ function reshuffle(state, ctx) {
   if (state.discard.length > 1) {
     const top = state.discard.pop();
     const rest = state.discard;
+    // Recycled cards were public. New opaque labels prevent their old labels
+    // from identifying the hidden stock's next card after the shuffle.
+    const previous = [...state.hands.flat(), ...rest, top];
+    if (state.drew) previous.push(state.drew);
+    let nextUid = Math.max(...previous.map(card => card.uid)) + 1;
     shuffleInPlace(rest, ctx);
+    rest.forEach(card => { card.uid = nextUid++; });
     state.stock = rest;
     state.discard = [top];
     state.log += ' | Reshuffled.';

@@ -7,7 +7,7 @@
   ],
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
-  "server_code": "\"use strict\";\n\n// Dos server code (v2 Game API).\n// 2-player Dos (Mattel, 2018; rules after the official FRM36 instructions,\n// as reproduced in the manuals.plus transcription of the instruction sheet).\n// This package fixes ONE variant, documented in `rules`:\n//   * 108-card deck: per colour (R, B, G, Y): three each of 1, 3, 4, 5;\n//     two each of 6, 7, 8, 9, 10; two Wild # cards. Plus 12 Wild DOS cards\n//     (colourless, counting as a 2 of any colour). There is no number 2 card.\n//   * Deal 7 cards each; turn two cards face up to form the Center Row.\n//     A Wild # is never a starting center card: it is skipped and the next\n//     card is used instead.\n//   * On your turn, match one or more center cards, at most once per card,\n//     or draw:\n//     - Single Match: one card whose number equals a center card's number.\n//     - Double Match: two cards whose numbers add up to a center card's number.\n//     - Single Color Match: a single match where the played card also has\n//       the center card's colour. Double Color Match: a double match where\n//       both played cards have the center card's colour. Each colour match\n//       earns one bonus: one extra card from your hand face-up into the\n//       Center Row at the end of your turn. Each Double Color Match also\n//       makes every other player draw one card.\n//     - Wild # (coloured) counts as any number 1-10 in its colour; you\n//       declare the number when you play it. A Wild # in the Center Row\n//       counts as the number the matcher declares for it.\n//     - Wild DOS counts as a 2 of any colour; you declare its colour when\n//       you play it. A Wild DOS in the Center Row counts as the colour the\n//       matcher declares for it.\n//   * Ending your turn: all cards you played, including the center cards\n//     you played them on, go to the discard pile. The Center Row is then\n//     refilled from the deck until it has at least two cards, and then any\n//     bonus cards are put face-up into the Center Row (there is no maximum\n//     number of cards in the Center Row).\n//   * Draw: if you cannot (or do not want to) match, draw one card. If the\n//     drawn card lets you match, you may play a match at once or pass. If\n//     you have drawn and still cannot match, put one card from your hand\n//     face up in the Center Row and your turn ends.\n//   * First player to shed all cards wins the hand. The \"DOS!\" shout when\n//     holding two cards is omitted in this digital version (no penalty).\n//   * If the draw pile runs out it is refilled by reshuffling the discard\n//     pile. If a player must draw and no card can be drawn at all, the hand\n//     ends and the player with the fewest cards in hand wins (tie: fewest\n//     points in hand — number cards count their face value, Wild DOS 20,\n//     Wild # 40 — then the lowest seat).\n//   * A portal match is a single hand; there is no 200-point race.\n// The opening shuffle is derived deterministically from the player ids\n// and the pot (FNV-1a hash + splitmix-style PRNG), never from\n// ctx.random(), so newMatch is fully verifiable. Reshuffles use a\n// deterministic hash of the discard pile and the move count, never\n// ctx.random(), so every applyMove result is fully reproducible.\n\nconst COLORS = [\"R\", \"B\", \"G\", \"Y\"];\nconst COLOR_ORDER = { R: 0, B: 1, G: 2, Y: 3 };\nconst WILD_DOS = \"WD\";\n\nfunction colorOf(card) {\n  if (card === WILD_DOS) return null;\n  return card[0];\n}\nfunction isWildDos(card) { return card === WILD_DOS; }\nfunction isWildHash(card) { return typeof card === \"string\" && card.length === 2 && card[1] === \"#\"; }\nfunction isNumberCard(card) {\n  if (typeof card !== \"string\") return false;\n  if (isWildDos(card) || isWildHash(card)) return false;\n  return /^[RBGY](1|3|4|5|6|7|8|9|10)$/.test(card);\n}\nfunction isCard(card) { return isNumberCard(card) || isWildDos(card) || isWildHash(card); }\nfunction numOf(card) {\n  if (isWildDos(card)) return 2;\n  if (isWildHash(card)) return null;\n  return parseInt(card.slice(1), 10);\n}\nfunction pointsOf(card) {\n  if (isWildDos(card)) return 20;\n  if (isWildHash(card)) return 40;\n  return numOf(card);\n}\nfunction cardSortKey(card) {\n  if (isWildDos(card)) return [4, 0];\n  const c = colorOf(card);\n  if (isWildHash(card)) return [COLOR_ORDER[c], 11];\n  return [COLOR_ORDER[c], numOf(card)];\n}\nfunction sortHand(hand) {\n  return hand.slice().sort(function (a, b) {\n    const ka = cardSortKey(a), kb = cardSortKey(b);\n    if (ka[0] !== kb[0]) return ka[0] - kb[0];\n    return ka[1] - kb[1];\n  });\n}\nfunction hashString(s) {\n  let h = 2166136261 >>> 0;\n  for (let i = 0; i < s.length; i++) {\n    h ^= s.charCodeAt(i);\n    h = Math.imul(h, 16777619);\n  }\n  return h >>> 0;\n}\nfunction rngFromSeed(seed) {\n  let a = seed >>> 0;\n  return function () {\n    a |= 0;\n    a = (a + 0x6d2b79f5) | 0;\n    let t = Math.imul(a ^ (a >>> 15), 1 | a);\n    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}\nfunction fullDeck() {\n  const deck = [];\n  for (const color of COLORS) {\n    for (const n of [1, 3, 4, 5]) for (let k = 0; k < 3; k++) deck.push(color + n);\n    for (const n of [6, 7, 8, 9, 10]) for (let k = 0; k < 2; k++) deck.push(color + n);\n    for (let k = 0; k < 2; k++) deck.push(color + \"#\");\n  }\n  for (let k = 0; k < 12; k++) deck.push(WILD_DOS);\n  return deck;\n}\nfunction shuffledDeck(rng) {\n  const deck = fullDeck();\n  for (let i = deck.length - 1; i > 0; i--) {\n    const j = Math.floor(rng() * (i + 1));\n    const tmp = deck[i];\n    deck[i] = deck[j];\n    deck[j] = tmp;\n  }\n  return deck;\n}\n// Deterministic reshuffle of the discard pile: seeded by the discard\n// contents and the move count, so the result is reproducible.\nfunction reshuffledDiscard(discard, moveCount) {\n  const rng = rngFromSeed(hashString(discard.join(\",\") + \"|\" + String(moveCount)));\n  const deck = discard.slice();\n  for (let i = deck.length - 1; i > 0; i--) {\n    const j = Math.floor(rng() * (i + 1));\n    const tmp = deck[i];\n    deck[i] = deck[j];\n    deck[j] = tmp;\n  }\n  return deck;\n}\n// The effective {num, color} of a card as played, from its declaration.\n// A declaration that was not given stays null (never undefined), so every\n// center entry always carries both fields, as the state schema requires.\nfunction playedEntry(card, ref) {\n  if (isWildDos(card)) return { id: card, num: 2, color: ref.color !== undefined ? ref.color : null };\n  if (isWildHash(card)) return { id: card, num: ref.num !== undefined ? ref.num : null, color: colorOf(card) };\n  return { id: card, num: numOf(card), color: colorOf(card) };\n}\n// The effective target of a center card, as the matcher declares it.\nfunction targetOf(entry, placement) {\n  let num = entry.num, color = entry.color;\n  if (isWildHash(entry.id) && placement && typeof placement.centerNum === \"number\") num = placement.centerNum;\n  if (isWildDos(entry.id) && placement && typeof placement.centerColor === \"string\") color = placement.centerColor;\n  return { num: num, color: color };\n}\nfunction copyState(state) {\n  return {\n    deck: state.deck.slice(),\n    discard: state.discard.slice(),\n    center: state.center.map(function (e) { return { id: e.id, num: e.num, color: e.color }; }),\n    hands: [state.hands[0].slice(), state.hands[1].slice()],\n    turn: state.turn,\n    phase: state.phase,\n    drawn_card: state.drawn_card,\n    winner: state.winner,\n    moves: state.moves\n  };\n}\nfunction handPoints(hand) {\n  let total = 0;\n  for (const c of hand) total += pointsOf(c);\n  return total;\n}\nfunction settle(state, ctx) {\n  if (ctx.pot === 0) return {};\n  const humans = ctx.players.filter(function (p) { return p.kind === \"human\"; });\n  if (humans.length === 0) return {};\n  if (state.winner === -1) {\n    const share = Math.floor(ctx.pot / humans.length);\n    const payouts = {};\n    humans.forEach(function (p, i) {\n      payouts[p.id] = share + (i === 0 ? ctx.pot - share * humans.length : 0);\n    });\n    return payouts;\n  }\n  const winnerPlayer = ctx.players[state.winner];\n  if (winnerPlayer && winnerPlayer.kind === \"human\") {\n    const payouts = {};\n    payouts[winnerPlayer.id] = ctx.pot;\n    return payouts;\n  }\n  const payouts = {};\n  payouts[humans[0].id] = ctx.pot;\n  return payouts;\n}\n// Draw one card from the deck, refilling it from the discard pile when\n// empty. Returns the card, or null when no card can be drawn at all.\nfunction drawCard(next, moveCount) {\n  if (next.deck.length === 0) {\n    if (next.discard.length === 0) return null;\n    next.deck = reshuffledDiscard(next.discard, moveCount);\n    next.discard = [];\n  }\n  return next.deck.pop();\n}\n// Refill the Center Row from the deck until it has at least two cards.\nfunction refillCenter(next, moveCount) {\n  while (next.center.length < 2) {\n    const card = drawCard(next, moveCount);\n    if (card === null) return;\n    next.center.push(playedEntry(card, {}));\n  }\n}\n// All legal single-center-card placements for `seat` in `state`, as\n// {pile, cards:[ref...], colorMatch, doubleColor, score, centerDecl}.\n// A ref is {i, num?, color?} with i a hand index; centerDecl carries the\n// declaration for a wild center card ({centerNum} for a Wild # center,\n// {centerColor} for a Wild DOS center). Used by applyMove validation,\n// computerMove and randomMove, so the three can never drift apart.\n// A Wild # in the Center Row can be any number 1-10 (the matcher declares\n// it); a Wild DOS in the Center Row is a 2 of any colour (the matcher\n// declares its colour, so a single match on it is always a colour match,\n// and a double match on it is a colour match when both played cards share\n// one colour).\nfunction allPlacements(state, seat) {\n  const hand = state.hands[seat];\n  const out = [];\n  for (let pile = 0; pile < state.center.length; pile++) {\n    const top = state.center[pile];\n    const wdTop = isWildDos(top.id);\n    const hashTop = isWildHash(top.id);\n    const fixedColor = wdTop ? null : top.color;\n    const targetNums = hashTop ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] : [wdTop ? 2 : top.num];\n    for (const targetNum of targetNums) {\n      // Single-card placements.\n      for (let i = 0; i < hand.length; i++) {\n        const card = hand[i];\n        if (isWildHash(card)) {\n          // A Wild # on a Wild # center needs only one declaration pair.\n          if (hashTop && targetNum !== 1) continue;\n          const ref = { i: i, num: targetNum };\n          const centerDecl = {};\n          if (hashTop) centerDecl.centerNum = targetNum;\n          let colorMatch;\n          if (wdTop) { colorMatch = true; centerDecl.centerColor = colorOf(card); }\n          else colorMatch = colorOf(card) === fixedColor;\n          out.push({ pile: pile, cards: [ref], colorMatch: colorMatch, doubleColor: false,\n            score: 40 + (colorMatch ? 5 : 0), centerDecl: centerDecl });\n        } else if (isWildDos(card)) {\n          if (targetNum !== 2) continue;\n          const effColor = wdTop ? \"R\" : fixedColor;\n          const ref = { i: i, color: effColor };\n          const centerDecl = {};\n          if (hashTop) centerDecl.centerNum = 2;\n          if (wdTop) centerDecl.centerColor = \"R\";\n          out.push({ pile: pile, cards: [ref], colorMatch: true, doubleColor: false,\n            score: 25, centerDecl: centerDecl });\n        } else if (numOf(card) === targetNum) {\n          const ref = { i: i };\n          const centerDecl = {};\n          if (hashTop) centerDecl.centerNum = targetNum;\n          let colorMatch;\n          if (wdTop) { colorMatch = true; centerDecl.centerColor = colorOf(card); }\n          else colorMatch = colorOf(card) === fixedColor;\n          out.push({ pile: pile, cards: [ref], colorMatch: colorMatch, doubleColor: false,\n            score: numOf(card) + (colorMatch ? 5 : 0), centerDecl: centerDecl });\n        }\n      }\n      // Two-card placements (sum to the target number).\n      for (let i = 0; i < hand.length; i++) {\n        for (let j = i + 1; j < hand.length; j++) {\n          const c = pairCombo(hand[i], i, hand[j], j, targetNum, fixedColor, wdTop, hashTop);\n          if (c) {\n            out.push({ pile: pile, cards: c.cards, colorMatch: c.colorMatch,\n              doubleColor: c.colorMatch, score: c.score, centerDecl: c.centerDecl });\n          }\n        }\n      }\n    }\n  }\n  return out;\n}\n// One canonical way two hand cards (a, b) can sum to `target` as a\n// double match on a center card whose colour is `fixedColor` (null when\n// the center card is a Wild DOS and its colour is declared by the\n// matcher). The number a Wild # must take is forced by the target and\n// the other card's value, so enumerating every split would only\n// duplicate equivalent moves. Returns null when the pair cannot sum\n// to the target.\nfunction pairCombo(a, ia, b, ib, target, fixedColor, wdTop, hashTop) {\n  const fixed = function (card) {\n    if (isWildDos(card)) return 2;\n    if (isWildHash(card)) return null;\n    return numOf(card);\n  };\n  const fa = fixed(a), fb = fixed(b);\n  let na, nb;\n  if (fa !== null && fb !== null) { na = fa; nb = fb; }\n  else if (fa !== null) { na = fa; nb = target - fa; }\n  else if (fb !== null) { nb = fb; na = target - fb; }\n  else { na = Math.max(1, target - 10); nb = target - na; }\n  if (na < 1 || na > 10 || nb < 1 || nb > 10 || na + nb !== target) return null;\n  const ra = { i: ia }, rb = { i: ib };\n  if (isWildHash(a)) ra.num = na;\n  if (isWildHash(b)) rb.num = nb;\n  // The colour the matcher declares for a Wild DOS center card: the\n  // colour of the first non-Wild-DOS card (or R if both are Wild DOS).\n  let declaredColor = fixedColor;\n  if (wdTop) {\n    declaredColor = !isWildDos(a) ? colorOf(a) : !isWildDos(b) ? colorOf(b) : \"R\";\n  }\n  if (isWildDos(a)) ra.color = declaredColor;\n  if (isWildDos(b)) rb.color = declaredColor;\n  const effColorA = isWildDos(a) ? declaredColor : colorOf(a);\n  const effColorB = isWildDos(b) ? declaredColor : colorOf(b);\n  const colorMatch = effColorA === declaredColor && effColorB === declaredColor;\n  const centerDecl = {};\n  if (hashTop) centerDecl.centerNum = target;\n  if (wdTop) centerDecl.centerColor = declaredColor;\n  const score = pointsOf(a) + pointsOf(b) + (colorMatch ? 20 : 0);\n  return { cards: [ra, rb], colorMatch: colorMatch, score: score, centerDecl: centerDecl };\n}\n// Validate one card reference against the hand. Returns the card id.\n// Throws InvalidMove with the exact message for the problem.\nfunction refCard(hand, used, ref) {\n  if (!ref || typeof ref !== \"object\" || !Number.isInteger(ref.i)) {\n    throw new InvalidMove(\"that is not a valid card\");\n  }\n  if (ref.i < 0 || ref.i >= hand.length) {\n    throw new InvalidMove(\"that card is not in your hand\");\n  }\n  if (used[ref.i]) {\n    throw new InvalidMove(\"that card is already used\");\n  }\n  used[ref.i] = true;\n  const card = hand[ref.i];\n  if (isWildHash(card)) {\n    if (!Number.isInteger(ref.num) || ref.num < 1 || ref.num > 10) {\n      throw new InvalidMove(\"that is not a valid number\");\n    }\n  } else if (isWildDos(card)) {\n    if (typeof ref.color !== \"string\" || COLORS.indexOf(ref.color) < 0) {\n      throw new InvalidMove(\"that is not a valid color\");\n    }\n  }\n  return card;\n}\n\nconst game = {\n  newMatch(ctx) {\n    const rng = rngFromSeed(hashString(ctx.players.map(function (p) { return p.id; }).join(\"|\") + \"|\" + String(ctx.pot)));\n    const deck = shuffledDeck(rng);\n    const hand0 = sortHand([deck[0], deck[2], deck[4], deck[6], deck[8], deck[10], deck[12]]);\n    const hand1 = sortHand([deck[1], deck[3], deck[5], deck[7], deck[9], deck[11], deck[13]]);\n    // Center Row: the next two non-Wild-# cards; Wild # cards stay in the deck.\n    const rest = deck.slice(14);\n    const centerCards = [];\n    const remaining = [];\n    for (const c of rest) {\n      if (centerCards.length < 2 && !isWildHash(c)) centerCards.push(c);\n      else remaining.push(c);\n    }\n    const state = {\n      deck: remaining,\n      discard: [],\n      center: centerCards.map(function (c) { return playedEntry(c, {}); }),\n      hands: [hand0, hand1],\n      turn: 0,\n      phase: \"play\",\n      drawn_card: null,\n      winner: null,\n      moves: 0\n    };\n    return { state: state, turn: [ctx.players[0].id] };\n  },\n\n  applyMove(state, playerId, move, ctx) {\n    if (!move || typeof move !== \"object\" || Array.isArray(move)) {\n      throw new InvalidMove(\"send a match, draw or pass move\");\n    }\n    if (state.phase === \"over\") {\n      throw new InvalidMove(\"the game is over\");\n    }\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (seat < 0 || seat !== state.turn) {\n      throw new InvalidMove(\"it is not your turn\");\n    }\n    if (typeof move.type !== \"string\" || (move.type !== \"match\" && move.type !== \"draw\" && move.type !== \"pass\" && move.type !== \"add_center\")) {\n      throw new InvalidMove(\"send a match, draw or pass move\");\n    }\n    const next = copyState(state);\n    next.moves = state.moves + 1;\n\n    if (move.type === \"pass\") {\n      if (state.phase !== \"after_draw\") {\n        throw new InvalidMove(\"you can only pass after drawing\");\n      }\n      next.phase = \"play\";\n      next.drawn_card = null;\n      next.turn = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n\n    if (move.type === \"add_center\") {\n      if (state.phase !== \"add_center\") {\n        throw new InvalidMove(\"you can only add a card to the center row after drawing\");\n      }\n      if (!move.card || typeof move.card !== \"object\") {\n        throw new InvalidMove(\"that is not a valid card\");\n      }\n      const used = {};\n      const card = refCard(state.hands[seat], used, move.card);\n      next.hands[seat] = next.hands[seat].filter(function (c, i) { return i !== move.card.i; });\n      next.center.push(playedEntry(card, move.card));\n      next.phase = \"play\";\n      next.drawn_card = null;\n      next.turn = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n\n    if (move.type === \"draw\") {\n      if (state.phase !== \"play\") {\n        throw new InvalidMove(\"you cannot draw now\");\n      }\n      const drawn = drawCard(next, ctx.move_count);\n      if (drawn === null) {\n        // Nothing left to draw anywhere: fewest cards wins the hand.\n        next.phase = \"over\";\n        const c0 = next.hands[0].length, c1 = next.hands[1].length;\n        let winner = 0;\n        if (c1 < c0) winner = 1;\n        else if (c0 === c1) {\n          const p0 = handPoints(next.hands[0]), p1 = handPoints(next.hands[1]);\n          winner = p1 < p0 ? 1 : 0;\n        }\n        next.winner = winner;\n        return { state: next, turn: null, payouts: settle(next, ctx) };\n      }\n      next.hands[seat] = sortHand(next.hands[seat].concat([drawn]));\n      // If the drawn card lets the player match, they keep the turn and\n      // must play a match or pass; otherwise they must put one card from\n      // their hand face up in the Center Row.\n      if (allPlacements(next, seat).length > 0) {\n        next.phase = \"after_draw\";\n        next.drawn_card = drawn;\n        return { state: next, turn: [ctx.players[seat].id] };\n      }\n      next.phase = \"add_center\";\n      next.drawn_card = drawn;\n      return { state: next, turn: [ctx.players[seat].id] };\n    }\n\n    // move.type === \"match\"\n    if (state.phase !== \"play\" && state.phase !== \"after_draw\") {\n      throw new InvalidMove(\"you cannot match now\");\n    }\n    if (!Array.isArray(move.placements) || move.placements.length === 0) {\n      throw new InvalidMove(\"send a match, draw or pass move\");\n    }\n    const bonus = Array.isArray(move.bonus) ? move.bonus : [];\n    const hand = state.hands[seat];\n    const used = {};\n    const placements = [];\n    const seenPiles = {};\n    let colorMatches = 0;\n    let doubleColors = 0;\n    for (const pl of move.placements) {\n      if (!pl || typeof pl !== \"object\" || Array.isArray(pl)) {\n        throw new InvalidMove(\"that is not a valid card\");\n      }\n      if (!Number.isInteger(pl.pile) || pl.pile < 0 || pl.pile >= state.center.length) {\n        throw new InvalidMove(\"that pile does not exist\");\n      }\n      if (seenPiles[pl.pile]) {\n        throw new InvalidMove(\"you cannot match that pile twice\");\n      }\n      seenPiles[pl.pile] = true;\n      if (!Array.isArray(pl.cards) || pl.cards.length < 1 || pl.cards.length > 2) {\n        throw new InvalidMove(\"you must play one or two cards\");\n      }\n      const top = state.center[pl.pile];\n      // A matcher must declare what a wild center card counts as.\n      if (isWildHash(top.id) && pl.centerNum === undefined) {\n        throw new InvalidMove(\"declare the number of the wild card\");\n      }\n      if (isWildDos(top.id) && pl.centerColor === undefined) {\n        throw new InvalidMove(\"declare the color of the wild card\");\n      }\n      if (isWildHash(top.id) && pl.centerNum !== undefined && (!Number.isInteger(pl.centerNum) || pl.centerNum < 1 || pl.centerNum > 10)) {\n        throw new InvalidMove(\"that is not a valid number\");\n      }\n      if (isWildDos(top.id) && pl.centerColor !== undefined && COLORS.indexOf(pl.centerColor) < 0) {\n        throw new InvalidMove(\"that is not a valid color\");\n      }\n      const target = targetOf(top, pl);\n      const refs = [];\n      for (const ref of pl.cards) {\n        const card = refCard(hand, used, ref);\n        refs.push({ card: card, ref: ref, entry: playedEntry(card, ref) });\n      }\n      // Check the match itself.\n      let matched = false, isColor = false;\n      if (refs.length === 1) {\n        if (refs[0].entry.num === target.num) {\n          matched = true;\n          isColor = refs[0].entry.color === target.color;\n        }\n      } else {\n        if (refs[0].entry.num + refs[1].entry.num === target.num) {\n          matched = true;\n          isColor = refs[0].entry.color === target.color && refs[1].entry.color === target.color;\n        }\n      }\n      if (!matched) {\n        throw new InvalidMove(\"that card does not match the center row\");\n      }\n      if (isColor) {\n        colorMatches += 1;\n        if (refs.length === 2) doubleColors += 1;\n      }\n      placements.push({ pile: pl.pile, refs: refs });\n    }\n    // Bonus discards: one per colour match earned, face-up into the Center Row.\n    if (bonus.length > colorMatches) {\n      throw new InvalidMove(\"you cannot discard that many bonus cards\");\n    }\n    const bonusEntries = [];\n    for (const b of bonus) {\n      const card = refCard(hand, used, b);\n      bonusEntries.push(playedEntry(card, b));\n    }\n    // Apply: played cards and the matched center cards go to the discard pile.\n    for (const pl of placements) {\n      next.discard.push(state.center[pl.pile].id);\n      for (const r of pl.refs) next.discard.push(r.card);\n    }\n    // Remove the matched center cards (highest index first).\n    const matchedPiles = placements.map(function (p) { return p.pile; }).sort(function (a, b) { return b - a; });\n    for (const pile of matchedPiles) next.center.splice(pile, 1);\n    // Remove the played cards from the hand.\n    const usedIdx = Object.keys(used).map(function (k) { return parseInt(k, 10); }).sort(function (a, b) { return b - a; });\n    for (const idx of usedIdx) next.hands[seat].splice(idx, 1);\n    // Each Double Color Match makes every other player draw one card.\n    for (let d = 0; d < doubleColors; d++) {\n      const opp = 1 - seat;\n      const drawn = drawCard(next, ctx.move_count);\n      if (drawn !== null) {\n        next.hands[opp] = sortHand(next.hands[opp].concat([drawn]));\n      }\n    }\n    // Win check: shed every card with the matches alone. A bonus discard\n    // is impossible here, because every bonus card is a card still in the\n    // hand — so this early return is only taken when there is no bonus to\n    // place. (The played and bonus cards are removed from the hand in one\n    // step below, so returning early with a bonus pending would lose the\n    // bonus cards: they would be out of the hand but never put anywhere.)\n    if (next.hands[seat].length === 0 && bonus.length === 0) {\n      next.phase = \"over\";\n      next.drawn_card = null;\n      next.winner = seat;\n      return { state: next, turn: null, payouts: settle(next, ctx) };\n    }\n    // End of turn: refill the Center Row to at least two cards, then add\n    // the bonus cards face-up into the Center Row.\n    refillCenter(next, ctx.move_count);\n    for (const e of bonusEntries) next.center.push(e);\n    // A bonus discard can also shed the last card.\n    if (next.hands[seat].length === 0) {\n      next.phase = \"over\";\n      next.drawn_card = null;\n      next.winner = seat;\n      return { state: next, turn: null, payouts: settle(next, ctx) };\n    }\n    next.phase = \"play\";\n    next.drawn_card = null;\n    next.turn = 1 - seat;\n    return { state: next, turn: [ctx.players[1 - seat].id] };\n  },\n\n  computerMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (state.phase === \"add_center\") {\n      return addCenterMove(state, seat);\n    }\n    if (state.phase === \"after_draw\") {\n      const mv = bestMatchMove(state, seat);\n      return mv !== null ? mv : { type: \"pass\" };\n    }\n    const mv = bestMatchMove(state, seat);\n    if (mv !== null) return mv;\n    return { type: \"draw\" };\n  },\n\n  randomMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (state.phase === \"add_center\") {\n      return addCenterMove(state, seat, ctx);\n    }\n    const placements = allPlacements(state, seat);\n    if (state.phase === \"after_draw\") {\n      if (placements.length > 0) {\n        return randomMatchMove(state, seat, placements, ctx);\n      }\n      return { type: \"pass\" };\n    }\n    if (placements.length === 0) return { type: \"draw\" };\n    // Usually match when able; sometimes draw instead, as the rules allow.\n    if (ctx.random() < 0.15) return { type: \"draw\" };\n    return randomMatchMove(state, seat, placements, ctx);\n  },\n\n  viewFor(state, playerId, ctx) {\n    const seat = playerId === null ? -1 : ctx.players.findIndex(function (p) { return p.id === playerId; });\n    return {\n      hand: seat >= 0 ? state.hands[seat].slice() : [],\n      hand_counts: [state.hands[0].length, state.hands[1].length],\n      center: state.center.map(function (e) { return { id: e.id, num: e.num, color: e.color }; }),\n      deck_count: state.deck.length,\n      discard_count: state.discard.length,\n      phase: state.phase,\n      turn: state.turn,\n      drawn_card: seat >= 0 && seat === state.turn && (state.phase === \"after_draw\" || state.phase === \"add_center\") ? state.drawn_card : null,\n      winner: state.winner,\n      moves: state.moves\n    };\n  }\n};\n\n// Pick the best match move for `seat`: the highest-scoring placements,\n// combined greedily across center cards without reusing a card, plus one\n// bonus discard per colour match earned (the highest-point card left in hand).\nfunction bestMatchMove(state, seat) {\n  const placements = allPlacements(state, seat);\n  if (placements.length === 0) return null;\n  const sorted = placements.slice().sort(function (a, b) {\n    if (b.score !== a.score) return b.score - a.score;\n    if (a.pile !== b.pile) return a.pile - b.pile;\n    return a.cards[0].i - b.cards[0].i;\n  });\n  const used = {};\n  const chosen = [];\n  let colorMatches = 0;\n  for (const p of sorted) {\n    let clash = false;\n    for (const c of p.cards) if (used[c.i]) clash = true;\n    if (clash) continue;\n    // One placement per center card.\n    let pileUsed = false;\n    for (const q of chosen) if (q.pile === p.pile) pileUsed = true;\n    if (pileUsed) continue;\n    for (const c of p.cards) used[c.i] = true;\n    chosen.push(p);\n    if (p.colorMatch) colorMatches += 1;\n  }\n  if (chosen.length === 0) return null;\n  const hand = state.hands[seat];\n  const remaining = [];\n  for (let i = 0; i < hand.length; i++) if (!used[i]) remaining.push(i);\n  remaining.sort(function (a, b) { return pointsOf(hand[b]) - pointsOf(hand[a]) || a - b; });\n  const bonus = [];\n  for (let k = 0; k < colorMatches && k < remaining.length; k++) {\n    const i = remaining[k];\n    const card = hand[i];\n    const b = { i: i };\n    if (isWildHash(card)) b.num = 1;\n    if (isWildDos(card)) b.color = \"R\";\n    bonus.push(b);\n  }\n  return { type: \"match\", placements: chosen.map(toMovePlacement), bonus: bonus };\n}\n// Turn an enumerated placement into the placement object a move carries,\n// including the declaration for a wild center card.\nfunction toMovePlacement(p) {\n  const out = { pile: p.pile, cards: p.cards };\n  if (p.centerDecl) {\n    if (p.centerDecl.centerNum !== undefined) out.centerNum = p.centerDecl.centerNum;\n    if (p.centerDecl.centerColor !== undefined) out.centerColor = p.centerDecl.centerColor;\n  }\n  return out;\n}\n// Turn one enumerated placement into a full match move (no bonus).\nfunction singlePlacementMove(state, seat, placement) {\n  return { type: \"match\", placements: [toMovePlacement(placement)], bonus: [] };\n}\n// A random legal match move: one random placement, plus a second random\n// non-conflicting placement when one exists, plus a random bonus discard\n// per colour match earned.\nfunction randomMatchMove(state, seat, placements, ctx) {\n  const first = placements[Math.floor(ctx.random() * placements.length)];\n  const used = {};\n  for (const c of first.cards) used[c.i] = true;\n  const chosen = [first];\n  let colorMatches = first.colorMatch ? 1 : 0;\n  const rest = placements.filter(function (p) {\n    if (p.pile === first.pile) return false;\n    for (const c of p.cards) if (used[c.i]) return false;\n    return true;\n  });\n  if (rest.length > 0 && ctx.random() < 0.75) {\n    const second = rest[Math.floor(ctx.random() * rest.length)];\n    for (const c of second.cards) used[c.i] = true;\n    chosen.push(second);\n    if (second.colorMatch) colorMatches += 1;\n  }\n  const hand = state.hands[seat];\n  const remaining = [];\n  for (let i = 0; i < hand.length; i++) if (!used[i]) remaining.push(i);\n  const bonus = [];\n  for (let k = 0; k < colorMatches && remaining.length > 0; k++) {\n    const idx = Math.floor(ctx.random() * remaining.length);\n    const i = remaining.splice(idx, 1)[0];\n    const card = hand[i];\n    const b = { i: i };\n    if (isWildHash(card)) b.num = 1 + Math.floor(ctx.random() * 10);\n    if (isWildDos(card)) b.color = COLORS[Math.floor(ctx.random() * COLORS.length)];\n    bonus.push(b);\n  }\n  return { type: \"match\", placements: chosen.map(toMovePlacement), bonus: bonus };\n}\n// The move that puts one card from the hand face-up into the Center Row\n// after a draw that enabled no match: the lowest-point card (a computer\n// sheds its cheapest card; a random player picks one at random).\nfunction addCenterMove(state, seat, ctx) {\n  const hand = state.hands[seat];\n  let i = 0;\n  if (ctx) {\n    i = Math.floor(ctx.random() * hand.length);\n  } else {\n    for (let k = 1; k < hand.length; k++) {\n      if (pointsOf(hand[k]) < pointsOf(hand[i])) i = k;\n    }\n  }\n  const card = hand[i];\n  const ref = { i: i };\n  if (isWildHash(card)) ref.num = 1;\n  if (isWildDos(card)) ref.color = \"R\";\n  return { type: \"add_center\", card: ref };\n}\n\n// declarative-archive-view-hints\n;(()=>{const __archiveView=game.viewFor;game.viewFor=function(state,id,ctx){const v=__archiveView.call(this,state,id,ctx);const seat=id==null?-1:ctx.players.findIndex(p=>p.id===id);v.legal_placements=(seat===state.turn&&(state.phase===\"play\"||state.phase===\"after_draw\"))?allPlacements(state,seat).map(p=>({pile:p.pile,cards:p.cards,centerNum:p.centerDecl.centerNum,centerColor:p.centerDecl.centerColor,colorMatch:p.colorMatch,doubleColor:p.doubleColor})):[];return v;};})();\n",
+  "server_code": "\"use strict\";\n\n// Dos server code (v2 Game API).\n// 2-player Dos (Mattel, 2018; rules after the official FRM36 instructions,\n// as reproduced in the manuals.plus transcription of the instruction sheet).\n// This package fixes ONE variant, documented in `rules`:\n//   * 108-card deck: per colour (R, B, G, Y): three each of 1, 3, 4, 5;\n//     two each of 6, 7, 8, 9, 10; two Wild # cards. Plus 12 Wild DOS cards\n//     (colourless, counting as a 2 of any colour). There is no number 2 card.\n//   * Deal 7 cards each; turn two cards face up to form the Center Row.\n//     A Wild # is never a starting center card: it is skipped and the next\n//     card is used instead.\n//   * On your turn, match one or more center cards, at most once per card,\n//     or draw:\n//     - Single Match: one card whose number equals a center card's number.\n//     - Double Match: two cards whose numbers add up to a center card's number.\n//     - Single Color Match: a single match where the played card also has\n//       the center card's colour. Double Color Match: a double match where\n//       both played cards have the center card's colour. Each colour match\n//       earns one bonus: one extra card from your hand face-up into the\n//       Center Row at the end of your turn. Each Double Color Match also\n//       makes every other player draw one card.\n//     - Wild # (coloured) counts as any number 1-10 in its colour; you\n//       declare the number when you play it. A Wild # in the Center Row\n//       counts as the number the matcher declares for it.\n//     - Wild DOS counts as a 2 of any colour; you declare its colour when\n//       you play it. A Wild DOS in the Center Row counts as the colour the\n//       matcher declares for it.\n//   * Ending your turn: all cards you played, including the center cards\n//     you played them on, go to the discard pile. The Center Row is then\n//     refilled from the deck until it has at least two cards, and then any\n//     bonus cards are put face-up into the Center Row (there is no maximum\n//     number of cards in the Center Row).\n//   * Draw: if you cannot (or do not want to) match, draw one card. If the\n//     drawn card lets you match, you may play a match at once or pass. If\n//     you have drawn and still cannot match, put one card from your hand\n//     face up in the Center Row and your turn ends.\n//   * First player to shed all cards wins the hand. The \"DOS!\" shout when\n//     holding two cards is omitted in this digital version (no penalty).\n//   * If the draw pile runs out it is refilled by reshuffling the discard\n//     pile. If a player must draw and no card can be drawn at all, the hand\n//     ends and the player with the fewest cards in hand wins (tie: fewest\n//     points in hand — number cards count their face value, Wild DOS 20,\n//     Wild # 40 — then the lowest seat).\n//   * A portal match is a single hand; there is no 200-point race.\n// Deals and recycled discards use the platform private random stream.\n// The same authoritative call seed replays them without revealing future cards.\n\nconst COLORS = [\"R\", \"B\", \"G\", \"Y\"];\nconst COLOR_ORDER = { R: 0, B: 1, G: 2, Y: 3 };\nconst WILD_DOS = \"WD\";\n\nfunction colorOf(card) {\n  if (card === WILD_DOS) return null;\n  return card[0];\n}\nfunction isWildDos(card) { return card === WILD_DOS; }\nfunction isWildHash(card) { return typeof card === \"string\" && card.length === 2 && card[1] === \"#\"; }\nfunction isNumberCard(card) {\n  if (typeof card !== \"string\") return false;\n  if (isWildDos(card) || isWildHash(card)) return false;\n  return /^[RBGY](1|3|4|5|6|7|8|9|10)$/.test(card);\n}\nfunction isCard(card) { return isNumberCard(card) || isWildDos(card) || isWildHash(card); }\nfunction numOf(card) {\n  if (isWildDos(card)) return 2;\n  if (isWildHash(card)) return null;\n  return parseInt(card.slice(1), 10);\n}\nfunction pointsOf(card) {\n  if (isWildDos(card)) return 20;\n  if (isWildHash(card)) return 40;\n  return numOf(card);\n}\nfunction cardSortKey(card) {\n  if (isWildDos(card)) return [4, 0];\n  const c = colorOf(card);\n  if (isWildHash(card)) return [COLOR_ORDER[c], 11];\n  return [COLOR_ORDER[c], numOf(card)];\n}\nfunction sortHand(hand) {\n  return hand.slice().sort(function (a, b) {\n    const ka = cardSortKey(a), kb = cardSortKey(b);\n    if (ka[0] !== kb[0]) return ka[0] - kb[0];\n    return ka[1] - kb[1];\n  });\n}\nfunction fullDeck() {\n  const deck = [];\n  for (const color of COLORS) {\n    for (const n of [1, 3, 4, 5]) for (let k = 0; k < 3; k++) deck.push(color + n);\n    for (const n of [6, 7, 8, 9, 10]) for (let k = 0; k < 2; k++) deck.push(color + n);\n    for (let k = 0; k < 2; k++) deck.push(color + \"#\");\n  }\n  for (let k = 0; k < 12; k++) deck.push(WILD_DOS);\n  return deck;\n}\nfunction shuffledDeck(rng) {\n  const deck = fullDeck();\n  for (let i = deck.length - 1; i > 0; i--) {\n    const j = Math.floor(rng() * (i + 1));\n    const tmp = deck[i];\n    deck[i] = deck[j];\n    deck[j] = tmp;\n  }\n  return deck;\n}\n// Replayable private shuffle; public discards and move counts cannot predict it.\nfunction reshuffledDiscard(discard, ctx) {\n  const deck = discard.slice();\n  for (let i = deck.length - 1; i > 0; i--) {\n    const j = Math.floor(ctx.random() * (i + 1));\n    const tmp = deck[i];\n    deck[i] = deck[j];\n    deck[j] = tmp;\n  }\n  return deck;\n}\n// The effective {num, color} of a card as played, from its declaration.\n// A declaration that was not given stays null (never undefined), so every\n// center entry always carries both fields, as the state schema requires.\nfunction playedEntry(card, ref) {\n  if (isWildDos(card)) return { id: card, num: 2, color: ref.color !== undefined ? ref.color : null };\n  if (isWildHash(card)) return { id: card, num: ref.num !== undefined ? ref.num : null, color: colorOf(card) };\n  return { id: card, num: numOf(card), color: colorOf(card) };\n}\n// The effective target of a center card, as the matcher declares it.\nfunction targetOf(entry, placement) {\n  let num = entry.num, color = entry.color;\n  if (isWildHash(entry.id) && placement && typeof placement.centerNum === \"number\") num = placement.centerNum;\n  if (isWildDos(entry.id) && placement && typeof placement.centerColor === \"string\") color = placement.centerColor;\n  return { num: num, color: color };\n}\nfunction copyState(state) {\n  return {\n    deck: state.deck.slice(),\n    discard: state.discard.slice(),\n    center: state.center.map(function (e) { return { id: e.id, num: e.num, color: e.color }; }),\n    hands: [state.hands[0].slice(), state.hands[1].slice()],\n    turn: state.turn,\n    phase: state.phase,\n    drawn_card: state.drawn_card,\n    winner: state.winner,\n    moves: state.moves\n  };\n}\nfunction handPoints(hand) {\n  let total = 0;\n  for (const c of hand) total += pointsOf(c);\n  return total;\n}\nfunction settle(state, ctx) {\n  if (ctx.pot === 0) return {};\n  const humans = ctx.players.filter(function (p) { return p.kind === \"human\"; });\n  if (humans.length === 0) return {};\n  if (state.winner === -1) {\n    const share = Math.floor(ctx.pot / humans.length);\n    const payouts = {};\n    humans.forEach(function (p, i) {\n      payouts[p.id] = share + (i === 0 ? ctx.pot - share * humans.length : 0);\n    });\n    return payouts;\n  }\n  const winnerPlayer = ctx.players[state.winner];\n  if (winnerPlayer && winnerPlayer.kind === \"human\") {\n    const payouts = {};\n    payouts[winnerPlayer.id] = ctx.pot;\n    return payouts;\n  }\n  const payouts = {};\n  payouts[humans[0].id] = ctx.pot;\n  return payouts;\n}\n// Draw one card from the deck, refilling it from the discard pile when\n// empty. Returns the card, or null when no card can be drawn at all.\nfunction drawCard(next, ctx) {\n  if (next.deck.length === 0) {\n    if (next.discard.length === 0) return null;\n    next.deck = reshuffledDiscard(next.discard, ctx);\n    next.discard = [];\n  }\n  return next.deck.pop();\n}\n// Refill the Center Row from the deck until it has at least two cards.\nfunction refillCenter(next, ctx) {\n  while (next.center.length < 2) {\n    const card = drawCard(next, ctx);\n    if (card === null) return;\n    next.center.push(playedEntry(card, {}));\n  }\n}\n// All legal single-center-card placements for `seat` in `state`, as\n// {pile, cards:[ref...], colorMatch, doubleColor, score, centerDecl}.\n// A ref is {i, num?, color?} with i a hand index; centerDecl carries the\n// declaration for a wild center card ({centerNum} for a Wild # center,\n// {centerColor} for a Wild DOS center). Used by applyMove validation,\n// computerMove and randomMove, so the three can never drift apart.\n// A Wild # in the Center Row can be any number 1-10 (the matcher declares\n// it); a Wild DOS in the Center Row is a 2 of any colour (the matcher\n// declares its colour, so a single match on it is always a colour match,\n// and a double match on it is a colour match when both played cards share\n// one colour).\nfunction allPlacements(state, seat) {\n  const hand = state.hands[seat];\n  const out = [];\n  for (let pile = 0; pile < state.center.length; pile++) {\n    const top = state.center[pile];\n    const wdTop = isWildDos(top.id);\n    const hashTop = isWildHash(top.id);\n    const fixedColor = wdTop ? null : top.color;\n    const targetNums = hashTop ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] : [wdTop ? 2 : top.num];\n    for (const targetNum of targetNums) {\n      // Single-card placements.\n      for (let i = 0; i < hand.length; i++) {\n        const card = hand[i];\n        if (isWildHash(card)) {\n          // A Wild # on a Wild # center needs only one declaration pair.\n          if (hashTop && targetNum !== 1) continue;\n          const ref = { i: i, num: targetNum };\n          const centerDecl = {};\n          if (hashTop) centerDecl.centerNum = targetNum;\n          let colorMatch;\n          if (wdTop) { colorMatch = true; centerDecl.centerColor = colorOf(card); }\n          else colorMatch = colorOf(card) === fixedColor;\n          out.push({ pile: pile, cards: [ref], colorMatch: colorMatch, doubleColor: false,\n            score: 40 + (colorMatch ? 5 : 0), centerDecl: centerDecl });\n        } else if (isWildDos(card)) {\n          if (targetNum !== 2) continue;\n          const effColor = wdTop ? \"R\" : fixedColor;\n          const ref = { i: i, color: effColor };\n          const centerDecl = {};\n          if (hashTop) centerDecl.centerNum = 2;\n          if (wdTop) centerDecl.centerColor = \"R\";\n          out.push({ pile: pile, cards: [ref], colorMatch: true, doubleColor: false,\n            score: 25, centerDecl: centerDecl });\n        } else if (numOf(card) === targetNum) {\n          const ref = { i: i };\n          const centerDecl = {};\n          if (hashTop) centerDecl.centerNum = targetNum;\n          let colorMatch;\n          if (wdTop) { colorMatch = true; centerDecl.centerColor = colorOf(card); }\n          else colorMatch = colorOf(card) === fixedColor;\n          out.push({ pile: pile, cards: [ref], colorMatch: colorMatch, doubleColor: false,\n            score: numOf(card) + (colorMatch ? 5 : 0), centerDecl: centerDecl });\n        }\n      }\n      // Two-card placements (sum to the target number).\n      for (let i = 0; i < hand.length; i++) {\n        for (let j = i + 1; j < hand.length; j++) {\n          const c = pairCombo(hand[i], i, hand[j], j, targetNum, fixedColor, wdTop, hashTop);\n          if (c) {\n            out.push({ pile: pile, cards: c.cards, colorMatch: c.colorMatch,\n              doubleColor: c.colorMatch, score: c.score, centerDecl: c.centerDecl });\n          }\n        }\n      }\n    }\n  }\n  return out;\n}\n// One canonical way two hand cards (a, b) can sum to `target` as a\n// double match on a center card whose colour is `fixedColor` (null when\n// the center card is a Wild DOS and its colour is declared by the\n// matcher). The number a Wild # must take is forced by the target and\n// the other card's value, so enumerating every split would only\n// duplicate equivalent moves. Returns null when the pair cannot sum\n// to the target.\nfunction pairCombo(a, ia, b, ib, target, fixedColor, wdTop, hashTop) {\n  const fixed = function (card) {\n    if (isWildDos(card)) return 2;\n    if (isWildHash(card)) return null;\n    return numOf(card);\n  };\n  const fa = fixed(a), fb = fixed(b);\n  let na, nb;\n  if (fa !== null && fb !== null) { na = fa; nb = fb; }\n  else if (fa !== null) { na = fa; nb = target - fa; }\n  else if (fb !== null) { nb = fb; na = target - fb; }\n  else { na = Math.max(1, target - 10); nb = target - na; }\n  if (na < 1 || na > 10 || nb < 1 || nb > 10 || na + nb !== target) return null;\n  const ra = { i: ia }, rb = { i: ib };\n  if (isWildHash(a)) ra.num = na;\n  if (isWildHash(b)) rb.num = nb;\n  // The colour the matcher declares for a Wild DOS center card: the\n  // colour of the first non-Wild-DOS card (or R if both are Wild DOS).\n  let declaredColor = fixedColor;\n  if (wdTop) {\n    declaredColor = !isWildDos(a) ? colorOf(a) : !isWildDos(b) ? colorOf(b) : \"R\";\n  }\n  if (isWildDos(a)) ra.color = declaredColor;\n  if (isWildDos(b)) rb.color = declaredColor;\n  const effColorA = isWildDos(a) ? declaredColor : colorOf(a);\n  const effColorB = isWildDos(b) ? declaredColor : colorOf(b);\n  const colorMatch = effColorA === declaredColor && effColorB === declaredColor;\n  const centerDecl = {};\n  if (hashTop) centerDecl.centerNum = target;\n  if (wdTop) centerDecl.centerColor = declaredColor;\n  const score = pointsOf(a) + pointsOf(b) + (colorMatch ? 20 : 0);\n  return { cards: [ra, rb], colorMatch: colorMatch, score: score, centerDecl: centerDecl };\n}\n// Validate one card reference against the hand. Returns the card id.\n// Throws InvalidMove with the exact message for the problem.\nfunction refCard(hand, used, ref) {\n  if (!ref || typeof ref !== \"object\" || !Number.isInteger(ref.i)) {\n    throw new InvalidMove(\"that is not a valid card\");\n  }\n  if (ref.i < 0 || ref.i >= hand.length) {\n    throw new InvalidMove(\"that card is not in your hand\");\n  }\n  if (used[ref.i]) {\n    throw new InvalidMove(\"that card is already used\");\n  }\n  used[ref.i] = true;\n  const card = hand[ref.i];\n  if (isWildHash(card)) {\n    if (!Number.isInteger(ref.num) || ref.num < 1 || ref.num > 10) {\n      throw new InvalidMove(\"that is not a valid number\");\n    }\n  } else if (isWildDos(card)) {\n    if (typeof ref.color !== \"string\" || COLORS.indexOf(ref.color) < 0) {\n      throw new InvalidMove(\"that is not a valid color\");\n    }\n  }\n  return card;\n}\n\nconst game = {\n  newMatch(ctx) {\n    const deck = shuffledDeck(ctx.random);\n    const hand0 = sortHand([deck[0], deck[2], deck[4], deck[6], deck[8], deck[10], deck[12]]);\n    const hand1 = sortHand([deck[1], deck[3], deck[5], deck[7], deck[9], deck[11], deck[13]]);\n    // Center Row: the next two non-Wild-# cards; Wild # cards stay in the deck.\n    const rest = deck.slice(14);\n    const centerCards = [];\n    const remaining = [];\n    for (const c of rest) {\n      if (centerCards.length < 2 && !isWildHash(c)) centerCards.push(c);\n      else remaining.push(c);\n    }\n    const state = {\n      deck: remaining,\n      discard: [],\n      center: centerCards.map(function (c) { return playedEntry(c, {}); }),\n      hands: [hand0, hand1],\n      turn: 0,\n      phase: \"play\",\n      drawn_card: null,\n      winner: null,\n      moves: 0\n    };\n    return { state: state, turn: [ctx.players[0].id] };\n  },\n\n  applyMove(state, playerId, move, ctx) {\n    if (!move || typeof move !== \"object\" || Array.isArray(move)) {\n      throw new InvalidMove(\"send a match, draw or pass move\");\n    }\n    if (state.phase === \"over\") {\n      throw new InvalidMove(\"the game is over\");\n    }\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (seat < 0 || seat !== state.turn) {\n      throw new InvalidMove(\"it is not your turn\");\n    }\n    if (typeof move.type !== \"string\" || (move.type !== \"match\" && move.type !== \"draw\" && move.type !== \"pass\" && move.type !== \"add_center\")) {\n      throw new InvalidMove(\"send a match, draw or pass move\");\n    }\n    const next = copyState(state);\n    next.moves = state.moves + 1;\n\n    if (move.type === \"pass\") {\n      if (state.phase !== \"after_draw\") {\n        throw new InvalidMove(\"you can only pass after drawing\");\n      }\n      next.phase = \"play\";\n      next.drawn_card = null;\n      next.turn = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n\n    if (move.type === \"add_center\") {\n      if (state.phase !== \"add_center\") {\n        throw new InvalidMove(\"you can only add a card to the center row after drawing\");\n      }\n      if (!move.card || typeof move.card !== \"object\") {\n        throw new InvalidMove(\"that is not a valid card\");\n      }\n      const used = {};\n      const card = refCard(state.hands[seat], used, move.card);\n      next.hands[seat] = next.hands[seat].filter(function (c, i) { return i !== move.card.i; });\n      next.center.push(playedEntry(card, move.card));\n      next.phase = \"play\";\n      next.drawn_card = null;\n      next.turn = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n\n    if (move.type === \"draw\") {\n      if (state.phase !== \"play\") {\n        throw new InvalidMove(\"you cannot draw now\");\n      }\n      const drawn = drawCard(next, ctx);\n      if (drawn === null) {\n        // Nothing left to draw anywhere: fewest cards wins the hand.\n        next.phase = \"over\";\n        const c0 = next.hands[0].length, c1 = next.hands[1].length;\n        let winner = 0;\n        if (c1 < c0) winner = 1;\n        else if (c0 === c1) {\n          const p0 = handPoints(next.hands[0]), p1 = handPoints(next.hands[1]);\n          winner = p1 < p0 ? 1 : 0;\n        }\n        next.winner = winner;\n        return { state: next, turn: null, payouts: settle(next, ctx) };\n      }\n      next.hands[seat] = sortHand(next.hands[seat].concat([drawn]));\n      // If the drawn card lets the player match, they keep the turn and\n      // must play a match or pass; otherwise they must put one card from\n      // their hand face up in the Center Row.\n      if (allPlacements(next, seat).length > 0) {\n        next.phase = \"after_draw\";\n        next.drawn_card = drawn;\n        return { state: next, turn: [ctx.players[seat].id] };\n      }\n      next.phase = \"add_center\";\n      next.drawn_card = drawn;\n      return { state: next, turn: [ctx.players[seat].id] };\n    }\n\n    // move.type === \"match\"\n    if (state.phase !== \"play\" && state.phase !== \"after_draw\") {\n      throw new InvalidMove(\"you cannot match now\");\n    }\n    if (!Array.isArray(move.placements) || move.placements.length === 0) {\n      throw new InvalidMove(\"send a match, draw or pass move\");\n    }\n    const bonus = Array.isArray(move.bonus) ? move.bonus : [];\n    const hand = state.hands[seat];\n    const used = {};\n    const placements = [];\n    const seenPiles = {};\n    let colorMatches = 0;\n    let doubleColors = 0;\n    for (const pl of move.placements) {\n      if (!pl || typeof pl !== \"object\" || Array.isArray(pl)) {\n        throw new InvalidMove(\"that is not a valid card\");\n      }\n      if (!Number.isInteger(pl.pile) || pl.pile < 0 || pl.pile >= state.center.length) {\n        throw new InvalidMove(\"that pile does not exist\");\n      }\n      if (seenPiles[pl.pile]) {\n        throw new InvalidMove(\"you cannot match that pile twice\");\n      }\n      seenPiles[pl.pile] = true;\n      if (!Array.isArray(pl.cards) || pl.cards.length < 1 || pl.cards.length > 2) {\n        throw new InvalidMove(\"you must play one or two cards\");\n      }\n      const top = state.center[pl.pile];\n      // A matcher must declare what a wild center card counts as.\n      if (isWildHash(top.id) && pl.centerNum === undefined) {\n        throw new InvalidMove(\"declare the number of the wild card\");\n      }\n      if (isWildDos(top.id) && pl.centerColor === undefined) {\n        throw new InvalidMove(\"declare the color of the wild card\");\n      }\n      if (isWildHash(top.id) && pl.centerNum !== undefined && (!Number.isInteger(pl.centerNum) || pl.centerNum < 1 || pl.centerNum > 10)) {\n        throw new InvalidMove(\"that is not a valid number\");\n      }\n      if (isWildDos(top.id) && pl.centerColor !== undefined && COLORS.indexOf(pl.centerColor) < 0) {\n        throw new InvalidMove(\"that is not a valid color\");\n      }\n      const target = targetOf(top, pl);\n      const refs = [];\n      for (const ref of pl.cards) {\n        const card = refCard(hand, used, ref);\n        refs.push({ card: card, ref: ref, entry: playedEntry(card, ref) });\n      }\n      // Check the match itself.\n      let matched = false, isColor = false;\n      if (refs.length === 1) {\n        if (refs[0].entry.num === target.num) {\n          matched = true;\n          isColor = refs[0].entry.color === target.color;\n        }\n      } else {\n        if (refs[0].entry.num + refs[1].entry.num === target.num) {\n          matched = true;\n          isColor = refs[0].entry.color === target.color && refs[1].entry.color === target.color;\n        }\n      }\n      if (!matched) {\n        throw new InvalidMove(\"that card does not match the center row\");\n      }\n      if (isColor) {\n        colorMatches += 1;\n        if (refs.length === 2) doubleColors += 1;\n      }\n      placements.push({ pile: pl.pile, refs: refs });\n    }\n    // Bonus discards: one per colour match earned, face-up into the Center Row.\n    if (bonus.length > colorMatches) {\n      throw new InvalidMove(\"you cannot discard that many bonus cards\");\n    }\n    const bonusEntries = [];\n    for (const b of bonus) {\n      const card = refCard(hand, used, b);\n      bonusEntries.push(playedEntry(card, b));\n    }\n    // Apply: played cards and the matched center cards go to the discard pile.\n    for (const pl of placements) {\n      next.discard.push(state.center[pl.pile].id);\n      for (const r of pl.refs) next.discard.push(r.card);\n    }\n    // Remove the matched center cards (highest index first).\n    const matchedPiles = placements.map(function (p) { return p.pile; }).sort(function (a, b) { return b - a; });\n    for (const pile of matchedPiles) next.center.splice(pile, 1);\n    // Remove the played cards from the hand.\n    const usedIdx = Object.keys(used).map(function (k) { return parseInt(k, 10); }).sort(function (a, b) { return b - a; });\n    for (const idx of usedIdx) next.hands[seat].splice(idx, 1);\n    // Each Double Color Match makes every other player draw one card.\n    for (let d = 0; d < doubleColors; d++) {\n      const opp = 1 - seat;\n      const drawn = drawCard(next, ctx);\n      if (drawn !== null) {\n        next.hands[opp] = sortHand(next.hands[opp].concat([drawn]));\n      }\n    }\n    // Win check: shed every card with the matches alone. A bonus discard\n    // is impossible here, because every bonus card is a card still in the\n    // hand — so this early return is only taken when there is no bonus to\n    // place. (The played and bonus cards are removed from the hand in one\n    // step below, so returning early with a bonus pending would lose the\n    // bonus cards: they would be out of the hand but never put anywhere.)\n    if (next.hands[seat].length === 0 && bonus.length === 0) {\n      next.phase = \"over\";\n      next.drawn_card = null;\n      next.winner = seat;\n      return { state: next, turn: null, payouts: settle(next, ctx) };\n    }\n    // End of turn: refill the Center Row to at least two cards, then add\n    // the bonus cards face-up into the Center Row.\n    refillCenter(next, ctx);\n    for (const e of bonusEntries) next.center.push(e);\n    // A bonus discard can also shed the last card.\n    if (next.hands[seat].length === 0) {\n      next.phase = \"over\";\n      next.drawn_card = null;\n      next.winner = seat;\n      return { state: next, turn: null, payouts: settle(next, ctx) };\n    }\n    next.phase = \"play\";\n    next.drawn_card = null;\n    next.turn = 1 - seat;\n    return { state: next, turn: [ctx.players[1 - seat].id] };\n  },\n\n  computerMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (state.phase === \"add_center\") {\n      return addCenterMove(state, seat);\n    }\n    if (state.phase === \"after_draw\") {\n      const mv = bestMatchMove(state, seat);\n      return mv !== null ? mv : { type: \"pass\" };\n    }\n    const mv = bestMatchMove(state, seat);\n    if (mv !== null) return mv;\n    return { type: \"draw\" };\n  },\n\n  randomMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (state.phase === \"add_center\") {\n      return addCenterMove(state, seat, ctx);\n    }\n    const placements = allPlacements(state, seat);\n    if (state.phase === \"after_draw\") {\n      if (placements.length > 0) {\n        return randomMatchMove(state, seat, placements, ctx);\n      }\n      return { type: \"pass\" };\n    }\n    if (placements.length === 0) return { type: \"draw\" };\n    // Usually match when able; sometimes draw instead, as the rules allow.\n    if (ctx.random() < 0.15) return { type: \"draw\" };\n    return randomMatchMove(state, seat, placements, ctx);\n  },\n\n  viewFor(state, playerId, ctx) {\n    const seat = playerId === null ? -1 : ctx.players.findIndex(function (p) { return p.id === playerId; });\n    return {\n      hand: seat >= 0 ? state.hands[seat].slice() : [],\n      hand_counts: [state.hands[0].length, state.hands[1].length],\n      center: state.center.map(function (e) { return { id: e.id, num: e.num, color: e.color }; }),\n      deck_count: state.deck.length,\n      discard_count: state.discard.length,\n      phase: state.phase,\n      turn: state.turn,\n      drawn_card: seat >= 0 && seat === state.turn && (state.phase === \"after_draw\" || state.phase === \"add_center\") ? state.drawn_card : null,\n      winner: state.winner,\n      moves: state.moves\n    };\n  }\n};\n\n// Pick the best match move for `seat`: the highest-scoring placements,\n// combined greedily across center cards without reusing a card, plus one\n// bonus discard per colour match earned (the highest-point card left in hand).\nfunction bestMatchMove(state, seat) {\n  const placements = allPlacements(state, seat);\n  if (placements.length === 0) return null;\n  const sorted = placements.slice().sort(function (a, b) {\n    if (b.score !== a.score) return b.score - a.score;\n    if (a.pile !== b.pile) return a.pile - b.pile;\n    return a.cards[0].i - b.cards[0].i;\n  });\n  const used = {};\n  const chosen = [];\n  let colorMatches = 0;\n  for (const p of sorted) {\n    let clash = false;\n    for (const c of p.cards) if (used[c.i]) clash = true;\n    if (clash) continue;\n    // One placement per center card.\n    let pileUsed = false;\n    for (const q of chosen) if (q.pile === p.pile) pileUsed = true;\n    if (pileUsed) continue;\n    for (const c of p.cards) used[c.i] = true;\n    chosen.push(p);\n    if (p.colorMatch) colorMatches += 1;\n  }\n  if (chosen.length === 0) return null;\n  const hand = state.hands[seat];\n  const remaining = [];\n  for (let i = 0; i < hand.length; i++) if (!used[i]) remaining.push(i);\n  remaining.sort(function (a, b) { return pointsOf(hand[b]) - pointsOf(hand[a]) || a - b; });\n  const bonus = [];\n  for (let k = 0; k < colorMatches && k < remaining.length; k++) {\n    const i = remaining[k];\n    const card = hand[i];\n    const b = { i: i };\n    if (isWildHash(card)) b.num = 1;\n    if (isWildDos(card)) b.color = \"R\";\n    bonus.push(b);\n  }\n  return { type: \"match\", placements: chosen.map(toMovePlacement), bonus: bonus };\n}\n// Turn an enumerated placement into the placement object a move carries,\n// including the declaration for a wild center card.\nfunction toMovePlacement(p) {\n  const out = { pile: p.pile, cards: p.cards };\n  if (p.centerDecl) {\n    if (p.centerDecl.centerNum !== undefined) out.centerNum = p.centerDecl.centerNum;\n    if (p.centerDecl.centerColor !== undefined) out.centerColor = p.centerDecl.centerColor;\n  }\n  return out;\n}\n// Turn one enumerated placement into a full match move (no bonus).\nfunction singlePlacementMove(state, seat, placement) {\n  return { type: \"match\", placements: [toMovePlacement(placement)], bonus: [] };\n}\n// A random legal match move: one random placement, plus a second random\n// non-conflicting placement when one exists, plus a random bonus discard\n// per colour match earned.\nfunction randomMatchMove(state, seat, placements, ctx) {\n  const first = placements[Math.floor(ctx.random() * placements.length)];\n  const used = {};\n  for (const c of first.cards) used[c.i] = true;\n  const chosen = [first];\n  let colorMatches = first.colorMatch ? 1 : 0;\n  const rest = placements.filter(function (p) {\n    if (p.pile === first.pile) return false;\n    for (const c of p.cards) if (used[c.i]) return false;\n    return true;\n  });\n  if (rest.length > 0 && ctx.random() < 0.75) {\n    const second = rest[Math.floor(ctx.random() * rest.length)];\n    for (const c of second.cards) used[c.i] = true;\n    chosen.push(second);\n    if (second.colorMatch) colorMatches += 1;\n  }\n  const hand = state.hands[seat];\n  const remaining = [];\n  for (let i = 0; i < hand.length; i++) if (!used[i]) remaining.push(i);\n  const bonus = [];\n  for (let k = 0; k < colorMatches && remaining.length > 0; k++) {\n    const idx = Math.floor(ctx.random() * remaining.length);\n    const i = remaining.splice(idx, 1)[0];\n    const card = hand[i];\n    const b = { i: i };\n    if (isWildHash(card)) b.num = 1 + Math.floor(ctx.random() * 10);\n    if (isWildDos(card)) b.color = COLORS[Math.floor(ctx.random() * COLORS.length)];\n    bonus.push(b);\n  }\n  return { type: \"match\", placements: chosen.map(toMovePlacement), bonus: bonus };\n}\n// The move that puts one card from the hand face-up into the Center Row\n// after a draw that enabled no match: the lowest-point card (a computer\n// sheds its cheapest card; a random player picks one at random).\nfunction addCenterMove(state, seat, ctx) {\n  const hand = state.hands[seat];\n  let i = 0;\n  if (ctx) {\n    i = Math.floor(ctx.random() * hand.length);\n  } else {\n    for (let k = 1; k < hand.length; k++) {\n      if (pointsOf(hand[k]) < pointsOf(hand[i])) i = k;\n    }\n  }\n  const card = hand[i];\n  const ref = { i: i };\n  if (isWildHash(card)) ref.num = 1;\n  if (isWildDos(card)) ref.color = \"R\";\n  return { type: \"add_center\", card: ref };\n}\n\n// declarative-archive-view-hints\n;(()=>{const __archiveView=game.viewFor;game.viewFor=function(state,id,ctx){const v=__archiveView.call(this,state,id,ctx);const seat=id==null?-1:ctx.players.findIndex(p=>p.id===id);v.legal_placements=(seat===state.turn&&(state.phase===\"play\"||state.phase===\"after_draw\"))?allPlacements(state,seat).map(p=>({pile:p.pile,cards:p.cards,centerNum:p.centerDecl.centerNum,centerColor:p.centerDecl.centerColor,colorMatch:p.colorMatch,doubleColor:p.doubleColor})):[];return v;};})();\n",
   "rules": "Dos is Mattel's two-player matching card game (2018), after the official FRM36 instruction sheet. This package uses one fixed variant, described here. The deck has 108 cards: in each of the four colours (red, blue, green, yellow) there are three each of 1, 3, 4 and 5; two each of 6, 7, 8, 9 and 10; and two Wild # cards. There are also 12 Wild DOS cards, which are colourless. There is no number 2 card. Setup: shuffle the deck and deal seven cards to each player; turn two cards face up to form the Center Row. A Wild # is never a starting center card: it is skipped and the next card is used instead. Play: on your turn you must either match one or both of the cards in the Center Row with cards from your hand, or draw. A Single Match plays one card whose number equals a center card's number. A Double Match plays two cards whose numbers add up to a center card's number. You may match each center card at most once per turn. A Single Color Match is a single match where the played card also has the center card's colour; a Double Color Match is a double match where both played cards have the center card's colour. Each colour match earns one bonus: at the end of your turn you may put one card from your hand face-up in the Center Row. Each Double Color Match also makes every other player draw one card. Wild # cards count as any number from 1 to 10 in their own colour; you decide the number when you play one. A Wild # in the Center Row counts as the number the matcher declares for it. A Wild DOS card counts as a 2 of any colour; you decide its colour when you play it. A Wild DOS in the Center Row counts as the colour the matcher declares for it. Ending your turn: all the cards you played, including the center cards you played them on, go to the discard pile. The Center Row is then refilled from the deck until it has at least two cards, and then any bonus cards are put face-up in the Center Row. There is no maximum number of cards in the Center Row. Draw: if you cannot (or do not want to) make a match, draw one card. If the drawn card lets you match, you may play a match at once or pass. If you have drawn and still cannot make a match, put one card from your hand face up in the Center Row and your turn ends. Going out: the first player to shed all their cards wins the hand. The 'DOS!' shout when holding exactly two cards is omitted in this digital version, with no penalty. If the draw pile runs out it is refilled by reshuffling the discard pile. If a player must draw and no card can be drawn at all, the hand ends and the player with the fewest cards in hand wins; on a tie, the player with the fewest points in hand wins (number cards count their face value, a Wild DOS counts 20, a Wild # counts 40), and if that is also tied the lowest seat wins. A portal match is a single hand; there is no 200-point race. This game itself stakes no tokens; if there is a pot, the hand winner, if human, takes it, and if the winner is a computer, the only human gets the pot back; a drawn hand splits the pot between the humans. Players cannot join or leave mid-hand. Against the computer, it plays the highest-scoring matches it can find, takes its colour-match bonuses, and draws when it cannot match.",
   "ui_instructions": "Tap one or two hand cards, then a matching center card. Adjust wild cards if needed, add more matches or bonus cards, and tap Continue. Tap the deck to draw.",
   "tutorial": {
@@ -492,128 +492,128 @@
         },
         "state": {
           "deck": [
-            "Y4",
-            "Y9",
-            "G5",
-            "R3",
-            "G#",
-            "R1",
+            "WD",
+            "G8",
+            "R5",
+            "Y5",
+            "G7",
             "Y#",
-            "Y7",
+            "B7",
+            "R6",
             "G10",
-            "Y1",
-            "B9",
+            "G6",
+            "R7",
+            "G4",
+            "Y3",
+            "WD",
+            "R1",
+            "G7",
+            "Y10",
+            "Y7",
+            "B5",
+            "G5",
             "B4",
+            "B6",
             "Y10",
             "B10",
-            "WD",
-            "R1",
-            "G6",
-            "Y4",
-            "R1",
-            "G10",
-            "R4",
-            "B#",
-            "WD",
-            "WD",
-            "B8",
             "Y8",
-            "G4",
-            "G3",
-            "G7",
+            "R3",
+            "B7",
+            "Y1",
             "B6",
             "WD",
+            "Y3",
             "G1",
-            "Y1",
-            "Y1",
-            "G4",
-            "Y7",
-            "WD",
-            "B8",
-            "B7",
-            "R#",
-            "Y9",
-            "Y6",
-            "Y6",
             "G#",
-            "Y5",
-            "G9",
+            "Y6",
+            "B4",
+            "R5",
+            "R8",
+            "G8",
+            "WD",
+            "R4",
             "R10",
             "R9",
-            "B10",
-            "Y5",
-            "B3",
+            "B8",
+            "B9",
             "G5",
-            "G8",
-            "G4",
+            "B3",
             "Y8",
-            "B3",
-            "R4",
-            "Y3",
-            "B5",
-            "B5",
-            "WD",
-            "B1",
-            "B5",
-            "R7",
-            "G5",
-            "G7",
-            "G6",
-            "R3",
-            "R8",
-            "R9",
-            "Y10",
-            "WD",
-            "G1",
-            "B1",
-            "G3",
-            "WD",
-            "R5",
+            "R#",
             "Y#",
             "Y4",
             "WD",
-            "G8",
-            "R3",
-            "B9",
-            "R8",
+            "B3",
+            "Y5",
+            "Y5",
+            "R1",
+            "G5",
+            "G9",
             "B#",
+            "Y4",
             "G3",
+            "WD",
+            "B9",
+            "WD",
+            "R3",
+            "G6",
+            "B10",
+            "WD",
+            "Y6",
+            "R6",
+            "R8",
+            "Y3",
             "R10",
-            "B7",
-            "B1",
-            "B4",
+            "Y7",
+            "Y9",
             "G1",
-            "R7"
+            "B1",
+            "B5",
+            "R9",
+            "G1",
+            "WD",
+            "R7",
+            "B1",
+            "Y1",
+            "G4",
+            "B1",
+            "B#",
+            "B8",
+            "G4",
+            "Y1",
+            "WD",
+            "R4",
+            "R1"
           ],
           "discard": [],
           "center": [
             {
-              "id": "G9",
-              "num": 9,
-              "color": "G"
+              "id": "Y4",
+              "num": 4,
+              "color": "Y"
             },
             {
-              "id": "R6",
-              "num": 6,
-              "color": "R"
+              "id": "B4",
+              "num": 4,
+              "color": "B"
             }
           ],
           "hands": [
             [
-              "R5",
-              "R6",
+              "R3",
               "R#",
-              "B3",
-              "Y3",
-              "Y5",
-              "WD"
+              "B5",
+              "G3",
+              "G3",
+              "G10",
+              "G#"
             ],
             [
               "R4",
               "R5",
-              "B4",
-              "B6",
-              "Y3",
+              "B3",
+              "G9",
+              "Y9",
               "WD",
               "WD"
             ]
@@ -630,45 +630,30 @@
           "type": "match",
           "placements": [
             {
-              "pile": 1,
-              "cards": [
-                {
-                  "i": 2,
-                  "num": 4
-                },
-                {
-                  "i": 6,
-                  "color": "R"
-                }
-              ]
-            },
-            {
               "pile": 0,
               "cards": [
                 {
-                  "i": 1
+                  "i": 1,
+                  "num": 1
                 },
                 {
-                  "i": 3
+                  "i": 6,
+                  "num": 3
                 }
               ]
             }
           ],
-          "bonus": [
-            {
-              "i": 0
-            }
-          ]
+          "bonus": []
         },
         "view_of_mover": {
           "hand": [
-            "R5",
-            "R6",
+            "R3",
             "R#",
-            "B3",
-            "Y3",
-            "Y5",
-            "WD"
+            "B5",
+            "G3",
+            "G3",
+            "G10",
+            "G#"
           ],
           "hand_counts": [
             7,
@@ -676,14 +661,14 @@
           ],
           "center": [
             {
-              "id": "G9",
-              "num": 9,
-              "color": "G"
+              "id": "Y4",
+              "num": 4,
+              "color": "Y"
             },
             {
-              "id": "R6",
-              "num": 6,
-              "color": "R"
+              "id": "B4",
+              "num": 4,
+              "color": "B"
             }
           ],
           "deck_count": 92,
@@ -698,8 +683,19 @@
               "pile": 0,
               "cards": [
                 {
-                  "i": 2,
-                  "num": 9
+                  "i": 1,
+                  "num": 4
+                }
+              ],
+              "colorMatch": false,
+              "doubleColor": false
+            },
+            {
+              "pile": 0,
+              "cards": [
+                {
+                  "i": 6,
+                  "num": 4
                 }
               ],
               "colorMatch": false,
@@ -712,8 +708,8 @@
                   "i": 0
                 },
                 {
-                  "i": 2,
-                  "num": 4
+                  "i": 1,
+                  "num": 1
                 }
               ],
               "colorMatch": false,
@@ -723,10 +719,53 @@
               "pile": 0,
               "cards": [
                 {
-                  "i": 1
+                  "i": 0
                 },
                 {
-                  "i": 2,
+                  "i": 6,
+                  "num": 1
+                }
+              ],
+              "colorMatch": false,
+              "doubleColor": false
+            },
+            {
+              "pile": 0,
+              "cards": [
+                {
+                  "i": 1,
+                  "num": 1
+                },
+                {
+                  "i": 3
+                }
+              ],
+              "colorMatch": false,
+              "doubleColor": false
+            },
+            {
+              "pile": 0,
+              "cards": [
+                {
+                  "i": 1,
+                  "num": 1
+                },
+                {
+                  "i": 4
+                }
+              ],
+              "colorMatch": false,
+              "doubleColor": false
+            },
+            {
+              "pile": 0,
+              "cards": [
+                {
+                  "i": 1,
+                  "num": 1
+                },
+                {
+                  "i": 6,
                   "num": 3
                 }
               ],
@@ -737,80 +776,25 @@
               "pile": 0,
               "cards": [
                 {
-                  "i": 1
-                },
-                {
                   "i": 3
-                }
-              ],
-              "colorMatch": false,
-              "doubleColor": false
-            },
-            {
-              "pile": 0,
-              "cards": [
-                {
-                  "i": 1
-                },
-                {
-                  "i": 4
-                }
-              ],
-              "colorMatch": false,
-              "doubleColor": false
-            },
-            {
-              "pile": 0,
-              "cards": [
-                {
-                  "i": 2,
-                  "num": 6
-                },
-                {
-                  "i": 3
-                }
-              ],
-              "colorMatch": false,
-              "doubleColor": false
-            },
-            {
-              "pile": 0,
-              "cards": [
-                {
-                  "i": 2,
-                  "num": 6
-                },
-                {
-                  "i": 4
-                }
-              ],
-              "colorMatch": false,
-              "doubleColor": false
-            },
-            {
-              "pile": 0,
-              "cards": [
-                {
-                  "i": 2,
-                  "num": 4
-                },
-                {
-                  "i": 5
-                }
-              ],
-              "colorMatch": false,
-              "doubleColor": false
-            },
-            {
-              "pile": 0,
-              "cards": [
-                {
-                  "i": 2,
-                  "num": 7
                 },
                 {
                   "i": 6,
-                  "color": "G"
+                  "num": 1
+                }
+              ],
+              "colorMatch": false,
+              "doubleColor": false
+            },
+            {
+              "pile": 0,
+              "cards": [
+                {
+                  "i": 4
+                },
+                {
+                  "i": 6,
+                  "num": 1
                 }
               ],
               "colorMatch": false,
@@ -820,21 +804,22 @@
               "pile": 1,
               "cards": [
                 {
-                  "i": 1
+                  "i": 1,
+                  "num": 4
                 }
               ],
-              "colorMatch": true,
+              "colorMatch": false,
               "doubleColor": false
             },
             {
               "pile": 1,
               "cards": [
                 {
-                  "i": 2,
-                  "num": 6
+                  "i": 6,
+                  "num": 4
                 }
               ],
-              "colorMatch": true,
+              "colorMatch": false,
               "doubleColor": false
             },
             {
@@ -844,24 +829,10 @@
                   "i": 0
                 },
                 {
-                  "i": 2,
+                  "i": 1,
                   "num": 1
                 }
               ],
-              "colorMatch": true,
-              "doubleColor": true
-            },
-            {
-              "pile": 1,
-              "cards": [
-                {
-                  "i": 2,
-                  "num": 3
-                },
-                {
-                  "i": 3
-                }
-              ],
               "colorMatch": false,
               "doubleColor": false
             },
@@ -869,44 +840,58 @@
               "pile": 1,
               "cards": [
                 {
-                  "i": 2,
-                  "num": 3
-                },
-                {
-                  "i": 4
-                }
-              ],
-              "colorMatch": false,
-              "doubleColor": false
-            },
-            {
-              "pile": 1,
-              "cards": [
-                {
-                  "i": 2,
-                  "num": 1
-                },
-                {
-                  "i": 5
-                }
-              ],
-              "colorMatch": false,
-              "doubleColor": false
-            },
-            {
-              "pile": 1,
-              "cards": [
-                {
-                  "i": 2,
-                  "num": 4
+                  "i": 0
                 },
                 {
                   "i": 6,
-                  "color": "R"
+                  "num": 1
                 }
               ],
-              "colorMatch": true,
-              "doubleColor": true
+              "colorMatch": false,
+              "doubleColor": false
+            },
+            {
+              "pile": 1,
+              "cards": [
+                {
+                  "i": 1,
+                  "num": 1
+                },
+                {
+                  "i": 3
+                }
+              ],
+              "colorMatch": false,
+              "doubleColor": false
+            },
+            {
+              "pile": 1,
+              "cards": [
+                {
+                  "i": 1,
+                  "num": 1
+                },
+                {
+                  "i": 4
+                }
+              ],
+              "colorMatch": false,
+              "doubleColor": false
+            },
+            {
+              "pile": 1,
+              "cards": [
+                {
+                  "i": 1,
+                  "num": 1
+                },
+                {
+                  "i": 6,
+                  "num": 3
+                }
+              ],
+              "colorMatch": false,
+              "doubleColor": false
             },
             {
               "pile": 1,
@@ -915,7 +900,22 @@
                   "i": 3
                 },
                 {
+                  "i": 6,
+                  "num": 1
+                }
+              ],
+              "colorMatch": false,
+              "doubleColor": false
+            },
+            {
+              "pile": 1,
+              "cards": [
+                {
                   "i": 4
+                },
+                {
+                  "i": 6,
+                  "num": 1
                 }
               ],
               "colorMatch": false,
@@ -927,9 +927,9 @@
           "hand": [
             "R4",
             "R5",
-            "B4",
-            "B6",
-            "Y3",
+            "B3",
+            "G9",
+            "Y9",
             "WD",
             "WD"
           ],
@@ -939,14 +939,14 @@
           ],
           "center": [
             {
-              "id": "G9",
-              "num": 9,
-              "color": "G"
+              "id": "Y4",
+              "num": 4,
+              "color": "Y"
             },
             {
-              "id": "R6",
-              "num": 6,
-              "color": "R"
+              "id": "B4",
+              "num": 4,
+              "color": "B"
             }
           ],
           "deck_count": 92,
@@ -960,133 +960,129 @@
         },
         "expected_state": {
           "deck": [
-            "Y4",
-            "Y9",
-            "G5",
-            "R3",
-            "G#",
-            "R1",
+            "WD",
+            "G8",
+            "R5",
+            "Y5",
+            "G7",
             "Y#",
-            "Y7",
+            "B7",
+            "R6",
             "G10",
-            "Y1",
-            "B9",
+            "G6",
+            "R7",
+            "G4",
+            "Y3",
+            "WD",
+            "R1",
+            "G7",
+            "Y10",
+            "Y7",
+            "B5",
+            "G5",
             "B4",
+            "B6",
             "Y10",
             "B10",
-            "WD",
-            "R1",
-            "G6",
-            "Y4",
-            "R1",
-            "G10",
-            "R4",
-            "B#",
-            "WD",
-            "WD",
-            "B8",
             "Y8",
-            "G4",
-            "G3",
-            "G7",
+            "R3",
+            "B7",
+            "Y1",
             "B6",
             "WD",
+            "Y3",
             "G1",
-            "Y1",
-            "Y1",
-            "G4",
-            "Y7",
-            "WD",
-            "B8",
-            "B7",
-            "R#",
-            "Y9",
-            "Y6",
-            "Y6",
             "G#",
-            "Y5",
-            "G9",
+            "Y6",
+            "B4",
+            "R5",
+            "R8",
+            "G8",
+            "WD",
+            "R4",
             "R10",
             "R9",
-            "B10",
-            "Y5",
-            "B3",
+            "B8",
+            "B9",
             "G5",
-            "G8",
-            "G4",
+            "B3",
             "Y8",
-            "B3",
-            "R4",
-            "Y3",
-            "B5",
-            "B5",
-            "WD",
-            "B1",
-            "B5",
-            "R7",
-            "G5",
-            "G7",
-            "G6",
-            "R3",
-            "R8",
-            "R9",
-            "Y10",
-            "WD",
-            "G1",
-            "B1",
-            "G3",
-            "WD",
-            "R5",
+            "R#",
             "Y#",
             "Y4",
             "WD",
-            "G8",
-            "R3",
-            "B9",
-            "R8",
+            "B3",
+            "Y5",
+            "Y5",
+            "R1",
+            "G5",
+            "G9",
             "B#",
+            "Y4",
             "G3",
+            "WD",
+            "B9",
+            "WD",
+            "R3",
+            "G6",
+            "B10",
+            "WD",
+            "Y6",
+            "R6",
+            "R8",
+            "Y3",
             "R10",
-            "B7",
-            "B1"
+            "Y7",
+            "Y9",
+            "G1",
+            "B1",
+            "B5",
+            "R9",
+            "G1",
+            "WD",
+            "R7",
+            "B1",
+            "Y1",
+            "G4",
+            "B1",
+            "B#",
+            "B8",
+            "G4",
+            "Y1",
+            "WD",
+            "R4"
           ],
           "discard": [
-            "R6",
+            "Y4",
             "R#",
-            "WD",
-            "G9",
-            "R6",
-            "B3"
+            "G#"
           ],
           "center": [
-            {
-              "id": "G1",
-              "num": 1,
-              "color": "G"
-            },
             {
               "id": "B4",
               "num": 4,
               "color": "B"
             },
             {
-              "id": "R5",
-              "num": 5,
+              "id": "R1",
+              "num": 1,
               "color": "R"
             }
           ],
           "hands": [
             [
-              "Y3",
-              "Y5"
+              "R3",
+              "B5",
+              "G3",
+              "G3",
+              "G10"
             ],
             [
               "R4",
               "R5",
-              "R7",
-              "B4",
-              "B6",
-              "Y3",
+              "B3",
+              "G9",
+              "Y9",
               "WD",
               "WD"
             ]
@@ -1102,32 +1098,30 @@
         ],
         "expected_view_of_mover": {
           "hand": [
-            "Y3",
-            "Y5"
+            "R3",
+            "B5",
+            "G3",
+            "G3",
+            "G10"
           ],
           "hand_counts": [
-            2,
-            8
+            5,
+            7
           ],
           "center": [
-            {
-              "id": "G1",
-              "num": 1,
-              "color": "G"
-            },
             {
               "id": "B4",
               "num": 4,
               "color": "B"
             },
             {
-              "id": "R5",
-              "num": 5,
+              "id": "R1",
+              "num": 1,
               "color": "R"
             }
           ],
-          "deck_count": 89,
-          "discard_count": 6,
+          "deck_count": 91,
+          "discard_count": 3,
           "phase": "play",
           "turn": 1,
           "drawn_card": null,
@@ -1139,36 +1133,30 @@
           "hand": [
             "R4",
             "R5",
-            "R7",
-            "B4",
-            "B6",
-            "Y3",
+            "B3",
+            "G9",
+            "Y9",
             "WD",
             "WD"
           ],
           "hand_counts": [
-            2,
-            8
+            5,
+            7
           ],
           "center": [
-            {
-              "id": "G1",
-              "num": 1,
-              "color": "G"
-            },
             {
               "id": "B4",
               "num": 4,
               "color": "B"
             },
             {
-              "id": "R5",
-              "num": 5,
+              "id": "R1",
+              "num": 1,
               "color": "R"
             }
           ],
-          "deck_count": 89,
-          "discard_count": 6,
+          "deck_count": 91,
+          "discard_count": 3,
           "phase": "play",
           "turn": 1,
           "drawn_card": null,
@@ -1176,7 +1164,7 @@
           "moves": 1,
           "legal_placements": [
             {
-              "pile": 1,
+              "pile": 0,
               "cards": [
                 {
                   "i": 0
@@ -1186,67 +1174,19 @@
               "doubleColor": false
             },
             {
-              "pile": 1,
+              "pile": 0,
               "cards": [
                 {
-                  "i": 3
-                }
-              ],
-              "colorMatch": true,
-              "doubleColor": false
-            },
-            {
-              "pile": 1,
-              "cards": [
-                {
-                  "i": 6,
+                  "i": 5,
                   "color": "B"
                 },
                 {
-                  "i": 7,
+                  "i": 6,
                   "color": "B"
                 }
               ],
               "colorMatch": true,
               "doubleColor": true
-            },
-            {
-              "pile": 2,
-              "cards": [
-                {
-                  "i": 1
-                }
-              ],
-              "colorMatch": true,
-              "doubleColor": false
-            },
-            {
-              "pile": 2,
-              "cards": [
-                {
-                  "i": 5
-                },
-                {
-                  "i": 6,
-                  "color": "R"
-                }
-              ],
-              "colorMatch": false,
-              "doubleColor": false
-            },
-            {
-              "pile": 2,
-              "cards": [
-                {
-                  "i": 5
-                },
-                {
-                  "i": 7,
-                  "color": "R"
-                }
-              ],
-              "colorMatch": false,
-              "doubleColor": false
             }
           ]
         },

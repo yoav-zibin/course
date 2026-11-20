@@ -190,9 +190,14 @@ viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
 ## Human-only online matches
 
 Online matches contain human players. Computer opponent selection, random
-matchmaking and open-match discovery have been removed. All matches are public;
+matchmaking and open-match discovery have been removed. New matches are public;
 `viewFor` still controls each player's and spectator's view of hidden information.
 Local practice and random walks continue to exercise `computerMove`.
+
+Matches created as private before this change retain their restricted audience:
+participants can read them, and an active invitation grants its existing viewing
+and joining capability. Their rematches keep that audience. Cached clients that
+explicitly request a new private match receive a validation error.
 
 Timeouts end a match — a server timer fires at the deadline, and reads and
 moves check too — and pay its outstanding pot to the players who did not hold

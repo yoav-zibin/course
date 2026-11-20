@@ -7,7 +7,7 @@
   "all_state_public": false,
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
-  "server_code": "const suit=card=>Math.floor(card/13);\nconst rank=card=>card%13;\nfunction legal(s){\n  const hand=s.hands[s.seat];\n  const follow=hand.filter(card=>s.trick.length&&suit(card)===suit(s.trick[0].card));\n  return follow.length?follow:hand;\n}\nconst game={\n  newMatch(ctx){\n    const deck=Array.from({length:52},(_,i)=>i);\n    let seed=2166136261;\n    for(const p of ctx.players)for(const c of p.id)seed=Math.imul(seed^c.charCodeAt(0),16777619);\n    for(let i=51;i>0;i--){\n      seed=(Math.imul(seed,1664525)+1013904223)>>>0;\n      const j=seed%(i+1);[deck[i],deck[j]]=[deck[j],deck[i]];\n    }\n    return {state:{hands:ctx.players.map((_,i)=>deck.slice(13*i,13*i+13)),seat:0,trump:-1,trick:[],scores:[0,0],winners:[]},turn:[ctx.players[0].id]};\n  },\n  applyMove(s,id,m,ctx){\n    const invalid=()=>{throw new InvalidMove(\"Choose a legal move on your turn.\");};\n    if(!m||Object.keys(m).length!==1||s.winners.length||ctx.players[s.seat].id!==id)invalid();\n    if(s.trump<0){\n      if(!Number.isInteger(m.trump)||m.trump<0||m.trump>3)invalid();\n      return {state:{...s,trump:m.trump},turn:[id]};\n    }\n    if(!legal(s).includes(m.card))invalid();\n    const hands=s.hands.map((hand,i)=>i===s.seat?hand.filter(c=>c!==m.card):hand);\n    const next={...s,hands,trick:[...s.trick,{seat:s.seat,card:m.card}],seat:(s.seat+1)%4};\n    if(next.trick.length===4){\n      const lead=suit(next.trick[0].card);\n      const strength=c=>rank(c)+(suit(c)===s.trump?26:suit(c)===lead?13:0);\n      next.seat=next.trick.sort((a,b)=>strength(b.card)-strength(a.card))[0].seat;\n      next.trick=[];\n      next.scores=[...s.scores];\n      const team=next.seat%2;\n      if(++next.scores[team]===7)next.winners=[team,team+2];\n    }\n    if(!next.winners.length)return {state:next,turn:[ctx.players[next.seat].id]};\n    const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false);\n    const winning=humans.filter(p=>next.winners.includes(ctx.players.indexOf(p)));\n    const paid=winning.length?winning:humans;\n    return {state:next,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,Math.floor(ctx.pot/paid.length)+(i<ctx.pot%paid.length?1:0)]))};\n  },\n  viewFor(s,id,ctx){\n    const {hands,...visible}=s;\n    const i=ctx.players.findIndex(p=>p.id===id), hand=hands[i]??[];\n    return {...visible,hand:s.trump<0?(i===0?hand.slice(0,5):[]):hand,legal:i===s.seat&&s.trump>=0&&!s.winners.length?legal(s):[]};\n  },\n  computerMove(s){\n    if(s.trump<0){\n      const first=s.hands[0].slice(0,5);\n      return {trump:[0,1,2,3].sort((a,b)=>first.filter(c=>suit(c)===b).length-first.filter(c=>suit(c)===a).length)[0]};\n    }\n    return {card:legal(s)[0]};\n  },\n  randomMove(s,id,ctx){\n    if(s.trump<0)return {trump:Math.floor(ctx.random()*4)};\n    const moves=legal(s);return {card:moves[Math.floor(ctx.random()*moves.length)]};\n  }\n};\n",
+  "server_code": "const suit=card=>Math.floor(card/13);\nconst rank=card=>card%13;\nfunction legal(s){\n  const hand=s.hands[s.seat];\n  const follow=hand.filter(card=>s.trick.length&&suit(card)===suit(s.trick[0].card));\n  return follow.length?follow:hand;\n}\nconst game={\n  newMatch(ctx){\n    const deck=Array.from({length:52},(_,i)=>i);\n    for(let i=51;i>0;i--){\n      const j=Math.floor(ctx.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];\n    }\n    return {state:{hands:ctx.players.map((_,i)=>deck.slice(13*i,13*i+13)),seat:0,trump:-1,trick:[],scores:[0,0],winners:[]},turn:[ctx.players[0].id]};\n  },\n  applyMove(s,id,m,ctx){\n    const invalid=()=>{throw new InvalidMove(\"Choose a legal move on your turn.\");};\n    if(!m||Object.keys(m).length!==1||s.winners.length||ctx.players[s.seat].id!==id)invalid();\n    if(s.trump<0){\n      if(!Number.isInteger(m.trump)||m.trump<0||m.trump>3)invalid();\n      return {state:{...s,trump:m.trump},turn:[id]};\n    }\n    if(!legal(s).includes(m.card))invalid();\n    const hands=s.hands.map((hand,i)=>i===s.seat?hand.filter(c=>c!==m.card):hand);\n    const next={...s,hands,trick:[...s.trick,{seat:s.seat,card:m.card}],seat:(s.seat+1)%4};\n    if(next.trick.length===4){\n      const lead=suit(next.trick[0].card);\n      const strength=c=>rank(c)+(suit(c)===s.trump?26:suit(c)===lead?13:0);\n      next.seat=next.trick.sort((a,b)=>strength(b.card)-strength(a.card))[0].seat;\n      next.trick=[];\n      next.scores=[...s.scores];\n      const team=next.seat%2;\n      if(++next.scores[team]===7)next.winners=[team,team+2];\n    }\n    if(!next.winners.length)return {state:next,turn:[ctx.players[next.seat].id]};\n    const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false);\n    const winning=humans.filter(p=>next.winners.includes(ctx.players.indexOf(p)));\n    const paid=winning.length?winning:humans;\n    return {state:next,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,Math.floor(ctx.pot/paid.length)+(i<ctx.pot%paid.length?1:0)]))};\n  },\n  viewFor(s,id,ctx){\n    const {hands,...visible}=s;\n    const i=ctx.players.findIndex(p=>p.id===id), hand=hands[i]??[];\n    return {...visible,hand:s.trump<0?(i===0?hand.slice(0,5):[]):hand,legal:i===s.seat&&s.trump>=0&&!s.winners.length?legal(s):[]};\n  },\n  computerMove(s){\n    if(s.trump<0){\n      const first=s.hands[0].slice(0,5);\n      return {trump:[0,1,2,3].sort((a,b)=>first.filter(c=>suit(c)===b).length-first.filter(c=>suit(c)===a).length)[0]};\n    }\n    return {card:legal(s)[0]};\n  },\n  randomMove(s,id,ctx){\n    if(s.trump<0)return {trump:Math.floor(ctx.random()*4)};\n    const moves=legal(s);return {card:moves[Math.floor(ctx.random()*moves.length)]};\n  }\n};\n",
   "declarative_ui": {
     "format": "buildplay-ui",
     "version": 1,
@@ -572,143 +572,143 @@
         "expected_state": {
           "hands": [
             [
-              51,
-              32,
-              8,
-              46,
-              14,
-              18,
-              1,
-              45,
-              7,
-              11,
-              30,
-              48,
-              19
-            ],
-            [
-              10,
-              2,
-              40,
-              43,
-              33,
-              36,
-              50,
-              25,
-              31,
-              3,
-              12,
-              41,
-              29
-            ],
-            [
-              9,
-              39,
-              35,
-              38,
-              17,
-              47,
-              49,
-              42,
-              5,
-              16,
+              24,
+              44,
               23,
+              10,
+              43,
+              31,
+              50,
+              41,
               6,
-              24
+              29,
+              35,
+              22,
+              40
             ],
             [
-              28,
-              21,
-              0,
-              37,
-              20,
-              13,
-              26,
               34,
+              11,
+              3,
+              49,
+              33,
+              8,
+              14,
               4,
-              15,
-              22,
               27,
-              44
+              45,
+              38,
+              30,
+              7
+            ],
+            [
+              21,
+              16,
+              12,
+              1,
+              36,
+              37,
+              25,
+              47,
+              2,
+              17,
+              39,
+              9,
+              15
+            ],
+            [
+              5,
+              20,
+              19,
+              42,
+              18,
+              51,
+              28,
+              13,
+              46,
+              48,
+              26,
+              0,
+              32
             ]
           ],
+          "seat": 0,
+          "trump": 1,
+          "trick": [],
           "scores": [
             0,
             0
           ],
-          "seat": 0,
-          "trick": [],
-          "trump": 3,
           "winners": []
         },
         "expected_turn": [
           "u1"
         ],
         "expected_view_of_mover": {
+          "seat": 0,
+          "trump": 1,
+          "trick": [],
+          "scores": [
+            0,
+            0
+          ],
+          "winners": [],
           "hand": [
-            51,
-            32,
-            8,
-            46,
-            14,
-            18,
-            1,
-            45,
-            7,
-            11,
-            30,
-            48,
-            19
+            24,
+            44,
+            23,
+            10,
+            43,
+            31,
+            50,
+            41,
+            6,
+            29,
+            35,
+            22,
+            40
           ],
           "legal": [
-            51,
-            32,
-            8,
-            46,
-            14,
-            18,
-            1,
-            45,
-            7,
-            11,
-            30,
-            48,
-            19
-          ],
-          "scores": [
-            0,
-            0
-          ],
-          "seat": 0,
-          "trick": [],
-          "trump": 3,
-          "winners": []
+            24,
+            44,
+            23,
+            10,
+            43,
+            31,
+            50,
+            41,
+            6,
+            29,
+            35,
+            22,
+            40
+          ]
         },
         "expected_view_of_other": {
-          "hand": [
-            10,
-            2,
-            40,
-            43,
-            33,
-            36,
-            50,
-            25,
-            31,
-            3,
-            12,
-            41,
-            29
-          ],
-          "legal": [],
+          "seat": 0,
+          "trump": 1,
+          "trick": [],
           "scores": [
             0,
             0
           ],
-          "seat": 0,
-          "trick": [],
-          "trump": 3,
-          "winners": []
+          "winners": [],
+          "hand": [
+            34,
+            11,
+            3,
+            49,
+            33,
+            8,
+            14,
+            4,
+            27,
+            45,
+            38,
+            30,
+            7
+          ],
+          "legal": []
         },
         "images": [
           {
@@ -730,7 +730,7 @@
         ],
         "kind": "initial",
         "move": {
-          "trump": 3
+          "trump": 1
         },
         "name": "initial move",
         "other_player_id": "u2",
@@ -738,104 +738,104 @@
         "state": {
           "hands": [
             [
-              51,
-              32,
-              8,
-              46,
-              14,
-              18,
-              1,
-              45,
-              7,
-              11,
-              30,
-              48,
-              19
-            ],
-            [
-              10,
-              2,
-              40,
-              43,
-              33,
-              36,
-              50,
-              25,
-              31,
-              3,
-              12,
-              41,
-              29
-            ],
-            [
-              9,
-              39,
-              35,
-              38,
-              17,
-              47,
-              49,
-              42,
-              5,
-              16,
+              24,
+              44,
               23,
+              10,
+              43,
+              31,
+              50,
+              41,
               6,
-              24
+              29,
+              35,
+              22,
+              40
             ],
             [
-              28,
-              21,
-              0,
-              37,
-              20,
-              13,
-              26,
               34,
+              11,
+              3,
+              49,
+              33,
+              8,
+              14,
               4,
-              15,
-              22,
               27,
-              44
+              45,
+              38,
+              30,
+              7
+            ],
+            [
+              21,
+              16,
+              12,
+              1,
+              36,
+              37,
+              25,
+              47,
+              2,
+              17,
+              39,
+              9,
+              15
+            ],
+            [
+              5,
+              20,
+              19,
+              42,
+              18,
+              51,
+              28,
+              13,
+              46,
+              48,
+              26,
+              0,
+              32
             ]
           ],
+          "seat": 0,
+          "trump": -1,
+          "trick": [],
           "scores": [
             0,
             0
           ],
-          "seat": 0,
-          "trick": [],
-          "trump": -1,
           "winners": []
         },
         "view_of_mover": {
-          "hand": [
-            51,
-            32,
-            8,
-            46,
-            14
-          ],
-          "legal": [],
+          "seat": 0,
+          "trump": -1,
+          "trick": [],
           "scores": [
             0,
             0
           ],
-          "seat": 0,
-          "trick": [],
-          "trump": -1,
-          "winners": []
+          "winners": [],
+          "hand": [
+            24,
+            44,
+            23,
+            10,
+            43
+          ],
+          "legal": []
         },
         "view_of_other": {
-          "hand": [],
-          "legal": [],
+          "seat": 0,
+          "trump": -1,
+          "trick": [],
           "scores": [
             0,
             0
           ],
-          "seat": 0,
-          "trick": [],
-          "trump": -1,
-          "winners": []
+          "winners": [],
+          "hand": [],
+          "legal": []
         }
       },
       {
@@ -935,6 +935,14 @@
           "u3"
         ],
         "expected_view_of_mover": {
+          "scores": [
+            4,
+            1
+          ],
+          "seat": 2,
+          "trick": [],
+          "trump": 3,
+          "winners": [],
           "hand": [
             43,
             50,
@@ -945,7 +953,9 @@
             41,
             29
           ],
-          "legal": [],
+          "legal": []
+        },
+        "expected_view_of_other": {
           "scores": [
             4,
             1
@@ -953,9 +963,7 @@
           "seat": 2,
           "trick": [],
           "trump": 3,
-          "winners": []
-        },
-        "expected_view_of_other": {
+          "winners": [],
           "hand": [
             46,
             14,
@@ -966,15 +974,7 @@
             48,
             19
           ],
-          "legal": [],
-          "scores": [
-            4,
-            1
-          ],
-          "seat": 2,
-          "trick": [],
-          "trump": 3,
-          "winners": []
+          "legal": []
         },
         "images": [
           {
@@ -1068,6 +1068,27 @@
           "winners": []
         },
         "view_of_mover": {
+          "scores": [
+            3,
+            1
+          ],
+          "seat": 1,
+          "trick": [
+            {
+              "card": 38,
+              "seat": 2
+            },
+            {
+              "card": 37,
+              "seat": 3
+            },
+            {
+              "card": 30,
+              "seat": 0
+            }
+          ],
+          "trump": 3,
+          "winners": [],
           "hand": [
             43,
             36,
@@ -1083,7 +1104,9 @@
             36,
             31,
             29
-          ],
+          ]
+        },
+        "view_of_other": {
           "scores": [
             3,
             1
@@ -1104,9 +1127,7 @@
             }
           ],
           "trump": 3,
-          "winners": []
-        },
-        "view_of_other": {
+          "winners": [],
           "hand": [
             46,
             14,
@@ -1117,28 +1138,7 @@
             48,
             19
           ],
-          "legal": [],
-          "scores": [
-            3,
-            1
-          ],
-          "seat": 1,
-          "trick": [
-            {
-              "card": 38,
-              "seat": 2
-            },
-            {
-              "card": 37,
-              "seat": 3
-            },
-            {
-              "card": 30,
-              "seat": 0
-            }
-          ],
-          "trump": 3,
-          "winners": []
+          "legal": []
         }
       },
       {
@@ -1223,12 +1223,25 @@
         },
         "expected_turn": null,
         "expected_view_of_mover": {
+          "scores": [
+            7,
+            3
+          ],
+          "seat": 0,
+          "trick": [],
+          "trump": 3,
+          "winners": [
+            0,
+            2
+          ],
           "hand": [
             12,
             41,
             29
           ],
-          "legal": [],
+          "legal": []
+        },
+        "expected_view_of_other": {
           "scores": [
             7,
             3
@@ -1239,26 +1252,13 @@
           "winners": [
             0,
             2
-          ]
-        },
-        "expected_view_of_other": {
+          ],
           "hand": [
             7,
             11,
             48
           ],
-          "legal": [],
-          "scores": [
-            7,
-            3
-          ],
-          "seat": 0,
-          "trick": [],
-          "trump": 3,
-          "winners": [
-            0,
-            2
-          ]
+          "legal": []
         },
         "images": [
           {
@@ -1332,6 +1332,27 @@
           "winners": []
         },
         "view_of_mover": {
+          "scores": [
+            6,
+            3
+          ],
+          "seat": 1,
+          "trick": [
+            {
+              "card": 16,
+              "seat": 2
+            },
+            {
+              "card": 15,
+              "seat": 3
+            },
+            {
+              "card": 19,
+              "seat": 0
+            }
+          ],
+          "trump": 3,
+          "winners": [],
           "hand": [
             3,
             12,
@@ -1343,7 +1364,9 @@
             12,
             41,
             29
-          ],
+          ]
+        },
+        "view_of_other": {
           "scores": [
             6,
             3
@@ -1364,36 +1387,13 @@
             }
           ],
           "trump": 3,
-          "winners": []
-        },
-        "view_of_other": {
+          "winners": [],
           "hand": [
             7,
             11,
             48
           ],
-          "legal": [],
-          "scores": [
-            6,
-            3
-          ],
-          "seat": 1,
-          "trick": [
-            {
-              "card": 16,
-              "seat": 2
-            },
-            {
-              "card": 15,
-              "seat": 3
-            },
-            {
-              "card": 19,
-              "seat": 0
-            }
-          ],
-          "trump": 3,
-          "winners": []
+          "legal": []
         }
       }
     ],

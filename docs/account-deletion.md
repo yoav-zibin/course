@@ -41,12 +41,15 @@ deadline, repeat refunds, or resurrect removed data.
 Cleanup removes the account and merged aliases, login/referral reservations,
 online matches the account owned or participated in (including completed/shared
 matches), move history and private match evidence, related invitations and queued
-work, libraries, push registrations/deliveries, account-linked experiment and
-token records, submitted bug reports/feedback, and structured cached account
+work, libraries, push registrations/deliveries, account-linked experiment
+records, submitted bug reports/feedback, and structured cached account
 references. Shared matches disappear for the other players too. Held match pots
 use the existing refund behavior.
 
-Published platform games and anonymous numeric aggregates remain. Device-only
+Permanent token movements and pending accounting exports remain, including their
+historical user and match IDs, amounts, starting balances, reasons and timestamps;
+they contain no names or login details. Published platform games and anonymous
+numeric aggregates remain. Device-only
 offline saves/caches cannot be remotely erased. Tiny, unindexed hash-keyed boolean
 fences remain to prevent already-running requests from recreating deleted users
 or matches; they contain no names, credentials, account IDs or match payloads.

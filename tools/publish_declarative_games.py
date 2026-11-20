@@ -88,9 +88,17 @@ def _dos_match_event(ui, message, frame, move):
     def page_to(key, index):
         target = index // 14
         prefix = "dos_hand" if key == "handPage" else "dos_center"
-        while frame["local_state"][key] != target:
-            direction = "next" if frame["local_state"][key] < target else "previous"
+        seen = set()
+        for _ in range(32):
+            current = frame["local_state"][key]
+            if current == target:
+                return
+            if current in seen:
+                raise ValueError("Dos pagination did not advance toward the selected card")
+            seen.add(current)
+            direction = "next" if current < target else "previous"
             tap(f"{prefix}_{direction}")
+        raise ValueError("Dos pagination exceeded its action limit")
 
     for placement in move["placements"]:
         for ref in sorted(placement["cards"], key=lambda item: item["i"]):

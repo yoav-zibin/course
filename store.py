@@ -271,6 +271,8 @@ class InMemoryStore:
     """A [Store] backed by dicts. Not thread-safe on its own; callers serialize access."""
 
     def __init__(self) -> None:
+        # Share the service's operation boundary with background push cleanup.
+        self.operation_lock = threading.RLock()
         # Dicts preserve insertion order, so listings come out oldest first.
         self._users: dict[str, User] = {}
         self._token_movements: dict[str, TokenMovement] = {}

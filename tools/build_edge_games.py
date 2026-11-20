@@ -260,6 +260,8 @@ def schemas(kind):
                 'properties': {'cell': {'type': 'integer', 'minimum': -1, 'maximum': 48}, 'rot': {'type': 'integer', 'minimum': 0, 'maximum': 7}}}
     state = {'type': 'object', 'required': list(props), 'additionalProperties': False, 'properties': props}
     view = copy.deepcopy(state)
+    if kind == 'cartographers':
+        view['properties']['deck']['minItems'] = 1
     view['properties']['legal'] = {'type': 'array', 'maxItems': 450, 'items': move}
     view['required'].append('legal')
     return {'state': state, 'view': view, 'move': move}
@@ -390,7 +392,7 @@ def package(kind):
         if 'payouts' in result:
             case['expected_payouts'] = result['payouts']
         cases.append(case)
-    return {'all_state_public': True, 'name': TITLES[kind][0] + ' (Declarative)', 'description': RULES[kind][0],
+    return {'all_state_public': kind != 'cartographers', 'name': TITLES[kind][0] + ' (Declarative)', 'description': RULES[kind][0],
             'game_addition_request_id_and_secret': 'example-only-declarative-' + kind + '-replace-before-publishing',
             'allowed_player_counts': [2], 'server_code': code, 'declarative_ui': specification(kind),
             'rules': RULES[kind][0], 'ui_instructions': UI_RULES[kind][0],

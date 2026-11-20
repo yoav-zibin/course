@@ -1,23 +1,6 @@
 "use strict";
 function warRank(card) { return card % 13 + 2; }
 function warSuit(card) { return Math.floor(card / 13); }
-function warShuffleSeed(ctx) {
-  let h = 2166136261;
-  for (const player of ctx.players || []) {
-    const id = String(player.id || "");
-    for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
-    h = Math.imul(h ^ 255, 16777619);
-  }
-  h ^= (ctx.pot || 0) | 0;
-  return h >>> 0 || 1;
-}
-function warRandom(seed) {
-  let x = seed >>> 0;
-  return function() {
-    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
-    return (x >>> 0) / 4294967296;
-  };
-}
 function warEligible(state) {
   return state.decks.map((deck, seat) => deck.length ? seat : -1).filter(seat => seat >= 0);
 }
@@ -106,7 +89,7 @@ function warFinishPending(state, ctx) {
 const game = {
   newMatch(ctx) {
     const deck = Array.from({length: 52}, (_, card) => card);
-    const random = warRandom(warShuffleSeed(ctx));
+    const random = ctx.random;
     for (let i = deck.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1));
       [deck[i], deck[j]] = [deck[j], deck[i]];

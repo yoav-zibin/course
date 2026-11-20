@@ -7,7 +7,7 @@
   ],
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
-  "server_code": "\"use strict\";\n\n// Mau-Mau server code (v2 Game API).\n// Fixed variant (documented verbatim in the package rules):\n//   * 2 players, standard 52-card French pack, ranks 2-A, suits C/D/H/S.\n//     Each player is dealt 7 cards; one card is turned up to start the\n//     discard pile. Seat 0 (the non-dealer) leads first.\n//   * On your turn, play a card matching the top discard by rank or suit,\n//     or draw. If you cannot (or choose not to) play, draw 1 card from the\n//     stock: if the drawn card is legally playable you may play it\n//     immediately or pass; if it is not playable your turn ends at once.\n//     A drawn card is never held over to a later turn.\n//   * Action cards (only these four; aces are plain cards, no effect):\n//       7: next player must draw 2 and their turn ends, unless they play\n//          a 7 of any suit, which adds 2 more (4, 6, 8, ...) and passes\n//          the obligation on. While a draw penalty is pending, a player\n//          may only play a 7 or draw the pending cards.\n//       8: next player misses their turn (with 2 players, the player who\n//          played the 8 plays again).\n//       9: reverses the direction of play (with 2 players, the player who\n//          played the 9 plays again).\n//       Jack: wild, playable on any card including another Jack. The\n//          player who plays it chooses a new suit; the next player must\n//          match that suit or a Jack. A Jack may be the final card.\n//   * When the stock runs out, the discard pile except the top card is\n//     reshuffled into a new stock. Reshuffles are deterministic: derived\n//     from ctx.seed, ctx.move_count and the reshuffle count, never\n//     Math.random() and never ctx.random().\n//   * The game ends the moment a hand becomes empty; pending draw\n//     penalties are not applied after the game ends. There is no \"Mau\"\n//     call-out rule. No scoring across hands: one hand = one match.\n//   * Moves: {type:\"play\", card:\"7H\", suit:\"S\"} (suit only for a Jack),\n//     {type:\"draw\"}, {type:\"pass\"} (only after drawing a playable card\n//     and choosing not to play it).\n// The opening deal is derived deterministically from the player ids and\n// the pot (FNV-1a hash + splitmix-style PRNG), never from ctx.random(),\n// so newMatch is fully verifiable. The upcard's action effect (if it is\n// a 7, 8, 9 or Jack) does NOT apply at the start of the hand; it is\n// simply the first discard, and its suit is the suit to match.\n\nconst RANKS = [\"2\", \"3\", \"4\", \"5\", \"6\", \"7\", \"8\", \"9\", \"10\", \"J\", \"Q\", \"K\", \"A\"];\nconst RANK_VALUE = { \"2\": 2, \"3\": 3, \"4\": 4, \"5\": 5, \"6\": 6, \"7\": 7, \"8\": 8, \"9\": 9, \"10\": 10, J: 11, Q: 12, K: 13, A: 14 };\nconst SUITS = [\"S\", \"H\", \"D\", \"C\"];\nconst SUIT_ORDER = { S: 0, H: 1, D: 2, C: 3 };\nconst ACTION_RANKS = [\"7\", \"8\", \"9\", \"J\"];\n\nfunction rankOf(card) {\n  return card.length === 3 ? card.slice(0, 2) : card[0];\n}\nfunction suitOf(card) {\n  return card[card.length - 1];\n}\nfunction isCard(card) {\n  return typeof card === \"string\" && card.length >= 2 && card.length <= 3 &&\n    Object.prototype.hasOwnProperty.call(RANK_VALUE, rankOf(card)) &&\n    Object.prototype.hasOwnProperty.call(SUIT_ORDER, suitOf(card)) &&\n    (card.length === 2 || rankOf(card) === \"10\");\n}\nfunction isSuit(s) {\n  return typeof s === \"string\" && Object.prototype.hasOwnProperty.call(SUIT_ORDER, s);\n}\nfunction sortHand(hand) {\n  return hand.slice().sort(function (a, b) {\n    const s = SUIT_ORDER[suitOf(a)] - SUIT_ORDER[suitOf(b)];\n    if (s !== 0) return s;\n    return RANK_VALUE[rankOf(b)] - RANK_VALUE[rankOf(a)];\n  });\n}\nfunction hashString(s) {\n  let h = 2166136261 >>> 0;\n  for (let i = 0; i < s.length; i++) {\n    h ^= s.charCodeAt(i);\n    h = Math.imul(h, 16777619);\n  }\n  return h >>> 0;\n}\nfunction rngFromSeed(seed) {\n  let a = seed >>> 0;\n  return function () {\n    a |= 0;\n    a = (a + 0x6d2b79f5) | 0;\n    let t = Math.imul(a ^ (a >>> 15), 1 | a);\n    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}\nfunction shuffledDeck(rng) {\n  const deck = [];\n  for (const suit of SUITS) {\n    for (const rank of RANKS) deck.push(rank + suit);\n  }\n  for (let i = deck.length - 1; i > 0; i--) {\n    const j = Math.floor(rng() * (i + 1));\n    const tmp = deck[i];\n    deck[i] = deck[j];\n    deck[j] = tmp;\n  }\n  return deck;\n}\nfunction copyState(state) {\n  return {\n    hands: [state.hands[0].slice(), state.hands[1].slice()],\n    stock: state.stock.slice(),\n    discard: state.discard.slice(),\n    top_suit: state.top_suit,\n    to_move: state.to_move,\n    pending_draw: state.pending_draw,\n    drew: state.drew,\n    winner: state.winner,\n    phase: state.phase,\n    reshuffles: state.reshuffles\n  };\n}\nfunction topCard(state) {\n  return state.discard[state.discard.length - 1];\n}\n// Is this card playable on the current top discard (ignoring pending/drew)?\nfunction matchesTop(state, card) {\n  if (rankOf(card) === \"J\") return true;\n  const top = topCard(state);\n  return rankOf(card) === rankOf(top) || suitOf(card) === state.top_suit;\n}\n// Legal play cards for a player in the current state (normal play only:\n// no pending draw, no undecided drawn card).\nfunction legalPlays(state, seat) {\n  return state.hands[seat].filter(function (c) { return matchesTop(state, c); });\n}\nfunction settle(state, ctx) {\n  if (ctx.pot === 0) return {};\n  const humans = ctx.players.filter(function (p) { return p.kind === \"human\"; });\n  if (humans.length === 0) return {};\n  const winnerPlayer = ctx.players[state.winner];\n  if (winnerPlayer && winnerPlayer.kind === \"human\") {\n    const payouts = {};\n    payouts[winnerPlayer.id] = ctx.pot;\n    return payouts;\n  }\n  const payouts = {};\n  payouts[humans[0].id] = ctx.pot;\n  return payouts;\n}\n// Draw n cards into next.hands[seat], reshuffling the discard pile\n// (except its top card) into a new stock whenever the stock runs out.\n// Deterministic: the reshuffle PRNG is seeded from ctx.seed,\n// ctx.move_count and the reshuffle count. Returns the drawn cards.\n// If no cards exist at all to draw (stock empty and only the top card\n// in the discard pile), draws as many as exist and stops.\nfunction drawCards(next, seat, n, ctx) {\n  const drawn = [];\n  for (let k = 0; k < n; k++) {\n    if (next.stock.length === 0) {\n      if (next.discard.length <= 1) break;\n      const top = next.discard[next.discard.length - 1];\n      const rest = next.discard.slice(0, next.discard.length - 1);\n      const seed = hashString(String(ctx.seed || 0) + \"|\" + String(ctx.move_count || 0) + \"|\" + String(next.reshuffles));\n      const rng = rngFromSeed(seed);\n      for (let i = rest.length - 1; i > 0; i--) {\n        const j = Math.floor(rng() * (i + 1));\n        const tmp = rest[i];\n        rest[i] = rest[j];\n        rest[j] = tmp;\n      }\n      next.stock = rest;\n      next.discard = [top];\n      next.reshuffles += 1;\n    }\n    const card = next.stock.shift();\n    next.hands[seat].push(card);\n    drawn.push(card);\n  }\n  next.hands[seat] = sortHand(next.hands[seat]);\n  return drawn;\n}\n// Choose the suit a Jack should name: the suit most common in the\n// player's remaining hand (excluding Jacks); ties break S, H, D, C.\nfunction bestSuitForJack(hand) {\n  const counts = { S: 0, H: 0, D: 0, C: 0 };\n  hand.forEach(function (c) {\n    if (rankOf(c) !== \"J\") counts[suitOf(c)] += 1;\n  });\n  let best = \"S\";\n  for (const s of SUITS) {\n    if (counts[s] > counts[best]) best = s;\n  }\n  return best;\n}\n// Apply a played card's effect and return {state, turn, payouts?}.\n// `next` already has the card removed from the hand, pushed on the\n// discard pile, top_suit updated, and drew cleared.\nfunction afterPlay(next, seat, card, ctx) {\n  if (next.hands[seat].length === 0) {\n    next.phase = \"over\";\n    next.winner = seat;\n    next.pending_draw = 0;\n    next.drew = null;\n    return { state: next, turn: null, payouts: settle(next, ctx) };\n  }\n  const rank = rankOf(card);\n  if (rank === \"7\") {\n    next.pending_draw += 2;\n    next.to_move = 1 - seat;\n    return { state: next, turn: [ctx.players[1 - seat].id] };\n  }\n  if (rank === \"8\" || rank === \"9\") {\n    // With 2 players the next player is skipped / play reverses, so\n    // the player who played the card plays again.\n    next.to_move = seat;\n    return { state: next, turn: [ctx.players[seat].id] };\n  }\n  next.to_move = 1 - seat;\n  return { state: next, turn: [ctx.players[1 - seat].id] };\n}\n\nconst game = {\n  newMatch(ctx) {\n    const rng = rngFromSeed(hashString(ctx.players.map(function (p) { return p.id; }).join(\"|\") + \"|\" + String(ctx.pot)));\n    const deck = shuffledDeck(rng);\n    const hand0 = sortHand([deck[0], deck[2], deck[4], deck[6], deck[8], deck[10], deck[12]]);\n    const hand1 = sortHand([deck[1], deck[3], deck[5], deck[7], deck[9], deck[11], deck[13]]);\n    const upcard = deck[14];\n    const state = {\n      hands: [hand0, hand1],\n      stock: deck.slice(15),\n      discard: [upcard],\n      top_suit: suitOf(upcard),\n      to_move: 0,\n      pending_draw: 0,\n      drew: null,\n      winner: null,\n      phase: \"play\",\n      reshuffles: 0\n    };\n    return { state: state, turn: [ctx.players[0].id] };\n  },\n\n  applyMove(state, playerId, move, ctx) {\n    if (!move || typeof move !== \"object\" || Array.isArray(move) || typeof move.type !== \"string\") {\n      throw new InvalidMove(\"send a play, draw or pass move\");\n    }\n    if (move.type !== \"play\" && move.type !== \"draw\" && move.type !== \"pass\") {\n      throw new InvalidMove(\"send a play, draw or pass move\");\n    }\n    if (state.phase === \"over\") {\n      throw new InvalidMove(\"the game is over\");\n    }\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (seat < 0 || seat !== state.to_move) {\n      throw new InvalidMove(\"it is not your turn\");\n    }\n    const keys = Object.keys(move);\n    if (move.type === \"play\") {\n      if (keys.some(function (k) { return k !== \"type\" && k !== \"card\" && k !== \"suit\"; })) {\n        throw new InvalidMove(\"send a play, draw or pass move\");\n      }\n      if (typeof move.card !== \"string\" || !isCard(move.card)) {\n        throw new InvalidMove(\"that is not a valid card\");\n      }\n      if (move.suit !== undefined && !isSuit(move.suit)) {\n        throw new InvalidMove(\"that is not a valid suit\");\n      }\n      const hand = state.hands[seat];\n      if (hand.indexOf(move.card) < 0) {\n        throw new InvalidMove(\"that card is not in your hand\");\n      }\n      if (state.pending_draw > 0) {\n        if (rankOf(move.card) !== \"7\") {\n          throw new InvalidMove(\"you must play a seven or draw the pending cards\");\n        }\n      } else if (state.drew !== null) {\n        if (move.card !== state.drew) {\n          throw new InvalidMove(\"you may only play the card you just drew or pass\");\n        }\n      } else if (!matchesTop(state, move.card)) {\n        throw new InvalidMove(\"that card does not match the top card\");\n      }\n      const isJack = rankOf(move.card) === \"J\";\n      if (isJack && move.suit === undefined) {\n        throw new InvalidMove(\"you must choose a suit when you play a jack\");\n      }\n      if (!isJack && move.suit !== undefined) {\n        throw new InvalidMove(\"a suit is only chosen for a jack\");\n      }\n      const next = copyState(state);\n      next.hands[seat] = next.hands[seat].filter(function (c) { return c !== move.card; });\n      next.discard.push(move.card);\n      next.top_suit = isJack ? move.suit : suitOf(move.card);\n      next.drew = null;\n      return afterPlay(next, seat, move.card, ctx);\n    }\n    if (move.type === \"draw\") {\n      if (keys.length !== 1) {\n        throw new InvalidMove(\"send a play, draw or pass move\");\n      }\n      if (state.drew !== null) {\n        throw new InvalidMove(\"you have already drawn a card\");\n      }\n      const next = copyState(state);\n      if (state.pending_draw > 0) {\n        drawCards(next, seat, state.pending_draw, ctx);\n        next.pending_draw = 0;\n        next.to_move = 1 - seat;\n        return { state: next, turn: [ctx.players[1 - seat].id] };\n      }\n      const drawn = drawCards(next, seat, 1, ctx);\n      if (drawn.length === 0) {\n        // No card left anywhere to draw: the turn simply passes.\n        next.to_move = 1 - seat;\n        return { state: next, turn: [ctx.players[1 - seat].id] };\n      }\n      const card = drawn[0];\n      if (matchesTop(next, card)) {\n        // The drawn card is playable: the player may play it or pass.\n        next.drew = card;\n        next.to_move = seat;\n        return { state: next, turn: [ctx.players[seat].id] };\n      }\n      next.to_move = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n    // move.type === \"pass\"\n    if (keys.length !== 1) {\n      throw new InvalidMove(\"send a play, draw or pass move\");\n    }\n    if (state.drew === null) {\n      throw new InvalidMove(\"you can only pass after drawing a card\");\n    }\n    const next = copyState(state);\n    next.drew = null;\n    next.to_move = 1 - seat;\n    return { state: next, turn: [ctx.players[1 - seat].id] };\n  },\n\n  computerMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    const hand = state.hands[seat];\n    if (state.pending_draw > 0) {\n      const sevens = hand.filter(function (c) { return rankOf(c) === \"7\"; });\n      if (sevens.length > 0) return { type: \"play\", card: sevens[0] };\n      return { type: \"draw\" };\n    }\n    if (state.drew !== null) {\n      const card = state.drew;\n      // Play the drawn card unless it is an action card worth keeping\n      // and the hand still has other cards; a final card always wins.\n      if (hand.length === 1 || ACTION_RANKS.indexOf(rankOf(card)) < 0) {\n        if (rankOf(card) === \"J\") {\n          const rest = hand.filter(function (c) { return c !== card; });\n          return { type: \"play\", card: card, suit: bestSuitForJack(rest) };\n        }\n        return { type: \"play\", card: card };\n      }\n      return { type: \"pass\" };\n    }\n    const legal = legalPlays(state, seat);\n    if (legal.length === 0) return { type: \"draw\" };\n    // Shed non-action cards first (lowest first); then 8 / 9 (another\n    // turn), then 7 (opponent draws), keeping Jacks for last.\n    function rankScore(c) {\n      const r = rankOf(c);\n      if (ACTION_RANKS.indexOf(r) < 0) return 0;\n      if (r === \"8\" || r === \"9\") return 1;\n      if (r === \"7\") return 2;\n      return 3;\n    }\n    const sorted = legal.slice().sort(function (a, b) {\n      const s = rankScore(a) - rankScore(b);\n      if (s !== 0) return s;\n      return RANK_VALUE[rankOf(a)] - RANK_VALUE[rankOf(b)];\n    });\n    const card = sorted[0];\n    if (rankOf(card) === \"J\") {\n      const rest = hand.filter(function (c) { return c !== card; });\n      return { type: \"play\", card: card, suit: bestSuitForJack(rest) };\n    }\n    return { type: \"play\", card: card };\n  },\n\n  randomMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    const hand = state.hands[seat];\n    if (state.pending_draw > 0) {\n      const sevens = hand.filter(function (c) { return rankOf(c) === \"7\"; });\n      const options = sevens.map(function (c) { return { type: \"play\", card: c }; });\n      options.push({ type: \"draw\" });\n      return options[Math.floor(ctx.random() * options.length)];\n    }\n    if (state.drew !== null) {\n      const card = state.drew;\n      const play = rankOf(card) === \"J\"\n        ? { type: \"play\", card: card, suit: SUITS[Math.floor(ctx.random() * SUITS.length)] }\n        : { type: \"play\", card: card };\n      return ctx.random() < 0.5 ? play : { type: \"pass\" };\n    }\n    const legal = legalPlays(state, seat);\n    const options = legal.map(function (c) {\n      if (rankOf(c) === \"J\") {\n        return { type: \"play\", card: c, suit: SUITS[Math.floor(ctx.random() * SUITS.length)] };\n      }\n      return { type: \"play\", card: c };\n    });\n    options.push({ type: \"draw\" });\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n\n  viewFor(state, playerId, ctx) {\n    const seat = playerId === null ? -1 : ctx.players.findIndex(function (p) { return p.id === playerId; });\n    return {\n      hand: seat >= 0 ? state.hands[seat].slice() : [],\n      hand_counts: [state.hands[0].length, state.hands[1].length],\n      stock_count: state.stock.length,\n      discard_top: topCard(state),\n      top_suit: state.top_suit,\n      discard_count: state.discard.length,\n      pending_draw: state.pending_draw,\n      drew: seat >= 0 && state.drew !== null && state.to_move === seat ? state.drew : null,\n      to_move: state.to_move,\n      winner: state.winner,\n      phase: state.phase\n    };\n  }\n};\n\n// declarative-archive-view-hints\n;(()=>{const __archiveView=game.viewFor;game.viewFor=function(state,id,ctx){const v=__archiveView.call(this,state,id,ctx);const seat=id==null?-1:ctx.players.findIndex(p=>p.id===id);v.legal_plays=seat===state.to_move?legalPlays(state,seat):[];if(seat===state.to_move&&state.pending_draw>0){for(const card of state.hands[seat])if(/^7[SHDC]$/.test(card)&&!v.legal_plays.includes(card))v.legal_plays.push(card);}return v;};})();\n",
+  "server_code": "\"use strict\";\n\n// Mau-Mau server code (v2 Game API).\n// Fixed variant (documented verbatim in the package rules):\n//   * 2 players, standard 52-card French pack, ranks 2-A, suits C/D/H/S.\n//     Each player is dealt 7 cards; one card is turned up to start the\n//     discard pile. Seat 0 (the non-dealer) leads first.\n//   * On your turn, play a card matching the top discard by rank or suit,\n//     or draw. If you cannot (or choose not to) play, draw 1 card from the\n//     stock: if the drawn card is legally playable you may play it\n//     immediately or pass; if it is not playable your turn ends at once.\n//     A drawn card is never held over to a later turn.\n//   * Action cards (only these four; aces are plain cards, no effect):\n//       7: next player must draw 2 and their turn ends, unless they play\n//          a 7 of any suit, which adds 2 more (4, 6, 8, ...) and passes\n//          the obligation on. While a draw penalty is pending, a player\n//          may only play a 7 or draw the pending cards.\n//       8: next player misses their turn (with 2 players, the player who\n//          played the 8 plays again).\n//       9: reverses the direction of play (with 2 players, the player who\n//          played the 9 plays again).\n//       Jack: wild, playable on any card including another Jack. The\n//          player who plays it chooses a new suit; the next player must\n//          match that suit or a Jack. A Jack may be the final card.\n//   * When the stock runs out, the discard pile except the top card is\n//     reshuffled into a new stock using the platform private random stream.\n//     Replaying the same authoritative call reproduces the same shuffle.\n//   * The game ends the moment a hand becomes empty; pending draw\n//     penalties are not applied after the game ends. There is no \"Mau\"\n//     call-out rule. No scoring across hands: one hand = one match.\n//   * Moves: {type:\"play\", card:\"7H\", suit:\"S\"} (suit only for a Jack),\n//     {type:\"draw\"}, {type:\"pass\"} (only after drawing a playable card\n//     and choosing not to play it).\n// The opening deal uses the platform private random stream. The same private\n// call seed reproduces the deal; public player ids and stakes do not predict it. The upcard's action effect (if it is\n// a 7, 8, 9 or Jack) does NOT apply at the start of the hand; it is\n// simply the first discard, and its suit is the suit to match.\n\nconst RANKS = [\"2\", \"3\", \"4\", \"5\", \"6\", \"7\", \"8\", \"9\", \"10\", \"J\", \"Q\", \"K\", \"A\"];\nconst RANK_VALUE = { \"2\": 2, \"3\": 3, \"4\": 4, \"5\": 5, \"6\": 6, \"7\": 7, \"8\": 8, \"9\": 9, \"10\": 10, J: 11, Q: 12, K: 13, A: 14 };\nconst SUITS = [\"S\", \"H\", \"D\", \"C\"];\nconst SUIT_ORDER = { S: 0, H: 1, D: 2, C: 3 };\nconst ACTION_RANKS = [\"7\", \"8\", \"9\", \"J\"];\n\nfunction rankOf(card) {\n  return card.length === 3 ? card.slice(0, 2) : card[0];\n}\nfunction suitOf(card) {\n  return card[card.length - 1];\n}\nfunction isCard(card) {\n  return typeof card === \"string\" && card.length >= 2 && card.length <= 3 &&\n    Object.prototype.hasOwnProperty.call(RANK_VALUE, rankOf(card)) &&\n    Object.prototype.hasOwnProperty.call(SUIT_ORDER, suitOf(card)) &&\n    (card.length === 2 || rankOf(card) === \"10\");\n}\nfunction isSuit(s) {\n  return typeof s === \"string\" && Object.prototype.hasOwnProperty.call(SUIT_ORDER, s);\n}\nfunction sortHand(hand) {\n  return hand.slice().sort(function (a, b) {\n    const s = SUIT_ORDER[suitOf(a)] - SUIT_ORDER[suitOf(b)];\n    if (s !== 0) return s;\n    return RANK_VALUE[rankOf(b)] - RANK_VALUE[rankOf(a)];\n  });\n}\nfunction shuffledDeck(rng) {\n  const deck = [];\n  for (const suit of SUITS) {\n    for (const rank of RANKS) deck.push(rank + suit);\n  }\n  for (let i = deck.length - 1; i > 0; i--) {\n    const j = Math.floor(rng() * (i + 1));\n    const tmp = deck[i];\n    deck[i] = deck[j];\n    deck[j] = tmp;\n  }\n  return deck;\n}\nfunction copyState(state) {\n  return {\n    hands: [state.hands[0].slice(), state.hands[1].slice()],\n    stock: state.stock.slice(),\n    discard: state.discard.slice(),\n    top_suit: state.top_suit,\n    to_move: state.to_move,\n    pending_draw: state.pending_draw,\n    drew: state.drew,\n    winner: state.winner,\n    phase: state.phase,\n    reshuffles: state.reshuffles\n  };\n}\nfunction topCard(state) {\n  return state.discard[state.discard.length - 1];\n}\n// Is this card playable on the current top discard (ignoring pending/drew)?\nfunction matchesTop(state, card) {\n  if (rankOf(card) === \"J\") return true;\n  const top = topCard(state);\n  return rankOf(card) === rankOf(top) || suitOf(card) === state.top_suit;\n}\n// Legal play cards for a player in the current state (normal play only:\n// no pending draw, no undecided drawn card).\nfunction legalPlays(state, seat) {\n  return state.hands[seat].filter(function (c) { return matchesTop(state, c); });\n}\nfunction settle(state, ctx) {\n  if (ctx.pot === 0) return {};\n  const humans = ctx.players.filter(function (p) { return p.kind === \"human\"; });\n  if (humans.length === 0) return {};\n  const winnerPlayer = ctx.players[state.winner];\n  if (winnerPlayer && winnerPlayer.kind === \"human\") {\n    const payouts = {};\n    payouts[winnerPlayer.id] = ctx.pot;\n    return payouts;\n  }\n  const payouts = {};\n  payouts[humans[0].id] = ctx.pot;\n  return payouts;\n}\n// Draw n cards into next.hands[seat], reshuffling the discard pile\n// (except its top card) into a new stock whenever the stock runs out.\n// The platform private stream makes reshuffles reproducible without a public\n// seed or a game-owned weak PRNG. Returns the drawn cards.\n// If no cards exist at all to draw (stock empty and only the top card\n// in the discard pile), draws as many as exist and stops.\nfunction drawCards(next, seat, n, ctx) {\n  const drawn = [];\n  for (let k = 0; k < n; k++) {\n    if (next.stock.length === 0) {\n      if (next.discard.length <= 1) break;\n      const top = next.discard[next.discard.length - 1];\n      const rest = next.discard.slice(0, next.discard.length - 1);\n\n      for (let i = rest.length - 1; i > 0; i--) {\n        const j = Math.floor(ctx.random() * (i + 1));\n        const tmp = rest[i];\n        rest[i] = rest[j];\n        rest[j] = tmp;\n      }\n      next.stock = rest;\n      next.discard = [top];\n      next.reshuffles += 1;\n    }\n    const card = next.stock.shift();\n    next.hands[seat].push(card);\n    drawn.push(card);\n  }\n  next.hands[seat] = sortHand(next.hands[seat]);\n  return drawn;\n}\n// Choose the suit a Jack should name: the suit most common in the\n// player's remaining hand (excluding Jacks); ties break S, H, D, C.\nfunction bestSuitForJack(hand) {\n  const counts = { S: 0, H: 0, D: 0, C: 0 };\n  hand.forEach(function (c) {\n    if (rankOf(c) !== \"J\") counts[suitOf(c)] += 1;\n  });\n  let best = \"S\";\n  for (const s of SUITS) {\n    if (counts[s] > counts[best]) best = s;\n  }\n  return best;\n}\n// Apply a played card's effect and return {state, turn, payouts?}.\n// `next` already has the card removed from the hand, pushed on the\n// discard pile, top_suit updated, and drew cleared.\nfunction afterPlay(next, seat, card, ctx) {\n  if (next.hands[seat].length === 0) {\n    next.phase = \"over\";\n    next.winner = seat;\n    next.pending_draw = 0;\n    next.drew = null;\n    return { state: next, turn: null, payouts: settle(next, ctx) };\n  }\n  const rank = rankOf(card);\n  if (rank === \"7\") {\n    next.pending_draw += 2;\n    next.to_move = 1 - seat;\n    return { state: next, turn: [ctx.players[1 - seat].id] };\n  }\n  if (rank === \"8\" || rank === \"9\") {\n    // With 2 players the next player is skipped / play reverses, so\n    // the player who played the card plays again.\n    next.to_move = seat;\n    return { state: next, turn: [ctx.players[seat].id] };\n  }\n  next.to_move = 1 - seat;\n  return { state: next, turn: [ctx.players[1 - seat].id] };\n}\n\nconst game = {\n  newMatch(ctx) {\n    const deck = shuffledDeck(ctx.random);\n    const hand0 = sortHand([deck[0], deck[2], deck[4], deck[6], deck[8], deck[10], deck[12]]);\n    const hand1 = sortHand([deck[1], deck[3], deck[5], deck[7], deck[9], deck[11], deck[13]]);\n    const upcard = deck[14];\n    const state = {\n      hands: [hand0, hand1],\n      stock: deck.slice(15),\n      discard: [upcard],\n      top_suit: suitOf(upcard),\n      to_move: 0,\n      pending_draw: 0,\n      drew: null,\n      winner: null,\n      phase: \"play\",\n      reshuffles: 0\n    };\n    return { state: state, turn: [ctx.players[0].id] };\n  },\n\n  applyMove(state, playerId, move, ctx) {\n    if (!move || typeof move !== \"object\" || Array.isArray(move) || typeof move.type !== \"string\") {\n      throw new InvalidMove(\"send a play, draw or pass move\");\n    }\n    if (move.type !== \"play\" && move.type !== \"draw\" && move.type !== \"pass\") {\n      throw new InvalidMove(\"send a play, draw or pass move\");\n    }\n    if (state.phase === \"over\") {\n      throw new InvalidMove(\"the game is over\");\n    }\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (seat < 0 || seat !== state.to_move) {\n      throw new InvalidMove(\"it is not your turn\");\n    }\n    const keys = Object.keys(move);\n    if (move.type === \"play\") {\n      if (keys.some(function (k) { return k !== \"type\" && k !== \"card\" && k !== \"suit\"; })) {\n        throw new InvalidMove(\"send a play, draw or pass move\");\n      }\n      if (typeof move.card !== \"string\" || !isCard(move.card)) {\n        throw new InvalidMove(\"that is not a valid card\");\n      }\n      if (move.suit !== undefined && !isSuit(move.suit)) {\n        throw new InvalidMove(\"that is not a valid suit\");\n      }\n      const hand = state.hands[seat];\n      if (hand.indexOf(move.card) < 0) {\n        throw new InvalidMove(\"that card is not in your hand\");\n      }\n      if (state.pending_draw > 0) {\n        if (rankOf(move.card) !== \"7\") {\n          throw new InvalidMove(\"you must play a seven or draw the pending cards\");\n        }\n      } else if (state.drew !== null) {\n        if (move.card !== state.drew) {\n          throw new InvalidMove(\"you may only play the card you just drew or pass\");\n        }\n      } else if (!matchesTop(state, move.card)) {\n        throw new InvalidMove(\"that card does not match the top card\");\n      }\n      const isJack = rankOf(move.card) === \"J\";\n      if (isJack && move.suit === undefined) {\n        throw new InvalidMove(\"you must choose a suit when you play a jack\");\n      }\n      if (!isJack && move.suit !== undefined) {\n        throw new InvalidMove(\"a suit is only chosen for a jack\");\n      }\n      const next = copyState(state);\n      next.hands[seat] = next.hands[seat].filter(function (c) { return c !== move.card; });\n      next.discard.push(move.card);\n      next.top_suit = isJack ? move.suit : suitOf(move.card);\n      next.drew = null;\n      return afterPlay(next, seat, move.card, ctx);\n    }\n    if (move.type === \"draw\") {\n      if (keys.length !== 1) {\n        throw new InvalidMove(\"send a play, draw or pass move\");\n      }\n      if (state.drew !== null) {\n        throw new InvalidMove(\"you have already drawn a card\");\n      }\n      const next = copyState(state);\n      if (state.pending_draw > 0) {\n        drawCards(next, seat, state.pending_draw, ctx);\n        next.pending_draw = 0;\n        next.to_move = 1 - seat;\n        return { state: next, turn: [ctx.players[1 - seat].id] };\n      }\n      const drawn = drawCards(next, seat, 1, ctx);\n      if (drawn.length === 0) {\n        // No card left anywhere to draw: the turn simply passes.\n        next.to_move = 1 - seat;\n        return { state: next, turn: [ctx.players[1 - seat].id] };\n      }\n      const card = drawn[0];\n      if (matchesTop(next, card)) {\n        // The drawn card is playable: the player may play it or pass.\n        next.drew = card;\n        next.to_move = seat;\n        return { state: next, turn: [ctx.players[seat].id] };\n      }\n      next.to_move = 1 - seat;\n      return { state: next, turn: [ctx.players[1 - seat].id] };\n    }\n    // move.type === \"pass\"\n    if (keys.length !== 1) {\n      throw new InvalidMove(\"send a play, draw or pass move\");\n    }\n    if (state.drew === null) {\n      throw new InvalidMove(\"you can only pass after drawing a card\");\n    }\n    const next = copyState(state);\n    next.drew = null;\n    next.to_move = 1 - seat;\n    return { state: next, turn: [ctx.players[1 - seat].id] };\n  },\n\n  computerMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    const hand = state.hands[seat];\n    if (state.pending_draw > 0) {\n      const sevens = hand.filter(function (c) { return rankOf(c) === \"7\"; });\n      if (sevens.length > 0) return { type: \"play\", card: sevens[0] };\n      return { type: \"draw\" };\n    }\n    if (state.drew !== null) {\n      const card = state.drew;\n      // Play the drawn card unless it is an action card worth keeping\n      // and the hand still has other cards; a final card always wins.\n      if (hand.length === 1 || ACTION_RANKS.indexOf(rankOf(card)) < 0) {\n        if (rankOf(card) === \"J\") {\n          const rest = hand.filter(function (c) { return c !== card; });\n          return { type: \"play\", card: card, suit: bestSuitForJack(rest) };\n        }\n        return { type: \"play\", card: card };\n      }\n      return { type: \"pass\" };\n    }\n    const legal = legalPlays(state, seat);\n    if (legal.length === 0) return { type: \"draw\" };\n    // Shed non-action cards first (lowest first); then 8 / 9 (another\n    // turn), then 7 (opponent draws), keeping Jacks for last.\n    function rankScore(c) {\n      const r = rankOf(c);\n      if (ACTION_RANKS.indexOf(r) < 0) return 0;\n      if (r === \"8\" || r === \"9\") return 1;\n      if (r === \"7\") return 2;\n      return 3;\n    }\n    const sorted = legal.slice().sort(function (a, b) {\n      const s = rankScore(a) - rankScore(b);\n      if (s !== 0) return s;\n      return RANK_VALUE[rankOf(a)] - RANK_VALUE[rankOf(b)];\n    });\n    const card = sorted[0];\n    if (rankOf(card) === \"J\") {\n      const rest = hand.filter(function (c) { return c !== card; });\n      return { type: \"play\", card: card, suit: bestSuitForJack(rest) };\n    }\n    return { type: \"play\", card: card };\n  },\n\n  randomMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    const hand = state.hands[seat];\n    if (state.pending_draw > 0) {\n      const sevens = hand.filter(function (c) { return rankOf(c) === \"7\"; });\n      const options = sevens.map(function (c) { return { type: \"play\", card: c }; });\n      options.push({ type: \"draw\" });\n      return options[Math.floor(ctx.random() * options.length)];\n    }\n    if (state.drew !== null) {\n      const card = state.drew;\n      const play = rankOf(card) === \"J\"\n        ? { type: \"play\", card: card, suit: SUITS[Math.floor(ctx.random() * SUITS.length)] }\n        : { type: \"play\", card: card };\n      return ctx.random() < 0.5 ? play : { type: \"pass\" };\n    }\n    const legal = legalPlays(state, seat);\n    const options = legal.map(function (c) {\n      if (rankOf(c) === \"J\") {\n        return { type: \"play\", card: c, suit: SUITS[Math.floor(ctx.random() * SUITS.length)] };\n      }\n      return { type: \"play\", card: c };\n    });\n    options.push({ type: \"draw\" });\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n\n  viewFor(state, playerId, ctx) {\n    const seat = playerId === null ? -1 : ctx.players.findIndex(function (p) { return p.id === playerId; });\n    return {\n      hand: seat >= 0 ? state.hands[seat].slice() : [],\n      hand_counts: [state.hands[0].length, state.hands[1].length],\n      stock_count: state.stock.length,\n      discard_top: topCard(state),\n      top_suit: state.top_suit,\n      discard_count: state.discard.length,\n      pending_draw: state.pending_draw,\n      drew: seat >= 0 && state.drew !== null && state.to_move === seat ? state.drew : null,\n      to_move: state.to_move,\n      winner: state.winner,\n      phase: state.phase\n    };\n  }\n};\n\n// declarative-archive-view-hints\n;(()=>{const __archiveView=game.viewFor;game.viewFor=function(state,id,ctx){const v=__archiveView.call(this,state,id,ctx);const seat=id==null?-1:ctx.players.findIndex(p=>p.id===id);v.legal_plays=seat===state.to_move?legalPlays(state,seat):[];if(seat===state.to_move&&state.pending_draw>0){for(const card of state.hands[seat])if(/^7[SHDC]$/.test(card)&&!v.legal_plays.includes(card))v.legal_plays.push(card);}return v;};})();\n",
   "rules": "Mau-Mau is a German shedding card game, played here in one fixed variant for two players, based on the main rules on Wikipedia. It uses a standard 52-card French pack, ranks 2 to ace, suits clubs, diamonds, hearts and spades. Each player is dealt 7 cards. One card is turned up to start the discard pile. Seat 0 (the non-dealer) leads first. The player who empties their hand first wins the hand. On your turn, play a card from your hand that matches the top discard by rank or suit, or draw. If you cannot (or choose not to) play, draw 1 card from the stock: if the drawn card is legally playable you may play it immediately or pass; if it is not playable your turn ends at once. A drawn card is never held over to a later turn — after drawing, your only options are to play that drawn card (if legal) or pass. Action cards (only these four; aces are plain cards with no special effect in this variant): 7 — the next player must draw 2 cards and their turn ends, unless they play a 7 of any suit, which adds 2 more to the pending draw (4, 6, 8, ...) and passes the obligation on. While a draw penalty is pending, a player may only play a 7 or draw the pending cards. 8 — the next player misses their turn (with 2 players, the player who played the 8 plays again). 9 — reverses the direction of play (with 2 players, the player who played the 9 plays again). Jack — wild, playable on any card, including on another Jack. The player who plays it chooses a new suit; the next player must match that suit or a Jack. A Jack may be the final card and wins. If the upcard turned up at the start is a 7, 8, 9 or Jack, its action does not apply; it is simply the first discard, and its suit is the suit to match. When the stock runs out, reshuffle the discard pile except for the top card into a new stock. Reshuffles are deterministic: they are derived from the match seed and the move count, never from unseeded randomness. The opening deal is likewise derived deterministically from the player ids and the pot, so the same players and pot always open with the same deal. The game ends the moment a hand becomes empty; pending draw penalties are not applied after the game ends. There is no \"Mau\" call-out rule in this variant. There is no scoring across hands: one hand is one match. Moves: {\"type\": \"play\", \"card\": \"7H\", \"suit\": \"S\"} (suit only for a Jack, naming the chosen suit), {\"type\": \"draw\"} (draw the pending penalty if any, else draw 1), {\"type\": \"pass\"} (only allowed after drawing a playable card and choosing not to play it). This game itself stakes no tokens; if there is a pot, the hand winner, if human, takes it, and if the winner is a computer, the only human gets the pot back. Players cannot join or leave mid-hand. Against the computer, it sheds non-action cards first when possible, uses action cards deliberately, and keeps Jacks for last.",
   "ui_instructions": "Tap a highlighted card to play it, or tap the deck to draw. After playing a Jack, tap the suit you choose.",
   "tutorial": {
@@ -325,67 +325,67 @@
         "state": {
           "hands": [
             [
-              "9H",
-              "5H",
-              "4H",
-              "AD",
-              "6D",
-              "JC",
-              "7C"
+              "QH",
+              "2D",
+              "KC",
+              "10C",
+              "8C",
+              "3C",
+              "2C"
             ],
             [
+              "JS",
+              "10S",
               "4S",
-              "2S",
-              "AH",
-              "2H",
-              "7D",
-              "4D",
-              "QC"
+              "6H",
+              "5H",
+              "9D",
+              "5D"
             ]
           ],
           "stock": [
-            "KC",
-            "3C",
-            "5D",
-            "9D",
-            "10S",
-            "8C",
             "6C",
-            "QS",
-            "QD",
-            "6H",
-            "2D",
-            "10D",
-            "4C",
-            "7S",
-            "KD",
-            "5S",
+            "4H",
             "KS",
-            "5C",
-            "9C",
-            "JD",
-            "8H",
-            "6S",
-            "2C",
-            "8D",
-            "8S",
-            "3D",
-            "3S",
-            "10C",
-            "AC",
-            "10H",
-            "QH",
-            "JS",
-            "7H",
+            "QC",
+            "JH",
+            "QD",
             "AS",
+            "AD",
+            "3S",
+            "9C",
             "3H",
+            "5C",
+            "4D",
+            "6S",
+            "7S",
+            "3D",
+            "KD",
+            "8D",
+            "JD",
+            "7H",
+            "4C",
+            "2H",
+            "9S",
+            "9H",
+            "6D",
+            "8S",
+            "7C",
+            "7D",
             "KH",
-            "9S"
+            "QS",
+            "10H",
+            "8H",
+            "AH",
+            "10D",
+            "JC",
+            "5S",
+            "2S"
           ],
           "discard": [
-            "JH"
+            "AC"
           ],
-          "top_suit": "H",
+          "top_suit": "C",
           "to_move": 0,
           "pending_draw": 0,
           "drew": null,
@@ -397,25 +397,25 @@
         "other_player_id": "u2",
         "move": {
           "type": "play",
-          "card": "9H"
+          "card": "2C"
         },
         "view_of_mover": {
           "hand": [
-            "9H",
-            "5H",
-            "4H",
-            "AD",
-            "6D",
-            "JC",
-            "7C"
+            "QH",
+            "2D",
+            "KC",
+            "10C",
+            "8C",
+            "3C",
+            "2C"
           ],
           "hand_counts": [
             7,
             7
           ],
           "stock_count": 37,
-          "discard_top": "JH",
-          "top_suit": "H",
+          "discard_top": "AC",
+          "top_suit": "C",
           "discard_count": 1,
           "pending_draw": 0,
           "drew": null,
@@ -423,29 +423,30 @@
           "winner": null,
           "phase": "play",
           "legal_plays": [
-            "9H",
-            "5H",
-            "4H",
-            "JC"
+            "KC",
+            "10C",
+            "8C",
+            "3C",
+            "2C"
           ]
         },
         "view_of_other": {
           "hand": [
+            "JS",
+            "10S",
             "4S",
-            "2S",
-            "AH",
-            "2H",
-            "7D",
-            "4D",
-            "QC"
+            "6H",
+            "5H",
+            "9D",
+            "5D"
           ],
           "hand_counts": [
             7,
             7
           ],
           "stock_count": 37,
-          "discard_top": "JH",
-          "top_suit": "H",
+          "discard_top": "AC",
+          "top_suit": "C",
           "discard_count": 1,
           "pending_draw": 0,
           "drew": null,
@@ -457,68 +458,68 @@
         "expected_state": {
           "hands": [
             [
-              "5H",
-              "4H",
-              "AD",
-              "6D",
-              "JC",
-              "7C"
+              "QH",
+              "2D",
+              "KC",
+              "10C",
+              "8C",
+              "3C"
             ],
             [
+              "JS",
+              "10S",
               "4S",
-              "2S",
-              "AH",
-              "2H",
-              "7D",
-              "4D",
-              "QC"
+              "6H",
+              "5H",
+              "9D",
+              "5D"
             ]
           ],
           "stock": [
-            "KC",
-            "3C",
-            "5D",
-            "9D",
-            "10S",
-            "8C",
             "6C",
-            "QS",
-            "QD",
-            "6H",
-            "2D",
-            "10D",
-            "4C",
-            "7S",
-            "KD",
-            "5S",
+            "4H",
             "KS",
-            "5C",
-            "9C",
-            "JD",
-            "8H",
-            "6S",
-            "2C",
-            "8D",
-            "8S",
-            "3D",
-            "3S",
-            "10C",
-            "AC",
-            "10H",
-            "QH",
-            "JS",
-            "7H",
+            "QC",
+            "JH",
+            "QD",
             "AS",
+            "AD",
+            "3S",
+            "9C",
             "3H",
+            "5C",
+            "4D",
+            "6S",
+            "7S",
+            "3D",
+            "KD",
+            "8D",
+            "JD",
+            "7H",
+            "4C",
+            "2H",
+            "9S",
+            "9H",
+            "6D",
+            "8S",
+            "7C",
+            "7D",
             "KH",
-            "9S"
+            "QS",
+            "10H",
+            "8H",
+            "AH",
+            "10D",
+            "JC",
+            "5S",
+            "2S"
           ],
           "discard": [
-            "JH",
-            "9H"
+            "AC",
+            "2C"
           ],
-          "top_suit": "H",
-          "to_move": 0,
+          "top_suit": "C",
+          "to_move": 1,
           "pending_draw": 0,
           "drew": null,
           "winner": null,
@@ -526,60 +527,58 @@
           "reshuffles": 0
         },
         "expected_turn": [
-          "u1"
+          "u2"
         ],
         "expected_view_of_mover": {
           "hand": [
-            "5H",
-            "4H",
-            "AD",
-            "6D",
-            "JC",
-            "7C"
+            "QH",
+            "2D",
+            "KC",
+            "10C",
+            "8C",
+            "3C"
           ],
           "hand_counts": [
             6,
             7
           ],
           "stock_count": 37,
-          "discard_top": "9H",
-          "top_suit": "H",
+          "discard_top": "2C",
+          "top_suit": "C",
           "discard_count": 2,
           "pending_draw": 0,
           "drew": null,
-          "to_move": 0,
-          "winner": null,
-          "phase": "play",
-          "legal_plays": [
-            "5H",
-            "4H",
-            "JC"
-          ]
-        },
-        "expected_view_of_other": {
-          "hand": [
-            "4S",
-            "2S",
-            "AH",
-            "2H",
-            "7D",
-            "4D",
-            "QC"
-          ],
-          "hand_counts": [
-            6,
-            7
-          ],
-          "stock_count": 37,
-          "discard_top": "9H",
-          "top_suit": "H",
-          "discard_count": 2,
-          "pending_draw": 0,
-          "drew": null,
-          "to_move": 0,
+          "to_move": 1,
           "winner": null,
           "phase": "play",
           "legal_plays": []
+        },
+        "expected_view_of_other": {
+          "hand": [
+            "JS",
+            "10S",
+            "4S",
+            "6H",
+            "5H",
+            "9D",
+            "5D"
+          ],
+          "hand_counts": [
+            6,
+            7
+          ],
+          "stock_count": 37,
+          "discard_top": "2C",
+          "top_suit": "C",
+          "discard_count": 2,
+          "pending_draw": 0,
+          "drew": null,
+          "to_move": 1,
+          "winner": null,
+          "phase": "play",
+          "legal_plays": [
+            "JS"
+          ]
         },
         "images": [
           {

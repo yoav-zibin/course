@@ -7,7 +7,7 @@
   "all_state_public": false,
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
-  "server_code": "const rank=c=>(c%13+12)%13;\nconst suit=c=>[1,0,2,3][Math.floor(c/13)];\nconst strength=c=>rank(c)*4+suit(c);\nconst opening=14;\nfunction score(cards) {\n  const sorted=[...cards].sort((a,b)=>strength(a)-strength(b));\n  const high=sorted[sorted.length-1];\n  const groups=Array.from({length:13},(_,r)=>sorted.filter(c=>rank(c)===r));\n  if([1,2,3].includes(cards.length))\n    return groups.some(g=>g.length===cards.length)?strength(high):-1;\n  if(cards.length!==5)return -1;\n  const ranks=sorted.map(rank);\n  const flush=sorted.every(c=>suit(c)===suit(high));\n  const straightHigh=ranks.join(\",\")===\"0,1,2,11,12\"?2:ranks.join(\",\")===\"0,1,2,3,12\"?3:\n    ranks[4]<12&&ranks.every((r,i)=>r===ranks[0]+i)?ranks[4]:-1;\n  const straightValue=straightHigh*4+suit(sorted.find(c=>rank(c)===straightHigh));\n  if(flush&&straightHigh>=0)return 500+straightValue;\n  const four=groups.findIndex(g=>g.length===4);\n  if(four>=0)return 400+four;\n  const three=groups.findIndex(g=>g.length===3);\n  if(three>=0&&groups.some(g=>g.length===2))return 300+three;\n  if(flush)return 200+suit(high)*16+rank(high);\n  return straightHigh>=0?100+straightValue:-1;\n}\nfunction allowed(s,cards) {\n  if(!Array.isArray(cards)||!cards.length||new Set(cards).size!==cards.length||\n    !cards.every(c=>s.hands[s.seat].includes(c))||s.open&&!cards.includes(opening))return false;\n  const value=score(cards);\n  return value>=0&&(!s.table.length||s.table.length===cards.length&&value>score(s.table));\n}\nfunction moves(s) {\n  const hand=s.hands[s.seat],options=[];\n  const search=(selection,start,size)=>{\n    if(selection.length===size){if(allowed(s,selection))options.push({cards:selection});return;}\n    for(let i=start;i<=hand.length-(size-selection.length);i++)search([...selection,hand[i]],i+1,size);\n  };\n  for(const size of s.table.length?[s.table.length]:[1,2,3,5])search([],0,size);\n  if(s.table.length)options.push({pass:true});\n  return options;\n}\nconst game={\n  newMatch(ctx){\n    let seed=2166136261;\n    for(const p of ctx.players)for(const c of p.id)seed=Math.imul(seed^c.charCodeAt(0),16777619);\n    const deck=Array.from({length:52},(_,i)=>i);\n    for(let i=deck.length-1;i>0;i--){\n      seed=(Math.imul(seed,1664525)+1013904223)>>>0;\n      const j=seed%(i+1);\n      [deck[i],deck[j]]=[deck[j],deck[i]];\n    }\n    const hands=ctx.players.map((_,i)=>deck.slice(i*13,i*13+13).sort((a,b)=>strength(a)-strength(b)));\n    const seat=hands.findIndex(h=>h.includes(opening));\n    return {state:{hands,seat,leader:seat,passes:0,table:[],open:true,winners:[]},turn:[ctx.players[seat].id]};\n  },\n  applyMove(s,id,m,ctx){\n    if(!m||Object.keys(m).length!==1||ctx.players[s.seat].id!==id||s.winners.length||\n      !(m.pass===true?s.table.length:allowed(s,m.cards)))\n      throw new InvalidMove(\"Choose a legal move on your turn.\");\n    const state={...s,seat:(s.seat+1)%4};\n    if(m.pass){\n      state.passes++;\n      if(state.passes===3){state.table=[];state.passes=0;state.seat=s.leader;}\n    }else{\n      state.hands=s.hands.map((hand,i)=>i===s.seat?hand.filter(c=>!m.cards.includes(c)):hand);\n      state.table=[...m.cards];\n      state.leader=s.seat;\n      state.passes=0;\n      state.open=false;\n      if(!state.hands[s.seat].length){\n        state.winners=[s.seat];\n        const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false);\n        const winner=ctx.players[s.seat];\n        const paid=humans.includes(winner)?[winner]:humans;\n        return {state,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,\n          Math.floor(ctx.pot/paid.length)+Number(i<ctx.pot%paid.length)]))};\n      }\n    }\n    return {state,turn:[ctx.players[state.seat].id]};\n  },\n  viewFor(s,id,ctx){\n    const {hands,...visible}=s;\n    const i=ctx.players.findIndex(p=>p.id===id);\n    return {...visible,hand:hands[i]??[],counts:hands.map(h=>h.length)};\n  },\n  computerMove(s){\n    return moves(s).sort((a,b)=>(b.cards?.length??0)-(a.cards?.length??0)||\n      (a.cards&&b.cards?score(a.cards)-score(b.cards):0))[0];\n  },\n  randomMove(s,id,ctx){\n    const options=moves(s);\n    return options[Math.floor(ctx.random()*options.length)];\n  }\n};\n",
+  "server_code": "const rank=c=>(c%13+12)%13;\nconst suit=c=>[1,0,2,3][Math.floor(c/13)];\nconst strength=c=>rank(c)*4+suit(c);\nconst opening=14;\nfunction score(cards) {\n  const sorted=[...cards].sort((a,b)=>strength(a)-strength(b));\n  const high=sorted[sorted.length-1];\n  const groups=Array.from({length:13},(_,r)=>sorted.filter(c=>rank(c)===r));\n  if([1,2,3].includes(cards.length))\n    return groups.some(g=>g.length===cards.length)?strength(high):-1;\n  if(cards.length!==5)return -1;\n  const ranks=sorted.map(rank);\n  const flush=sorted.every(c=>suit(c)===suit(high));\n  const straightHigh=ranks.join(\",\")===\"0,1,2,11,12\"?2:ranks.join(\",\")===\"0,1,2,3,12\"?3:\n    ranks[4]<12&&ranks.every((r,i)=>r===ranks[0]+i)?ranks[4]:-1;\n  const straightValue=straightHigh*4+suit(sorted.find(c=>rank(c)===straightHigh));\n  if(flush&&straightHigh>=0)return 500+straightValue;\n  const four=groups.findIndex(g=>g.length===4);\n  if(four>=0)return 400+four;\n  const three=groups.findIndex(g=>g.length===3);\n  if(three>=0&&groups.some(g=>g.length===2))return 300+three;\n  if(flush)return 200+suit(high)*16+rank(high);\n  return straightHigh>=0?100+straightValue:-1;\n}\nfunction allowed(s,cards) {\n  if(!Array.isArray(cards)||!cards.length||new Set(cards).size!==cards.length||\n    !cards.every(c=>s.hands[s.seat].includes(c))||s.open&&!cards.includes(opening))return false;\n  const value=score(cards);\n  return value>=0&&(!s.table.length||s.table.length===cards.length&&value>score(s.table));\n}\nfunction moves(s) {\n  const hand=s.hands[s.seat],options=[];\n  const search=(selection,start,size)=>{\n    if(selection.length===size){if(allowed(s,selection))options.push({cards:selection});return;}\n    for(let i=start;i<=hand.length-(size-selection.length);i++)search([...selection,hand[i]],i+1,size);\n  };\n  for(const size of s.table.length?[s.table.length]:[1,2,3,5])search([],0,size);\n  if(s.table.length)options.push({pass:true});\n  return options;\n}\nconst game={\n  newMatch(ctx){\n    const deck=Array.from({length:52},(_,i)=>i);\n    for(let i=deck.length-1;i>0;i--){\n      const j=Math.floor(ctx.random()*(i+1));\n      [deck[i],deck[j]]=[deck[j],deck[i]];\n    }\n    const hands=ctx.players.map((_,i)=>deck.slice(i*13,i*13+13).sort((a,b)=>strength(a)-strength(b)));\n    const seat=hands.findIndex(h=>h.includes(opening));\n    return {state:{hands,seat,leader:seat,passes:0,table:[],open:true,winners:[]},turn:[ctx.players[seat].id]};\n  },\n  applyMove(s,id,m,ctx){\n    if(!m||Object.keys(m).length!==1||ctx.players[s.seat].id!==id||s.winners.length||\n      !(m.pass===true?s.table.length:allowed(s,m.cards)))\n      throw new InvalidMove(\"Choose a legal move on your turn.\");\n    const state={...s,seat:(s.seat+1)%4};\n    if(m.pass){\n      state.passes++;\n      if(state.passes===3){state.table=[];state.passes=0;state.seat=s.leader;}\n    }else{\n      state.hands=s.hands.map((hand,i)=>i===s.seat?hand.filter(c=>!m.cards.includes(c)):hand);\n      state.table=[...m.cards];\n      state.leader=s.seat;\n      state.passes=0;\n      state.open=false;\n      if(!state.hands[s.seat].length){\n        state.winners=[s.seat];\n        const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false);\n        const winner=ctx.players[s.seat];\n        const paid=humans.includes(winner)?[winner]:humans;\n        return {state,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,\n          Math.floor(ctx.pot/paid.length)+Number(i<ctx.pot%paid.length)]))};\n      }\n    }\n    return {state,turn:[ctx.players[state.seat].id]};\n  },\n  viewFor(s,id,ctx){\n    const {hands,...visible}=s;\n    const i=ctx.players.findIndex(p=>p.id===id);\n    return {...visible,hand:hands[i]??[],counts:hands.map(h=>h.length)};\n  },\n  computerMove(s){\n    return moves(s).sort((a,b)=>(b.cards?.length??0)-(a.cards?.length??0)||\n      (a.cards&&b.cards?score(a.cards)-score(b.cards):0))[0];\n  },\n  randomMove(s,id,ctx){\n    const options=moves(s);\n    return options[Math.floor(ctx.random()*options.length)];\n  }\n};\n",
   "declarative_ui": {
     "format": "buildplay-ui",
     "version": 1,
@@ -574,141 +574,136 @@
         "expected_state": {
           "hands": [
             [
-              30,
-              18,
-              7,
-              46,
-              8,
-              48,
-              11,
-              51
-            ],
-            [
               40,
-              2,
               41,
-              3,
               29,
               43,
               31,
-              33,
-              10,
-              36,
-              50,
-              25,
-              12
-            ],
-            [
-              16,
-              42,
-              17,
-              5,
+              44,
               6,
-              47,
-              9,
+              22,
               35,
               23,
-              49,
+              10,
               24,
-              38,
+              50
+            ],
+            [
+              3,
+              4,
+              30,
+              45,
+              7,
+              33,
+              8,
+              34,
+              49,
+              11,
+              38
+            ],
+            [
+              1,
+              15,
+              2,
+              16,
+              17,
+              21,
+              47,
+              9,
+              36,
+              37,
+              25,
+              12,
               39
             ],
             [
-              27,
-              15,
               28,
-              4,
-              44,
+              42,
+              18,
+              5,
+              19,
+              32,
               20,
-              21,
-              34,
-              22,
-              37,
+              46,
+              48,
+              51,
               13,
               0,
               26
             ]
           ],
-          "leader": 0,
-          "open": false,
+          "seat": 2,
+          "leader": 1,
           "passes": 0,
-          "seat": 1,
           "table": [
             14,
-            1,
-            19,
-            32,
-            45
+            27
           ],
+          "open": false,
           "winners": []
         },
         "expected_turn": [
-          "u2"
+          "u3"
         ],
         "expected_view_of_mover": {
-          "counts": [
-            8,
-            13,
-            13,
-            13
-          ],
-          "hand": [
-            30,
-            18,
-            7,
-            46,
-            8,
-            48,
-            11,
-            51
-          ],
-          "leader": 0,
-          "open": false,
+          "seat": 2,
+          "leader": 1,
           "passes": 0,
-          "seat": 1,
           "table": [
             14,
-            1,
-            19,
-            32,
-            45
+            27
           ],
-          "winners": []
+          "open": false,
+          "winners": [],
+          "hand": [
+            3,
+            4,
+            30,
+            45,
+            7,
+            33,
+            8,
+            34,
+            49,
+            11,
+            38
+          ],
+          "counts": [
+            13,
+            11,
+            13,
+            13
+          ]
         },
         "expected_view_of_other": {
-          "counts": [
-            8,
-            13,
-            13,
-            13
-          ],
-          "hand": [
-            40,
-            2,
-            41,
-            3,
-            29,
-            43,
-            31,
-            33,
-            10,
-            36,
-            50,
-            25,
-            12
-          ],
-          "leader": 0,
-          "open": false,
+          "seat": 2,
+          "leader": 1,
           "passes": 0,
-          "seat": 1,
           "table": [
             14,
-            1,
-            19,
-            32,
-            45
+            27
           ],
-          "winners": []
+          "open": false,
+          "winners": [],
+          "hand": [
+            3,
+            4,
+            30,
+            45,
+            7,
+            33,
+            8,
+            34,
+            49,
+            11,
+            38
+          ],
+          "counts": [
+            13,
+            11,
+            13,
+            13
+          ]
         },
         "images": [
           {
@@ -732,142 +727,139 @@
         "move": {
           "cards": [
             14,
-            1,
-            19,
-            32,
-            45
+            27
           ]
         },
         "name": "initial move",
         "other_player_id": "u2",
-        "player_id": "u1",
+        "player_id": "u2",
         "state": {
           "hands": [
             [
-              14,
-              1,
-              30,
-              18,
-              19,
-              32,
-              45,
-              7,
-              46,
-              8,
-              48,
-              11,
-              51
-            ],
-            [
               40,
-              2,
               41,
-              3,
               29,
               43,
               31,
-              33,
-              10,
-              36,
-              50,
-              25,
-              12
-            ],
-            [
-              16,
-              42,
-              17,
-              5,
+              44,
               6,
-              47,
-              9,
+              22,
               35,
               23,
-              49,
+              10,
               24,
-              38,
+              50
+            ],
+            [
+              14,
+              27,
+              3,
+              4,
+              30,
+              45,
+              7,
+              33,
+              8,
+              34,
+              49,
+              11,
+              38
+            ],
+            [
+              1,
+              15,
+              2,
+              16,
+              17,
+              21,
+              47,
+              9,
+              36,
+              37,
+              25,
+              12,
               39
             ],
             [
-              27,
-              15,
               28,
-              4,
-              44,
+              42,
+              18,
+              5,
+              19,
+              32,
               20,
-              21,
-              34,
-              22,
-              37,
+              46,
+              48,
+              51,
               13,
               0,
               26
             ]
           ],
-          "leader": 0,
-          "open": true,
+          "seat": 1,
+          "leader": 1,
           "passes": 0,
-          "seat": 0,
           "table": [],
+          "open": true,
           "winners": []
         },
         "view_of_mover": {
-          "counts": [
-            13,
-            13,
-            13,
-            13
-          ],
+          "seat": 1,
+          "leader": 1,
+          "passes": 0,
+          "table": [],
+          "open": true,
+          "winners": [],
           "hand": [
             14,
-            1,
+            27,
+            3,
+            4,
             30,
-            18,
-            19,
-            32,
             45,
             7,
-            46,
+            33,
             8,
-            48,
+            34,
+            49,
             11,
-            51
+            38
           ],
-          "leader": 0,
-          "open": true,
-          "passes": 0,
-          "seat": 0,
-          "table": [],
-          "winners": []
-        },
-        "view_of_other": {
           "counts": [
             13,
             13,
             13,
             13
-          ],
-          "hand": [
-            40,
-            2,
-            41,
-            3,
-            29,
-            43,
-            31,
-            33,
-            10,
-            36,
-            50,
-            25,
-            12
-          ],
-          "leader": 0,
-          "open": true,
+          ]
+        },
+        "view_of_other": {
+          "seat": 1,
+          "leader": 1,
           "passes": 0,
-          "seat": 0,
           "table": [],
-          "winners": []
+          "open": true,
+          "winners": [],
+          "hand": [
+            14,
+            27,
+            3,
+            4,
+            30,
+            45,
+            7,
+            33,
+            8,
+            34,
+            49,
+            11,
+            38
+          ],
+          "counts": [
+            13,
+            13,
+            13,
+            13
+          ]
         }
       },
       {
@@ -956,12 +948,14 @@
           "u2"
         ],
         "expected_view_of_mover": {
-          "counts": [
-            6,
-            2,
-            9,
-            4
+          "leader": 0,
+          "open": false,
+          "passes": 0,
+          "seat": 1,
+          "table": [
+            48
           ],
+          "winners": [],
           "hand": [
             18,
             7,
@@ -970,26 +964,14 @@
             11,
             51
           ],
-          "leader": 0,
-          "open": false,
-          "passes": 0,
-          "seat": 1,
-          "table": [
-            48
-          ],
-          "winners": []
-        },
-        "expected_view_of_other": {
           "counts": [
             6,
             2,
             9,
             4
-          ],
-          "hand": [
-            29,
-            50
-          ],
+          ]
+        },
+        "expected_view_of_other": {
           "leader": 0,
           "open": false,
           "passes": 0,
@@ -997,7 +979,17 @@
           "table": [
             48
           ],
-          "winners": []
+          "winners": [],
+          "hand": [
+            29,
+            50
+          ],
+          "counts": [
+            6,
+            2,
+            9,
+            4
+          ]
         },
         "images": [
           {
@@ -1069,12 +1061,14 @@
           "winners": []
         },
         "view_of_mover": {
-          "counts": [
-            7,
-            2,
-            9,
-            4
+          "leader": 3,
+          "open": false,
+          "passes": 0,
+          "seat": 0,
+          "table": [
+            22
           ],
+          "winners": [],
           "hand": [
             18,
             7,
@@ -1084,26 +1078,14 @@
             11,
             51
           ],
-          "leader": 3,
-          "open": false,
-          "passes": 0,
-          "seat": 0,
-          "table": [
-            22
-          ],
-          "winners": []
-        },
-        "view_of_other": {
           "counts": [
             7,
             2,
             9,
             4
-          ],
-          "hand": [
-            29,
-            50
-          ],
+          ]
+        },
+        "view_of_other": {
           "leader": 3,
           "open": false,
           "passes": 0,
@@ -1111,7 +1093,17 @@
           "table": [
             22
           ],
-          "winners": []
+          "winners": [],
+          "hand": [
+            29,
+            50
+          ],
+          "counts": [
+            7,
+            2,
+            9,
+            4
+          ]
         }
       },
       {
@@ -1187,13 +1179,6 @@
         },
         "expected_turn": null,
         "expected_view_of_mover": {
-          "counts": [
-            3,
-            1,
-            2,
-            0
-          ],
-          "hand": [],
           "leader": 3,
           "open": false,
           "passes": 0,
@@ -1203,29 +1188,36 @@
           ],
           "winners": [
             3
-          ]
-        },
-        "expected_view_of_other": {
+          ],
+          "hand": [],
           "counts": [
             3,
             1,
             2,
             0
+          ]
+        },
+        "expected_view_of_other": {
+          "leader": 3,
+          "open": false,
+          "passes": 0,
+          "seat": 0,
+          "table": [
+            20
+          ],
+          "winners": [
+            3
           ],
           "hand": [
             46,
             8,
             11
           ],
-          "leader": 3,
-          "open": false,
-          "passes": 0,
-          "seat": 0,
-          "table": [
-            20
-          ],
-          "winners": [
-            3
+          "counts": [
+            3,
+            1,
+            2,
+            0
           ]
         },
         "images": [
@@ -1283,15 +1275,6 @@
           "winners": []
         },
         "view_of_mover": {
-          "counts": [
-            3,
-            1,
-            2,
-            1
-          ],
-          "hand": [
-            20
-          ],
           "leader": 2,
           "open": false,
           "passes": 0,
@@ -1299,28 +1282,37 @@
           "table": [
             5
           ],
-          "winners": []
-        },
-        "view_of_other": {
+          "winners": [],
+          "hand": [
+            20
+          ],
           "counts": [
             3,
             1,
             2,
             1
+          ]
+        },
+        "view_of_other": {
+          "leader": 2,
+          "open": false,
+          "passes": 0,
+          "seat": 3,
+          "table": [
+            5
           ],
+          "winners": [],
           "hand": [
             46,
             8,
             11
           ],
-          "leader": 2,
-          "open": false,
-          "passes": 0,
-          "seat": 3,
-          "table": [
-            5
-          ],
-          "winners": []
+          "counts": [
+            3,
+            1,
+            2,
+            1
+          ]
         }
       }
     ],

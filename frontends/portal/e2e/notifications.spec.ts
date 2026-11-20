@@ -1,5 +1,6 @@
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
 import {createGame,createUser,loginAs,uniqueName} from './helpers';
+import {logoutAndSignIn,seedAccounts,verifiedSignInFixtures} from './auth-fixtures';
 
 const headers=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
 async function createMatch(request:APIRequestContext,user:any,gameId:string) {
@@ -43,6 +44,52 @@ async function fakeWebPush(page:Page) {
 }
 
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Notification acceptance uses only a disposable loopback server.');});
+
+test('a current account still sees a failed notification enrollment',async({page,request})=>{
+  const alice=await createUser(request,uniqueName('Current enrollment'));
+  await fakeWebPush(page);await loginAs(page,alice);
+  await page.route('**/push/subscriptions',route=>route.fulfill(route.request().method()==='POST'?{status:503,json:{detail:'Current device enrollment failed.'}}:{json:[]}));
+  await page.goto('/portal');await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await page.getByRole('button',{name:'Enable on this device',exact:true}).click();
+  await expect(page.getByText('Not enabled on this device',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await expect(page.getByText('Current device enrollment failed.',{exact:true})).toBeVisible();
+});
+
+test('a rejected enrollment from the previous account stays out of the next account and report',async({page,request})=>{
+  const alice=await createUser(request,uniqueName('Enrollment Alice')),bob=await createUser(request,uniqueName('Enrollment Bob'));
+  const marker='private-alice-enrollment-failure';
+  await fakeWebPush(page);await verifiedSignInFixtures(page,[alice,bob]);await seedAccounts(page,[alice,bob]);
+  let release!:()=>void,entered!:()=>void;
+  const held=new Promise<void>(resolve=>{release=resolve;}),requested=new Promise<void>(resolve=>{entered=resolve;});
+  const subscriptions=new Map<string,any>();
+  await page.route('**/push/subscriptions',async route=>{
+    const id=route.request().headers()['x-user-id'];
+    if(route.request().method()==='POST'){
+      if(id===alice.id){entered();await held;return route.fulfill({status:403,json:{detail:marker}});}
+      subscriptions.set(id,route.request().postDataJSON());
+    }
+    return route.fulfill({json:subscriptions.has(id)?[subscriptions.get(id)]:[]});
+  });
+  await page.goto('/portal');await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await page.getByRole('button',{name:'Enable on this device',exact:true}).click();await requested;
+  await logoutAndSignIn(page,bob);
+  const failed=page.waitForResponse(response=>response.url().endsWith('/push/subscriptions')&&response.request().method()==='POST'&&response.status()===403);
+  release();await failed;
+  // A completed current-account enrollment proves that the old operation has
+  // finished and the controller queue advanced, without a timing-only wait.
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await expect(page.getByText('Enabled on this device',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await expect(page.getByText(marker,{exact:false})).toHaveCount(0);
+  let report:any;
+  await page.route('**/bug-reports',async route=>{report=route.request().postDataJSON();return route.fulfill({status:201,json:{id:'notification-privacy-fixture'}});});
+  await page.getByRole('button',{name:'Report a bug or request a feature',exact:true}).click();
+  await page.getByRole('textbox',{name:'Bug or feature request',exact:true}).fill('Bob reports a separate issue after changing accounts.');
+  await page.getByRole('button',{name:'Send report',exact:true}).click();
+  await expect.poll(()=>report).toBeTruthy();
+  expect(JSON.stringify(report)).not.toContain(marker);
+});
 
 test('a direct invite appears in-app with push disabled and opens its match invitation',async({page,browser,request})=>{
   const alice=await createUser(request,uniqueName('Invite host')),bob=await createUser(request,uniqueName('Invite recipient'));

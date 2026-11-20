@@ -79,12 +79,58 @@ def test_failed_call_logs_error_status_and_route_template(api: Api, caplog):
     assert failed["result"] == "error"
 
 
+def test_push_device_endpoint_is_redacted_from_request_query_and_bodies(api: Api, caplog):
+    user = api.new_user("Phone owner")
+    endpoint = "expo:ExponentPushToken[private-device]"
+    response = api.request("POST", "/push/native-subscriptions", as_user=user,
+                           json={"token": endpoint.removeprefix("expo:"), "platform": "ios"})
+    assert response.status_code == 201
+    api.ok("GET", "/push/subscriptions", as_user=user)
+    api.ok("DELETE", "/push/subscriptions", as_user=user, params={"endpoint": endpoint})
+    calls = [call for call in _api_calls(caplog)
+             if call["route"] in {"/push/subscriptions", "/push/native-subscriptions"}]
+    assert len(calls) == 3
+    assert calls[0]["request_body"]["token"] == "<redacted>"
+    assert calls[0]["response_body"]["endpoint"] == "<redacted>"
+    assert calls[1]["response_body"][0]["endpoint"] == "<redacted>"
+    assert calls[2]["query"]["endpoint"] == "<redacted>"
+    assert "private-device" not in caplog.text
+    invalid = api.request("POST", "/push/subscriptions", as_user=user,
+                          json={"endpoint": endpoint, "keys": {"p256dh": "invalid", "auth": "invalid"}})
+    assert invalid.status_code == 422
+    failed = _api_calls(caplog)[-1]
+    assert failed["response_body"]["detail"][0]["loc"] == ["body", "endpoint"]
+    assert failed["response_body"]["detail"][0]["input"] == "<redacted>"
+    assert "private-device" not in caplog.text
+
+
 def test_static_requests_are_not_logged(api: Api, caplog):
     api.client.get("/static/does-not-exist.js")
 
     assert not any(
         call["route"].startswith("/static") for call in _api_calls(caplog)
     )
+
+
+def test_push_auth_and_rejected_verification_codes_do_not_reach_logs(api: Api, caplog):
+    user = api.new_user("Browser owner")
+    auth = "private-browser-auth"
+    invalid = api.request("POST", "/push/subscriptions", as_user=user,
+        json={"endpoint": "https://push.example.com/private-browser",
+              "keys": {"p256dh": "invalid", "auth": auth}})
+    assert invalid.status_code == 422
+    call = _api_calls(caplog)[-1]
+    assert call["request_body"]["keys"]["auth"] == "<redacted>"
+    errors = call["response_body"]["detail"]
+    assert next(row for row in errors if row["loc"][-1] == "auth")["input"] == "<redacted>"
+    assert auth not in caplog.text
+    for code in (739251, [739251]):
+        invalid = api.request("POST", "/auth/email/verify",
+                              json={"verification_id": "fake", "code": code})
+        assert invalid.status_code == 422
+        errors = _api_calls(caplog)[-1]["response_body"]["detail"]
+        assert next(row for row in errors if row["loc"][-1] == "code")["input"] == "<redacted>"
+    assert "739251" not in caplog.text
 
 
 def test_timed_external_records_on_the_current_request():

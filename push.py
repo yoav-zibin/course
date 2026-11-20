@@ -24,8 +24,7 @@ from urllib.parse import urlsplit
 
 import requests
 from collections.abc import Sequence
-from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from cryptography.hazmat.primitives import serialization
@@ -37,6 +36,19 @@ from game_platform.models import WebPushSubscription
 from game_platform.store import Store
 
 logger = logging.getLogger(__name__)
+
+
+def _subscription_identity(subscription: WebPushSubscription) -> dict:
+    return {"endpoint": subscription.endpoint, "subscription_id": subscription.id,
+            "user_id": subscription.user_id, "subscription_updated_at": subscription.updated_at}
+
+
+def _delete_subscription_if_current(store: Store, observed: dict) -> None:
+    """A stale gateway response must never remove a replacement registration."""
+    with store.operation_lock:
+        current = store.get_push_subscription_by_endpoint(observed["endpoint"])
+        if current is not None and _subscription_identity(current) == observed:
+            store.delete_push_subscription(current.id)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -70,9 +82,8 @@ class LogPushNotifier:
     def enqueue(self, messages: Sequence[PushMessage]) -> None:
         for message in messages:
             logger.info(
-                "push to %s (%s): %s — %s",
+                "push to %s: %s — %s",
                 message.subscription.user_id,
-                message.subscription.endpoint,
                 message.title,
                 message.body,
             )
@@ -185,7 +196,7 @@ class WebPushNotifier:
             response = getattr(error, "response", None)
             status = response.status_code if response is not None else None
             if status in (404, 410):
-                self._store.delete_push_subscription_by_endpoint(subscription.endpoint)
+                _delete_subscription_if_current(self._store, _subscription_identity(subscription))
             elif retry_errors:
                 raise
             else:
@@ -267,14 +278,13 @@ class ExpoPushDelivery:
         if not isinstance(ticket, dict):
             raise RuntimeError("Expo push returned an invalid ticket")
         if ticket.get("status") != "ok":
-            self._handle_error(ticket, message.subscription.endpoint)
+            self._handle_error(ticket, _subscription_identity(message.subscription))
             return
         receipt_id = ticket.get("id")
         if not isinstance(receipt_id, str) or not receipt_id or "/" in receipt_id or len(receipt_id) > 128:
             raise RuntimeError("Expo push returned an invalid receipt ID")
         now = dt.datetime.now(dt.timezone.utc)
-        record = {"receipt_id": receipt_id, "endpoint": message.subscription.endpoint,
-                  "user_id": message.subscription.user_id,
+        record = {"receipt_id": receipt_id, **_subscription_identity(message.subscription),
                   "created_at": now, "due_at": now + dt.timedelta(minutes=15)}
         if getattr(self.store, "scalable", False):
             with self.store.atomic():
@@ -283,14 +293,15 @@ class ExpoPushDelivery:
             with self._lock:
                 self._pending[receipt_id] = record
 
-    def _handle_error(self, result: dict, endpoint: str) -> None:
+    def _handle_error(self, result: dict, subscription_identity: dict) -> None:
         error = (result.get("details") or {}).get("error", "UnknownError")
         if error == "DeviceNotRegistered":
-            self.store.delete_push_subscription_by_endpoint(endpoint)
+            _delete_subscription_if_current(self.store, subscription_identity)
         elif error in {"MessageRateExceeded", "ExpoServerError", "InternalServerError", "UnknownError"}:
             raise RuntimeError("Expo push delivery temporarily failed")
         else:
-            logger.warning("Expo push rejected a notification (%s)", error)
+            # Gateway-controlled details can echo device credentials or payloads.
+            logger.warning("Expo push rejected a notification")
 
     def run_receipts(self, limit: int = 10) -> None:
         now = dt.datetime.now(dt.timezone.utc)
@@ -324,7 +335,11 @@ class ExpoPushDelivery:
             if receipt is None and now - row["created_at"] < dt.timedelta(hours=24):
                 continue
             if isinstance(receipt, dict) and receipt.get("status") == "error":
-                self._handle_error(receipt, row["endpoint"])
+                # Older receipts lack a registration generation and cannot safely
+                # invalidate whichever account currently owns this endpoint.
+                identity = {name: row.get(name) for name in (
+                    "endpoint", "subscription_id", "user_id", "subscription_updated_at")}
+                self._handle_error(receipt, identity)
             if scalable:
                 with self.store.atomic():
                     self.store.raw_put(self.store.ref("push_receipts", key), None)
@@ -350,7 +365,7 @@ class RoutedPushNotifier:
     def deliver(self, message: PushMessage) -> None:
         # A queued push must not survive opt-out, logout, or endpoint reassignment.
         # Transactional point reads bypass the query store's stale read cache.
-        with self.store.atomic() if getattr(self.store, "scalable", False) else nullcontext():
+        with self.store.operation_lock:
             subscription = self.store.get_push_subscription_by_endpoint(message.subscription.endpoint)
             if subscription is None or subscription.user_id != message.subscription.user_id:
                 return
@@ -361,13 +376,13 @@ class RoutedPushNotifier:
         if expiration is not None and expiration.tzinfo is None:
             expiration = expiration.replace(tzinfo=dt.timezone.utc)
         if expiration is not None and expiration <= dt.datetime.now(dt.timezone.utc):
-            self.store.delete_push_subscription_by_endpoint(subscription.endpoint)
+            _delete_subscription_if_current(self.store, _subscription_identity(subscription))
             return
         if subscription.delivery == "expo":
             if self.config.native_enabled:
-                self.native.deliver(message)
+                self.native.deliver(replace(message, subscription=subscription))
         else:
-            self.browser.deliver(message)
+            self.browser.deliver(replace(message, subscription=subscription))
 
     @property
     def receipts_enabled(self) -> bool:

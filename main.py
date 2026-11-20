@@ -77,7 +77,7 @@ def main() -> None:
         "--purge-example-data",
         action="store_true",
         help="delete every user whose password equals their id (the example data's "
-        "users) with their games and matches, save, and exit; stop the server first",
+        "users) with their matches, save, and exit; stop the server first",
     )
     parser.add_argument(
         "--print-config",

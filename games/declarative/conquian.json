@@ -7,7 +7,7 @@
   "all_state_public": false,
   "allows_leave_mid_match": false,
   "allows_join_mid_match": false,
-  "server_code": "const mode=\"conquian\", conquian=mode===\"conquian\", continental=mode===\"continental-rummy\", biriba=mode===\"biriba\";\nconst size=biriba||continental?11:10;\nconst rank=c=>c>=104?-1:c%13;\nconst suit=c=>Math.floor(c%52/13);\nconst wild=c=>c>=104||(biriba&&rank(c)===0);\nfunction meld(cards){\n if(cards.length<3)return false;\n const natural=cards.filter(c=>!wild(c)),w=cards.length-natural.length;\n if(natural.length<2||w>(biriba?1:natural.length))return false;\n if(natural.every(c=>rank(c)===rank(natural[0])))return !conquian||new Set(natural.map(suit)).size===natural.length;\n if(!natural.every(c=>suit(c)===suit(natural[0])))return false;\n for(const lowAce of [false,true]){\n  const ranks=natural.map(c=>rank(c)===12&&lowAce?-1:conquian&&rank(c)>=9?rank(c)-3:rank(c));\n  if(new Set(ranks).size===ranks.length&&Math.max(...ranks)-Math.min(...ranks)<cards.length&&cards.length<=13)return true;\n }\n return false;\n}\nfunction groups(hand){\n const out=[];\n for(let a=0;a<hand.length;a++)for(let b=a+1;b<hand.length;b++)for(let c=b+1;c<hand.length;c++){\n  const group=[hand[a],hand[b],hand[c]];\n  if(meld(group))out.push(group);\n }\n return out;\n}\nfunction layout(hand){\n if(!hand.length)return [];\n for(let mask=1;mask<2**hand.length;mask+=2){\n  const group=hand.filter((_,i)=>mask&(1<<i));\n  if(!meld(group))continue;\n  const rest=layout(hand.filter((_,i)=>!(mask&(1<<i))));\n  if(rest)return [group,...rest];\n }\n return null;\n}\nfunction finish(s,ctx,winner){\n s.winners=winner>=0?[winner]:[];\n const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false);\n const paid=winner>=0&&humans.includes(ctx.players[winner])?[ctx.players[winner]]:humans;\n return {state:s,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,Math.floor(ctx.pot/paid.length)+Number(i<ctx.pot%paid.length)]))};\n}\nfunction moves(s){\n const hand=s.hands[s.seat], pile=s.pile, top=pile[pile.length-1];\n if(s.phase===0){\n  if(conquian){\n   const options=groups([...hand,top]).filter(g=>g.includes(top)).map(cards=>({cards}));\n   s.melds[s.seat].forEach((g,i)=>{if(meld([...g,top]))options.push({extend:i});});\n   return [...options,{pass:true}];\n  }\n  return [{draw:0},...(pile.length?[{draw:1}]:[])];\n }\n if(!continental&&!biriba&&!conquian){\n  const close=hand.find(c=>layout(hand.filter(x=>x!==c)));\n  return [...(close===undefined?[]:[{close}]),...hand.map(discard=>({discard}))];\n }\n const options=hand.map(discard=>({discard}));\n if(continental&&!s.melds[s.seat].length){\n  const sets=groups(hand).filter(g=>g.filter(c=>!wild(c)).every(c=>rank(c)===rank(g.find(c=>!wild(c)))));\n  for(const a of sets)for(const b of sets)if(a[0]<b[0]&&a.every(c=>!b.includes(c)))options.unshift({cards:[...a,...b]});\n }else if(!conquian){\n  for(const cards of groups(hand))options.unshift({cards});\n  s.melds[s.seat].forEach((g,i)=>hand.forEach(c=>{if(meld([...g,c]))options.unshift({append:[i,c]});}));\n }\n return options;\n}\nconst game={\n newMatch(ctx){\n  let seed=2166136261;\n  for(const p of ctx.players)for(const c of p.id)seed=Math.imul(seed^c.charCodeAt(0),16777619);\n  const deck=Array.from({length:conquian?52:108},(_,i)=>i).filter(c=>!conquian||![6,7,8].includes(rank(c)));\n  for(let i=deck.length-1;i>0;i--){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const j=seed%(i+1);[deck[i],deck[j]]=[deck[j],deck[i]];}\n  const hands=ctx.players.map((_,i)=>deck.slice(i*size,i*size+size)),stock=deck.slice(hands.length*size);\n  const reserve=biriba?hands.map(()=>stock.splice(0,11)):hands.map(()=>[]);\n  return {state:{hands,stock,reserve,pile:[stock.shift()],melds:hands.map(()=>[]),seat:0,phase:0,turns:0,winners:[]},turn:[ctx.players[0].id]};\n },\n applyMove(s,id,m,ctx){\n  const fail=()=>{throw new InvalidMove(\"Choose a legal move on your turn.\");};\n  if(!m||Object.keys(m).length!==1||s.winners.length||ctx.players[s.seat].id!==id)fail();\n  const i=s.seat;\n  const options=moves(s);\n  if(!options.some(o=>JSON.stringify(o)===JSON.stringify(m)))fail();\n  const state={...s,hands:s.hands.map(h=>[...h]),stock:[...s.stock],pile:[...s.pile],reserve:s.reserve.map(h=>[...h]),melds:s.melds.map(gs=>gs.map(g=>[...g])),turns:s.turns+1};\n  let hand=state.hands[i];\n  if(m.pass){\n   if(!state.stock.length)return finish(state,ctx,-1);\n   state.pile=[state.stock.shift()];state.seat=1-i;\n  }else if(m.draw!==undefined){\n   if(m.draw===0&&!state.stock.length)return finish(state,ctx,-1);\n   if(m.draw&&biriba)hand.push(...state.pile.splice(0));\n   else hand.push(m.draw?state.pile.pop():state.stock.shift());\n   state.phase=1;\n  }else if(m.close!==undefined)return finish(state,ctx,i);\n  else if(m.discard!==undefined){\n   hand.splice(hand.indexOf(m.discard),1);state.pile.push(m.discard);\n   state.phase=0;state.seat=(i+1)%state.hands.length;\n  }else{\n   if(conquian){\n    const up=state.pile.pop();\n    if(m.extend!==undefined)state.melds[i][m.extend].push(up);\n    else {state.melds[i].push(m.cards);hand=state.hands[i]=hand.filter(c=>!m.cards.includes(c));}\n    state.phase=1;\n   }else if(m.append){\n    const [group,c]=m.append;state.melds[i][group].push(c);hand.splice(hand.indexOf(c),1);\n   }else{\n    state.melds[i].push(...(m.cards.length===6?[m.cards.slice(0,3),m.cards.slice(3)]:[m.cards]));\n    hand=state.hands[i]=hand.filter(c=>!m.cards.includes(c));\n   }\n  }\n  if(conquian&&state.melds[i].flat().length>=11)return finish(state,ctx,i);\n  if(!hand.length&&!conquian){\n   if(state.reserve[i].length){state.hands[i]=state.reserve[i];state.reserve[i]=[];}\n   else if(!biriba||state.melds[i].some(g=>g.length>=7))return finish(state,ctx,i);\n   else return finish(state,ctx,-1);\n  }\n  if(state.turns>=100)return finish(state,ctx,-1);\n  return {state,turn:[ctx.players[state.seat].id]};\n },\n viewFor(s,id,ctx){\n  const {hands,stock,reserve,pile,...visible}=s,i=ctx.players.findIndex(p=>p.id===id);\n  return {...visible,hand:hands[i]??[],counts:hands.map(h=>h.length),top:pile[pile.length-1]??-1,choices:i===s.seat?moves(s):[]};\n },\n computerMove(s){\n  const options=moves(s);\n  if(conquian)return options[0];\n  if(s.phase===0)return {draw:0};\n  return options.find(m=>m.cards||m.append||m.close!==undefined)??options[options.length-1];\n },\n randomMove(s){return this.computerMove(s);}\n};\n",
+  "server_code": "const mode=\"conquian\", conquian=mode===\"conquian\", continental=mode===\"continental-rummy\", biriba=mode===\"biriba\";\nconst size=biriba||continental?11:10;\nconst rank=c=>c>=104?-1:c%13;\nconst suit=c=>Math.floor(c%52/13);\nconst wild=c=>c>=104||(biriba&&rank(c)===0);\nfunction meld(cards){\n if(cards.length<3)return false;\n const natural=cards.filter(c=>!wild(c)),w=cards.length-natural.length;\n if(natural.length<2||w>(biriba?1:natural.length))return false;\n if(natural.every(c=>rank(c)===rank(natural[0])))return !conquian||new Set(natural.map(suit)).size===natural.length;\n if(!natural.every(c=>suit(c)===suit(natural[0])))return false;\n for(const lowAce of [false,true]){\n  const ranks=natural.map(c=>rank(c)===12&&lowAce?-1:conquian&&rank(c)>=9?rank(c)-3:rank(c));\n  if(new Set(ranks).size===ranks.length&&Math.max(...ranks)-Math.min(...ranks)<cards.length&&cards.length<=13)return true;\n }\n return false;\n}\nfunction groups(hand){\n const out=[];\n for(let a=0;a<hand.length;a++)for(let b=a+1;b<hand.length;b++)for(let c=b+1;c<hand.length;c++){\n  const group=[hand[a],hand[b],hand[c]];\n  if(meld(group))out.push(group);\n }\n return out;\n}\nfunction layout(hand){\n if(!hand.length)return [];\n for(let mask=1;mask<2**hand.length;mask+=2){\n  const group=hand.filter((_,i)=>mask&(1<<i));\n  if(!meld(group))continue;\n  const rest=layout(hand.filter((_,i)=>!(mask&(1<<i))));\n  if(rest)return [group,...rest];\n }\n return null;\n}\nfunction finish(s,ctx,winner){\n s.winners=winner>=0?[winner]:[];\n const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false);\n const paid=winner>=0&&humans.includes(ctx.players[winner])?[ctx.players[winner]]:humans;\n return {state:s,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,Math.floor(ctx.pot/paid.length)+Number(i<ctx.pot%paid.length)]))};\n}\nfunction moves(s){\n const hand=s.hands[s.seat], pile=s.pile, top=pile[pile.length-1];\n if(s.phase===0){\n  if(conquian){\n   const options=groups([...hand,top]).filter(g=>g.includes(top)).map(cards=>({cards}));\n   s.melds[s.seat].forEach((g,i)=>{if(meld([...g,top]))options.push({extend:i});});\n   return [...options,{pass:true}];\n  }\n  return [{draw:0},...(pile.length?[{draw:1}]:[])];\n }\n if(!continental&&!biriba&&!conquian){\n  const close=hand.find(c=>layout(hand.filter(x=>x!==c)));\n  return [...(close===undefined?[]:[{close}]),...hand.map(discard=>({discard}))];\n }\n const options=hand.map(discard=>({discard}));\n if(continental&&!s.melds[s.seat].length){\n  const sets=groups(hand).filter(g=>g.filter(c=>!wild(c)).every(c=>rank(c)===rank(g.find(c=>!wild(c)))));\n  for(const a of sets)for(const b of sets)if(a[0]<b[0]&&a.every(c=>!b.includes(c)))options.unshift({cards:[...a,...b]});\n }else if(!conquian){\n  for(const cards of groups(hand))options.unshift({cards});\n  s.melds[s.seat].forEach((g,i)=>hand.forEach(c=>{if(meld([...g,c]))options.unshift({append:[i,c]});}));\n }\n return options;\n}\nconst game={\n newMatch(ctx){\n  const deck=Array.from({length:conquian?52:108},(_,i)=>i).filter(c=>!conquian||![6,7,8].includes(rank(c)));\n  for(let i=deck.length-1;i>0;i--){\n      const j=Math.floor(ctx.random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}\n  const hands=ctx.players.map((_,i)=>deck.slice(i*size,i*size+size)),stock=deck.slice(hands.length*size);\n  const reserve=biriba?hands.map(()=>stock.splice(0,11)):hands.map(()=>[]);\n  return {state:{hands,stock,reserve,pile:[stock.shift()],melds:hands.map(()=>[]),seat:0,phase:0,turns:0,winners:[]},turn:[ctx.players[0].id]};\n },\n applyMove(s,id,m,ctx){\n  const fail=()=>{throw new InvalidMove(\"Choose a legal move on your turn.\");};\n  if(!m||Object.keys(m).length!==1||s.winners.length||ctx.players[s.seat].id!==id)fail();\n  const i=s.seat;\n  const options=moves(s);\n  if(!options.some(o=>JSON.stringify(o)===JSON.stringify(m)))fail();\n  const state={...s,hands:s.hands.map(h=>[...h]),stock:[...s.stock],pile:[...s.pile],reserve:s.reserve.map(h=>[...h]),melds:s.melds.map(gs=>gs.map(g=>[...g])),turns:s.turns+1};\n  let hand=state.hands[i];\n  if(m.pass){\n   if(!state.stock.length)return finish(state,ctx,-1);\n   state.pile=[state.stock.shift()];state.seat=1-i;\n  }else if(m.draw!==undefined){\n   if(m.draw===0&&!state.stock.length)return finish(state,ctx,-1);\n   if(m.draw&&biriba)hand.push(...state.pile.splice(0));\n   else hand.push(m.draw?state.pile.pop():state.stock.shift());\n   state.phase=1;\n  }else if(m.close!==undefined)return finish(state,ctx,i);\n  else if(m.discard!==undefined){\n   hand.splice(hand.indexOf(m.discard),1);state.pile.push(m.discard);\n   state.phase=0;state.seat=(i+1)%state.hands.length;\n  }else{\n   if(conquian){\n    const up=state.pile.pop();\n    if(m.extend!==undefined)state.melds[i][m.extend].push(up);\n    else {state.melds[i].push(m.cards);hand=state.hands[i]=hand.filter(c=>!m.cards.includes(c));}\n    state.phase=1;\n   }else if(m.append){\n    const [group,c]=m.append;state.melds[i][group].push(c);hand.splice(hand.indexOf(c),1);\n   }else{\n    state.melds[i].push(...(m.cards.length===6?[m.cards.slice(0,3),m.cards.slice(3)]:[m.cards]));\n    hand=state.hands[i]=hand.filter(c=>!m.cards.includes(c));\n   }\n  }\n  if(conquian&&state.melds[i].flat().length>=11)return finish(state,ctx,i);\n  if(!hand.length&&!conquian){\n   if(state.reserve[i].length){state.hands[i]=state.reserve[i];state.reserve[i]=[];}\n   else if(!biriba||state.melds[i].some(g=>g.length>=7))return finish(state,ctx,i);\n   else return finish(state,ctx,-1);\n  }\n  if(state.turns>=100)return finish(state,ctx,-1);\n  return {state,turn:[ctx.players[state.seat].id]};\n },\n viewFor(s,id,ctx){\n  const {hands,stock,reserve,pile,...visible}=s,i=ctx.players.findIndex(p=>p.id===id);\n  return {...visible,hand:hands[i]??[],counts:hands.map(h=>h.length),top:pile[pile.length-1]??-1,choices:i===s.seat?moves(s):[]};\n },\n computerMove(s){\n  const options=moves(s);\n  if(conquian)return options[0];\n  if(s.phase===0)return {draw:0};\n  return options.find(m=>m.cards||m.append||m.close!==undefined)??options[options.length-1];\n },\n randomMove(s){return this.computerMove(s);}\n};\n",
   "declarative_ui": {
     "format": "buildplay-ui",
     "version": 1,
@@ -564,66 +564,66 @@
         "expected_state": {
           "hands": [
             [
-              4,
-              17,
+              27,
+              35,
+              15,
+              38,
+              24,
+              25,
               28,
-              11,
-              2,
-              23,
-              31,
-              36
+              37
             ],
             [
-              0,
-              3,
-              24,
-              38,
-              9,
+              51,
+              42,
+              2,
+              4,
               41,
-              35,
-              43,
-              12,
-              30
+              44,
+              10,
+              50,
+              30,
+              5
             ]
           ],
-          "melds": [
-            [
-              [
-                14,
-                15,
-                13
-              ]
-            ],
-            []
+          "stock": [
+            11,
+            1,
+            14,
+            36,
+            9,
+            13,
+            3,
+            17,
+            40,
+            39,
+            16,
+            29,
+            49,
+            12,
+            43,
+            48,
+            26,
+            0,
+            31
           ],
-          "phase": 1,
-          "pile": [],
           "reserve": [
             [],
             []
           ],
-          "seat": 0,
-          "stock": [
-            16,
-            26,
-            40,
-            25,
-            49,
-            29,
-            39,
-            48,
-            27,
-            44,
-            10,
-            22,
-            1,
-            5,
-            18,
-            37,
-            50,
-            42,
-            51
+          "pile": [],
+          "melds": [
+            [
+              [
+                23,
+                18,
+                22
+              ]
+            ],
+            []
           ],
+          "seat": 0,
+          "phase": 1,
           "turns": 1,
           "winners": []
         },
@@ -631,95 +631,95 @@
           "u1"
         ],
         "expected_view_of_mover": {
+          "melds": [
+            [
+              [
+                23,
+                18,
+                22
+              ]
+            ],
+            []
+          ],
+          "seat": 0,
+          "phase": 1,
+          "turns": 1,
+          "winners": [],
+          "hand": [
+            27,
+            35,
+            15,
+            38,
+            24,
+            25,
+            28,
+            37
+          ],
+          "counts": [
+            8,
+            10
+          ],
+          "top": -1,
           "choices": [
             {
-              "discard": 4
+              "discard": 27
             },
             {
-              "discard": 17
+              "discard": 35
+            },
+            {
+              "discard": 15
+            },
+            {
+              "discard": 38
+            },
+            {
+              "discard": 24
+            },
+            {
+              "discard": 25
             },
             {
               "discard": 28
             },
             {
-              "discard": 11
-            },
-            {
-              "discard": 2
-            },
-            {
-              "discard": 23
-            },
-            {
-              "discard": 31
-            },
-            {
-              "discard": 36
+              "discard": 37
             }
-          ],
-          "counts": [
-            8,
-            10
-          ],
-          "hand": [
-            4,
-            17,
-            28,
-            11,
-            2,
-            23,
-            31,
-            36
-          ],
-          "melds": [
-            [
-              [
-                14,
-                15,
-                13
-              ]
-            ],
-            []
-          ],
-          "phase": 1,
-          "seat": 0,
-          "top": -1,
-          "turns": 1,
-          "winners": []
+          ]
         },
         "expected_view_of_other": {
-          "choices": [],
-          "counts": [
-            8,
-            10
-          ],
-          "hand": [
-            0,
-            3,
-            24,
-            38,
-            9,
-            41,
-            35,
-            43,
-            12,
-            30
-          ],
           "melds": [
             [
               [
-                14,
-                15,
-                13
+                23,
+                18,
+                22
               ]
             ],
             []
           ],
-          "phase": 1,
           "seat": 0,
-          "top": -1,
+          "phase": 1,
           "turns": 1,
-          "winners": []
+          "winners": [],
+          "hand": [
+            51,
+            42,
+            2,
+            4,
+            41,
+            44,
+            10,
+            50,
+            30,
+            5
+          ],
+          "counts": [
+            8,
+            10
+          ],
+          "top": -1,
+          "choices": []
         },
         "images": [
           {
@@ -742,9 +742,9 @@
         "kind": "initial",
         "move": {
           "cards": [
-            14,
-            15,
-            13
+            23,
+            18,
+            22
           ]
         },
         "name": "initial move",
@@ -753,133 +753,140 @@
         "state": {
           "hands": [
             [
-              4,
-              17,
-              28,
-              11,
-              2,
+              27,
+              35,
+              15,
               23,
-              31,
-              36,
-              14,
-              15
+              18,
+              38,
+              24,
+              25,
+              28,
+              37
             ],
             [
-              0,
-              3,
-              24,
-              38,
-              9,
+              51,
+              42,
+              2,
+              4,
               41,
-              35,
-              43,
-              12,
-              30
+              44,
+              10,
+              50,
+              30,
+              5
             ]
           ],
-          "melds": [
-            [],
-            []
-          ],
-          "phase": 0,
-          "pile": [
-            13
+          "stock": [
+            11,
+            1,
+            14,
+            36,
+            9,
+            13,
+            3,
+            17,
+            40,
+            39,
+            16,
+            29,
+            49,
+            12,
+            43,
+            48,
+            26,
+            0,
+            31
           ],
           "reserve": [
             [],
             []
           ],
-          "seat": 0,
-          "stock": [
-            16,
-            26,
-            40,
-            25,
-            49,
-            29,
-            39,
-            48,
-            27,
-            44,
-            10,
-            22,
-            1,
-            5,
-            18,
-            37,
-            50,
-            42,
-            51
+          "pile": [
+            22
           ],
+          "melds": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "phase": 0,
           "turns": 0,
           "winners": []
         },
         "view_of_mover": {
+          "melds": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "phase": 0,
+          "turns": 0,
+          "winners": [],
+          "hand": [
+            27,
+            35,
+            15,
+            23,
+            18,
+            38,
+            24,
+            25,
+            28,
+            37
+          ],
+          "counts": [
+            10,
+            10
+          ],
+          "top": 22,
           "choices": [
             {
               "cards": [
-                14,
-                15,
-                13
+                23,
+                18,
+                22
+              ]
+            },
+            {
+              "cards": [
+                23,
+                24,
+                22
               ]
             },
             {
               "pass": true
             }
-          ],
-          "counts": [
-            10,
-            10
-          ],
-          "hand": [
-            4,
-            17,
-            28,
-            11,
-            2,
-            23,
-            31,
-            36,
-            14,
-            15
-          ],
-          "melds": [
-            [],
-            []
-          ],
-          "phase": 0,
-          "seat": 0,
-          "top": 13,
-          "turns": 0,
-          "winners": []
+          ]
         },
         "view_of_other": {
-          "choices": [],
-          "counts": [
-            10,
-            10
-          ],
-          "hand": [
-            0,
-            3,
-            24,
-            38,
-            9,
-            41,
-            35,
-            43,
-            12,
-            30
-          ],
           "melds": [
             [],
             []
           ],
-          "phase": 0,
           "seat": 0,
-          "top": 13,
+          "phase": 0,
           "turns": 0,
-          "winners": []
+          "winners": [],
+          "hand": [
+            51,
+            42,
+            2,
+            4,
+            41,
+            44,
+            10,
+            50,
+            30,
+            5
+          ],
+          "counts": [
+            10,
+            10
+          ],
+          "top": 22,
+          "choices": []
         }
       },
       {
@@ -973,11 +980,28 @@
           "u1"
         ],
         "expected_view_of_mover": {
-          "choices": [],
-          "counts": [
-            6,
-            6
+          "melds": [
+            [
+              [
+                14,
+                15,
+                13,
+                25
+              ]
+            ],
+            [
+              [
+                43,
+                30,
+                4,
+                17
+              ]
+            ]
           ],
+          "phase": 0,
+          "seat": 0,
+          "turns": 16,
+          "winners": [],
           "hand": [
             24,
             38,
@@ -986,6 +1010,14 @@
             35,
             12
           ],
+          "counts": [
+            6,
+            6
+          ],
+          "top": 48,
+          "choices": []
+        },
+        "expected_view_of_other": {
           "melds": [
             [
               [
@@ -1006,20 +1038,8 @@
           ],
           "phase": 0,
           "seat": 0,
-          "top": 48,
           "turns": 16,
-          "winners": []
-        },
-        "expected_view_of_other": {
-          "choices": [
-            {
-              "pass": true
-            }
-          ],
-          "counts": [
-            6,
-            6
-          ],
+          "winners": [],
           "hand": [
             28,
             11,
@@ -1028,29 +1048,16 @@
             31,
             36
           ],
-          "melds": [
-            [
-              [
-                14,
-                15,
-                13,
-                25
-              ]
-            ],
-            [
-              [
-                43,
-                30,
-                4,
-                17
-              ]
-            ]
+          "counts": [
+            6,
+            6
           ],
-          "phase": 0,
-          "seat": 0,
           "top": 48,
-          "turns": 16,
-          "winners": []
+          "choices": [
+            {
+              "pass": true
+            }
+          ]
         },
         "images": [
           {
@@ -1141,15 +1148,28 @@
           "winners": []
         },
         "view_of_mover": {
-          "choices": [
-            {
-              "pass": true
-            }
+          "melds": [
+            [
+              [
+                14,
+                15,
+                13,
+                25
+              ]
+            ],
+            [
+              [
+                43,
+                30,
+                4,
+                17
+              ]
+            ]
           ],
-          "counts": [
-            6,
-            6
-          ],
+          "phase": 0,
+          "seat": 1,
+          "turns": 15,
+          "winners": [],
           "hand": [
             24,
             38,
@@ -1158,6 +1178,18 @@
             35,
             12
           ],
+          "counts": [
+            6,
+            6
+          ],
+          "top": 39,
+          "choices": [
+            {
+              "pass": true
+            }
+          ]
+        },
+        "view_of_other": {
           "melds": [
             [
               [
@@ -1178,16 +1210,8 @@
           ],
           "phase": 0,
           "seat": 1,
-          "top": 39,
           "turns": 15,
-          "winners": []
-        },
-        "view_of_other": {
-          "choices": [],
-          "counts": [
-            6,
-            6
-          ],
+          "winners": [],
           "hand": [
             28,
             11,
@@ -1196,29 +1220,12 @@
             31,
             36
           ],
-          "melds": [
-            [
-              [
-                14,
-                15,
-                13,
-                25
-              ]
-            ],
-            [
-              [
-                43,
-                30,
-                4,
-                17
-              ]
-            ]
+          "counts": [
+            6,
+            6
           ],
-          "phase": 0,
-          "seat": 1,
           "top": 39,
-          "turns": 15,
-          "winners": []
+          "choices": []
         }
       },
       {
@@ -1304,15 +1311,33 @@
         },
         "expected_turn": null,
         "expected_view_of_mover": {
-          "choices": [
-            {
-              "pass": true
-            }
+          "melds": [
+            [
+              [
+                14,
+                15,
+                13,
+                25
+              ]
+            ],
+            [
+              [
+                43,
+                30,
+                4,
+                17
+              ],
+              [
+                38,
+                12,
+                51
+              ]
+            ]
           ],
-          "counts": [
-            6,
-            3
-          ],
+          "phase": 0,
+          "seat": 0,
+          "turns": 30,
+          "winners": [],
           "hand": [
             28,
             11,
@@ -1321,6 +1346,18 @@
             31,
             36
           ],
+          "counts": [
+            6,
+            3
+          ],
+          "top": 24,
+          "choices": [
+            {
+              "pass": true
+            }
+          ]
+        },
+        "expected_view_of_other": {
           "melds": [
             [
               [
@@ -1346,49 +1383,19 @@
           ],
           "phase": 0,
           "seat": 0,
-          "top": 24,
           "turns": 30,
-          "winners": []
-        },
-        "expected_view_of_other": {
-          "choices": [],
-          "counts": [
-            6,
-            3
-          ],
+          "winners": [],
           "hand": [
             9,
             41,
             35
           ],
-          "melds": [
-            [
-              [
-                14,
-                15,
-                13,
-                25
-              ]
-            ],
-            [
-              [
-                43,
-                30,
-                4,
-                17
-              ],
-              [
-                38,
-                12,
-                51
-              ]
-            ]
+          "counts": [
+            6,
+            3
           ],
-          "phase": 0,
-          "seat": 0,
           "top": 24,
-          "turns": 30,
-          "winners": []
+          "choices": []
         },
         "images": [
           {
@@ -1468,15 +1475,33 @@
           "winners": []
         },
         "view_of_mover": {
-          "choices": [
-            {
-              "pass": true
-            }
+          "melds": [
+            [
+              [
+                14,
+                15,
+                13,
+                25
+              ]
+            ],
+            [
+              [
+                43,
+                30,
+                4,
+                17
+              ],
+              [
+                38,
+                12,
+                51
+              ]
+            ]
           ],
-          "counts": [
-            6,
-            3
-          ],
+          "phase": 0,
+          "seat": 0,
+          "turns": 29,
+          "winners": [],
           "hand": [
             28,
             11,
@@ -1485,6 +1510,18 @@
             31,
             36
           ],
+          "counts": [
+            6,
+            3
+          ],
+          "top": 24,
+          "choices": [
+            {
+              "pass": true
+            }
+          ]
+        },
+        "view_of_other": {
           "melds": [
             [
               [
@@ -1510,49 +1547,19 @@
           ],
           "phase": 0,
           "seat": 0,
-          "top": 24,
           "turns": 29,
-          "winners": []
-        },
-        "view_of_other": {
-          "choices": [],
-          "counts": [
-            6,
-            3
-          ],
+          "winners": [],
           "hand": [
             9,
             41,
             35
           ],
-          "melds": [
-            [
-              [
-                14,
-                15,
-                13,
-                25
-              ]
-            ],
-            [
-              [
-                43,
-                30,
-                4,
-                17
-              ],
-              [
-                38,
-                12,
-                51
-              ]
-            ]
+          "counts": [
+            6,
+            3
           ],
-          "phase": 0,
-          "seat": 0,
           "top": 24,
-          "turns": 29,
-          "winners": []
+          "choices": []
         }
       }
     ],

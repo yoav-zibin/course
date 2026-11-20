@@ -1,5 +1,7 @@
 """Rematches are public and reserve a seat for every original human player."""
 
+from dataclasses import replace
+
 from game_platform.tests.helpers import Api
 
 
@@ -32,6 +34,23 @@ def test_a_public_rematch_holds_the_seat_for_the_original_opponent() -> None:
     )
     # Bob can also come back through a plain join.
     api.ok("POST", f"/matches/{rematch['id']}/join", as_user=bob)
+
+
+def test_legacy_private_rematch_retains_its_audience_and_reserved_rejoin():
+    api = Api()
+    match_id, _, alice, bob = finished_match(api)
+    store = api.platform._store
+    store.put_match(replace(store.get_match(match_id), private=True))
+    rematch = api.ok("POST", f"/matches/{match_id}/rematch", as_user=alice)
+    assert rematch["private"] is True
+    assert store.get_match(rematch["id"]).private is True
+    stranger = api.new_user("stranger")
+    for caller in (None, stranger):
+        assert api.request("GET", f"/matches/{rematch['id']}", as_user=caller).status_code == 404
+    assert api.request("POST", f"/matches/{rematch['id']}/join", as_user=stranger).status_code == 404
+    joined = api.ok("POST", f"/matches/{match_id}/rematch", as_user=bob)
+    assert joined["private"] is True
+    assert [p["user_id"] for p in joined["players"]] == [alice, bob]
 
 
 def test_seats_beyond_the_held_ones_stay_open_to_anyone() -> None:
