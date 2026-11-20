@@ -270,7 +270,7 @@ function board(kind) {
     {id:'main',kind:'grid',x:40,y:100,width:520,height:520,rows:4,columns:4,color:'#ead1a0',alternate_color:'#d5b37d',line_color:'#745033'},
     {id:'tray',kind:'free',x:40,y:650,width:520,height:110,color:'#80573c',line_color:'#4a3022'}]};
   if (kind === 'chutes_ladders') return {viewport:{width:620,height:720},boards:[
-    {id:'main',kind:'grid',x:20,y:112,width:560,height:560,rows:10,columns:10,color:'#f3e8c8',alternate_color:'#e2d3a8',line_color:'#718096'}]};
+    {id:'main',kind:'grid',x:30,y:112,width:560,height:560,rows:10,columns:10,color:'#fff3d4',alternate_color:'#e9e9d1',line_color:'#b6b99f'}]};
   if (kind === 'dots_boxes') return {viewport:{width:620,height:710},boards:[{id:'main',...free}]};
   if (kind === 'mastermind') return {viewport:{width:620,height:780},boards:[{id:'main',...free}]};
   if (kind === 'six_mens_morris') return {viewport:{width:620,height:680},boards:[
@@ -299,8 +299,7 @@ function typesFor(kind) {
       color:owner===0?'#d7e6f4':'#374151',text_color:owner===0?'#172033':'#ffffff',
       border_color:owner===0?'#34465e':'#cbd5e1'};
   if (kind === 'chutes_ladders') {
-    types.square = {shape:'rect',width:48,height:48,color:'#e8edf4',text_color:'#23334b'};
-    for (let i=0;i<4;i++) types[`token_${i}`] = {shape:'circle',width:27,height:27,
+    for (let i=0;i<4;i++) types[`token_${i}`] = {shape:'circle',width:20,height:20,
       color:['#dc2626','#2563eb','#16a34a','#9333ea'][i],text_color:'#ffffff'};
   }
   if (kind === 'dots_boxes') {

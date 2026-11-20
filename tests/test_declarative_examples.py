@@ -136,6 +136,24 @@ def test_morris_capture_choices_are_selected_on_the_board():
         assert all(not piece['actions'] for piece in scene['pieces'])
 
 
+def test_chutes_ladders_links_and_shared_square_tokens_remain_visible():
+    body = load('chutes_ladders')
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = dict(body.unit_tests['cases'][0]['view_of_mover'])
+    view.update(positions=[1, 1, 1, 1], pieces={'0':'👑','1':'🎩','2':'🚢','3':'🐶'})
+    message = {'type':'state_changed', 'view':view, 'status':'ongoing',
+               'acting_for_player_index':0, 'my_player_index':0, 'move_count':0}
+    scene = ui.reduce(message)['scene']
+    labels = {item['id']:item for item in scene['labels']}
+    paths = {item['id']:item for item in scene['paths']}
+    tokens = [item for item in scene['pieces'] if item['id'].startswith('token_')]
+    assert labels['square_1']['text'] == '1' and labels['square_100']['text'] == '100'
+    assert 'ladder_1_-1' in paths and 'rung_1_1' in paths and 'chute_16' in paths
+    assert paths['chute_16']['points'][0] == {'x':282,'y':588}
+    assert len({(piece['position']['x'],piece['position']['y']) for piece in tokens}) == 4
+    assert all(not piece['id'].startswith('square_') for piece in scene['pieces'])
+
+
 def test_thirty_one_direct_pile_and_card_actions_and_revealed_hands():
     body = load('thirty_one')
     ui = DeclarativeLogic(body.declarative_ui)

@@ -332,24 +332,39 @@ const gameUI = {
         return {r:9 - row,c:row % 2 === 0 ? offset : 9 - offset};
       };
       for (let value = 1; value <= 100; value++) {
-        const p = position(value), cell = p.r * 10 + p.c;
-        staticPiece(`square_${value}`, 'square', 'main', boardCell(cell,10),
-          {text:String(value)});
+        const p = position(value);
+        scene.labels.push({id:`square_${value}`,text:String(value),
+          x:34 + p.c * 56,y:116 + p.r * 56,font_size:14,color:'#23334b'});
       }
       const links = [[1,38],[4,14],[9,31],[21,42],[28,84],[36,44],[51,67],[71,91],[80,100],
         [16,6],[47,26],[49,11],[56,53],[62,19],[64,60],[87,24],[93,73],[95,75],[98,78]];
       for (const [from,to] of links) {
         const a = position(from), b = position(to);
-        const center = p => ({x:48 + p.c * 56,y:126 + p.r * 56});
+        const center = p => ({x:58 + p.c * 56,y:140 + p.r * 56});
         const start = center(a), end = center(b);
-        scene.paths.push({id:`link_${from}`,points:[start,end],
-          color:to > from ? '#22c55e' : '#f97316',width:5});
+        const dx = end.x - start.x, dy = end.y - start.y;
+        const length = Math.hypot(dx,dy), nx = -dy / length, ny = dx / length;
+        if (to > from) {
+          for (const side of [-1,1])
+            scene.paths.push({id:`ladder_${from}_${side}`,points:[
+              {x:start.x+nx*side*7,y:start.y+ny*side*7},
+              {x:end.x+nx*side*7,y:end.y+ny*side*7}],color:'#2d8063',width:3});
+          for (let rung = 1; rung <= 5; rung++) {
+            const x = start.x + dx*rung/6, y = start.y + dy*rung/6;
+            scene.paths.push({id:`rung_${from}_${rung}`,points:[
+              {x:x+nx*7,y:y+ny*7},{x:x-nx*7,y:y-ny*7}],color:'#2d8063',width:3});
+          }
+        } else {
+          scene.paths.push({id:`chute_${from}`,points:[start,end],color:'#bd5941',width:12});
+          scene.paths.push({id:`chute_center_${from}`,points:[start,end],color:'#f4ab83',width:6});
+        }
       }
       (s.positions || []).forEach((value,i) => {
         if (value > 0) {
           const p = position(value);
           staticPiece(`token_${i}`, `token_${i % 4}`, 'main',
-            {cell:String(p.r * 10 + p.c)}, {text:String((s.pieces || {})[i] || i + 1),z:5+i});
+            {x:28 + p.c*56 + (i % 2 ? 10 : -10),y:26 + p.r*56 + (i >= 2 ? 20 : 0)},
+            {text:String((s.pieces || {})[i] || i + 1),z:5+i});
         }
       });
       if (active && s.phase === 'select') {
@@ -357,8 +372,8 @@ const gameUI = {
         ['👑','🎩','🚢','🐶','🎒','🚗'].filter(piece => !used.has(piece)).forEach(piece =>
           offer({kind:'select',emoji:piece}, piece));
       } else if (active) offer({kind:'spin'}, `↻ ${text('Spin')}`);
-      const last = (s.log || []).slice(-3);
-      last.forEach((entry,i) => label(`log_${i}`,entry,22,710 + i * 18,12));
+      const last = (s.log || []).slice(-1);
+      last.forEach(entry => label('log',entry,22,690,14));
     } else if (KIND === 'dots_boxes') {
       const xy = (r,c) => ({x:100 + c * 120,y:135 + r * 120});
       for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
