@@ -3,6 +3,15 @@ import copy from '../src/platform/ui-copy.json';
 import {createUser} from './helpers';
 
 const hugeBalance=9_876_543_210_123;
+function notificationPage(count:number){
+  const items=Array.from({length:Math.min(count,50)},(_,index)=>({
+    id:'header-notification-'+index,event:'your_turn',title:'Your turn',body:'A match is waiting.',
+    url:'/portal#match=header-match-'+index,match_id:'header-match-'+index,
+    created_at:new Date(2026,10,19,12,0,index).toISOString(),read_at:null,
+  }));
+  return {items,next_cursor:count>items.length?'header-next-page':null,unread_count:count};
+}
+
 const avatar='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="16" fill="#70d5ff"/></svg>').toString('base64');
 const translated=(source:string,locale:string)=>locale==='en'?source:(copy as Record<string,Record<string,string>>)[source]?.[locale]??source;
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Header checks require a disposable loopback server.');});
@@ -35,7 +44,7 @@ for(const locale of ['en','ar'])test(`header stays on one line with long names a
   await page.addInitScript(account=>{if(window!==window.top)return;localStorage.setItem('game-platform.accounts.v1',JSON.stringify([account]));localStorage.setItem('game-platform.current-account.v1',account.id);},user);
   await page.route(`**/users/${user.id}`,async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),token_balance:balance,picture_url:'/header-avatar-unavailable'}});});
   await page.route('**/header-avatar-unavailable',route=>route.fulfill({status:404,body:''}));
-  await page.route('**/users/me/notifications?*',route=>route.fulfill({json:{items:[],next_cursor:null,unread_count:150}}));
+  await page.route('**/users/me/notifications?*',route=>route.fulfill({json:notificationPage(150)}));
   await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   await expect(page.getByTestId('header-focus')).toBeVisible();
   if(locale==='ar'){
@@ -69,7 +78,7 @@ test('header icons open inbox, account, focus and the bug form with avatar and k
   await page.setViewportSize({width:390,height:844});
   await page.addInitScript(account=>{if(window!==window.top)return;localStorage.setItem('game-platform.accounts.v1',JSON.stringify([account]));localStorage.setItem('game-platform.current-account.v1',account.id);},user);
   await page.route(`**/users/${user.id}`,async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),token_balance:hugeBalance,picture_url:avatar}});});
-  await page.route('**/users/me/notifications?*',route=>route.fulfill({json:{items:[],next_cursor:null,unread_count:1}}));
+  await page.route('**/users/me/notifications?*',route=>route.fulfill({json:notificationPage(1)}));
   await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   const account=page.getByRole('button',{name:'Account menu',exact:true});
   await expect(account.locator('img')).toHaveCount(1);
