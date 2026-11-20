@@ -13,7 +13,7 @@ from game_platform.tools.publish_declarative_games import scene_event
 
 EXAMPLES = Path(__file__).resolve().parents[1] / 'games' / 'declarative'
 ARCHIVED_HTML_KINDS = ('mau_mau','dos','kisolo','thirty_one','gobblet','chutes_ladders',
-                       'dots_boxes','six_mens_morris')
+                       'six_mens_morris')
 
 
 def load(kind):

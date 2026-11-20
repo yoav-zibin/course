@@ -1,6 +1,6 @@
 # Archived HTML game declarative conversions
 
-These packages convert eight games that have archived HTML editions into the
+These packages convert seven games that have archived HTML editions into the
 declarative scene format. The archived edition supplies the executable rules
 and tested move examples; the public references below are comparison sources
 for the documented game family or variant.
@@ -13,7 +13,6 @@ for the documented game family or variant.
 | `thirty_one` | Thirty-one | [Thirty-one](https://en.wikipedia.org/wiki/Thirty-one_(card_game)) |
 | `gobblet` | Gobblet | [Gobblet](https://en.wikipedia.org/wiki/Gobblet) |
 | `chutes_ladders` | Chutes & Ladders | [Chutes and Ladders](https://en.wikipedia.org/wiki/Chutes_and_Ladders) |
-| `dots_boxes` | Dots & Boxes | [Dots and Boxes](https://en.wikipedia.org/wiki/Dots_and_boxes) |
 | `six_mens_morris` | Six Men's Morris | [Six Men's Morris](https://en.wikipedia.org/wiki/Six_men%27s_morris) |
 
 ## Scope and variant notes
@@ -31,10 +30,12 @@ for the documented game family or variant.
   [`games/declarative/card-table/old-maid.json`](../games/declarative/card-table/old-maid.json).
 - Mastermind is omitted because the live catalog already has a declarative
   Mastermind game; avoid publishing a second catalog entry for the same game.
+- Dots & Boxes is omitted because a separate declarative Dots and Boxes game
+  is already live; its existing entry is unchanged.
 - The archive does not contain exact current HTML editions for Dominoes,
   Snakes and Ladders, or Nine Men's Morris; the selected packages above are
   distinct archived games or variants, not claims of exact replacements.
-- Dots & Boxes and the other listed packages retain their archived
+- The listed packages retain their archived
   rules and tested examples; the public pages are references, not substitutes
   for those executable rules.
 

@@ -1,4 +1,4 @@
-// Presentation for eight archived HTML games converted to the portable scene UI.
+// Presentation for archived HTML games converted to the portable scene UI.
 const gameUI = {
   reduce(message, localState) {
     const m = message.type === 'ui_event' ? message.state_changed : message;

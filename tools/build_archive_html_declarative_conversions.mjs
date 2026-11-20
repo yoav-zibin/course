@@ -29,7 +29,6 @@ const ENTRIES = [
   {kind:'thirty_one', title:'Thirty-one', players:[2], board:'table'},
   {kind:'gobblet', title:'Gobblet', players:[2], board:'gobblet'},
   {kind:'chutes_ladders', title:'Chutes & Ladders', players:[2,3,4], board:'chutes_ladders'},
-  {kind:'dots_boxes', title:'Dots & Boxes', players:[2], board:'dots_boxes'},
   {kind:'six_mens_morris', title:"Six Men's Morris", players:[2], board:'six_mens_morris'}
 ];
 
