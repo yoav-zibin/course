@@ -39,16 +39,21 @@
     "strings": {
       "title": "Hackenbush",
       "hackenbush_hint": "Cut your own colour. Cut-off branches fall.",
+      "turn_color": "Player {n} ({color})",
+      "winner_color": "Player {n} ({color}) wins",
+      "green": "Green",
+      "pink": "Pink",
+      "blue": "Blue",
+      "red": "Red",
       "turn": "Player {n}",
       "finished": "Finished",
       "winner": "Player {n} wins",
       "draw": "Draw",
       "server_invalid": "Illegal move",
-      "blue_turn": "Blue to cut",
-      "red_turn": "Red to cut",
+      "cut_turn": "Player {n} ({color}) to cut",
       "cut": "Cut branch {n}"
     },
-    "ui_code": "const KIND=\"hackenbush\";\nconst SOURCE_STRINGS={\"title\": \"Hackenbush\", \"hackenbush_hint\": \"Cut your own colour. Cut-off branches fall.\", \"turn\": \"Player {n}\", \"finished\": \"Finished\", \"winner\": \"Player {n} wins\", \"draw\": \"Draw\", \"server_invalid\": \"Illegal move\", \"blue_turn\": \"Blue to cut\", \"red_turn\": \"Red to cut\", \"cut\": \"Cut branch {n}\"};\nconst GEO={\"ground_y\": 430, \"hack_nodes\": [[60, 430], [190, 430], [330, 430], [480, 430], [60, 350], [60, 270], [20, 210], [110, 210], [110, 140], [190, 350], [190, 270], [150, 200], [240, 200], [330, 350], [300, 280], [370, 280], [370, 200], [480, 350], [480, 270], [440, 200], [530, 200]], \"hack_edges\": [[0, 4, 0], [4, 5, 1], [5, 6, 0], [5, 7, 1], [7, 8, 0], [1, 9, 1], [9, 10, 0], [10, 11, 1], [10, 12, 0], [2, 13, 0], [13, 14, 1], [13, 15, 0], [15, 16, 1], [3, 17, 1], [17, 18, 0], [18, 19, 1], [18, 20, 0]], \"sim_t\": [0.62, 0.42, 0.42, 0.49, 0.37, 0.63, 0.21, 0.7, 0.57, 0.44, 0.42, 0.27, 0.63, 0.21, 0.39], \"mountains\": [8, 12, 24, 36, 40], \"shapes\": [[[0, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [1, 1]], [[0, 0], [0, 1], [0, 2]], [[0, 0], [1, 0], [2, 0], [2, 1]], [[0, 0], [0, 1], [0, 2], [1, 1]], [[0, 1], [0, 2], [1, 0], [1, 1]], [[0, 0], [0, 1], [1, 0], [1, 1]]], \"deck\": [[0, 3], [1, 1], [2, 2], [3, 3], [0, 4], [1, 2], [2, 5], [3, 6], [0, 0], [1, 7], [2, 4], [3, 1]], \"colors\": [\"#3f9d4f\", \"#d98c4a\", \"#e6c65a\", \"#4f8cff\"]};\n// Presentation for Sim, Paper Soccer, Hackenbush and Cartographers. The generator\n// prefixes KIND, SOURCE_STRINGS and GEO. Every legal line, point or shape placement\n// is an explicit target; the reducer only translates a tap back to the offered move.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g, (_, k) => String(args[k] === undefined ? '' : args[k]));\n    const active = m.status === 'ongoing' && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active ? (s.legal || []) : [];\n    const keyOf = move => Object.keys(move).map(k => k + '_' + move[k]).join('_');\n    const COLORS = ['#a7f070', '#ff9dca'];\n    const pieces = [], targets = [], controls = [], paths = [];\n    const labels = [{id: 'title', text: t('title'), x: 24, y: 14, font_size: 24},\n      {id: 'turn', text: m.status === 'over' || s.over ? t('finished') : t(KIND === 'hackenbush' ? (s.turn ? 'red_turn' : 'blue_turn') : 'turn', {n: s.turn + 1}), x: 24, y: 46, font_size: 17}];\n    if (s.over && s.winner >= 0) labels.push({id: 'winner', text: t('winner', {n: s.winner + 1}), x: 24, y: 70, font_size: 15});\n    else if (s.over) labels.push({id: 'winner', text: t('draw'), x: 24, y: 70, font_size: 15});\n    const boards = {};\n    let local = {};\n    // Available moves are small markers tinted with the mover's colour. Their text is only the\n    // accessible name; the rules live in the portal's How to play panel, not on the board.\n    const tint = (KIND === 'hackenbush' ? ['#4f8cffcc', '#ff5d5dcc'] : [COLORS[0] + 'cc', COLORS[1] + 'cc'])[s.turn] || '#ffe27acc';\n    const target = (id, board, position, label, extra = {}) =>\n      targets.push(Object.assign({id, board, position, aria_label: label, color: tint, hit_area: {x: -22, y: -22, width: 44, height: 44}}, extra));\n\n    if (KIND === 'sim') {\n      const ox = 20, oy = 100, R = 170, cx = 210, cy = 210;\n      const pos = Array.from({length: 6}, (_, i) => [cx + R * Math.cos((-90 + 60 * i) * Math.PI / 180), cy + R * Math.sin((-90 + 60 * i) * Math.PI / 180)]);\n      const pairs = [];\n      for (let a = 0; a < 6; a++) for (let b = a + 1; b < 6; b++) pairs.push([a, b]);\n      pairs.forEach(([a, b], edge) => {\n        const owner = s.edges[edge];\n        paths.push({id: 'line_' + edge, points: [{x: ox + pos[a][0], y: oy + pos[a][1]}, {x: ox + pos[b][0], y: oy + pos[b][1]}],\n          color: owner === -1 ? '#51607a' : COLORS[owner], width: owner === -1 ? 2 : 7});\n      });\n      pos.forEach(([x, y], i) => pieces.push({id: 'dot_' + i, type: 'dot', board: 'main', position: {x, y}}));\n      // Crossing diagonals share a midpoint, so each marker sits at its own precomputed spot along its line (GEO.sim_t).\n      legal.forEach(move => {\n        const [a, b] = pairs[move.edge];\n        const f = GEO.sim_t[move.edge];\n        target(keyOf(move), 'main', {x: pos[a][0] + (pos[b][0] - pos[a][0]) * f, y: pos[a][1] + (pos[b][1] - pos[a][1]) * f},\n          t('edge', {a: a + 1, b: b + 1}));\n      });\n    } else if (KIND === 'dots_boxes') {\n      const ox = 20, oy = 100, gap = 90, start = 30;\n      const dot = (r, c) => [start + c * gap, start + r * gap];\n      const ends = edge => edge < 20 ? [dot(Math.floor(edge / 4), edge % 4), dot(Math.floor(edge / 4), edge % 4 + 1)]\n        : [dot(Math.floor((edge - 20) / 5), (edge - 20) % 5), dot(Math.floor((edge - 20) / 5) + 1, (edge - 20) % 5)];\n      s.edges.forEach((owner, edge) => {\n        const [a, b] = ends(edge);\n        paths.push({id: 'line_' + edge, points: [{x: ox + a[0], y: oy + a[1]}, {x: ox + b[0], y: oy + b[1]}],\n          color: owner === -1 ? '#3d4d6b' : COLORS[owner], width: owner === -1 ? 3 : 8});\n      });\n      s.boxes.forEach((owner, box) => {\n        if (owner < 0) return;\n        const [x, y] = dot(Math.floor(box / 4), box % 4);\n        pieces.push({id: 'box_' + box, type: 'box' + owner, board: 'main', position: {x: x + gap / 2, y: y + gap / 2}});\n      });\n      for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) { const [x, y] = dot(r, c); pieces.push({id: 'dot_' + (r * 5 + c), type: 'dot', board: 'main', position: {x, y}}); }\n      labels.push({id: 'score', text: t('score', {a: s.boxes.filter(v => v === 0).length, b: s.boxes.filter(v => v === 1).length}), x: 300, y: 46, font_size: 17});\n      legal.forEach(move => {\n        const [a, b] = ends(move.edge);\n        target(keyOf(move), 'main', {x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2}, t('side', {n: move.edge + 1}));\n      });\n    } else if (KIND === 'paper_soccer') {\n      const ox = 20, oy = 90, W = 9, H = 11;\n      const xy = p => p === 99 ? [4, -1] : p === 100 ? [4, H] : [p % W, Math.floor(p / W)];\n      const px = p => ({x: 20 + xy(p)[0] * 48, y: 20 + (xy(p)[1] + 1) * 48});\n      const view = p => ({x: ox + px(p).x, y: oy + px(p).y});\n      const line = [[0,0],[3,0],[3,-1],[5,-1],[5,0],[8,0],[8,10],[5,10],[5,11],[3,11],[3,10],[0,10],[0,0]];\n      paths.push({id: 'pitch', points: line.map(([x, y]) => ({x: ox + 20 + x * 48, y: oy + 20 + (y + 1) * 48})), color: '#e8f0ff', width: 3});\n      paths.push({id: 'halfway', points: [{x: ox + 20, y: oy + 20 + 6 * 48}, {x: ox + 20 + 8 * 48, y: oy + 20 + 6 * 48}], color: '#41557a', width: 1});\n      let run = [s.trail[0]], runMover = s.mover[0];\n      const flush = () => { if (run.length > 1) paths.push({id: 'trail_' + paths.length, points: run.map(view), color: COLORS[runMover], width: 4}); };\n      s.mover.forEach((who, i) => {\n        if (who !== runMover) { flush(); run = [s.trail[i]]; runMover = who; }\n        run.push(s.trail[i + 1]);\n      });\n      flush();\n      pieces.push({id: 'ball', type: 'ball', board: 'pitch', position: {cell: String(s.ball)}, text: '⚽'});\n      legal.forEach(move => target(keyOf(move), 'pitch', {cell: String(move.to)}, t('point', {n: move.to + 1})));\n    } else if (KIND === 'hackenbush') {\n      const oy = 90;\n      paths.push({id: 'ground', points: [{x: 10, y: oy + GEO.ground_y + 8}, {x: 550, y: oy + GEO.ground_y + 8}], color: '#7d5a3a', width: 10});\n      GEO.hack_edges.forEach(([a, b, colour], edge) => {\n        if (!s.alive[edge]) return;\n        paths.push({id: 'branch_' + edge, points: [{x: GEO.hack_nodes[a][0], y: oy + GEO.hack_nodes[a][1]}, {x: GEO.hack_nodes[b][0], y: oy + GEO.hack_nodes[b][1]}],\n          color: colour ? '#ff5d5d' : '#4f8cff', width: 9});\n      });\n      GEO.hack_nodes.forEach(([x, y], i) => { if (y >= GEO.ground_y) pieces.push({id: 'root_' + i, type: 'knot', board: 'main', position: {x, y}}); });\n      legal.forEach(move => {\n        const [a, b] = GEO.hack_edges[move.edge];\n        target(keyOf(move), 'main', {x: (GEO.hack_nodes[a][0] + GEO.hack_nodes[b][0]) / 2, y: (GEO.hack_nodes[a][1] + GEO.hack_nodes[b][1]) / 2 - 0},\n          t('cut', {n: move.edge + 1}));\n      });\n    } else {\n      const seat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0, other = 1 - seat;\n      const terrains = ['forest', 'village', 'farm', 'water'], types = ['t_forest', 't_village', 't_farm', 't_water'];\n      s.maps[seat].forEach((v, i) => { if (v >= 0) pieces.push({id: 'mine_' + i, type: v === 4 ? 't_mountain' : types[v], board: 'mine', position: {cell: String(i)}}); });\n      s.maps[other].forEach((v, i) => { if (v >= 0) pieces.push({id: 'theirs_' + i, type: v === 4 ? 's_mountain' : 's' + types[v].slice(1), board: 'theirs', position: {cell: String(i)}}); });\n      const card = s.deck[Math.min(s.round, s.deck.length - 1)];\n      const variantOf = (shape, rot) => {\n        let cells = shape.map(([r, c]) => [r, c]);\n        for (let i = 0; i < rot % 4; i++) cells = cells.map(([r, c]) => [c, -r]);\n        if (rot >= 4) cells = cells.map(([r, c]) => [r, -c]);\n        const minR = Math.min(...cells.map(c => c[0])), minC = Math.min(...cells.map(c => c[1]));\n        return cells.map(([r, c]) => [r - minR, c - minC]);\n      };\n      const rots = [...new Set(legal.map(move => move.rot))].sort((a, b) => a - b);\n      const valid = localState && localState.move_count === m.move_count && localState.viewer === seat && rots.includes(localState.rot);\n      let rot = valid ? localState.rot : (rots[0] || 0);\n      const event = message.type === 'ui_event' ? message.event : null;\n      if (active && event && event.type === 'tap' && event.id === 'rotate' && rots.length) rot = rots[(rots.indexOf(rot) + 1) % rots.length];\n      labels.push({id: 'card', text: t('card', {n: Math.min(s.round + 1, s.deck.length), total: s.deck.length, terrain: t(terrains[card[0]])}), x: 24, y: 112, font_size: 15});\n      labels.push({id: 'score', text: t('score', {a: s.scores[0], b: s.scores[1]}), x: 24, y: 134, font_size: 15});\n      labels.push({id: 'theirs_label', text: t('opponent_map'), x: 36, y: 466, font_size: 13});\n      if (!s.over) variantOf(GEO.shapes[card[1]], rot).forEach(([r, c], i) => pieces.push({id: 'card_' + i, type: 'c' + types[card[0]].slice(1), board: 'card', position: {x: 20 + c * 24, y: 20 + r * 24}}));\n      const pass = legal.find(move => move.cell === -1);\n      if (pass) controls.push({id: keyOf(pass), kind: 'button', label: t('pass')});\n      else if (legal.length) {\n        if (rots.length > 1) controls.push({id: 'rotate', kind: 'button', label: t('rotate')});\n        legal.filter(move => move.rot === rot).forEach(move => {\n          const r = Math.floor(move.cell / 7), c = move.cell % 7;\n          target(keyOf(move), 'mine', {cell: String(move.cell)}, t('place_at', {row: r + 1, col: c + 1}), {\n            hit_area: {x: -22, y: -22, width: 44, height: 44},\n            preview: variantOf(GEO.shapes[card[1]], rot).map(([dr, dc]) => ({position: {cell: String((r + dr) * 7 + c + dc)}, color: GEO.colors[card[0]]}))});\n        });\n      }\n      local = {move_count: m.move_count, viewer: seat, rot};\n    }\n    // Placed pieces, dots and the ball are passive; targets and buttons carry the interaction.\n    for (const piece of pieces) if (!piece.actions) piece.actions = [];\n    const out = {scene: {pieces, targets, controls, labels, paths}, local_state: local};\n    if (message.type === 'ui_event' && active && ['tap', 'drop'].includes(message.event.type)) {\n      const e = message.event, id = e.type === 'drop' ? e.target_id : e.id;\n      const move = legal.find(option => keyOf(option) === id);\n      if (move) out.make_move = move;\n    }\n    return out;\n  }\n};\n"
+    "ui_code": "const KIND=\"hackenbush\";\nconst SOURCE_STRINGS={\"title\": \"Hackenbush\", \"hackenbush_hint\": \"Cut your own colour. Cut-off branches fall.\", \"turn_color\": \"Player {n} ({color})\", \"winner_color\": \"Player {n} ({color}) wins\", \"green\": \"Green\", \"pink\": \"Pink\", \"blue\": \"Blue\", \"red\": \"Red\", \"turn\": \"Player {n}\", \"finished\": \"Finished\", \"winner\": \"Player {n} wins\", \"draw\": \"Draw\", \"server_invalid\": \"Illegal move\", \"cut_turn\": \"Player {n} ({color}) to cut\", \"cut\": \"Cut branch {n}\"};\nconst GEO={\"ground_y\": 430, \"hack_nodes\": [[60, 430], [190, 430], [330, 430], [480, 430], [60, 350], [60, 270], [20, 210], [110, 210], [110, 140], [190, 350], [190, 270], [150, 200], [240, 200], [330, 350], [300, 280], [370, 280], [370, 200], [480, 350], [480, 270], [440, 200], [530, 200]], \"hack_edges\": [[0, 4, 0], [4, 5, 1], [5, 6, 0], [5, 7, 1], [7, 8, 0], [1, 9, 1], [9, 10, 0], [10, 11, 1], [10, 12, 0], [2, 13, 0], [13, 14, 1], [13, 15, 0], [15, 16, 1], [3, 17, 1], [17, 18, 0], [18, 19, 1], [18, 20, 0]], \"sim_t\": [0.62, 0.42, 0.42, 0.49, 0.37, 0.63, 0.21, 0.7, 0.57, 0.44, 0.42, 0.27, 0.63, 0.21, 0.39], \"mountains\": [8, 12, 24, 36, 40], \"shapes\": [[[0, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [1, 1]], [[0, 0], [0, 1], [0, 2]], [[0, 0], [1, 0], [2, 0], [2, 1]], [[0, 0], [0, 1], [0, 2], [1, 1]], [[0, 1], [0, 2], [1, 0], [1, 1]], [[0, 0], [0, 1], [1, 0], [1, 1]]], \"deck\": [[0, 3], [1, 1], [2, 2], [3, 3], [0, 4], [1, 2], [2, 5], [3, 6], [0, 0], [1, 7], [2, 4], [3, 1]], \"colors\": [\"#3f9d4f\", \"#d98c4a\", \"#e6c65a\", \"#4f8cff\"]};\n// Presentation for Sim, Paper Soccer, Hackenbush and Cartographers. The generator\n// prefixes KIND, SOURCE_STRINGS and GEO. Every legal line, point or shape placement\n// is an explicit target; the reducer only translates a tap back to the offered move.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g, (_, k) => String(args[k] === undefined ? '' : args[k]));\n    const active = m.status === 'ongoing' && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active ? (s.legal || []) : [];\n    const keyOf = move => Object.keys(move).map(k => k + '_' + move[k]).join('_');\n    const COLORS = ['#a7f070', '#ff9dca'];\n    // Games with player colours name them next to the player number, so players can tell which side they are.\n    const colored = KIND !== 'cartographers';\n    const colorName = seat => t(KIND === 'hackenbush' ? ['blue', 'red'][seat] : ['green', 'pink'][seat]);\n    const pieces = [], targets = [], controls = [], paths = [];\n    const labels = [{id: 'title', text: t('title'), x: 24, y: 14, font_size: 24},\n      {id: 'turn', text: m.status === 'over' || s.over ? t('finished')\n        : colored ? t(KIND === 'hackenbush' ? 'cut_turn' : 'turn_color', {n: s.turn + 1, color: colorName(s.turn)}) : t('turn', {n: s.turn + 1}), x: 24, y: 46, font_size: 17}];\n    if (s.over && s.winner >= 0) labels.push({id: 'winner', text: colored ? t('winner_color', {n: s.winner + 1, color: colorName(s.winner)}) : t('winner', {n: s.winner + 1}), x: 24, y: 70, font_size: 15});\n    else if (s.over) labels.push({id: 'winner', text: t('draw'), x: 24, y: 70, font_size: 15});\n    const boards = {};\n    let local = {};\n    // Available moves are small markers tinted with the mover's colour. Their text is only the\n    // accessible name; the rules live in the portal's How to play panel, not on the board.\n    const tint = (KIND === 'hackenbush' ? ['#4f8cffcc', '#ff5d5dcc'] : [COLORS[0] + 'cc', COLORS[1] + 'cc'])[s.turn] || '#ffe27acc';\n    const target = (id, board, position, label, extra = {}) =>\n      targets.push(Object.assign({id, board, position, aria_label: label, color: tint, hit_area: {x: -22, y: -22, width: 44, height: 44}}, extra));\n\n    if (KIND === 'sim') {\n      const ox = 20, oy = 100, R = 170, cx = 210, cy = 210;\n      const pos = Array.from({length: 6}, (_, i) => [cx + R * Math.cos((-90 + 60 * i) * Math.PI / 180), cy + R * Math.sin((-90 + 60 * i) * Math.PI / 180)]);\n      const pairs = [];\n      for (let a = 0; a < 6; a++) for (let b = a + 1; b < 6; b++) pairs.push([a, b]);\n      pairs.forEach(([a, b], edge) => {\n        const owner = s.edges[edge];\n        paths.push({id: 'line_' + edge, points: [{x: ox + pos[a][0], y: oy + pos[a][1]}, {x: ox + pos[b][0], y: oy + pos[b][1]}],\n          color: owner === -1 ? '#51607a' : COLORS[owner], width: owner === -1 ? 2 : 7});\n      });\n      pos.forEach(([x, y], i) => pieces.push({id: 'dot_' + i, type: 'dot', board: 'main', position: {x, y}}));\n      // Crossing diagonals share a midpoint, so each marker sits at its own precomputed spot along its line (GEO.sim_t).\n      legal.forEach(move => {\n        const [a, b] = pairs[move.edge];\n        const f = GEO.sim_t[move.edge];\n        target(keyOf(move), 'main', {x: pos[a][0] + (pos[b][0] - pos[a][0]) * f, y: pos[a][1] + (pos[b][1] - pos[a][1]) * f},\n          t('edge', {a: a + 1, b: b + 1}));\n      });\n    } else if (KIND === 'dots_boxes') {\n      const ox = 20, oy = 100, gap = 90, start = 30;\n      const dot = (r, c) => [start + c * gap, start + r * gap];\n      const ends = edge => edge < 20 ? [dot(Math.floor(edge / 4), edge % 4), dot(Math.floor(edge / 4), edge % 4 + 1)]\n        : [dot(Math.floor((edge - 20) / 5), (edge - 20) % 5), dot(Math.floor((edge - 20) / 5) + 1, (edge - 20) % 5)];\n      s.edges.forEach((owner, edge) => {\n        const [a, b] = ends(edge);\n        paths.push({id: 'line_' + edge, points: [{x: ox + a[0], y: oy + a[1]}, {x: ox + b[0], y: oy + b[1]}],\n          color: owner === -1 ? '#3d4d6b' : COLORS[owner], width: owner === -1 ? 3 : 8});\n      });\n      s.boxes.forEach((owner, box) => {\n        if (owner < 0) return;\n        const [x, y] = dot(Math.floor(box / 4), box % 4);\n        pieces.push({id: 'box_' + box, type: 'box' + owner, board: 'main', position: {x: x + gap / 2, y: y + gap / 2}});\n      });\n      for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) { const [x, y] = dot(r, c); pieces.push({id: 'dot_' + (r * 5 + c), type: 'dot', board: 'main', position: {x, y}}); }\n      labels.push({id: 'score', text: t('score', {a: s.boxes.filter(v => v === 0).length, b: s.boxes.filter(v => v === 1).length}), x: 300, y: 46, font_size: 17});\n      legal.forEach(move => {\n        const [a, b] = ends(move.edge);\n        target(keyOf(move), 'main', {x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2}, t('side', {n: move.edge + 1}));\n      });\n    } else if (KIND === 'paper_soccer') {\n      const ox = 20, oy = 90, W = 9, H = 11;\n      const xy = p => p === 99 ? [4, -1] : p === 100 ? [4, H] : [p % W, Math.floor(p / W)];\n      const px = p => ({x: 20 + xy(p)[0] * 48, y: 20 + (xy(p)[1] + 1) * 48});\n      const view = p => ({x: ox + px(p).x, y: oy + px(p).y});\n      const line = [[0,0],[3,0],[3,-1],[5,-1],[5,0],[8,0],[8,10],[5,10],[5,11],[3,11],[3,10],[0,10],[0,0]];\n      paths.push({id: 'pitch', points: line.map(([x, y]) => ({x: ox + 20 + x * 48, y: oy + 20 + (y + 1) * 48})), color: '#e8f0ff', width: 3});\n      paths.push({id: 'halfway', points: [{x: ox + 20, y: oy + 20 + 6 * 48}, {x: ox + 20 + 8 * 48, y: oy + 20 + 6 * 48}], color: '#41557a', width: 1});\n      let run = [s.trail[0]], runMover = s.mover[0];\n      const flush = () => { if (run.length > 1) paths.push({id: 'trail_' + paths.length, points: run.map(view), color: COLORS[runMover], width: 4}); };\n      s.mover.forEach((who, i) => {\n        if (who !== runMover) { flush(); run = [s.trail[i]]; runMover = who; }\n        run.push(s.trail[i + 1]);\n      });\n      flush();\n      pieces.push({id: 'ball', type: 'ball', board: 'pitch', position: {cell: String(s.ball)}, text: '⚽'});\n      legal.forEach(move => target(keyOf(move), 'pitch', {cell: String(move.to)}, t('point', {n: move.to + 1})));\n    } else if (KIND === 'hackenbush') {\n      const oy = 90;\n      paths.push({id: 'ground', points: [{x: 10, y: oy + GEO.ground_y + 8}, {x: 550, y: oy + GEO.ground_y + 8}], color: '#7d5a3a', width: 10});\n      GEO.hack_edges.forEach(([a, b, colour], edge) => {\n        if (!s.alive[edge]) return;\n        paths.push({id: 'branch_' + edge, points: [{x: GEO.hack_nodes[a][0], y: oy + GEO.hack_nodes[a][1]}, {x: GEO.hack_nodes[b][0], y: oy + GEO.hack_nodes[b][1]}],\n          color: colour ? '#ff5d5d' : '#4f8cff', width: 9});\n      });\n      GEO.hack_nodes.forEach(([x, y], i) => { if (y >= GEO.ground_y) pieces.push({id: 'root_' + i, type: 'knot', board: 'main', position: {x, y}}); });\n      legal.forEach(move => {\n        const [a, b] = GEO.hack_edges[move.edge];\n        target(keyOf(move), 'main', {x: (GEO.hack_nodes[a][0] + GEO.hack_nodes[b][0]) / 2, y: (GEO.hack_nodes[a][1] + GEO.hack_nodes[b][1]) / 2 - 0},\n          t('cut', {n: move.edge + 1}));\n      });\n    } else {\n      const seat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0, other = 1 - seat;\n      const terrains = ['forest', 'village', 'farm', 'water'], types = ['t_forest', 't_village', 't_farm', 't_water'];\n      s.maps[seat].forEach((v, i) => { if (v >= 0) pieces.push({id: 'mine_' + i, type: v === 4 ? 't_mountain' : types[v], board: 'mine', position: {cell: String(i)}}); });\n      s.maps[other].forEach((v, i) => { if (v >= 0) pieces.push({id: 'theirs_' + i, type: v === 4 ? 's_mountain' : 's' + types[v].slice(1), board: 'theirs', position: {cell: String(i)}}); });\n      const card = s.deck[Math.min(s.round, s.deck.length - 1)];\n      const variantOf = (shape, rot) => {\n        let cells = shape.map(([r, c]) => [r, c]);\n        for (let i = 0; i < rot % 4; i++) cells = cells.map(([r, c]) => [c, -r]);\n        if (rot >= 4) cells = cells.map(([r, c]) => [r, -c]);\n        const minR = Math.min(...cells.map(c => c[0])), minC = Math.min(...cells.map(c => c[1]));\n        return cells.map(([r, c]) => [r - minR, c - minC]);\n      };\n      const rots = [...new Set(legal.map(move => move.rot))].sort((a, b) => a - b);\n      const valid = localState && localState.move_count === m.move_count && localState.viewer === seat && rots.includes(localState.rot);\n      let rot = valid ? localState.rot : (rots[0] || 0);\n      const event = message.type === 'ui_event' ? message.event : null;\n      if (active && event && event.type === 'tap' && event.id === 'rotate' && rots.length) rot = rots[(rots.indexOf(rot) + 1) % rots.length];\n      labels.push({id: 'card', text: t('card', {n: Math.min(s.round + 1, s.deck.length), total: s.deck.length, terrain: t(terrains[card[0]])}), x: 24, y: 112, font_size: 15});\n      labels.push({id: 'score', text: t('score', {a: s.scores[0], b: s.scores[1]}), x: 24, y: 134, font_size: 15});\n      labels.push({id: 'theirs_label', text: t('opponent_map'), x: 36, y: 466, font_size: 13});\n      if (!s.over) variantOf(GEO.shapes[card[1]], rot).forEach(([r, c], i) => pieces.push({id: 'card_' + i, type: 'c' + types[card[0]].slice(1), board: 'card', position: {x: 20 + c * 24, y: 20 + r * 24}}));\n      const pass = legal.find(move => move.cell === -1);\n      if (pass) controls.push({id: keyOf(pass), kind: 'button', label: t('pass')});\n      else if (legal.length) {\n        if (rots.length > 1) controls.push({id: 'rotate', kind: 'button', label: t('rotate')});\n        legal.filter(move => move.rot === rot).forEach(move => {\n          const r = Math.floor(move.cell / 7), c = move.cell % 7;\n          target(keyOf(move), 'mine', {cell: String(move.cell)}, t('place_at', {row: r + 1, col: c + 1}), {\n            hit_area: {x: -22, y: -22, width: 44, height: 44},\n            preview: variantOf(GEO.shapes[card[1]], rot).map(([dr, dc]) => ({position: {cell: String((r + dr) * 7 + c + dc)}, color: GEO.colors[card[0]]}))});\n        });\n      }\n      local = {move_count: m.move_count, viewer: seat, rot};\n    }\n    // Placed pieces, dots and the ball are passive; targets and buttons carry the interaction.\n    for (const piece of pieces) if (!piece.actions) piece.actions = [];\n    const out = {scene: {pieces, targets, controls, labels, paths}, local_state: local};\n    if (message.type === 'ui_event' && active && ['tap', 'drop'].includes(message.event.type)) {\n      const e = message.event, id = e.type === 'drop' ? e.target_id : e.id;\n      const move = legal.find(option => keyOf(option) === id);\n      if (move) out.make_move = move;\n    }\n    return out;\n  }\n};\n"
   },
   "rules": "Blue and Red take turns cutting one branch of their own colour from the picture. Any branches no longer connected to the ground fall away. A player who has no branch of their colour left to cut loses.",
   "ui_instructions": "Tap the marker on one of your own branches to cut it. Blue is Player 1 and Red is Player 2. Only branches of your colour have markers.",
@@ -892,13 +897,18 @@
       "client_strings": {
         "title": "Hackenbush",
         "hackenbush_hint": "Corta tu propio color. Las ramas cortadas caen.",
+        "turn_color": "Jugador {n} ({color})",
+        "winner_color": "Gana el jugador {n} ({color})",
+        "green": "Verde",
+        "pink": "Rosa",
+        "blue": "Azul",
+        "red": "Rojo",
         "turn": "Jugador {n}",
         "finished": "Terminado",
         "winner": "Gana el jugador {n}",
         "draw": "Empate",
         "server_invalid": "Jugada ilegal",
-        "blue_turn": "Corta Azul",
-        "red_turn": "Corta Rojo",
+        "cut_turn": "Corta el jugador {n} ({color})",
         "cut": "Cortar rama {n}"
       }
     },
@@ -913,13 +923,18 @@
       "client_strings": {
         "title": "Hackenbush",
         "hackenbush_hint": "Coupez votre couleur. Les branches coupées tombent.",
+        "turn_color": "Joueur {n} ({color})",
+        "winner_color": "Le joueur {n} ({color}) gagne",
+        "green": "Vert",
+        "pink": "Rose",
+        "blue": "Bleu",
+        "red": "Rouge",
         "turn": "Joueur {n}",
         "finished": "Terminé",
         "winner": "Le joueur {n} gagne",
         "draw": "Match nul",
         "server_invalid": "Coup interdit",
-        "blue_turn": "Bleu coupe",
-        "red_turn": "Rouge coupe",
+        "cut_turn": "Le joueur {n} ({color}) coupe",
         "cut": "Couper la branche {n}"
       }
     },
@@ -934,13 +949,18 @@
       "client_strings": {
         "title": "Hackenbush",
         "hackenbush_hint": "Schneide deine Farbe. Abgetrennte Äste fallen.",
+        "turn_color": "Spieler {n} ({color})",
+        "winner_color": "Spieler {n} ({color}) gewinnt",
+        "green": "Grün",
+        "pink": "Rosa",
+        "blue": "Blau",
+        "red": "Rot",
         "turn": "Spieler {n}",
         "finished": "Beendet",
         "winner": "Spieler {n} gewinnt",
         "draw": "Unentschieden",
         "server_invalid": "Ungültiger Zug",
-        "blue_turn": "Blau schneidet",
-        "red_turn": "Rot schneidet",
+        "cut_turn": "Spieler {n} ({color}) schneidet",
         "cut": "Ast {n} abschneiden"
       }
     },
@@ -955,13 +975,18 @@
       "client_strings": {
         "title": "Hackenbush",
         "hackenbush_hint": "Corte a sua cor. Os galhos soltos caem.",
+        "turn_color": "Jogador {n} ({color})",
+        "winner_color": "O jogador {n} ({color}) vence",
+        "green": "Verde",
+        "pink": "Rosa",
+        "blue": "Azul",
+        "red": "Vermelho",
         "turn": "Jogador {n}",
         "finished": "Terminado",
         "winner": "O jogador {n} vence",
         "draw": "Empate",
         "server_invalid": "Jogada ilegal",
-        "blue_turn": "Azul corta",
-        "red_turn": "Vermelho corta",
+        "cut_turn": "O jogador {n} ({color}) corta",
         "cut": "Cortar galho {n}"
       }
     },
@@ -976,13 +1001,18 @@
       "client_strings": {
         "title": "砍树游戏",
         "hackenbush_hint": "剪自己颜色的树枝，断开的树枝会掉落。",
+        "turn_color": "玩家{n}（{color}）",
+        "winner_color": "玩家{n}（{color}）获胜",
+        "green": "绿色",
+        "pink": "粉色",
+        "blue": "蓝色",
+        "red": "红色",
         "turn": "玩家{n}",
         "finished": "已结束",
         "winner": "玩家{n}获胜",
         "draw": "平局",
         "server_invalid": "非法着法",
-        "blue_turn": "蓝方剪枝",
-        "red_turn": "红方剪枝",
+        "cut_turn": "玩家{n}（{color}）剪枝",
         "cut": "剪断树枝 {n}"
       }
     },
@@ -997,13 +1027,18 @@
       "client_strings": {
         "title": "हैकेनबुश",
         "hackenbush_hint": "अपने रंग की शाखा काटें। कटी हुई शाखाएँ गिर जाती हैं।",
+        "turn_color": "खिलाड़ी {n} ({color})",
+        "winner_color": "खिलाड़ी {n} ({color}) जीता",
+        "green": "हरा",
+        "pink": "गुलाबी",
+        "blue": "नीला",
+        "red": "लाल",
         "turn": "खिलाड़ी {n}",
         "finished": "समाप्त",
         "winner": "खिलाड़ी {n} जीता",
         "draw": "बराबरी",
         "server_invalid": "अवैध चाल",
-        "blue_turn": "नीला काटे",
-        "red_turn": "लाल काटे",
+        "cut_turn": "खिलाड़ी {n} ({color}) काटे",
         "cut": "शाखा {n} काटें"
       }
     },
@@ -1018,13 +1053,18 @@
       "client_strings": {
         "title": "هاكنبوش",
         "hackenbush_hint": "اقطع لونك. الفروع المنفصلة تسقط.",
+        "turn_color": "اللاعب {n} ({color})",
+        "winner_color": "فاز اللاعب {n} ({color})",
+        "green": "أخضر",
+        "pink": "وردي",
+        "blue": "أزرق",
+        "red": "أحمر",
         "turn": "اللاعب {n}",
         "finished": "انتهت",
         "winner": "فاز اللاعب {n}",
         "draw": "تعادل",
         "server_invalid": "حركة غير قانونية",
-        "blue_turn": "دور الأزرق",
-        "red_turn": "دور الأحمر",
+        "cut_turn": "دور اللاعب {n} ({color})",
         "cut": "اقطع الفرع {n}"
       }
     }

@@ -11,10 +11,14 @@ const gameUI = {
     const legal = active ? (s.legal || []) : [];
     const keyOf = move => Object.keys(move).map(k => k + '_' + move[k]).join('_');
     const COLORS = ['#a7f070', '#ff9dca'];
+    // Games with player colours name them next to the player number, so players can tell which side they are.
+    const colored = KIND !== 'cartographers';
+    const colorName = seat => t(KIND === 'hackenbush' ? ['blue', 'red'][seat] : ['green', 'pink'][seat]);
     const pieces = [], targets = [], controls = [], paths = [];
     const labels = [{id: 'title', text: t('title'), x: 24, y: 14, font_size: 24},
-      {id: 'turn', text: m.status === 'over' || s.over ? t('finished') : t(KIND === 'hackenbush' ? (s.turn ? 'red_turn' : 'blue_turn') : 'turn', {n: s.turn + 1}), x: 24, y: 46, font_size: 17}];
-    if (s.over && s.winner >= 0) labels.push({id: 'winner', text: t('winner', {n: s.winner + 1}), x: 24, y: 70, font_size: 15});
+      {id: 'turn', text: m.status === 'over' || s.over ? t('finished')
+        : colored ? t(KIND === 'hackenbush' ? 'cut_turn' : 'turn_color', {n: s.turn + 1, color: colorName(s.turn)}) : t('turn', {n: s.turn + 1}), x: 24, y: 46, font_size: 17}];
+    if (s.over && s.winner >= 0) labels.push({id: 'winner', text: colored ? t('winner_color', {n: s.winner + 1, color: colorName(s.winner)}) : t('winner', {n: s.winner + 1}), x: 24, y: 70, font_size: 15});
     else if (s.over) labels.push({id: 'winner', text: t('draw'), x: 24, y: 70, font_size: 15});
     const boards = {};
     let local = {};

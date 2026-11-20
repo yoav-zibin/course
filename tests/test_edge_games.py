@@ -229,3 +229,21 @@ def test_dots_boxes_game_ends_with_the_larger_box_count():
     assert result['state']['over'] and -1 not in boxes
     mine = boxes.count(0)
     assert result['state']['winner'] == (-1 if mine == 8 else 0 if mine > 8 else 1)
+
+
+@pytest.mark.parametrize('kind, names', [('sim', ('Green', 'Pink')), ('paper_soccer', ('Green', 'Pink')), ('dots_boxes', ('Green', 'Pink')),
+                                         ('hackenbush', ('Blue', 'Red')), ('cartographers', None)])
+def test_player_numbers_are_paired_with_their_colours(kind, names):
+    game, ui = engine(kind)
+    state = start(game)
+    scene = frame(game, ui, state)[0]['scene']
+    turn = next(label['text'] for label in scene['labels'] if label['id'] == 'turn')
+    assert turn.startswith('Player 1') and (names is None or f'({names[0]})' in turn)
+    state['turn'] = 1
+    scene = frame(game, ui, state, 'b')[0]['scene']
+    turn = next(label['text'] for label in scene['labels'] if label['id'] == 'turn')
+    assert turn.startswith('Player 2') and (names is None or f'({names[1]})' in turn)
+    state['over'], state['winner'] = True, 1
+    scene = frame(game, ui, state)[0]['scene']
+    winner = next(label['text'] for label in scene['labels'] if label['id'] == 'winner')
+    assert winner.startswith('Player 2') and (names is None or f'({names[1]})' in winner)

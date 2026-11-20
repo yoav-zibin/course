@@ -159,6 +159,12 @@ UI_RULES = {
         'استخدم تدوير / قلب لتغيير الشكل ثم اضغط مربعًا مميزًا في خريطتك. على شاشة اللمس اضغط مرة للمعاينة ومرة أخرى للوضع.'),
 }
 COMMON = {
+    'turn_color': tr('Player {n} ({color})', 'Jugador {n} ({color})', 'Joueur {n} ({color})', 'Spieler {n} ({color})', 'Jogador {n} ({color})', '玩家{n}（{color}）', 'खिलाड़ी {n} ({color})', 'اللاعب {n} ({color})'),
+    'winner_color': tr('Player {n} ({color}) wins', 'Gana el jugador {n} ({color})', 'Le joueur {n} ({color}) gagne', 'Spieler {n} ({color}) gewinnt', 'O jogador {n} ({color}) vence', '玩家{n}（{color}）获胜', 'खिलाड़ी {n} ({color}) जीता', 'فاز اللاعب {n} ({color})'),
+    'green': tr('Green', 'Verde', 'Vert', 'Grün', 'Verde', '绿色', 'हरा', 'أخضر'),
+    'pink': tr('Pink', 'Rosa', 'Rose', 'Rosa', 'Rosa', '粉色', 'गुलाबी', 'وردي'),
+    'blue': tr('Blue', 'Azul', 'Bleu', 'Blau', 'Azul', '蓝色', 'नीला', 'أزرق'),
+    'red': tr('Red', 'Rojo', 'Rouge', 'Rot', 'Vermelho', '红色', 'लाल', 'أحمر'),
     'turn': tr('Player {n}', 'Jugador {n}', 'Joueur {n}', 'Spieler {n}', 'Jogador {n}', '玩家{n}', 'खिलाड़ी {n}', 'اللاعب {n}'),
     'finished': tr('Finished', 'Terminado', 'Terminé', 'Beendet', 'Terminado', '已结束', 'समाप्त', 'انتهت'),
     'winner': tr('Player {n} wins', 'Gana el jugador {n}', 'Le joueur {n} gagne', 'Spieler {n} gewinnt', 'O jogador {n} vence', '玩家{n}获胜', 'खिलाड़ी {n} जीता', 'فاز اللاعب {n}'),
@@ -195,8 +201,7 @@ EXTRA = {
         'point': tr('Point {n}', 'Punto {n}', 'Point {n}', 'Punkt {n}', 'Ponto {n}', '点 {n}', 'बिंदु {n}', 'النقطة {n}'),
     },
     'hackenbush': {
-        'blue_turn': tr('Blue to cut', 'Corta Azul', 'Bleu coupe', 'Blau schneidet', 'Azul corta', '蓝方剪枝', 'नीला काटे', 'دور الأزرق'),
-        'red_turn': tr('Red to cut', 'Corta Rojo', 'Rouge coupe', 'Rot schneidet', 'Vermelho corta', '红方剪枝', 'लाल काटे', 'دور الأحمر'),
+        'cut_turn': tr('Player {n} ({color}) to cut', 'Corta el jugador {n} ({color})', 'Le joueur {n} ({color}) coupe', 'Spieler {n} ({color}) schneidet', 'O jogador {n} ({color}) corta', '玩家{n}（{color}）剪枝', 'खिलाड़ी {n} ({color}) काटे', 'دور اللاعب {n} ({color})'),
         'cut': tr('Cut branch {n}', 'Cortar rama {n}', 'Couper la branche {n}', 'Ast {n} abschneiden', 'Cortar galho {n}', '剪断树枝 {n}', 'शाखा {n} काटें', 'اقطع الفرع {n}'),
     },
     'dots_boxes': {
