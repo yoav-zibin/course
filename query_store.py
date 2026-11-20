@@ -14,6 +14,7 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import logging
 import threading
 from dataclasses import replace
 
@@ -37,6 +38,7 @@ from game_platform.models import (
     Move,
     Feedback,
     User,
+    TokenMovement,
     WebPushSubscription,
     Translation,
 )
@@ -83,6 +85,7 @@ INTERNAL_COLLECTIONS = frozenset(
         "migration",
         "seed_runs",
         "token_ledger",
+        "token_ledger_pending",
         "dashboard_runs",
         "game_popularity",
         "feedback_limits",
@@ -100,6 +103,8 @@ INTERNAL_COLLECTIONS = frozenset(
 COLLECTIONS = frozenset(TYPES) | INTERNAL_COLLECTIONS
 ADAPTERS = {k: TypeAdapter(v) for k, v in TYPES.items()}
 MOVE_ADAPTER = TypeAdapter(Move)
+TOKEN_MOVEMENT_ADAPTER = TypeAdapter(TokenMovement)
+logger = logging.getLogger(__name__)
 SCHEMA = 1
 LEGACY_LIMIT = 100
 
@@ -216,6 +221,7 @@ class QueryStore:
         self.namespace = namespace
         self._local = threading.local()
         self.operation_lock = _Operation(self)
+        self.token_ledger_wake = None
         # Non-transactional reads are served by this stale-while-revalidate
         # cache (see read_cache.py); transactional reads always go through
         # their Firestore transaction.
@@ -261,7 +267,7 @@ class QueryStore:
             return
         tx = self.client.transaction()
         tx._begin(retry_id=retry_id)
-        uow = {"tx": tx, "reads": {}, "writes": {}, "after": []}
+        uow = {"tx": tx, "reads": {}, "writes": {}, "creates": set(), "after": []}
         self._local.uow = uow
         try:
             yield
@@ -272,6 +278,8 @@ class QueryStore:
             for ref, data in uow["writes"].values():
                 if data is None:
                     tx.delete(ref)
+                elif ref.path in uow["creates"]:
+                    tx.create(ref, data)
                 else:
                     tx.set(ref, data)
             if uow["writes"]:
@@ -316,8 +324,17 @@ class QueryStore:
             with self.atomic():
                 self.raw_put(ref, data)
             return
+        kind = self._kind_for_path(ref.path)
+        if kind == "token_ledger":
+            if data is None:
+                raise ValueError("token ledger is insert-only")
+            previous = self.raw_get(ref)
+            if previous is not None:
+                if previous != data:
+                    raise ValueError("token ledger is insert-only")
+                return
+            self._local.uow["creates"].add(ref.path)
         if data is not None:
-            kind = self._kind_for_path(ref.path)
             if "/referral_nodes/" in ref.path:
                 self.assert_account_write_allowed([data.get("id"), data.get("parent_id")])
             if kind in ("jobs", "failed_jobs", "requests", "outbox", "push_receipts", "matchmaking"):
@@ -1113,19 +1130,6 @@ class QueryStore:
             self.assert_account_write_allowed([user.id])
             previous = self.raw_get(self.ref("users", user.id))
             old_user = ADAPTERS["users"].validate_json(previous["json"]) if previous and not previous.get("tombstone") else None
-            old_balance = old_user.token_balance if old_user else 0
-            if not previous or old_balance != user.token_balance:
-                revision = (previous or {}).get("revision", 0) + 1
-                self.raw_put(
-                    self.ref("token_ledger", f"{user.id}:{revision}"),
-                    {
-                        "user_id": user.id,
-                        "revision": revision,
-                        "amount": user.token_balance - old_balance,
-                        "balance": user.token_balance,
-                        "created_at": dt.datetime.now(dt.timezone.utc),
-                    },
-                )
             # Profile/lifecycle/inbox writes must not re-write hundreds of
             # unchanged identity reservations and exhaust the transaction cap.
             if user.referral_code and (old_user is None or old_user.referral_code != user.referral_code):
@@ -1146,6 +1150,74 @@ class QueryStore:
                 invited_by_user_id=user.invited_by_user_id,
                 replaced_by_user_id=user.replaced_by_user_id,
             )
+
+    @staticmethod
+    def _token_movement_row(movement):
+        return {
+            "schema_version": 2,
+            "id": movement.id,
+            "user_id": movement.user_id,
+            "amount": movement.amount,
+            "balance_before": movement.balance_before,
+            "reason": movement.reason,
+            "match_id": movement.match_id,
+            "created_at": movement.created_at,
+        }
+
+    def append_token_movement(self, movement):
+        """Commit a durable accounting outbox entry alongside its balance change."""
+        movement = TOKEN_MOVEMENT_ADAPTER.validate_python(movement)
+        row = self._token_movement_row(movement)
+        with self.atomic():
+            ref = self.ref("token_ledger_pending", movement.id)
+            previous = self.raw_get(ref)
+            if previous is not None:
+                if any(previous.get(field) != value for field, value in row.items()):
+                    raise ValueError("token movement ID already exists")
+                return
+            self.raw_put(ref, {**row, "due_at": dt.datetime.now(dt.timezone.utc), "attempts": 0})
+            if self.token_ledger_wake is not None:
+                self._local.uow["after"].append(self.token_ledger_wake)
+
+    def flush_token_movements(self, *, limit=100):
+        """Materialize bounded immutable rows; a failed write leaves its outbox."""
+        if not 1 <= limit <= 100:
+            raise ValueError("token ledger limit must be between 1 and 100")
+        from game_platform.service import ConflictError
+
+        now = dt.datetime.now(dt.timezone.utc)
+        rows = list(self.collection("token_ledger_pending")
+                    .where(filter=FieldFilter("due_at", "<=", now))
+                    .order_by("due_at").limit(limit).stream())
+        completed = 0
+        for doc in rows:
+            try:
+                with self.atomic():
+                    pending = self.raw_get(doc.reference)
+                    if pending is None or pending["due_at"] > now:
+                        continue
+                    movement = TOKEN_MOVEMENT_ADAPTER.validate_python(pending)
+                    self.raw_put(self.ref("token_ledger", movement.id), self._token_movement_row(movement))
+                    self.raw_put(doc.reference, None)
+                completed += 1
+            except ConflictError:
+                continue
+            except Exception:
+                logger.exception("token ledger materialization failed: %s", doc.id)
+                with self.atomic():
+                    pending = self.raw_get(doc.reference)
+                    if pending is not None:
+                        self.raw_put(doc.reference, {**pending,
+                            "due_at": now + dt.timedelta(seconds=30),
+                            "attempts": pending.get("attempts", 0) + 1})
+        return completed
+
+    def list_token_movements(self, *, limit=100):
+        """A bounded page of detailed rows; legacy revision rows remain intact."""
+        if not 1 <= limit <= 100:
+            raise ValueError("token ledger limit must be between 1 and 100")
+        return [TOKEN_MOVEMENT_ADAPTER.validate_python(doc.to_dict()) for doc in
+                self._query("token_ledger", [("schema_version", "==", 2)], limit=limit)]
 
     def has_game_membership(self, user_id, game_id, version):
         return bool(

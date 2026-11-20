@@ -102,7 +102,7 @@ def test_fallback_quotes_remainder_and_accepts_pre_release_previews(api, old_pre
     store = api.platform._store
     # An ongoing move can pay part of the pot, leaving an odd remainder.
     original = store.get_match(mid)
-    api.platform._credit_tokens(bob, 1)
+    api.platform._credit_tokens(bob, 1, reason="match_payout", match_id=mid)
     store.put_match(replace(original, token_pot=19, token_payouts={1: 1}))
     quote = api.ok("POST", f"/matches/{mid}/maybeLeave", as_user=alice)
     assert quote["pending_leave_payout"] == 10

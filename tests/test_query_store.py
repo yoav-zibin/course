@@ -853,8 +853,10 @@ def test_payout_ledger_and_lost_response_retry_are_atomic(store):
     platform.make_move(**args)
     assert store.get_user(alice).token_balance == 20
     assert store.get_user(bob).token_balance == 0
+    platform.run_token_ledger()
     ledger = [doc.to_dict() for doc in store.collection("token_ledger").stream()]
-    assert sum(row["amount"] for row in ledger if row["user_id"] == alice) == 20
+    assert 10 + sum(row["amount"] for row in ledger if row["user_id"] == alice) == 20
+    assert all(row["match_id"] == match for row in ledger)
     assert len(store.get_match(match).moves) == 5
 
 

@@ -58,7 +58,7 @@ test('legacy logout survives reload and permits saved login or guest entry only 
   await page.locator('[data-auth-action="login"]').click();
   await expect(page.getByRole('button',{name:'Continue as guest',exact:true})).toBeVisible();
   await expect(page.locator('#auth-verified-bonus')).toBeVisible();
-  await expect(page.locator('#auth-verified-bonus')).toContainText('1,000');
+  await expect(page.locator('#auth-verified-bonus')).toContainText('100 free tokens total');
   await page.getByRole('button',{name:'Close',exact:true}).click();
   await page.locator('.auth-menu-button').click();await page.locator(`[data-auth-action="switch:${bob.id}"]`).click();
   expect(await page.evaluate(()=>Auth.current()?.id)).toBe(bob.id);

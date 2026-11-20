@@ -41,6 +41,9 @@ export class PortalStore {
   private syncPromise: Promise<void> | null = null;
   private notificationPromise: Promise<void> | null = null;
   private dismissedNotificationIds = new Set<string>();
+  private dailyLoginPromise: {key:string; promise:Promise<void>} | null = null;
+  private dailyLoginDays = new Map<string,string>();
+  private dailyLoginRetryAfter = new Map<string,number>();
   private notificationPromptClaim: Promise<void> | null = null;
   private offeredNotificationPrompt = new Set<string>();
   private bootstrapPromise: Promise<void> | null = null;
@@ -190,11 +193,39 @@ export class PortalStore {
       const jobs: Promise<any>[] = [this.list('games'), this.list('openMatches'), this.read('/auth/config').then(authConfig => { guard(); this.patch({ authConfig }); }), this.read('/games/popular').then(popularGames => { guard(); this.patch({ popularGames: popularGames.map(localizeGame) }); })];
       if (this.state.account) jobs.push(this.refreshNotifications(), this.list('myMatches'), this.list('savedGames'), this.list('invites'), this.read('/users/me/recent-games').then(recentGames => { guard(); this.patch({ recentGames: recentGames.map(localizeGame) }); }), this.refreshProfile());
       const results = await Promise.allSettled(jobs); guard();
+      await this.claimDailyLogin().catch(() => {}); guard();
       const first = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
       if (first && !this.state.games.length) this.patch({ error: first.reason?.message || 'Could not refresh' });
       await this.loadProfiles().catch(() => {});
     })().finally(() => { if (this.refreshPromise === pending) this.refreshPromise = null; });
     this.refreshPromise = pending; return pending;
+  }
+  private async claimDailyLogin(): Promise<void> {
+    const account=this.state.account;
+    if(this.localOnly||!account||!isOnline())return;
+    const guard=this.capture(),scope=JSON.stringify([this.state.baseUrl,account.id]),day=new Date().toISOString().slice(0,10);
+    const profile=this.state.profile,linked=account.linked??account.linked_accounts;
+    const verified=profile?.is_verified===true||account.is_verified===true||linked?.some((item:any)=>['google','email','phone'].includes(item?.kind))?true:profile?.is_verified??account.is_verified;
+    const lastDay=profile?.last_token_grant_day??account.last_token_grant_day,total=profile?.free_tokens_granted??account.free_tokens_granted;
+    if(verified===false||lastDay>=day||typeof total==='number'&&total>=100||this.dailyLoginDays.get(scope)===day||(this.dailyLoginRetryAfter.get(scope)||0)>Date.now())return;
+    const key=JSON.stringify([scope,day]);
+    if(this.dailyLoginPromise?.key===key)return this.dailyLoginPromise.promise;
+    const pending=(async()=>{
+      try{
+        if(verified!==true){
+          await this.refreshProfile();guard();
+          if(this.state.profile?.is_verified!==true){this.dailyLoginDays.set(scope,day);return;}
+        }
+        const saved=await this.request('POST','/auth/daily-login');guard();
+        if(typeof saved?.id!=='string'||typeof saved.token_balance!=='number'||typeof saved.free_tokens_granted!=='number')throw new Error('Invalid daily login response');
+        const fields={token_balance:saved.token_balance,free_tokens_granted:saved.free_tokens_granted,last_token_grant_day:saved.last_token_grant_day,is_verified:saved.is_verified};
+        const own={...saved,...this.state.profile,id:saved.id,...fields};
+        this.patch({profile:own,account:{...this.state.account!,...fields},accounts:this.state.accounts.map(item=>item.id===account.id?{...item,...fields}:item)});
+        await this.cache(`/users/${encodeURIComponent(account.id)}`,own);guard();
+        this.dailyLoginDays.set(scope,day);this.dailyLoginRetryAfter.delete(scope);
+      }catch(error){guard();this.dailyLoginRetryAfter.set(scope,Date.now()+60000);throw error;}
+    })().finally(()=>{if(this.dailyLoginPromise?.promise===pending)this.dailyLoginPromise=null;});
+    this.dailyLoginPromise={key,promise:pending};return pending;
   }
   async refreshNotifications(more = false): Promise<void> {
     if (!this.state.account || this.localOnly || !isOnline()) return;
@@ -258,6 +289,7 @@ export class PortalStore {
   async refreshMatch() {
     const selected = this.state.selectedMatch; if (!selected) return;
     const guard = this.capture(); const token = this.selection;
+    await this.claimDailyLogin().catch(() => {}); guard(); if (token !== this.selection) return;
     if (this.data.local[selected.id]) { await this.reloadData(); return; }
     let match: Match;
     if (this.data.queues[selected.id]?.length) { await this.sync().catch(() => {}); guard(); match = this.data.responses[`/matches/${selected.id}`] || selected; }

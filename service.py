@@ -49,6 +49,8 @@ from game_platform.models import (
     SeatTimeout,
     Seat,
     Translation,
+    TokenMovement,
+    TokenMovementReason,
     User,
     UserNotification,
     WebPushSubscription,
@@ -1460,7 +1462,8 @@ class GamePlatform:
         different user, the two accounts merge, and the one with the stronger
         login method survives (google > phone > email > guest). The provider's
         name and email are refreshed on login; the assigned animal avatar persists. [invited_by_user_id] is recorded only when this creates a new user.
-        The first successful verified login credits a one-time 1,000-token bonus.
+        The first verified day credits 10 tokens; later login days credit 10,
+        up to 100 tokens issued across the account's lifetime.
         Returns (user, merged_from_user_id).
         """
         with self._lock:
@@ -1512,21 +1515,46 @@ class GamePlatform:
             return self._grant_verified_login_bonus(merged), merged_from
 
     def _grant_verified_login_bonus(self, user: User) -> User:
-        """Called only after verified login, with the operation lock held.
+        """Award one verified-login reward per UTC day, with the lock held.
 
         The marker and balance are saved together; query mode commits them in
         the same transaction as identity linking and verification consumption.
         """
-        if user.verified_login_bonus_granted:
+        if not user.linked_accounts:
             return user
+        issued = self._free_tokens_issued(user)
+        first = not user.verified_login_bonus_granted
+        today = self._clock().astimezone(dt.timezone.utc).date().isoformat()
+        if issued >= 100 or not first and user.last_token_grant_day and user.last_token_grant_day >= today:
+            return user
+        amount = min(10, 100 - issued)
+        self._record_token_movement(
+            user, amount, reason="sign_in_bonus" if first else "daily_login",
+        )
         user = replace(
             user,
-            token_balance=user.token_balance + 1000,
+            token_balance=user.token_balance + amount,
             verified_login_bonus_granted=True,
+            free_tokens_granted=issued + amount,
+            last_token_grant_day=today,
             updated_at=self._clock(),
         )
         self._store.put_user(user)
         return user
+
+    @staticmethod
+    def _free_tokens_issued(user: User) -> int:
+        # Existing rewarded users retain their old tokens and have already
+        # exceeded the new programme's cap, even if they spent the wallet.
+        if user.free_tokens_granted is not None:
+            return user.free_tokens_granted
+        return 1000 if user.verified_login_bonus_granted else 0
+
+    def claim_daily_login(self, *, caller_id: str) -> User:
+        """A retained verified session records a visit without logging out."""
+        with self._lock:
+            user = self._resolve_replaced(self._require_user(caller_id))
+            return self._grant_verified_login_bonus(user)
 
     def merge_users(
         self,
@@ -1701,6 +1729,7 @@ class GamePlatform:
                 inviter_id=source_inviter, user_id=into_user_id
             ):
                 invited_by = source_inviter
+        self._record_token_movement(into, source.token_balance, reason="account_merged")
         into = replace(
             into,
             notifications_enabled=into.notifications_enabled and source.notifications_enabled,
@@ -1714,7 +1743,9 @@ class GamePlatform:
             verified_login_bonus_granted=(
                 into.verified_login_bonus_granted or source.verified_login_bonus_granted
             ),
-            # Retain historical grant dates for existing records and clients.
+            free_tokens_granted=(
+                self._free_tokens_issued(into) + self._free_tokens_issued(source)
+            ),
             last_token_grant_day=max(
                 (day for day in (into.last_token_grant_day, source.last_token_grant_day) if day),
                 default=None,
@@ -1738,6 +1769,7 @@ class GamePlatform:
             if old is None or old.id == into_user_id:
                 continue
             if uid == from_user_id:
+                self._record_token_movement(old, -old.token_balance, reason="account_merged")
                 old = replace(
                     old,
                     replaced_by_user_id=into_user_id,
@@ -2647,7 +2679,7 @@ class GamePlatform:
             # creator now, everyone else in _join — so the pot is real
             # from the start, leaving the waiting room refunds it, and
             # deleting a waiting match refunds everyone (Phase 4).
-            self._deduct_stake(caller_id, bet_per_player)
+            self._deduct_stake(caller_id, bet_per_player, match_id=match.id)
             match = replace(match, token_pot=bet_per_player)
         self._store.put_match(match)
         return match
@@ -2767,7 +2799,7 @@ class GamePlatform:
         stake = match.bet_per_player
         if stake:
             # Raises (before anything is saved) when the joiner can't afford it.
-            self._deduct_stake(caller_id, stake)
+            self._deduct_stake(caller_id, stake, match_id=match.id)
         saved = self._save(
             replace(
                 match,
@@ -2910,13 +2942,31 @@ class GamePlatform:
         if user.token_balance < amount:
             raise ConflictError("a player has insufficient tokens")
 
-    def _deduct_stake(self, user_id: str, amount: int) -> None:
+    def _record_token_movement(
+        self, user: User, amount: int, *, reason: TokenMovementReason,
+        match_id: str | None = None,
+    ) -> None:
+        """Save a movement alongside its balance change, before background export.
+
+        Query storage stages this durable event in the same transaction as the
+        user and match. Its worker materializes the permanent, insert-only row.
+        """
+        if not amount:
+            return
+        self._store.append_token_movement(TokenMovement(
+            id=str(uuid.uuid4()), user_id=user.id, amount=amount,
+            balance_before=user.token_balance, reason=reason, match_id=match_id,
+            created_at=self._clock(),
+        ))
+
+    def _deduct_stake(self, user_id: str, amount: int, *, match_id: str) -> None:
         """Takes [amount] tokens from a player entering a paid match."""
         user = self._store.get_user(user_id)
         if user is None:
             raise NotFoundError("player not found")
         if user.token_balance < amount:
             raise ConflictError("a player has insufficient tokens")
+        self._record_token_movement(user, -amount, reason="started_match", match_id=match_id)
         self._store.put_user(
             replace(
                 user,
@@ -2924,7 +2974,10 @@ class GamePlatform:
             )
         )
 
-    def _credit_tokens(self, user_id: str, amount: int) -> None:
+    def _credit_tokens(
+        self, user_id: str, amount: int, *, reason: TokenMovementReason,
+        match_id: str,
+    ) -> None:
         """Gives [amount] tokens back to a player (a payout, a settlement
         share, a refund). A missing user is skipped: their account is gone,
         and a payout must not fail the match over it."""
@@ -2932,6 +2985,7 @@ class GamePlatform:
             return
         user = self._store.get_user(user_id)
         if user is not None:
+            self._record_token_movement(user, amount, reason=reason, match_id=match_id)
             self._store.put_user(
                 replace(user, token_balance=user.token_balance + amount)
             )
@@ -2945,7 +2999,7 @@ class GamePlatform:
         for uid in humans:
             self._check_can_stake(uid, match.bet_per_player)
         for uid in humans:
-            self._deduct_stake(uid, match.bet_per_player)
+            self._deduct_stake(uid, match.bet_per_player, match_id=match.id)
         return humans
 
     # Server-side game logic (v2 Game API, docs/server-side-game-api.md).
@@ -3361,7 +3415,9 @@ class GamePlatform:
         that produced it, the next turn, and — when the match ends — the
         token payouts the game returned, credited to the human players."""
         turn_indices = self._turn_indices(match, result)
-        pot, payouts_by_index = self._pay_logic_result(match, result)
+        pot, payouts_by_index = self._pay_logic_result(
+            match, result, reason="left_match" if leaving else "match_ended",
+        )
         now = self._clock()
         record = Move(
             move_number=len(match.moves) + 1,
@@ -3395,14 +3451,19 @@ class GamePlatform:
             )
         )
 
-    def _pay_logic_result(self, match: Match, result: dict[str, Any]) -> tuple[int, dict[int, int] | None]:
+    def _pay_logic_result(
+        self, match: Match, result: dict[str, Any], *,
+        reason: TokenMovementReason = "match_ended",
+    ) -> tuple[int, dict[int, int] | None]:
         """Validate the entire distribution before transferring any tokens."""
         GameLogic._validate_result("applyMove", result, self._game_ctx(match))
+        if reason == "match_ended" and result.get("turn") is not None:
+            reason = "match_payout"
         payouts = dict(match.token_payouts or {})
         raw = result.get("payouts") or {}
         for player_id, amount in raw.items():
             seat = match.seat_of_player_id(player_id)
-            self._credit_tokens(seat.user_id or "", amount)
+            self._credit_tokens(seat.user_id or "", amount, reason=reason, match_id=match.id)
             payouts[seat.player_index] = payouts.get(seat.player_index, 0) + amount
         return match.token_pot - sum(raw.values()), payouts if raw else match.token_payouts
 
@@ -3842,7 +3903,7 @@ class GamePlatform:
                 if match.token_pot >= match.bet_per_player
                 else 0
             )
-            self._credit_tokens(caller_id, staked)
+            self._credit_tokens(caller_id, staked, reason="left_match", match_id=match.id)
             remaining_humans = [
                 user_id
                 for user_id in match.human_user_ids
@@ -3941,6 +4002,8 @@ class GamePlatform:
         payouts: dict[int, int],
         *,
         recipients: list[Seat],
+        match_id: str,
+        reason: TokenMovementReason = "match_ended",
         fixed: dict[int, int] | None = None,
         fallback: tuple[str, int] | None = None,
     ) -> dict[int, int]:
@@ -3960,7 +4023,7 @@ class GamePlatform:
             fixed_seat = by_index.get(index)
             if fixed_seat is None or not amount:
                 continue
-            self._credit_tokens(fixed_seat.user_id or "", amount)
+            self._credit_tokens(fixed_seat.user_id or "", amount, reason=reason, match_id=match_id)
             payouts[index] = payouts.get(index, 0) + amount
             remaining -= amount
         others = [seat for seat in recipients if seat.player_index not in fixed]
@@ -3969,14 +4032,14 @@ class GamePlatform:
             for position, other in enumerate(others):
                 amount = share + (1 if position < extra else 0)
                 if amount:
-                    self._credit_tokens(other.user_id or "", amount)
+                    self._credit_tokens(other.user_id or "", amount, reason=reason, match_id=match_id)
                     payouts[other.player_index] = (
                         payouts.get(other.player_index, 0) + amount
                     )
             remaining = 0
         if remaining > 0 and fallback is not None:
             user_id, index = fallback
-            self._credit_tokens(user_id, remaining)
+            self._credit_tokens(user_id, remaining, reason=reason, match_id=match_id)
             payouts[index] = payouts.get(index, 0) + remaining
         return payouts
 
@@ -4393,7 +4456,8 @@ class GamePlatform:
             return
         humans = [s for s in match.seats if s.kind == "human"]
         self._settle_pot(
-            held, {}, recipients=[s for s in humans if s.active] or humans
+            held, {}, recipients=[s for s in humans if s.active] or humans,
+            match_id=match.id, reason="left_match",
         )
 
     # Saved games: each user's library of games to come back to
@@ -5185,6 +5249,9 @@ class GamePlatform:
                             updated_at=self._clock(),
                         )
                     )
+            deleted = self._store.get_user(user_id)
+            if deleted is not None:
+                self._record_token_movement(deleted, -deleted.token_balance, reason="account_deleted")
             self._store.delete_user(user_id)
             # The account is gone, so its code is free again (as after a restart).
             if deleted.referral_code:
@@ -5262,7 +5329,8 @@ class GamePlatform:
                 and len(match.active_human_user_ids) != 1):
             payouts = self._settle_pot(
                 match.token_pot, dict(match.token_payouts or {}),
-                recipients=[s for s in match.seats if s.kind == "human" and s.active])
+                recipients=[s for s in match.seats if s.kind == "human" and s.active],
+                match_id=match.id)
             return self._save(replace(
                 match, status="over", turn_of_player_indices=None,
                 end_reason="solo_computers_only", token_pot=0,
@@ -5292,7 +5360,7 @@ class GamePlatform:
         waiting = [s for s in humans if s.player_index not in late_indices]
         payouts = self._settle_pot(
             updated.token_pot, dict(updated.token_payouts or {}),
-            recipients=waiting if waiting else humans)
+            recipients=waiting if waiting else humans, match_id=updated.id)
         updated = replace(self._ended_by_timeout(updated), token_pot=0,
                           token_payouts=payouts if updated.token_pot else updated.token_payouts,
                           pending_leave=None)

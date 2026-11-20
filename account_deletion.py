@@ -123,6 +123,7 @@ _PHASES = (
     ("libraries", "user_id", "=="),
     ("experiment_assignments", "user_id", "=="),
     ("experiment_events", "user_id", "=="),
+    # Keep this checkpoint number for already-running purge jobs; it is skipped.
     ("token_ledger", "user_id", "=="),
     ("feedback", "reporter_user_id", "=="),
     ("feedback", "target_id", "=="),
@@ -138,6 +139,12 @@ _PHASES = (
 def _tree_step(store, job):
     """Delete at most 400 children, then the tombstoned parent; resumable."""
     tree = job["tree"]
+    if tree["kind"] == "token_ledger":
+        # A job started by older code may already target a ledger row.
+        # Retain it and resume at the unchanged phase checkpoint.
+        retained = dict(job)
+        retained.pop("tree")
+        return retained
     ref = store.collection(tree["kind"]).document(tree["doc"])
     parent = store.raw_get(ref)
     if parent and not parent.get("tombstone"):
@@ -254,6 +261,9 @@ def _query_step(platform, ref):
         phase, index = job.get("stage", 0), job.get("account_index", 0)
         if phase < len(_PHASES):
             kind, field, op = _PHASES[phase]
+            if kind == "token_ledger":
+                store.raw_put(ref, {**job, "stage": phase + 1, "account_index": 0})
+                return True
             account_id = accounts[index]
             filters = [(field, op, account_id)]
             if kind == "feedback" and field == "target_id":
@@ -311,6 +321,7 @@ def _query_step(platform, ref):
                 reservation = store.raw_get(referral)
                 if reservation and reservation.get("user_id") in accounts:
                     store.raw_put(referral, None)
+            platform._record_token_movement(user, -user.token_balance, reason="account_deleted")
             store.delete_user(account_id)
             # User records have no child documents; finish the existing cleanup
             # contract in this same bounded transaction.
@@ -394,6 +405,8 @@ def _memory_run(platform, now, limit, max_steps):
                 deleted = store.get_user(account_id)
                 if deleted and deleted.referral_code:
                     platform._user_ids_by_code.pop(deleted.referral_code, None)
+                if deleted is not None:
+                    platform._record_token_movement(deleted, -deleted.token_balance, reason="account_deleted")
                 store.delete_user(account_id)
             completed += 1
             processed += 1

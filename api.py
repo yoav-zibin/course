@@ -697,6 +697,12 @@ def auth_me(platform: Platform, caller_id: CallerId) -> AuthResponse:
     return AuthResponse.of(platform.get_user(caller_id))
 
 
+@auth_router.post("/daily-login")
+def daily_login(platform: Platform, caller_id: CallerId) -> UserOut:
+    """Claim today's verified-session reward once, within the lifetime cap."""
+    return UserOut.of(platform.claim_daily_login(caller_id=caller_id), own=True)
+
+
 def _login_or_link(
     platform: Platform,
     *,

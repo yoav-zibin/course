@@ -87,7 +87,8 @@ def index_config(namespace):
         "push_receipts": {"due_at": "order", "user_id": "order"},
         "requests": {"match_id": "order", "user_id": "order"},
         "matchmaking": {"match_id": "order", "user_id": "order"},
-        "token_ledger": {"user_id": "order"},
+        "token_ledger": {"user_id": "order", "schema_version": "order"},
+        "token_ledger_pending": {"due_at": "order"},
         "account_deletions": {"due_at": "order"},
         "cleanup": {"path": "order"},
     }

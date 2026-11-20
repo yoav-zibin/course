@@ -22,7 +22,7 @@ test('Privacy opens from the bottom of the profile and preserves the profile dra
   const content=page.getByTestId('privacy-policy-content');
   await expect(content).toBeVisible();
   await expect(page.getByRole('heading',{name:'Privacy Policy for BuildPlay',exact:true})).toBeVisible();
-  await expect(content).toContainText('Last updated: November 19, 2026.');
+  await expect(content).toContainText('Last updated: November 20, 2026.');
   await expect(content).toContainText('OpenAI Codex');
   await expect(content).toContainText('are removed when account deletion completes.');
   await expect(content).toContainText('You can undo the request for 24 hours');

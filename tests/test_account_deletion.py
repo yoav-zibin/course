@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from game_platform.account_deletion import _claim, run_due_account_deletions
-from game_platform.models import Feedback, LinkedAccount, Move, UserNotification, WebPushSubscription
+from game_platform.models import Feedback, LinkedAccount, Move, TokenMovement, UserNotification, WebPushSubscription
 from game_platform.query_store import QueryStore
 from game_platform.service import ConflictError, GamePlatform
 from game_platform.store import InMemoryStore
@@ -145,9 +145,16 @@ def test_match_refund_happens_once_across_partial_child_cleanup_restart():
     assert store.get_user(other).token_balance == original_balance + 10
 
 
-def test_private_support_payloads_push_keys_ledger_and_target_names_are_erased():
+def test_private_support_payloads_are_erased_but_permanent_token_ledger_is_retained():
     api, store, client = setup()
     target, other = api.new_user("Remove name"), api.new_user("Keep name")
+    legacy_ref = store.ref("token_ledger", "legacy-credit")
+    legacy_row = {"user_id": target, "amount": 10, "balance": 10, "created_at": NOW}
+    store.raw_put(legacy_ref, legacy_row)
+    # Pending accounting survives the entire purge before background export.
+    pending = TokenMovement(id="pending-credit", user_id=target, amount=10,
+        balance_before=0, reason="sign_in_bonus", created_at=NOW)
+    store.append_token_movement(pending)
     report = {"id": "private-report", "reporter_user_id": target,
               "created_at": NOW.isoformat(), "status": "open", "text": "Account issue",
               "screenshot": "private-image", "diagnostics": {"private": "evidence"}}
@@ -171,12 +178,38 @@ def test_private_support_payloads_push_keys_ledger_and_target_names_are_erased()
     assert not store.raw_get(store.ref("endpoints", subscription.endpoint))
     assert not store.raw_get(store._feedback_target_ref("user", target))
     for kind, field in [("feedback", "reporter_user_id"), ("bug_reports", "reporter_user_id"),
-                        ("token_ledger", "user_id"), ("push_receipts", "user_id")]:
+                        ("push_receipts", "user_id")]:
         assert not store._query(kind, [(field, "==", target)])
+    assert store.raw_get(legacy_ref) == legacy_row
+    store.flush_token_movements()
+    assert store.list_token_movements() == [pending]
+    assert store.raw_get(legacy_ref) == legacy_row
     assert not store._query("feedback", [("target_id", "==", target)])
     assert len(store._query("feedback", [("id", "==", "keep-feedback")])) == 1
     with pytest.raises(ConflictError):
         store.create_bug_report(report, rate_keys=["user:"+target])
+
+
+def test_legacy_purge_checkpoint_skips_ledger_and_still_clears_later_private_phases():
+    api, store, _ = setup()
+    target = api.new_user("Erase")
+    ledger_ref = store.ref("token_ledger", "retained-ledger")
+    original = {"user_id": target, "amount": 10, "balance": 10, "created_at": NOW}
+    store.raw_put(ledger_ref, original)
+    store.create_bug_report({"id": "later-private-report", "reporter_user_id": target,
+        "created_at": NOW.isoformat(), "status": "open", "text": "Private",
+        "screenshot": "private-image", "diagnostics": {}},
+        rate_keys=["user:"+target])
+    due = schedule(api, target)
+    job_ref = store.ref("account_deletions", target)
+    assert _claim(api.platform, job_ref, due)
+    job = store.raw_get(job_ref)
+    store.raw_put(job_ref, {**job, "stage": 9, "tree": {
+        "kind": "token_ledger", "doc": ledger_ref.id, "identity": None}})
+    drain(api.platform, due)
+    assert store.get_user(target) is None
+    assert store.raw_get(ledger_ref) == original
+    assert store.get_bug_report("later-private-report") is None
 
 
 def test_json_store_restart_resumes_an_irreversible_partial_purge(tmp_path):

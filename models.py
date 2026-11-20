@@ -21,6 +21,25 @@ EndReason = Literal["finished", "player_left", "timed_out", "solo_computers_only
 
 
 LinkedAccountKind = Literal["google", "phone", "email"]
+TokenMovementReason = Literal[
+    "sign_in_bonus", "daily_login", "started_match", "left_match", "match_ended",
+    "match_payout", "account_merged", "account_deleted",
+]
+
+
+@dataclass(frozen=True, kw_only=True)
+class TokenMovement:
+    """Permanent accounting event; IDs survive deletion of their related data."""
+
+    id: str
+    user_id: str
+    amount: int
+    balance_before: int
+    reason: TokenMovementReason
+    created_at: dt.datetime
+    match_id: str | None = None
+
+
 # Historical experiment kinds remain readable in persisted snapshots.
 # Active experiment workflows accept campaign records only.
 ExperimentKind = str
@@ -125,8 +144,10 @@ class User:
     # separately from the balance so spending tokens cannot reset eligibility.
     # Older accounts receive the bonus on their next verified login.
     verified_login_bonus_granted: bool = False
-    # Historical daily match grants are no longer issued; retain the date so
-    # existing stored records and clients remain compatible.
+    # None distinguishes legacy 1,000-token bonuses from the current reward
+    # programme. Spending tokens never reduces this lifetime issued total.
+    free_tokens_granted: int | None = None
+    # UTC calendar day of the most recent verified-login reward.
     last_token_grant_day: str | None = None
     created_at: dt.datetime
     updated_at: dt.datetime

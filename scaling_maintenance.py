@@ -147,6 +147,11 @@ def cleanup(store, *, limit=100):
             row = store.raw_get(job.reference)
             if not row:
                 continue
+            if row["kind"] in ("token_ledger", "token_ledger_pending"):
+                # A stale cleanup marker must never remove accounting history
+                # or committed work awaiting its background materialization.
+                store.raw_put(job.reference, None)
+                continue
             ref = store.ref(row["kind"], row["identity"])
             if ref.path != row["path"]:
                 raise ValueError("cleanup path does not match namespace")

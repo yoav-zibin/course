@@ -28,11 +28,18 @@ from game_platform.models import (
     MatchStatus,
     Feedback,
     User,
+    TokenMovement,
     WebPushSubscription,
 )
 
 
 class Store(Protocol):
+    def append_token_movement(self, movement: TokenMovement) -> None:
+        """Insert an accounting event; never update or delete an existing row."""
+        ...
+
+    def list_token_movements(self, *, limit: int = 100) -> list[TokenMovement]: ...
+
     def create_bug_report(self, row: dict[str, Any], *, rate_keys: list[str]) -> None: ...
 
     def get_bug_report(self, report_id: str) -> dict[str, Any] | None: ...
@@ -262,6 +269,7 @@ class Snapshot:
     # Optional so existing data files load without a migration. Admin-only data.
     feedback: tuple[Feedback, ...] = ()
     game_popularity: tuple[GamePopularity, ...] = ()
+    token_movements: tuple[TokenMovement, ...] = ()
 
 
 class InMemoryStore:
@@ -270,6 +278,7 @@ class InMemoryStore:
     def __init__(self) -> None:
         # Dicts preserve insertion order, so listings come out oldest first.
         self._users: dict[str, User] = {}
+        self._token_movements: dict[str, TokenMovement] = {}
         self._user_ids_by_linked_account: dict[
             tuple[LinkedAccountKind, str], dict[str, None]
         ] = {}
@@ -307,6 +316,8 @@ class InMemoryStore:
     @classmethod
     def of_snapshot(cls, snapshot: Snapshot) -> "InMemoryStore":
         store = cls()
+        for movement in snapshot.token_movements:
+            store.append_token_movement(movement)
         for user in snapshot.users:
             store.put_user(user)
         for game in snapshot.game_versions:
@@ -350,6 +361,7 @@ class InMemoryStore:
         # Records are immutable, so a shallow copy is a consistent snapshot.
         return Snapshot(
             users=tuple(self._users.values()),
+            token_movements=tuple(self._token_movements.values()),
             game_versions=tuple(
                 game
                 for versions in self._game_versions.values()
@@ -376,6 +388,17 @@ class InMemoryStore:
                 for game_id, (matches, score) in sorted(self._game_popularity.items())
             ),
         )
+
+    def append_token_movement(self, movement: TokenMovement) -> None:
+        previous = self._token_movements.get(movement.id)
+        if previous is not None and previous != movement:
+            raise ValueError("token ledger is insert-only")
+        self._token_movements.setdefault(movement.id, movement)
+
+    def list_token_movements(self, *, limit: int = 100) -> list[TokenMovement]:
+        if not 1 <= limit <= 100:
+            raise ValueError("token ledger limit must be between 1 and 100")
+        return list(self._token_movements.values())[:limit]
 
     def put_experiment(self, experiment: Experiment) -> None:
         self._experiments[experiment.id] = experiment

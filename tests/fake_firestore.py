@@ -7,7 +7,7 @@ import copy
 from typing import Any
 
 from google.cloud import firestore
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import AlreadyExists, NotFound
 
 
 class Snapshot:
@@ -52,6 +52,11 @@ class Document:
             _merge(self.client.docs.setdefault(self.path, {}), data)
         else:
             self.client.docs[self.path] = copy.deepcopy(data)
+
+    def create(self, data: dict[str, Any]) -> None:
+        if self.path in self.client.docs:
+            raise AlreadyExists(self.path)
+        self.set(data)
 
     def update(self, fields: dict[str, Any]) -> None:
         self.client.writes += 1
@@ -220,6 +225,7 @@ class Transaction:
         self.id = "fake-transaction"
         self.in_progress = False
         self._staged: dict[str, dict[str, Any] | None] = {}
+        self._creates: set[str] = set()
 
     def _begin(self, retry_id: Any = None) -> None:
         self.in_progress = True
@@ -227,10 +233,17 @@ class Transaction:
     def set(self, ref: Document, data: dict[str, Any]) -> None:
         self._staged[ref.path] = copy.deepcopy(data)
 
+    def create(self, ref: Document, data: dict[str, Any]) -> None:
+        self._creates.add(ref.path)
+        self._staged[ref.path] = copy.deepcopy(data)
+
     def delete(self, ref: Document) -> None:
         self._staged[ref.path] = None
 
     def _commit(self) -> None:
+        for path in self._creates:
+            if path in self.client.docs:
+                raise AlreadyExists(path)
         for path, data in self._staged.items():
             self.client.writes += 1
             if data is None:
@@ -238,10 +251,12 @@ class Transaction:
             else:
                 self.client.docs[path] = copy.deepcopy(data)
         self._staged = {}
+        self._creates.clear()
         self.in_progress = False
 
     def _rollback(self) -> None:
         self._staged = {}
+        self._creates.clear()
         self.in_progress = False
 
     def _clean_up(self) -> None:

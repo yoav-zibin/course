@@ -29,6 +29,7 @@ from game_platform.models import (
     MatchStatus,
     Feedback,
     User,
+    TokenMovement,
     WebPushSubscription,
 )
 from game_platform.store import InMemoryStore, Snapshot
@@ -139,6 +140,15 @@ class SavingStore:
                 return
 
     # [Store] interface: reads delegate; writes delegate and schedule a save.
+
+    def append_token_movement(self, movement: TokenMovement) -> None:
+        with self._lock:
+            self._inner.append_token_movement(movement)
+            self._set_dirty()
+
+    def list_token_movements(self, *, limit: int = 100) -> list[TokenMovement]:
+        with self._lock:
+            return self._inner.list_token_movements(limit=limit)
 
     def create_bug_report(self, row, *, rate_keys):
         with self._lock:

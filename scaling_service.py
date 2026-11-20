@@ -88,6 +88,7 @@ class ScalablePlatform(GamePlatform):
             self._store, self._delivery, self._wake_after
         )
         self._worker = None
+        self._store.token_ledger_wake = self._wake_after
 
     def _wake_after(self, delay=0.1):
         with self._timer_lock:
@@ -558,6 +559,7 @@ class ScalablePlatform(GamePlatform):
                 break
             try:
                 self.run_due_jobs()
+                self.run_token_ledger()
                 self.run_outbox()
                 receipts_enabled = hasattr(self._delivery, "run_receipts") and getattr(
                     self._delivery, "receipts_enabled", True
@@ -565,7 +567,7 @@ class ScalablePlatform(GamePlatform):
                 if receipts_enabled:
                     self._delivery.run_receipts(limit=10)
                 due = []
-                for kind in ("jobs", "outbox", "push_receipts"):
+                for kind in ("jobs", "token_ledger_pending", "outbox", "push_receipts"):
                     if kind == "outbox" and self._delivery is None:
                         continue
                     if kind == "push_receipts" and not receipts_enabled:
@@ -590,6 +592,10 @@ class ScalablePlatform(GamePlatform):
             except Exception:
                 logger.exception("durable worker paused after an error")
                 self._wake_after(30)
+
+    def run_token_ledger(self, limit=100):
+        """Accounting delivery does not depend on optional push delivery."""
+        return self._store.flush_token_movements(limit=limit)
 
     def run_outbox(self, limit=10):
         from google.cloud.firestore_v1.base_query import FieldFilter

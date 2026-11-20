@@ -29,6 +29,8 @@ def test_create_and_get_a_guest_user(api: Api) -> None:
         "linked_accounts": [],
         "token_balance": 0,
         "last_token_grant_day": None,
+        "free_tokens_granted": 0,
+        "is_verified": False,
         "referral_code": user["referral_code"],
         "created_at": "2026-01-01T00:01:00Z",
         "updated_at": "2026-01-01T00:01:00Z",
@@ -45,6 +47,7 @@ def test_create_and_get_a_guest_user(api: Api) -> None:
     assert api.ok("GET", f"/users/{user['id']}") == {
         **user_without_password, "referral_code": None,
         "token_balance": None, "last_token_grant_day": None,
+        "free_tokens_granted": None, "is_verified": None,
         "notifications_enabled": None, "notification_prompt_seen": None,
     }
 

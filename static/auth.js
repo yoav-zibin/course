@@ -25,6 +25,7 @@ const Auth = (() => {
   let memoryAccounts = null;
   let memoryCurrentId = undefined;
   let selectionRevision = 0;
+  const dailyLoginDays = new Map(), dailyLoginPending = new Map(), dailyLoginRetryAfter = new Map();
 
   function load() {
     try {
@@ -93,6 +94,10 @@ const Auth = (() => {
       password: response.password,
       linked: response.linked_accounts ?? [],
       verified_login_bonus_granted: response.verified_login_bonus_granted === true,
+      is_verified: response.is_verified ?? (response.linked_accounts ?? []).some(link => ["google", "email", "phone"].includes(link.kind)),
+      free_tokens_granted: response.free_tokens_granted,
+      last_token_grant_day: response.last_token_grant_day,
+      token_balance: response.token_balance,
       referral_code: response.referral_code ?? null,
     });
     save(rest);
@@ -139,6 +144,42 @@ const Auth = (() => {
     return account
       ? { "X-User-Id": account.id, "X-User-Password": account.password }
       : {};
+  }
+
+  /** A retained verified session earns at most one reward per UTC visit day. */
+  async function claimDailyLogin() {
+    const account = current(), day = new Date().toISOString().slice(0, 10);
+    if (!account || typeof navigator !== "undefined" && navigator.onLine === false || document.hidden) return;
+    if (account.is_verified === false || account.last_token_grant_day >= day || account.free_tokens_granted >= 100 || dailyLoginDays.get(account.id) === day || (dailyLoginRetryAfter.get(account.id) ?? 0) > Date.now()) return;
+    if (dailyLoginPending.has(account.id)) return dailyLoginPending.get(account.id);
+    const revision = selectionRevision;
+    const active = () => revision === selectionRevision && current()?.id === account.id && current()?.password === account.password;
+    const remember = response => {
+      const all = load(), stored = all.find(item => item.id === account.id);
+      if (!stored) return;
+      for (const key of ["is_verified", "free_tokens_granted", "last_token_grant_day", "token_balance"])
+        if (response[key] !== undefined) stored[key] = response[key];
+      save(all);
+    };
+    const pending = (async () => {
+      try {
+        const verified = account.is_verified === true || account.linked?.some(link => ["google", "email", "phone"].includes(link.kind));
+        if (!verified) {
+          const restored = await apiRequest("GET", "/auth/me", { user: account });
+          if (!active() || !restored) return;
+          remember(restored);
+          if (!restored.is_verified || restored.free_tokens_granted >= 100 || restored.last_token_grant_day >= day) { dailyLoginDays.set(account.id, day); return; }
+        }
+        const granted = await apiRequest("POST", "/auth/daily-login", { user: account });
+        if (!active() || typeof granted?.token_balance !== "number") return;
+        dailyLoginDays.set(account.id, day);dailyLoginRetryAfter.delete(account.id);remember(granted);changed();
+      } catch {
+        if (active()) dailyLoginRetryAfter.set(account.id, Date.now() + 60000);
+      } finally {
+        if (dailyLoginPending.get(account.id) === pending) dailyLoginPending.delete(account.id);
+      }
+    })();
+    dailyLoginPending.set(account.id, pending);return pending;
   }
 
   // Invite links
@@ -341,7 +382,7 @@ const Auth = (() => {
     };
     const bonus = el("p", {
       id: "auth-verified-bonus", class: "muted", hidden: !!account,
-      textContent: I18n.t("ui.auth.verified_bonus", {}, "Get 1,000 tokens once with your first verified login. Use Google or verify a code sent to your email or phone. Guests receive no welcome bonus."),
+      textContent: I18n.t("ui.auth.verified_bonus", {}, "Get 10 tokens with your first verified login, then 10 on each later day you visit, up to 100 free tokens total. Days do not need to be consecutive. Guests receive no free tokens."),
     });
     box.append(close, title, bonus, dialog.message);
     if (account && !account.verified_login_bonus_granted) {
@@ -565,7 +606,7 @@ const Auth = (() => {
     const form = el("form", { class: "auth-method" },
       el("label", { class: "inline" }, `${I18n.t("ui.auth.guest", {}, "Guest")} `, input),
       button,
-      el("p", { class: "muted", textContent: I18n.t("ui.auth.guest_bonus_note", {}, "Play as a guest without a welcome bonus. Link a verified login later to receive your one-time 1,000 tokens.") })
+      el("p", { class: "muted", textContent: I18n.t("ui.auth.guest_bonus_note", {}, "Play as a guest without free tokens. Verify your login later to receive 10 tokens and daily visit rewards, up to 100 free tokens total.") })
     );
     form.addEventListener("submit", async event => {
       event.preventDefault();
@@ -783,6 +824,13 @@ const Auth = (() => {
     return container;
   }
 
+  document.addEventListener?.("auth-changed", () => { void claimDailyLogin(); });
+  document.addEventListener?.("visibilitychange", () => { if (!document.hidden) void claimDailyLogin(); });
+  window.addEventListener?.("focus", () => { void claimDailyLogin(); });
+  window.addEventListener?.("online", () => { void claimDailyLogin(); });
+  if (typeof setInterval === "function") setInterval(() => { void claimDailyLogin(); }, 60000);
+  void claimDailyLogin();
+
   return {
     accounts,
     current,
@@ -791,6 +839,7 @@ const Auth = (() => {
     remove,
     removeAll,
     headers,
+    claimDailyLogin,
     inviteLink,
     setReferralCode,
     setPicture,

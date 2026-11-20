@@ -33,13 +33,26 @@ with tempfile.TemporaryDirectory() as tmp:
     if Path(game_platform.__file__).resolve().parent != package_alias.resolve():
         raise RuntimeError("Browser tests imported a different game_platform checkout")
     from game_platform.json_file_store import JsonFileStore
-    from game_platform.models import User
+    from game_platform.models import LinkedAccount, User
 
     store = JsonFileStore(Path(tmp) / "data.json")
     now = dt.datetime.now(dt.timezone.utc)
     for project in ("chromium", "mobile"):
         # Match the two CI retries so each attempt gets an independent wallet.
         for attempt in range(3):
+            # A retained verified session can claim a later visit day without
+            # contacting an external login provider during browser tests.
+            reward_id = f"daily-reward-{project}-{attempt}"
+            store.put_user(User(
+                id=reward_id, display_name="Daily reward player",
+                password="daily-reward-test-wallet", token_balance=10,
+                linked_accounts=(LinkedAccount(
+                    kind="email", identifier=f"{reward_id}@example.test", linked_at=now,
+                ),),
+                verified_login_bonus_granted=True, free_tokens_granted=10,
+                last_token_grant_day=(now.date() - dt.timedelta(days=1)).isoformat(),
+                created_at=now, updated_at=now,
+            ))
             for name in ("Alice", "Bob"):
                 store.put_user(User(
                     id=f"paid-{project}-{attempt}-{name.lower()}", display_name=name,

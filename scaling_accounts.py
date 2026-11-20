@@ -40,6 +40,7 @@ import json
 from dataclasses import replace
 
 from game_platform.move_history import MoveHistory
+from game_platform.models import TokenMovement
 from game_platform.query_store import MOVE_ADAPTER
 
 MERGE_STAGES = (
@@ -421,6 +422,17 @@ def _merge_finalize(store, job):
     source, into = _check_merge_lifecycle(store, job["source_id"], job["into_id"])
     if source.id == into.id:
         raise ValueError("cannot merge a user into itself")
+    if source.token_balance:
+        now = _now()
+        for user, amount, direction in (
+            (into, source.token_balance, "in"),
+            (source, -source.token_balance, "out"),
+        ):
+            store.append_token_movement(TokenMovement(
+                id=f"merge:{source.id}:{into.id}:{direction}",
+                user_id=user.id, amount=amount, balance_before=user.token_balance,
+                reason="account_merged", match_id=None, created_at=now,
+            ))
     # Re-point linked-account reservations at the survivor before the source
     # record drops them, so a login can never resolve to the emptied source.
     for account in source.linked_accounts:
@@ -451,6 +463,11 @@ def _merge_finalize(store, job):
         token_balance=into.token_balance + source.token_balance,
         verified_login_bonus_granted=(
             into.verified_login_bonus_granted or source.verified_login_bonus_granted
+        ),
+        free_tokens_granted=sum(
+            user.free_tokens_granted if user.free_tokens_granted is not None
+            else 1000 if user.verified_login_bonus_granted else 0
+            for user in (into, source)
         ),
         last_token_grant_day=max(
             filter(None, (into.last_token_grant_day, source.last_token_grant_day)),
@@ -772,6 +789,13 @@ def _delete_finalize(store, job):
         reservation = store.raw_get(ref)
         if reservation and reservation.get("user_id") == user_id:
             store.raw_put(ref, None)
+    if user.token_balance:
+        store.append_token_movement(TokenMovement(
+            id=f"delete:{user.id}", user_id=user.id,
+            amount=-user.token_balance, balance_before=user.token_balance,
+            reason="account_deleted", match_id=None,
+            created_at=job.get("created_at") or _now(),
+        ))
     store.delete_user(user_id)
 
 

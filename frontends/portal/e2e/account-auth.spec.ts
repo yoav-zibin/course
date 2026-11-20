@@ -6,7 +6,7 @@ test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].inclu
 
 test('signed-out players see the verified bonus and can still create a zero-token Guest',async({page,request})=>{
   await verifiedSignInFixtures(page,[]);await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).first().click();
-  await expect(page.getByTestId('verified-login-bonus')).toContainText('1,000');
+  await expect(page.getByTestId('verified-login-bonus')).toContainText('100 free tokens total');
   await expect(page.getByRole('button',{name:'Test Google sign-in',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Continue with: Guest',exact:true}).click();
   await page.getByRole('textbox',{name:/Your name|Display name/}).fill('Auth Guest fixture');
@@ -23,9 +23,9 @@ for(const method of ['email','phone'] as const)test(`linking ${method} confirms 
   const user=await createUser(request,`Auth ${method} fixture`);await seedAccounts(page,[user]);await verifiedSignInFixtures(page,[user]);
   let balance=0;const authCalls:{path:string;caller:string|undefined}[]=[];
   page.on('request',request=>{if(/^\/auth\/(email|phone)\/(start|verify)$/.test(new URL(request.url()).pathname))authCalls.push({path:new URL(request.url()).pathname,caller:request.headers()['x-user-id']});});
-  await page.route(`**/users/${user.id}`,async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),token_balance:balance}});});
+  await page.route(`**/users/${user.id}`,async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),token_balance:balance,is_verified:balance>0,free_tokens_granted:balance>0?10:0,last_token_grant_day:balance>0?new Date().toISOString().slice(0,10):null}});});
   await page.route(`**/auth/${method}/start`,route=>route.fulfill({json:{verification_id:'fixture-verification'}}));
-  await page.route(`**/auth/${method}/verify`,route=>{balance=1000;return route.fulfill({json:{...user,user_id:user.id,token_balance:balance,linked_accounts:[{kind:method}]}});});
+  await page.route(`**/auth/${method}/verify`,route=>{balance=10;return route.fulfill({json:{...user,user_id:user.id,token_balance:balance,is_verified:true,free_tokens_granted:10,last_token_grant_day:new Date().toISOString().slice(0,10),linked_accounts:[{kind:method}]}});});
   await page.goto('/portal');await page.getByRole('button',{name:'Account menu',exact:true}).click();
   await expect(page.getByRole('button',{name:'Continue with: Guest',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Link a verified login',exact:true}).click();
@@ -44,7 +44,7 @@ for(const method of ['email','phone'] as const)test(`linking ${method} confirms 
     await page.getByRole('button',{name:'Verify',exact:true}).click();
     await expect(page.getByRole('button',{name:'Confirm link',exact:true})).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(user.display_name);
-    await expect(page.getByTestId('header-token-balance')).toHaveAttribute('aria-label','1,000 tokens');
+    await expect(page.getByTestId('header-token-balance')).toHaveAttribute('aria-label','10 tokens');
     expect(authCalls.filter(call=>call.path.endsWith('/verify')).at(-1)?.caller).toBe(user.id);
     await page.getByRole('button',{name:'Account menu',exact:true}).click();
     await expect(page.getByRole('heading',{name:user.display_name,exact:true})).toBeVisible();

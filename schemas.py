@@ -181,6 +181,8 @@ class UserOut(BaseModel):
     # responses about the caller's own account; None for other users.
     token_balance: int | None = None
     last_token_grant_day: str | None = None
+    free_tokens_granted: int | None = None
+    is_verified: bool | None = None
     # The user's own short invite code (links look like /r/<code>). Only in responses
     # about the caller's own account; None for other users.
     referral_code: str | None = None
@@ -206,6 +208,8 @@ class UserOut(BaseModel):
             locale=user.locale,
             token_balance=user.token_balance if own else None,
             last_token_grant_day=user.last_token_grant_day if own else None,
+            free_tokens_granted=(user.free_tokens_granted if user.free_tokens_granted is not None else 1000 if user.verified_login_bonus_granted else 0) if own else None,
+            is_verified=bool(user.linked_accounts) if own else None,
             replaced_by_user_id=user.replaced_by_user_id,
             replaced_user_ids=list(user.replaced_user_ids),
             created_at=user.created_at,
@@ -268,6 +272,9 @@ class AuthResponse(BaseModel):
     password: str
     linked_accounts: list[LinkedAccountOut] = []
     verified_login_bonus_granted: bool = False
+    free_tokens_granted: int = 0
+    last_token_grant_day: str | None = None
+    is_verified: bool = False
     merged_from_user_id: str | None = None
     # The user's short invite code, for invite links (/r/<code>).
     referral_code: str | None = None
@@ -283,6 +290,9 @@ class AuthResponse(BaseModel):
             password=user.password,
             linked_accounts=[LinkedAccountOut.of(a) for a in user.linked_accounts],
             verified_login_bonus_granted=user.verified_login_bonus_granted,
+            free_tokens_granted=user.free_tokens_granted if user.free_tokens_granted is not None else 1000 if user.verified_login_bonus_granted else 0,
+            last_token_grant_day=user.last_token_grant_day,
+            is_verified=bool(user.linked_accounts),
             merged_from_user_id=merged_from_user_id,
         )
 

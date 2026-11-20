@@ -7,7 +7,7 @@
     },
     {
       "kind": "paragraph",
-      "text": "Last updated: November 19, 2026."
+      "text": "Last updated: November 20, 2026."
     },
     {
       "kind": "paragraph",
@@ -66,6 +66,10 @@
     {
       "kind": "paragraph",
       "text": "Your account data is kept while your account exists. If you merge one account into another, the merged-away account remains an alias of the surviving account so existing logins keep working. Your submitted bug reports, their resolution history and feedback are kept as private support records while your account exists and are removed when account deletion completes. To request deletion, log in, open your profile and select Request account deletion. You can undo the request for 24 hours; permanent deletion may take up to another hour."
+    },
+    {
+      "kind": "paragraph",
+      "text": "Token transaction records are kept permanently, including after account or match deletion. They contain user IDs, token amounts and starting balances, the reason and time of each movement, and match IDs when applicable. They do not contain names or login details."
     },
     {
       "kind": "heading",
