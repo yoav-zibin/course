@@ -22,7 +22,7 @@ const gameUI = {
     // accessible name; the rules live in the portal's How to play panel, not on the board.
     const tint = (KIND === 'hackenbush' ? ['#4f8cffcc', '#ff5d5dcc'] : [COLORS[0] + 'cc', COLORS[1] + 'cc'])[s.turn] || '#ffe27acc';
     const target = (id, board, position, label, extra = {}) =>
-      targets.push(Object.assign({id, board, position, aria_label: label, color: tint, hit_area: {x: -14, y: -14, width: 28, height: 28}}, extra));
+      targets.push(Object.assign({id, board, position, aria_label: label, color: tint, hit_area: {x: -22, y: -22, width: 44, height: 44}}, extra));
 
     if (KIND === 'sim') {
       const ox = 20, oy = 100, R = 170, cx = 210, cy = 210;
@@ -35,10 +35,11 @@ const gameUI = {
           color: owner === -1 ? '#51607a' : COLORS[owner], width: owner === -1 ? 2 : 7});
       });
       pos.forEach(([x, y], i) => pieces.push({id: 'dot_' + i, type: 'dot', board: 'main', position: {x, y}}));
-      // Crossing diagonals share a midpoint, so each edge's target sits a third of the way along it.
+      // Crossing diagonals share a midpoint, so each marker sits at its own precomputed spot along its line (GEO.sim_t).
       legal.forEach(move => {
         const [a, b] = pairs[move.edge];
-        target(keyOf(move), 'main', {x: pos[a][0] + (pos[b][0] - pos[a][0]) * 0.36, y: pos[a][1] + (pos[b][1] - pos[a][1]) * 0.36},
+        const f = GEO.sim_t[move.edge];
+        target(keyOf(move), 'main', {x: pos[a][0] + (pos[b][0] - pos[a][0]) * f, y: pos[a][1] + (pos[b][1] - pos[a][1]) * f},
           t('edge', {a: a + 1, b: b + 1}));
       });
     } else if (KIND === 'dots_boxes') {
@@ -65,11 +66,11 @@ const gameUI = {
     } else if (KIND === 'paper_soccer') {
       const ox = 20, oy = 90, W = 9, H = 11;
       const xy = p => p === 99 ? [4, -1] : p === 100 ? [4, H] : [p % W, Math.floor(p / W)];
-      const px = p => ({x: 20 + xy(p)[0] * 40, y: 20 + (xy(p)[1] + 1) * 40});
+      const px = p => ({x: 20 + xy(p)[0] * 48, y: 20 + (xy(p)[1] + 1) * 48});
       const view = p => ({x: ox + px(p).x, y: oy + px(p).y});
       const line = [[0,0],[3,0],[3,-1],[5,-1],[5,0],[8,0],[8,10],[5,10],[5,11],[3,11],[3,10],[0,10],[0,0]];
-      paths.push({id: 'pitch', points: line.map(([x, y]) => ({x: ox + 20 + x * 40, y: oy + 20 + (y + 1) * 40})), color: '#e8f0ff', width: 3});
-      paths.push({id: 'halfway', points: [{x: ox + 20, y: oy + 20 + 6 * 40}, {x: ox + 20 + 8 * 40, y: oy + 20 + 6 * 40}], color: '#41557a', width: 1});
+      paths.push({id: 'pitch', points: line.map(([x, y]) => ({x: ox + 20 + x * 48, y: oy + 20 + (y + 1) * 48})), color: '#e8f0ff', width: 3});
+      paths.push({id: 'halfway', points: [{x: ox + 20, y: oy + 20 + 6 * 48}, {x: ox + 20 + 8 * 48, y: oy + 20 + 6 * 48}], color: '#41557a', width: 1});
       let run = [s.trail[0]], runMover = s.mover[0];
       const flush = () => { if (run.length > 1) paths.push({id: 'trail_' + paths.length, points: run.map(view), color: COLORS[runMover], width: 4}); };
       s.mover.forEach((who, i) => {
@@ -122,7 +123,7 @@ const gameUI = {
         legal.filter(move => move.rot === rot).forEach(move => {
           const r = Math.floor(move.cell / 7), c = move.cell % 7;
           target(keyOf(move), 'mine', {cell: String(move.cell)}, t('place_at', {row: r + 1, col: c + 1}), {
-            hit_area: {x: -20, y: -20, width: 40, height: 40},
+            hit_area: {x: -22, y: -22, width: 44, height: 44},
             preview: variantOf(GEO.shapes[card[1]], rot).map(([dr, dc]) => ({position: {cell: String((r + dr) * 7 + c + dc)}, color: GEO.colors[card[0]]}))});
         });
       }

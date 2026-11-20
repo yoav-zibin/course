@@ -62,6 +62,9 @@ def test_sim_crossing_diagonals_get_distinct_targets():
     assert len(scene['targets']) == 15
     spots = {(round(target['position']['x']), round(target['position']['y'])) for target in scene['targets']}
     assert len(spots) == 15
+    far = min(((a['position']['x'] - b['position']['x']) ** 2 + (a['position']['y'] - b['position']['y']) ** 2) ** .5
+              for i, a in enumerate(scene['targets']) for b in scene['targets'][i + 1:])
+    assert far >= 44, far  # No two 44-unit hit boxes overlap.
     # The three long diagonals cross at the hexagon centre, yet each keeps its own marker.
     centre = [target for target in scene['targets'] if target['aria_label'] in ('Line 1–4', 'Line 2–5', 'Line 3–6')]
     assert len(centre) == 3 and len({(round(t['position']['x']), round(t['position']['y'])) for t in centre}) == 3

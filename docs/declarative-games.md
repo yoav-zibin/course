@@ -482,7 +482,7 @@ patterns to copy:
 
 | Game | Target is | Pattern |
 | --- | --- | --- |
-| `sim` | one of fifteen lines between six dots | Lines cross at the hexagon's centre, so each marker sits a third of the way along its line and crossing lines never share a hit box. Claimed lines are `paths`. |
+| `sim` | one of fifteen lines between six dots | Lines cross at the hexagon's centre, so each marker sits at its own spot along its line (`sim_t`, found by search so markers stay at least 60 units apart) and crossing lines never share a hit box. Claimed lines are `paths`. |
 | `paper_soccer` | a reachable point on a graph board | Legal destinations are the free neighbours of the ball; the move adds a drawn line, so repeated lines and the pitch's walls are simply absent. The ball's trail is drawn as `paths`. |
 | `hackenbush` | one branch of your own colour | Each marker sits at the branch midpoint. A cut removes everything no longer attached to the ground, so the next scene omits those branches. |
 | `dots_boxes` | one of forty sides between a five by five grid of dots | A marker sits at each side's midpoint, and closing a box fills it with a piece and keeps the turn. Drawn sides are `paths`. |

@@ -36,6 +36,8 @@ GEO = {
         [2, 13, 0], [13, 14, 1], [13, 15, 0], [15, 16, 1],
         [3, 17, 1], [17, 18, 0], [18, 19, 1], [18, 20, 0],
     ],
+    # Sim: how far along each of the fifteen lines its marker sits, chosen so no two markers are closer than 60 units.
+    'sim_t': [0.62, 0.42, 0.42, 0.49, 0.37, 0.63, 0.21, 0.7, 0.57, 0.44, 0.42, 0.27, 0.63, 0.21, 0.39],
     'mountains': [8, 12, 24, 36, 40],
     'shapes': [
         [[0, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0], [1, 1]], [[0, 0], [0, 1], [0, 2]],
@@ -111,14 +113,14 @@ RULES = {
 }
 UI_RULES = {
     'sim': tr(
-        'Tap a highlighted marker on the line you want to claim. Each marker sits partway along its line, so crossing lines never share a marker.',
-        'Toca el marcador resaltado de la línea que quieres reclamar. Cada marcador está a un tercio de su línea, así que las líneas que se cruzan nunca comparten marcador.',
-        'Touchez le repère surligné de la ligne à prendre. Chaque repère se trouve au tiers de sa ligne : deux lignes qui se croisent ne partagent jamais un repère.',
-        'Tippe auf die markierte Stelle der Linie, die du beanspruchen willst. Jede Markierung liegt ein Stück auf ihrer Linie, daher teilen sich kreuzende Linien nie eine Markierung.',
-        'Toque no marcador destacado da linha que quer reivindicar. Cada marcador fica a um terço da sua linha, então linhas que se cruzam nunca dividem um marcador.',
-        '点击想占据的那条线上高亮的标记。每个标记位于所在线的三分之一处，所以相交的线不会共用标记。',
-        'जो रेखा चुननी है उस पर चमकते निशान को दबाएँ। हर निशान अपनी रेखा के एक-तिहाई हिस्से पर है, इसलिए एक-दूसरे को काटने वाली रेखाएँ कभी एक निशान साझा नहीं करतीं।',
-        'اضغط العلامة المميزة على الخط الذي تريده. تقع كل علامة على ثلث خطها، لذلك لا تتشارك الخطوط المتقاطعة علامة واحدة.'),
+        'Tap a highlighted marker on the line you want to claim. Each marker sits on its line, spaced so crossing lines never share a marker.',
+        'Toca el marcador resaltado de la línea que quieres reclamar. Cada marcador está sobre su línea y separado de los demás, así que las líneas que se cruzan nunca comparten marcador.',
+        "Touchez le repère surligné de la ligne à prendre. Chaque repère est sur sa ligne, à l'écart des autres : deux lignes qui se croisent ne partagent jamais un repère.",
+        'Tippe auf die markierte Stelle der Linie, die du beanspruchen willst. Jede Markierung liegt auf ihrer Linie und weit genug von den anderen entfernt, daher teilen sich kreuzende Linien nie eine Markierung.',
+        'Toque no marcador destacado da linha que quer reivindicar. Cada marcador fica sobre a sua linha, afastado dos outros, então linhas que se cruzam nunca dividem um marcador.',
+        '点击想占据的那条线上高亮的标记。每个标记都在自己的线上并与其他标记保持距离，所以相交的线不会共用标记。',
+        'जो रेखा चुननी है उस पर चमकते निशान को दबाएँ। हर निशान अपनी रेखा पर और दूसरों से दूर है, इसलिए एक-दूसरे को काटने वाली रेखाएँ कभी एक निशान साझा नहीं करतीं।',
+        'اضغط العلامة المميزة على الخط الذي تريده. تقع كل علامة على خطها وبعيدًا عن غيرها، لذلك لا تتشارك الخطوط المتقاطعة علامة واحدة.'),
     'paper_soccer': tr(
         'Tap a highlighted point next to the ball to move there. Green lines are Player 1\'s moves and pink lines are Player 2\'s. Player 1 attacks the top goal and Player 2 the bottom goal.',
         'Toca un punto resaltado junto al balón para moverte allí. Las líneas verdes son del jugador 1 y las rosas del jugador 2. El jugador 1 ataca la portería de arriba y el jugador 2 la de abajo.',
@@ -280,11 +282,11 @@ def specification(kind):
                  'box1': {'shape': 'rect', 'color': '#ff9dca', 'text_color': '#102039', 'width': 70, 'height': 70}}
         viewport = {'width': 460, 'height': 540, 'camera_enabled': False}
     elif kind == 'paper_soccer':
-        cells = [{'id': str(y * 9 + x), 'x': 20 + x * 40, 'y': 20 + (y + 1) * 40} for y in range(11) for x in range(9)]
-        cells += [{'id': '99', 'x': 20 + 4 * 40, 'y': 20}, {'id': '100', 'x': 20 + 4 * 40, 'y': 20 + 12 * 40}]
-        boards = [{'id': 'pitch', 'kind': 'graph', 'x': 20, 'y': 90, 'width': 360, 'height': 520, 'color': '#1d5a37', 'line_color': '#2d7a4e', 'cells': cells}]
-        types = {'ball': {**flat('#ffffff'), 'width': 30, 'height': 30}}
-        viewport = {'width': 400, 'height': 630}
+        cells = [{'id': str(y * 9 + x), 'x': 20 + x * 48, 'y': 20 + (y + 1) * 48} for y in range(11) for x in range(9)]
+        cells += [{'id': '99', 'x': 20 + 4 * 48, 'y': 20}, {'id': '100', 'x': 20 + 4 * 48, 'y': 20 + 12 * 48}]
+        boards = [{'id': 'pitch', 'kind': 'graph', 'x': 20, 'y': 90, 'width': 424, 'height': 616, 'color': '#1d5a37', 'line_color': '#2d7a4e', 'cells': cells}]
+        types = {'ball': {**flat('#ffffff'), 'width': 36, 'height': 36}}
+        viewport = {'width': 464, 'height': 726}
     elif kind == 'hackenbush':
         boards = [{'id': 'main', 'kind': 'free', 'x': 0, 'y': 90, 'width': 560, 'height': 480, 'color': '#172743', 'line_color': '#5c7190'}]
         types = {'knot': {**flat('#7d5a3a'), 'width': 26, 'height': 26}}
