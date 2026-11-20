@@ -10,7 +10,7 @@ from game_platform.observability import Monitor, RequestLogMiddleware, redact, r
 from game_platform.tests.helpers import Api
 
 
-@pytest.mark.parametrize("prefix", ["/auth/app-sessions", "/invites", "/i"])
+@pytest.mark.parametrize("prefix", ["/auth/app-sessions", "/invites", "/invite", "/i"])
 @pytest.mark.parametrize("result", ["ok", "slow", "error"])
 def test_capability_paths_are_hidden_in_pending_slow_error_and_api_logs(prefix, result, caplog):
     import asyncio
@@ -55,6 +55,9 @@ def test_capability_paths_are_hidden_in_pending_slow_error_and_api_logs(prefix, 
 
 def test_private_invite_urls_and_batch_paths_are_redacted_but_regular_ids_remain(caplog):
     api = Api()
+    # A random four-letter code can also be an ordinary log word, such as
+    # "game". Pin an uncommon test capability without changing live minting.
+    api.platform._new_invite_token = lambda: "qzvx"
     caplog.set_level(logging.INFO, logger="game_platform.events")
     alice = api.new_user("Alice")
     match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
@@ -74,3 +77,28 @@ def test_private_invite_urls_and_batch_paths_are_redacted_but_regular_ids_remain
     assert token not in redact_query("requests=" + json.dumps(paths))["requests"]
     assert redact_query(f"invite={token}&code={token}") == {"invite": "<redacted>", "code": "<redacted>"}
     assert token not in scrub_text(f"Failed to open /i/{token}", 200)
+
+
+def test_short_invite_fields_canonical_urls_and_validation_inputs_are_redacted():
+    token = "qzvx"
+    value = {
+        "match": {"id": "ordinary-match-id", "game_id": "ordinary-game-id", "invite_code": token},
+        "url": f"https://example.invalid/invite/{token}?lang=fr",
+        "legacy_url": f"https://example.invalid/portal#invite={token}",
+        "query_url": f"https://example.invalid/portal?invite_code={token}&lang=fr",
+        "validation": {"loc": ["body", "invite_code"], "input": token, "msg": "invalid invite"},
+    }
+    assert redact(value) == {
+        "match": {"id": "ordinary-match-id", "game_id": "ordinary-game-id", "invite_code": "<redacted>"},
+        "url": "https://example.invalid/invite/<redacted>?lang=fr",
+        "legacy_url": "https://example.invalid/portal#invite=<redacted>",
+        "query_url": "https://example.invalid/portal?invite_code=<redacted>&lang=fr",
+        "validation": {"loc": ["body", "invite_code"], "input": "<redacted>", "msg": "invalid invite"},
+    }
+    paths = [f"/invite/{token}", {"path": f"/invites/{token}"}, "/matches/ordinary-match-id"]
+    assert token not in redact_query("requests=" + json.dumps(paths))["requests"]
+    assert redact_query(f"invite_code={token}&game_id=ordinary-game-id") == {
+        "invite_code": "<redacted>", "game_id": "ordinary-game-id",
+    }
+    ordinary = {"game_id": "game", "match_id": "move", "name": "A game with four turns"}
+    assert redact(ordinary) == ordinary

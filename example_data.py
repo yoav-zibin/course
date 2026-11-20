@@ -62,6 +62,9 @@ def build(operations: Iterable[Mapping[str, Any]]) -> Snapshot:
     passwords = _Queue("password")
     # Referral codes count up from 10001 so the generated file never changes.
     codes = (str(n) for n in itertools.count(10_001))
+    # New multiplayer lobbies reserve short invite capabilities automatically.
+    # Example data is public and deterministic; live services keep random codes.
+    invite_codes = ("".join(letters) for letters in itertools.product("abcdefghijklmnopqrstuvwxyz", repeat=4))
     notification_ids = (f"notification{n}" for n in itertools.count(1))
     platform = GamePlatform(
         store=store,
@@ -71,6 +74,7 @@ def build(operations: Iterable[Mapping[str, Any]]) -> Snapshot:
         new_seed=lambda: 0x5EED,
         new_password=passwords,
         new_referral_code=lambda: next(codes),
+        new_invite_token=lambda: next(invite_codes),
     )
     for number, operation in enumerate(operations, start=1):
         try:

@@ -1,4 +1,4 @@
-"""Referral tracking: who invited each new user, and the invite tree behind /invites."""
+"""Referral tracking and the private tree behind /admin/referrals."""
 
 from dataclasses import replace
 
@@ -223,12 +223,29 @@ def test_deleting_a_user_passes_their_invites_up_to_their_inviter(api: Api) -> N
     assert counts(api) == {"ann": ("", 1, 1, 0), "cy": ("ann", 0, 0, 1)}
 
 
-def test_the_invites_page_and_data_need_the_master_password() -> None:
+def test_the_referrals_page_and_data_need_the_master_password() -> None:
     client = TestClient(create_app(master_password="s3cret"))
-    assert client.get("/invites").status_code == 401
-    assert client.get("/admin/invites").status_code == 401
-    assert client.get("/invites", auth=("", "s3cret")).status_code == 200
-    assert client.get("/admin/invites", auth=("", "s3cret")).status_code == 200
+    name = "Private referral test user"
+    assert client.post("/users", json={"display_name": name}).status_code == 201
+    for path in ("/admin/referrals", "/admin/invites"):
+        for credentials in (None, ("admin", "wrong-password")):
+            response = client.get(path, auth=credentials)
+            assert response.status_code == 401
+            assert response.headers["www-authenticate"] == (
+                'Basic realm="Game platform debug tools"'
+            )
+            assert name not in response.text
+
+    page = client.get("/admin/referrals", auth=("", "s3cret"))
+    assert page.status_code == 200
+    assert page.headers["content-type"].startswith("text/html")
+    data = client.get("/admin/invites", auth=("", "s3cret"))
+    assert data.status_code == 200
+    assert [user["display_name"] for user in data.json()["users"]] == [name]
+    # The old dashboard path is retired; match invite capabilities use
+    # /invites/{token}, rather than exposing referral data at /invites.
+    assert client.get("/invites").status_code == 404
+    assert client.get("/invites", auth=("", "s3cret")).status_code == 404
 
 
 def test_the_inviter_is_saved_in_the_data_file(tmp_path) -> None:

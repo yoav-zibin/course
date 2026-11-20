@@ -6,6 +6,7 @@ from game_platform import example_data
 from game_platform.json_file_store import JsonFileStore, read_snapshot
 from game_platform.models import Match
 from game_platform.store import Snapshot
+from game_platform.service import INVITE_MAX_AGE
 from game_platform.tests.helpers import Api
 
 
@@ -18,6 +19,31 @@ def _build() -> Snapshot:
 def test_the_example_data_file_is_up_to_date() -> None:
     # Regenerate with: python -m game_platform.example_data
     assert read_snapshot(example_data.DEFAULT_OUTPUT) == _build()
+
+
+def test_generated_waiting_lobby_invites_are_deterministic_and_resolve_their_match() -> None:
+    snapshot = _build()
+    assert _build() == snapshot
+    waiting = {match.id: match for match in snapshot.matches if match.status == "waiting_for_players"}
+    assert {invite.match_id for invite in snapshot.invites} == set(waiting)
+    assert len(snapshot.invites) == len(waiting) == 2
+    assert len({invite.token for invite in snapshot.invites}) == 2
+    for invite in snapshot.invites:
+        match = waiting[invite.match_id]
+        assert invite.token == match.invite_code
+        assert len(invite.token) == 4 and invite.token.islower() and invite.token.isalpha()
+        assert invite.created_by_user_id == match.owner_user_id
+        assert invite.created_at == match.created_at
+        assert invite.expires_at == match.created_at + INVITE_MAX_AGE
+    assert all(match.invite_code is None for match in snapshot.matches if match.id not in waiting)
+    # Read the actual generated file through the platform, so an updated JSON
+    # fixture cannot merely claim a code without its durable Invite record.
+    from game_platform.store import InMemoryStore
+    api = Api(store=InMemoryStore.of_snapshot(read_snapshot(example_data.DEFAULT_OUTPUT)))
+    for match in waiting.values():
+        viewed = api.ok("GET", f"/invites/{match.invite_code}")
+        assert viewed["match"]["id"] == match.id
+        assert viewed["usable"] is (len(match.seats) < 2)
 
 
 def test_example_data_does_not_include_runtime_experiment_tracking() -> None:
