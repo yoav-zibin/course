@@ -706,7 +706,7 @@ node tools/build_html_declarative_conversions.mjs
 python -m game_platform.tools.declarative_demo --port 8134
 ```
 
-Open `http://127.0.0.1:8134/portal` to play all thirty-four games in an isolated,
+Open `http://127.0.0.1:8134/portal` to play the included games in an isolated,
 ephemeral local platform. This runner uses no production data. Its fixtures
 support local development and do not substitute for the publication gate.
 The scene playground can load the same examples from
