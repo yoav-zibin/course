@@ -27,7 +27,11 @@ const gameUI = {
       if (!active) return null;
       const id = `intent_${offers.length}`;
       offers.push(move);
-      if (mode === 'target') {
+      if (mode === 'hit') {
+        scene.targets.push({id, board, position, color:'#00000000',
+          hit_area:{x:-46,y:-63,width:92,height:126},
+          ...(aria_label ? {aria_label} : {})});
+      } else if (mode === 'target') {
         scene.targets.push({id, board, position, label:String(value || '•'),
           ...(aria_label ? {aria_label} : {})});
       } else if (mode === 'piece') {
@@ -51,7 +55,7 @@ const gameUI = {
     const cardPos = i => ({x:36 + (i % 8) * 67,y:125 + Math.floor(i / 8) * 94});
     const boardCell = (i, columns) => ({cell:String(i)});
     const handLabel = hand => Array.isArray(hand) ? hand.map(cardText).join(' ') : '';
-    if (KIND !== 'six_mens_morris') label('title', title, 22, 16, 25);
+    if (KIND !== 'six_mens_morris' && KIND !== 'thirty_one') label('title', title, 22, 16, 25);
     if (Number.isInteger(s.to_move) || Number.isInteger(s.toMove) ||
         Number.isInteger(s.turn) || Number.isInteger(s.turnSeat) ||
         (KIND === 'six_mens_morris' && Number.isInteger(m.turn_of_player_indices?.[0]))) {
@@ -61,8 +65,8 @@ const gameUI = {
             Number.isInteger(s.turnSeat) ? s.turnSeat : m.turn_of_player_indices[0];
       label('status', m.status === 'over' ? text('Game over') :
         (active ? text('Your turn · {name}', {name:playerName(turn)}) :
-          text('{name} to play', {name:playerName(turn)})), 22,
-        KIND === 'six_mens_morris' ? 22 : 52, 16);
+          text('{name} to play', {name:playerName(turn)})), KIND === 'thirty_one' ? 220 : 22,
+        KIND === 'six_mens_morris' ? 22 : KIND === 'thirty_one' ? 55 : 52, 16);
     }
 
     let selectedSize = localValid ? localState.selectedSize : null;
@@ -192,22 +196,48 @@ const gameUI = {
         22, 420, 13);
     } else if (KIND === 'thirty_one') {
       const hand = Array.isArray(s.hand) ? s.hand : [];
-      hand.forEach((card, i) => {
-        if (active && (s.phase === 'discard' || s.phase === 'final_discard'))
-          offer({action:'discard',card}, text('Play {card}', {card:cardText(card)}),
-            'table', cardPos(i), 'piece');
-        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text:cardText(card)});
-      });
-      if (active && (s.phase === 'draw' || s.phase === 'final_draw')) {
-        if (s.stock_count > 0) offer({action:'draw',source:'stock'},
-          text('Draw a card ({n} left)', {n:s.stock_count}));
-        if (s.discard_top) offer({action:'draw',source:'discard'},
-          text('Play {card}', {card:cardText(s.discard_top)}));
-        if (s.phase === 'draw') offer({action:'knock'}, text('Pass'));
-        if (s.phase === 'final_draw') offer({action:'stand'}, text('Pass'));
+      const cardType = card => /[HD]$/.test(card) ? 'red_card' : 'black_card';
+      const drawPhase = s.phase === 'draw' || s.phase === 'final_draw';
+      const discardPhase = s.phase === 'discard' || s.phase === 'final_discard';
+      label('title', '31', 300, 12, 30);
+      if (s.phase !== 'over') {
+        staticPiece('stock', 'deck', 'table', {x:245,y:230}, {text:'◆'});
+        if (s.discard_top)
+          staticPiece('discard', cardType(s.discard_top), 'table', {x:395,y:230},
+            {text:cardText(s.discard_top)});
+        label('stock-count', String(s.stock_count ?? 0), 237, 310, 16);
       }
-      label('scores', (s.scores || []).map((score,i) => score == null ? '' :
-        `${playerName(i)} · ${score}`).filter(Boolean).join('   '), 22, 465, 14);
+      if (active && drawPhase) {
+        if (s.stock_count > 0)
+          offer({action:'draw',source:'stock'}, '', 'table', {x:245,y:230}, 'hit',
+            text('Draw a card ({n} left)', {n:s.stock_count}));
+        if (s.discard_top)
+          offer({action:'draw',source:'discard'}, '', 'table', {x:395,y:230}, 'hit',
+            text('Take {card}', {card:cardText(s.discard_top)}));
+        if (s.phase === 'draw') offer({action:'knock'}, text('Knock'));
+        else offer({action:'stand'}, text('Stand'));
+      }
+      const hands = s.phase === 'over' && Array.isArray(s.hands) ? s.hands : [hand];
+      hands.forEach((cards, row) => {
+        if (s.phase === 'over') {
+          const scoreIndex = Number.isInteger(m.my_player_index) ? (row === seat ? 0 : 1) : row;
+          const score = s.scores?.[scoreIndex];
+          label(`hand-owner_${row}`, `${playerName(row)}${score == null ? '' : ` · ${score}`}`,
+            260, 165 + row * 180, 17);
+        }
+        cards.forEach((card, i) => {
+          const position = {x:320 + (i - (cards.length - 1) / 2) * 112,
+            y:s.phase === 'over' ? 250 + row * 180 : 460};
+          staticPiece(`hand_${row}_${i}`, cardType(card), 'table', position, {text:cardText(card)});
+          if (active && discardPhase)
+            offer({action:'discard',card}, '', 'table', position, 'hit',
+              text('Play {card}', {card:cardText(card)}));
+        });
+      });
+      if (s.phase === 'over' && Number.isInteger(s.winner))
+        label('winner', text('Winner: {name}', {name:playerName(s.winner)}), 240, 100, 19);
+      else if (s.scores?.[0] != null)
+        label('scores', `${playerName(seat)} · ${s.scores[0]}`, 260, 100, 19);
     } else if (KIND === 'gobblet') {
       const moves = s.legal_moves || [];
       const board = s.board || [];

@@ -19,6 +19,9 @@ const EXTRA_STRINGS = {
   'Take {n}':['Retirar {n}','Prendre {n}','Stein {n} schlagen','Capturar {n}','移除 {n}','{n} को हटाएँ','خذ {n}'],
   'Move to point {n}':['Mover al punto {n}','Déplacer au point {n}','Zu Punkt {n} ziehen','Mover para o ponto {n}','移动到位置 {n}','बिंदु {n} पर जाएँ','انتقل إلى النقطة {n}'],
   'Select stone at point {n}':['Seleccionar ficha en el punto {n}','Sélectionner le pion au point {n}','Stein an Punkt {n} auswählen','Selecionar a peça no ponto {n}','选择位置 {n} 的棋子','बिंदु {n} की गोटी चुनें','اختر القطعة عند النقطة {n}'],
+  Knock:['Tocar','Frapper','Klopfen','Bater','敲牌','नॉक करें','اطرق'],
+  Stand:['Plantarse','Rester','Stehen bleiben','Parar','停牌','रुकें','توقف'],
+  'Take {card}':['Tomar {card}','Prendre {card}','{card} nehmen','Pegar {card}','拿取 {card}','{card} लें','خذ {card}'],
   'Reset guess':['Reiniciar intento','Réinitialiser la proposition','Tipp zurücksetzen','Reiniciar palpite','重置猜测','अनुमान रीसेट करें','إعادة تعيين التخمين']
 };
 const ALL_STRINGS={...COPY.strings,...EXTRA_STRINGS};
@@ -43,6 +46,17 @@ const MORRIS_UI = [
   '点击备用棋子，再点击空位。之后点击棋子和目标位置。组成三子连线且可以选择时，点击高亮的对方棋子将其移除。',
   'अपनी आरक्षित गोटी और फिर खाली बिंदु पर टैप करें। बाद में गोटी और उसके गंतव्य पर टैप करें। तीन की पंक्ति में विकल्प मिलने पर विरोधी की चमकती गोटी हटाने के लिए उस पर टैप करें।',
   'اضغط على قطعة الاحتياط ثم على نقطة فارغة. لاحقًا اضغط على قطعة ثم وجهتها. إذا أتاح الصف اختيارًا، فاضغط على قطعة منافسة مضاءة لإزالتها.'
+];
+
+const THIRTY_ONE_UI = [
+  'Tap the stock or discard pile to draw, then tap a card in your hand to discard it. Knock or stand using the button.',
+  'Toca el mazo o la pila de descartes para robar y luego una carta de tu mano para descartarla. Usa el botón para tocar o plantarte.',
+  'Touchez la pioche ou la défausse pour prendre une carte, puis une carte de votre main pour la défausser. Utilisez le bouton pour frapper ou rester.',
+  'Tippe zum Ziehen auf den Stapel oder Ablagestapel und dann zum Ablegen auf eine Karte in deiner Hand. Klopfe oder bleibe mit der Schaltfläche stehen.',
+  'Toque no monte ou no descarte para comprar e depois em uma carta da sua mão para descartá-la. Use o botão para bater ou parar.',
+  '点击牌堆或弃牌堆抽牌，然后点击手牌弃牌。使用按钮敲牌或停牌。',
+  'पत्ता लेने के लिए ढेर या छोड़े गए पत्तों पर टैप करें, फिर छोड़ने के लिए अपने हाथ के पत्ते पर टैप करें। नॉक करने या रुकने के लिए बटन दबाएँ।',
+  'اضغط على رزمة السحب أو كومة الرمي لسحب ورقة، ثم اضغط على ورقة من يدك لرميها. استخدم الزر للطرق أو التوقف.'
 ];
 
 const CUSTOM = {
@@ -208,6 +222,8 @@ const COLORS = {
 
 function board(kind) {
   const free = {kind:'free',x:0,y:0,width:640,height:740,color:'#145b4e',line_color:'#6ee7b7'};
+  if (kind === 'thirty_one') return {viewport:{width:640,height:590},boards:[
+    {id:'table',kind:'free',x:0,y:0,width:640,height:590,color:'#174d42',line_color:'#e2c47a'}]};
   if (kind === 'table') return {viewport:{width:640,height:720},boards:[{id:'table',...free}]};
   if (kind === 'kisolo') return {viewport:{width:620,height:530},boards:[
     {id:'main',kind:'grid',x:26,y:110,width:560,height:280,rows:4,columns:7,color:'#a87945',alternate_color:'#c99a63',line_color:'#5c4026'}]};
@@ -227,6 +243,11 @@ function typesFor(kind) {
     card:{shape:'card',width:60,height:82,color:COLORS.card,text_color:'#172033',border_color:'#667085'},
     played:{shape:'card',width:58,height:78,color:COLORS.played,text_color:'#172033',border_color:'#667085'}
   };
+  if (kind === 'thirty_one') {
+    types.red_card = {shape:'card',width:92,height:126,color:'#fffdf6',text_color:'#b02e35',border_color:'#d5c6a9'};
+    types.black_card = {shape:'card',width:92,height:126,color:'#fffdf6',text_color:'#1c2b31',border_color:'#d5c6a9'};
+    types.deck = {shape:'card',width:92,height:126,color:'#982f39',text_color:'#f5d894',border_color:'#f5d894'};
+  }
   if (kind === 'kisolo') types.pit = {shape:'circle',width:66,height:54,color:COLORS.pit,text_color:'#fff7ed'};
   if (kind === 'gobblet') for (let size=1;size<=4;size++) for (let owner=0;owner<2;owner++)
     types[`goblet_${size}_${owner}`] = {shape:'circle',width:28 + size * 9,height:28 + size * 9,
@@ -394,7 +415,8 @@ function build(entry) {
   const sourceTranslation=source.translations || {};
   const custom=CUSTOM[entry.kind];
   const rules=custom?.rules || source.rules;
-  const ui=entry.kind === 'six_mens_morris' ? MORRIS_UI[0] : custom?.ui || source.ui_instructions;
+  const ui=entry.kind === 'six_mens_morris' ? MORRIS_UI[0] :
+    entry.kind === 'thirty_one' ? THIRTY_ONE_UI[0] : custom?.ui || source.ui_instructions;
   const description=custom?.description || source.description;
   const title=`${entry.title} (Declarative)`;
   const translations={};
@@ -412,10 +434,11 @@ function build(entry) {
     const displayName=`${baseName}${suffix}`;
     translations[locale]={...old,display_name:displayName,
       ...(entry.kind === 'six_mens_morris' ? {game_ui_rules:MORRIS_UI[LOCALES.indexOf(locale)+1]} : {}),
+      ...(entry.kind === 'thirty_one' ? {game_ui_rules:THIRTY_ONE_UI[LOCALES.indexOf(locale)+1]} : {}),
       client_strings:translatedStrings(locale,displayName,entry.kind)};
   }
   const strings={...ENGLISH,title,...serverStrings(entry.kind).english};
-  const layout=board(entry.board);
+  const layout=board(entry.kind === 'thirty_one' ? entry.kind : entry.board);
   const spec={format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
     piece_types:typesFor(entry.kind),strings,
     ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n`+UI};

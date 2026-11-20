@@ -136,6 +136,46 @@ def test_morris_capture_choices_are_selected_on_the_board():
         assert all(not piece['actions'] for piece in scene['pieces'])
 
 
+def test_thirty_one_direct_pile_and_card_actions_and_revealed_hands():
+    body = load('thirty_one')
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = dict(body.unit_tests['cases'][0]['view_of_mover'])
+    m = {'type':'state_changed', 'view':view, 'status':'ongoing',
+         'players':[{'name':'A'}, {'name':'B'}], 'acting_for_player_index':0,
+         'my_player_index':0, 'move_count':0}
+    initial = ui.reduce(m)
+    assert {control['label'] for control in initial['scene']['controls']} == {'Knock'}
+    for source in ('stock', 'discard'):
+        assert scene_event(ui, m, initial, {'action':'draw', 'source':source})['make_move'] == {
+            'action':'draw', 'source':source}
+
+    discard = {**m, 'view':{**view, 'phase':'discard', 'hand':['AH','2C','KD','5S']}}
+    frame = ui.reduce(discard)
+    assert not frame['scene']['controls']
+    for card in discard['view']['hand']:
+        assert scene_event(ui, discard, frame, {'action':'discard','card':card})['make_move'] == {
+            'action':'discard','card':card}
+    assert {p['type'] for p in frame['scene']['pieces'] if p['id'].startswith('hand_')} == {
+        'red_card','black_card'}
+
+    final_turn = {**m, 'view':{**view, 'phase':'final_draw'}}
+    frame = ui.reduce(final_turn)
+    assert [control['label'] for control in frame['scene']['controls']] == ['Stand']
+    assert scene_event(ui, final_turn, frame, {'action':'stand'})['make_move'] == {'action':'stand'}
+
+    final = {**m, 'status':'over', 'acting_for_player_index':None, 'my_player_index':None,
+             'view':{**view, 'phase':'over', 'hand':[], 'hands':[['AH','KH','QH'],['7D','7H','7C']],
+                     'scores':[31,30.5], 'winner':0}}
+    frame = ui.reduce(final)
+    assert len([p for p in frame['scene']['pieces'] if p['id'].startswith('hand_')]) == 6
+    assert any(label['text'] == 'Winner: A' for label in frame['scene']['labels'])
+    assert {label['text'] for label in frame['scene']['labels']} >= {'A · 31', 'B · 30.5'}
+    assert not frame['scene']['targets'] and not frame['scene']['controls']
+    final_as_b = {**final, 'my_player_index':1, 'view':{**final['view'], 'scores':[30.5,31]}}
+    labels = ui.reduce(final_as_b)['scene']['labels']
+    assert {label['text'] for label in labels} >= {'A · 31', 'B · 30.5'}
+
+
 def test_morris_package_and_single_game_generator_are_consistent(tmp_path):
     prepare(load('six_mens_morris'))
     root = EXAMPLES.parents[1]
@@ -143,13 +183,16 @@ def test_morris_package_and_single_game_generator_are_consistent(tmp_path):
     destination = tmp_path / 'games' / 'declarative'
     (destination / 'locales').mkdir(parents=True)
     shutil.copy(root / 'tools' / 'build_archive_html_declarative_conversions.mjs', tmp_path / 'tools')
-    for name in (Path('archive_conversions_ui.js'), Path('six_mens_morris.json'),
+    for name in (Path('archive_conversions_ui.js'), Path('six_mens_morris.json'), Path('thirty_one.json'),
                  Path('locales') / 'html_conversions.json', Path('locales') / 'archive_server_strings.json'):
         shutil.copy(EXAMPLES / name, destination / name)
-    expected = (destination / 'six_mens_morris.json').read_bytes()
-    subprocess.run(['node', str(Path('tools') / 'build_archive_html_declarative_conversions.mjs'), 'six_mens_morris'],
-                   cwd=tmp_path, check=True, capture_output=True, timeout=30)
-    assert (destination / 'six_mens_morris.json').read_bytes() == expected
+    untouched = (destination / 'thirty_one.json').read_bytes()
+    command = ['node', str(Path('tools') / 'build_archive_html_declarative_conversions.mjs'), 'six_mens_morris']
+    subprocess.run(command, cwd=tmp_path, check=True, capture_output=True, timeout=30)
+    generated = (destination / 'six_mens_morris.json').read_bytes()
+    subprocess.run(command, cwd=tmp_path, check=True, capture_output=True, timeout=30)
+    assert (destination / 'six_mens_morris.json').read_bytes() == generated
+    assert (destination / 'thirty_one.json').read_bytes() == untouched
 
 
 def test_demo_validation_subprocess_imports_the_local_checkout():
