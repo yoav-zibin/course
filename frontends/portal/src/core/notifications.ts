@@ -1,4 +1,22 @@
-import type {Match} from './types';
+import type {InAppNotification, Match} from './types';
+
+/** Match updates share one inbox row, including invitations and rematches. */
+export function notificationMatchKey(item: InAppNotification, baseUrl: string): string {
+  if (item.match_id) return `match:${item.match_id}`;
+  const target = notificationTarget(item.url, baseUrl);
+  if (target?.kind === 'match' || target?.kind === 'rematch') return `match:${target.id}`;
+  return target?.kind === 'invite' ? `invite:${target.id}` : `notification:${item.id}`;
+}
+
+/** Keep the latest unread update for each match, preserving server order on ties. */
+export function pendingNotifications(items: InAppNotification[], baseUrl: string): InAppNotification[] {
+  const byMatch = new Map<string, InAppNotification>();
+  for (const item of items.filter(item => !item.read_at).sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))) {
+    const key = notificationMatchKey(item, baseUrl);
+    if (!byMatch.has(key)) byMatch.set(key, item);
+  }
+  return [...byMatch.values()];
+}
 
 /** A confirmed human move that hands control to a different human player. */
 export function handsTurnToOpponent(before: Match, after: Match, userId: string): boolean {

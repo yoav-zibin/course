@@ -23,7 +23,7 @@ import {readLocalUiTest} from './platform/legacy';
 import {notificationTarget} from './core/notifications';
 import type {InAppNotification} from './core/types';
 import {useNotificationDelivery} from './ui/useNotificationDelivery';
-import {NotificationInbox, NotificationPrompt} from './ui/Notifications';
+import {NotificationInbox, NotificationItem, NotificationPrompt} from './ui/Notifications';
 import {PortalHeader} from './ui/PortalHeader';
 
 function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
@@ -61,9 +61,12 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   };
   const notificationDelivery = useNotificationDelivery(p, openNotificationUrl, setNotice, localOnly);
   const openNotification = async (item: InAppNotification) => {
+    const scope=notificationScope.current;
     await openNotificationUrl(item.url);
+    if(scope!==notificationScope.current)return;
     await p.actions.readNotification(item.id);
-    setInbox(false); setNotificationBanner(null);
+    if(scope!==notificationScope.current)return;
+    setInbox(false); setNotificationBanner(current=>current?.id===item.id?null:current);
   };
   useEffect(() => {
     setInbox(false); setNotificationBanner(null);
@@ -75,14 +78,15 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
     const poll = async () => {
       try {if (AppState.currentState === 'active' && (Platform.OS !== 'web' || !document.hidden)) await p.actions.refreshNotifications();}
       catch { /* Keep the last inbox available during a lost connection. */ }
-      finally {if (!stopped) timer = setTimeout(poll,8000);}
+      finally {if (!stopped) timer = setTimeout(poll,inbox?2000:8000);}
     };
     void poll(); return () => {stopped = true; clearTimeout(timer);};
-  }, [p.ready,p.baseUrl,p.account?.id]);
+  }, [p.ready,p.baseUrl,p.account?.id,inbox]);
   useEffect(() => {
     const observed = observedNotifications.current;
     const fresh = p.notifications.find(item => !item.read_at && !observed.ids.has(item.id));
     if (observed.initialized && fresh) setNotificationBanner(fresh);
+    else setNotificationBanner(current=>p.notifications.some(item=>item.id===current?.id)?current:null);
     if (p.notifications.length || p.ready) observed.initialized = true;
     for (const item of p.notifications) observed.ids.add(item.id);
   }, [p.notifications]);
@@ -177,7 +181,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
       {!focus&&<PortalHeader width={width} locale={p.locale} baseUrl={p.baseUrl} account={p.account} balance={p.profile?.token_balance??p.account?.token_balance??0} unread={p.unreadNotifications} ready={p.ready} gameVisible={gameVisible} navigation={inlineNavigation?tabs:undefined}
-        onHome={()=>navigate('games')} onAccount={()=>setAccount(true)} onNotifications={()=>{setInbox(true);void p.actions.refreshNotifications().catch(()=>{});}} onFocus={toggleFocus}/>}
+        onHome={()=>navigate('games')} onAccount={()=>setAccount(true)} onNotifications={()=>setInbox(true)} onFocus={toggleFocus}/>}
       {!focus&&!side&&!inlineNavigation&&<ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
       <AccountDeletionBanner/>
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
@@ -186,7 +190,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
           {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {t('ui.offline.pending_moves','pending moves')}. {p.pending ? t('ui.offline.move_saved','Your move is saved on this device and will sync when connected.') : t('ui.offline.downloaded_play','Downloaded games are available on this device.')}</Notice>}
-          {notificationBanner&&<Card style={{padding:14,borderColor:colors.accent}}><Copy style={{fontWeight:'700'}}>{notificationBanner.title}</Copy><Copy>{notificationBanner.body}</Copy><Row><Button compact onPress={()=>run(()=>openNotification(notificationBanner))}>{copyText('Open')}</Button><Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button></Row></Card>}
+          {notificationBanner&&!inbox&&<View style={{gap:10}}><NotificationItem item={notificationBanner} onOpen={openNotification}/><Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button></View>}
           {appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
           {pendingInvite&&<Card><Title small>{invitePreview?.created_by_display_name?copyText("{v0} invited you to play",{v0:invitePreview.created_by_display_name}):copyText("You’re invited to play")}</Title><Copy muted>{p.account?copyText("Join the match with your current account."):copyText("Log in or continue as a guest, then join this match.")}</Copy><Row><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const joined=await p.actions.acceptInvite(pendingInvite);setPendingInvite('');setInvitePreview(null);setScreen('matches');writeRoute(`match=${encodeURIComponent(joined.id)}`);})}>{p.account?copyText("Join match"):copyText("Log in to join")}</Button><Button secondary onPress={()=>{setPendingInvite('');setInvitePreview(null);writeRoute('games');}}>{copyText("Not now")}</Button></Row></Card>}
           {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>

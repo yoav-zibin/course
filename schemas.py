@@ -438,6 +438,7 @@ class UserNotificationOut(BaseModel):
     url: str
     created_at: dt.datetime
     read_at: dt.datetime | None
+    match_id: str | None = None
 
     @classmethod
     def of(cls, item: UserNotification) -> "UserNotificationOut":
@@ -446,6 +447,10 @@ class UserNotificationOut(BaseModel):
 
 class NotificationsOut(CursorPageOut[UserNotificationOut]):
     unread_count: int
+
+
+class NotificationReadOut(UserNotificationOut):
+    dismissed_notification_ids: list[str]
 
 
 class PushSubscriptionOut(BaseModel):

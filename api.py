@@ -77,6 +77,7 @@ from game_platform.schemas import (
     NativePushSubscribe,
     NotificationsOut,
     UserNotificationOut,
+    NotificationReadOut,
     PushSubscribe,
     PushSubscriptionOut,
     QuickMatchRequest,
@@ -535,10 +536,14 @@ def list_notifications(
 
 @router.post("/users/me/notifications/{notification_id}/read")
 def read_notification(platform: Platform, caller_id: CallerId,
-                      notification_id: str) -> UserNotificationOut:
-    return UserNotificationOut.of(platform.read_notification(
+                      notification_id: str) -> NotificationReadOut:
+    item, dismissed_ids = platform.read_notification(
         caller_id=caller_id, notification_id=notification_id,
-    ))
+    )
+    return NotificationReadOut(
+        **UserNotificationOut.of(item).model_dump(),
+        dismissed_notification_ids=list(dismissed_ids),
+    )
 
 
 @router.get("/users/me/saved-games")

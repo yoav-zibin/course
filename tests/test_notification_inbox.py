@@ -25,6 +25,8 @@ def test_inbox_works_without_push_and_is_private_and_idempotently_read():
     assert page["unread_count"] == 1
     entry, = page["items"]
     assert entry["event"] == "turn"
+    assert entry["match_id"] == match
+    assert entry["body"] == "alice moved. Your turn in Poker"
     assert entry["url"].endswith("#match=" + match)
     assert entry["read_at"] is None
     assert _feed(api, other)["items"] == []
@@ -35,6 +37,7 @@ def test_inbox_works_without_push_and_is_private_and_idempotently_read():
     assert read["read_at"] is not None
     assert api.ok("POST", path, as_user=bob) == read
     assert _feed(api, bob)["unread_count"] == 0
+    assert _feed(api, bob)["items"] == []
     assert "notifications" not in api.ok("GET", f"/users/{bob}", as_user=other)
 
 
@@ -124,8 +127,8 @@ def test_inbox_is_bounded_and_pages_without_duplicates():
     game = api.new_game(owner=alice)
     match_id = api.new_match(owner=alice, game_id=game)
     match = api.platform._store.get_match(match_id)
-    for _ in range(105):
-        api.platform._notify_match_event("notify.turn", match=match,
+    for number in range(105):
+        api.platform._notify_match_event("notify.turn", match=replace(match, id=f"match-{number}"),
                                         recipient_ids=[bob, bob], tag_suffix="turn")
     assert len(api.platform.get_user(bob).notifications) == 100
     first = _feed(api, bob, limit=60)
@@ -139,6 +142,89 @@ def test_inbox_is_bounded_and_pages_without_duplicates():
                        params={"limit": "101"}).status_code == 422
     assert api.request("GET", "/users/me/notifications", as_user=bob,
                        params={"cursor": "foreign"}).status_code == 400
+
+
+def test_inbox_groups_latest_match_update_across_pages_and_dismisses_older_updates():
+    api = Api()
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game = api.new_game(owner=alice)
+    first = api.platform._store.get_match(api.new_match(owner=alice, game_id=game))
+    second = api.platform._store.get_match(api.new_match(owner=alice, game_id=game))
+    for match, event in ((first, "turn"), (second, "turn"), (first, "match_over")):
+        api.platform._notify_match_event(f"notify.{event}", match=match,
+                                        recipient_ids=[bob], tag_suffix=event)
+    all_entries = api.platform.get_user(bob).notifications
+    page = _feed(api, bob, limit=1)
+    latest, = page["items"]
+    assert latest["match_id"] == first.id
+    assert latest["event"] == "match_over"
+    assert page["unread_count"] == 2
+    next_page = _feed(api, bob, limit=1, cursor=page["next_cursor"])
+    assert [item["match_id"] for item in next_page["items"]] == [second.id]
+    assert next_page["next_cursor"] is None
+
+    read = api.ok("POST", f"/users/me/notifications/{latest['id']}/read", as_user=bob)
+    assert set(read["dismissed_notification_ids"]) == {
+        item.id for item in all_entries if item.match_id == first.id
+    }
+    assert _feed(api, bob)["unread_count"] == 1
+    assert [item["match_id"] for item in _feed(api, bob)["items"]] == [second.id]
+    # A cursor remains usable after its row is dismissed.
+    assert _feed(api, bob, cursor=page["next_cursor"])["items"] == next_page["items"]
+
+
+def test_reading_older_snapshot_preserves_newer_same_match_with_equal_timestamp():
+    api = Api()
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game = api.new_game(owner=alice)
+    match = api.platform._store.get_match(api.new_match(owner=alice, game_id=game))
+    now = api.platform._clock()
+    api.platform._clock = lambda: now
+    snapshots = []
+    for _ in range(3):
+        api.platform._notify_match_event("notify.turn", match=match,
+                                        recipient_ids=[bob], tag_suffix="turn")
+        snapshots.append(_feed(api, bob)["items"][0])
+    assert len({item["created_at"] for item in snapshots}) == 1
+    clicked = snapshots[1]
+    read = api.ok("POST", f"/users/me/notifications/{clicked['id']}/read", as_user=bob)
+    assert set(read["dismissed_notification_ids"]) == {item["id"] for item in snapshots[:2]}
+    remaining, = _feed(api, bob)["items"]
+    assert remaining["id"] == snapshots[2]["id"]
+    assert _feed(api, bob)["unread_count"] == 1
+
+
+def test_legacy_invites_and_match_links_group_and_dismiss_without_match_id(monkeypatch):
+    api = Api()
+    alice, bob = api.new_user("alice"), api.new_user("bob")
+    game = api.new_game(owner=alice)
+    match_id = api.new_match(owner=alice, game_id=game)
+    for _ in range(2):
+        api.ok("POST", f"/matches/{match_id}/invites", as_user=alice,
+               json={"recipient_user_id": bob})
+    match = api.platform._store.get_match(match_id)
+    api.platform._notify_match_event("notify.turn", match=match,
+                                    recipient_ids=[bob], tag_suffix="turn")
+    user = api.platform.get_user(bob)
+    rematch_entry = replace(user.notifications[0], id="legacy-rematch",
+                            event="rematch_request", url=f"/portal#rematch={match_id}",
+                            match_id=None)
+    api.platform._store.put_user(replace(user, notifications=tuple(
+        replace(item, match_id=None) for item in (rematch_entry, *user.notifications)
+    )))
+    entry, = _feed(api, bob)["items"]
+    assert entry["match_id"] == match_id
+    assert _feed(api, bob)["unread_count"] == 1
+    read = api.ok("POST", f"/users/me/notifications/{entry['id']}/read", as_user=bob)
+    assert len(read["dismissed_notification_ids"]) == 4
+    assert _feed(api, bob)["items"] == []
+    # Already-read legacy history must not perform invite lookups on each poll.
+    user = api.platform.get_user(bob)
+    api.platform._store.put_user(replace(user, notifications=tuple(
+        replace(item, match_id=None) for item in user.notifications
+    )))
+    monkeypatch.setattr(api.platform._store, "get_invite", lambda token: pytest.fail("read history fetched an invite"))
+    assert _feed(api, bob)["items"] == []
 
 
 def test_notification_preferences_inbox_and_native_subscription_survive_disk_and_merge(tmp_path):

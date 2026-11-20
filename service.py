@@ -19,6 +19,7 @@ import uuid
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Final, Literal
+from urllib.parse import parse_qs, urlsplit
 
 from pydantic import JsonValue
 
@@ -3421,6 +3422,7 @@ class GamePlatform:
                 tag_suffix="over",
             )
         else:
+            mover = self._store.get_user(mover_user_id) if mover_user_id else None
             gained = (saved.turn_of_player_indices or frozenset()) - (
                 before.turn_of_player_indices or frozenset()
             )
@@ -3434,6 +3436,7 @@ class GamePlatform:
                     and seat.user_id is not None
                     and seat.user_id != mover_user_id
                 ],
+                actor_name=mover.display_name if mover is not None else "",
                 tag_suffix="turn",
             )
 
@@ -4609,11 +4612,22 @@ class GamePlatform:
             if user is None:
                 continue
             locale = i18n.normalize_locale(user.locale) or i18n.DEFAULT_LOCALE
+            name = actor_name
+            if key == "notify.turn" and not name:
+                mover = match.moves[-1] if match.moves else None
+                seat = next((seat for seat in match.seats if mover is not None
+                             and seat.player_index == mover.player_index), None)
+                if seat is not None and seat.kind == "computer":
+                    number = match.player_id_of(seat).rsplit("-", 1)[-1]
+                    name = i18n.translate("ui.match.computer_name", locale, number=number)
+                else:
+                    name = i18n.translate("notify.opponent", locale)
             entry = UserNotification(
                 id=self._new_notification_id(), event=key.removeprefix("notify."),
                 title=game_name,
-                body=i18n.translate(key, locale, game=game_name, name=actor_name),
+                body=i18n.translate(key, locale, game=game_name, name=name),
                 url=target_url, created_at=self._clock(),
+                match_id=match.id,
             )
             self._store.put_user(replace(
                 user, notifications=(entry, *user.notifications)[:100],
@@ -4632,37 +4646,78 @@ class GamePlatform:
         if messages:
             self._push_notifier.enqueue(messages)
 
+    def _notification_match_id(self, item: UserNotification) -> str | None:
+        if item.match_id is not None:
+            return item.match_id
+        # Existing inboxes have no grouping field. Preserve their original
+        # notification IDs while resolving the server's historical link forms.
+        target = urlsplit(item.url)
+        values = parse_qs(target.fragment) | parse_qs(target.query)
+        for key in ("match", "rematch"):
+            if values.get(key):
+                return values[key][0]
+        invite_path = re.fullmatch(r"/i/([^/]+)", target.path)
+        if invite_path:
+            invite = self._store.get_invite(invite_path.group(1))
+            return invite.match_id if invite is not None else None
+        return None
+
+    def _notification_entries(self, user: User, *, include_read: bool = True) -> tuple[UserNotification, ...]:
+        return tuple(
+            item if item.match_id is not None or item.read_at is not None and not include_read else replace(
+                item, match_id=self._notification_match_id(item),
+            ) for item in user.notifications
+        )
+
     def list_notifications(self, *, caller_id: str, limit: int = 20,
                            cursor: str | None = None) -> dict[str, Any]:
-        """A bounded private inbox, independent of push permission and preference."""
+        """Unread updates, newest per match, independent of push permission."""
         with self._lock:
             user = self._require_user(caller_id)
-            entries = user.notifications
+            entries = self._notification_entries(user, include_read=False)
             start = 0
             if cursor is not None:
                 index = next((i for i, item in enumerate(entries) if item.id == cursor), None)
                 if index is None:
                     raise InvalidRequestError("invalid notification cursor")
                 start = index + 1
-            page = entries[start:start + limit]
+            seen: set[str] = set()
+            unread = []
+            for index, item in enumerate(entries):
+                group = item.match_id or item.id
+                if item.read_at is not None or group in seen:
+                    continue
+                seen.add(group)
+                unread.append((index, item))
+            available = [item for index, item in unread if index >= start]
+            page = available[:limit]
             return {
                 "items": page,
-                "next_cursor": page[-1].id if page and start + len(page) < len(entries) else None,
-                "unread_count": sum(item.read_at is None for item in entries),
+                "next_cursor": page[-1].id if page and len(available) > len(page) else None,
+                "unread_count": len(unread),
             }
 
-    def read_notification(self, *, caller_id: str, notification_id: str) -> UserNotification:
+    def read_notification(self, *, caller_id: str, notification_id: str) -> tuple[UserNotification, tuple[str, ...]]:
         with self._lock:
             user = self._require_user(caller_id)
-            item = next((item for item in user.notifications if item.id == notification_id), None)
-            if item is None:
+            entries = self._notification_entries(user)
+            index = next((i for i, item in enumerate(entries) if item.id == notification_id), None)
+            if index is None:
                 raise NotFoundError("notification not found")
-            if item.read_at is None:
-                item = replace(item, read_at=self._clock())
-                self._store.put_user(replace(user, notifications=tuple(
-                    item if entry.id == item.id else entry for entry in user.notifications
-                )))
-            return item
+            item = entries[index]
+            dismissed_ids = tuple(
+                entry.id for entry in entries[index:]
+                if entry.id == item.id or item.match_id is not None
+                and entry.match_id == item.match_id
+            )
+            now = self._clock()
+            updated = tuple(
+                replace(entry, read_at=now) if entry.id in dismissed_ids and entry.read_at is None
+                else entry for entry in entries
+            )
+            if updated != user.notifications:
+                self._store.put_user(replace(user, notifications=updated))
+            return updated[index], dismissed_ids
 
     # Debugging
 

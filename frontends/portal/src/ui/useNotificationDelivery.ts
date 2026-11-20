@@ -33,8 +33,8 @@ export function useNotificationDelivery(p: Portal, onOpen: (url: string) => Prom
       onForeground: () => {if (active) void latest.current.actions.refreshNotifications().catch(() => {});},
       onOpen: payload => {if (active && payload.url) void (async () => {
         await open.current(payload.url!);
-        if (!active) return;
-        if (payload.notification_id) await api.request('POST', `/users/me/notifications/${encodeURIComponent(payload.notification_id)}/read`, undefined, account);
+        if (!active || latest.current.account?.id !== account.id || latest.current.baseUrl !== base) return;
+        if (payload.notification_id) await latest.current.actions.readNotification(payload.notification_id);
         if (active) await latest.current.actions.refreshNotifications();
       })().catch(reason => {if (active) error.current(reason instanceof Error ? reason.message : String(reason));});},
     });

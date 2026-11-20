@@ -5,7 +5,7 @@ import { AccountRepository, emptyAccountData, equal, requestId } from './reposit
 import {protectedResponsePaths} from './cache-policy';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
-import {handsTurnToOpponent} from './notifications';
+import {handsTurnToOpponent, pendingNotifications} from './notifications';
 import { importNativeLegacy, finishNativeImport } from './native-migration';
 import * as storage from '../platform/storage';
 import { loadAccounts, saveAccounts, loadCurrentAccount, currentAccountKey } from '../platform/credentials';
@@ -40,6 +40,7 @@ export class PortalStore {
   private refreshPromise: Promise<void> | null = null;
   private syncPromise: Promise<void> | null = null;
   private notificationPromise: Promise<void> | null = null;
+  private dismissedNotificationIds = new Set<string>();
   private notificationPromptClaim: Promise<void> | null = null;
   private offeredNotificationPrompt = new Set<string>();
   private bootstrapPromise: Promise<void> | null = null;
@@ -207,19 +208,24 @@ export class PortalStore {
       const result = await this.request('GET', `/users/me/notifications?${query}`); guard();
       if (!more) await this.refreshProfile().catch(() => {}); guard();
       if (!Array.isArray(result.items)) return;
-      const read = new Map(this.state.notifications.filter(item => item.read_at).map(item => [item.id, item.read_at]));
-      const acknowledged = result.items.filter((item: InAppNotification) => !item.read_at && read.has(item.id)).length;
-      const incoming = (result.items as InAppNotification[]).map(item => read.has(item.id) ? {...item, read_at: read.get(item.id)!} : item);
-      const notifications = more ? unique([...this.state.notifications, ...incoming]) : incoming;
-      this.patch({notifications, notificationCursor: result.next_cursor || null, unreadNotifications: result.unread_count === undefined ? notifications.filter(item => !item.read_at).length : Math.max(0,result.unread_count-acknowledged)});
+      const pendingItems = pendingNotifications(result.items, this.state.baseUrl);
+      const incoming = pendingItems.filter(item => !this.dismissedNotificationIds.has(item.id));
+      const notifications = pendingNotifications(more ? [...this.state.notifications, ...incoming] : incoming, this.state.baseUrl).filter(item => !this.dismissedNotificationIds.has(item.id));
+      const complete = !more && !result.next_cursor;
+      const acknowledged = pendingItems.length - incoming.length;
+      this.patch({notifications, notificationCursor: result.next_cursor || null, unreadNotifications: complete || result.unread_count === undefined ? notifications.length : Math.max(notifications.length,result.unread_count-acknowledged)});
     })().finally(() => {if (this.notificationPromise === pending) this.notificationPromise = null;});
     this.notificationPromise = pending; return pending;
   }
   async readNotification(id: string) {
     const guard = this.capture();
-    const previous = this.state.notifications.find(item => item.id === id); if (!previous || previous.read_at) return;
     const saved = await this.request('POST', `/users/me/notifications/${encodeURIComponent(id)}/read`); guard();
-    this.patch({notifications: this.state.notifications.map(item => item.id === id ? saved : item), unreadNotifications: Math.max(0, this.state.unreadNotifications - (this.state.notifications.find(item => item.id === id)?.read_at ? 0 : 1))});
+    // The acknowledgement names the consumed snapshot and its older match
+    // updates. Exact IDs preserve a newer move even when timestamps are equal.
+    for (const dismissed of [id, ...(saved.dismissed_notification_ids || [])]) this.dismissedNotificationIds.add(dismissed);
+    const notifications = this.state.notifications.filter(item => !this.dismissedNotificationIds.has(item.id));
+    this.patch({notifications, unreadNotifications: Math.max(0, this.state.unreadNotifications - (this.state.notifications.length - notifications.length))});
+    return saved;
   }
   private async offerNotificationPrompt(before: Match, after: Match) {
     const account = this.state.account; if (!account || !handsTurnToOpponent(before, after, account.id)) return;
@@ -341,7 +347,7 @@ export class PortalStore {
   async switchAccount(id: string,intentGuard?:()=>void) {
     intentGuard?.();
     const account = this.state.accounts.find(a => a.id === id); if (!account) throw new Error('Account not found on this device');
-    const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.notificationPromptClaim = null; this.observations.clear();
+    const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.dismissedNotificationIds.clear(); this.notificationPromptClaim = null; this.observations.clear();
     const current=()=>{if(transition!==this.generation)throw new Error('Account changed; refresh to continue.');intentGuard?.();};
     await this.writeSelection(id,current).catch(()=>{});current();
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
@@ -351,7 +357,7 @@ export class PortalStore {
   async logout(id = this.state.account?.id) {
     const accounts = this.state.accounts.filter(a => a.id !== id);
     if(id!==this.state.account?.id){const guard=this.capture();await saveAccounts(accounts,this.state.baseUrl);guard();this.patch({accounts});return;}
-    const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.notificationPromptClaim = null; this.observations.clear();
+    const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.dismissedNotificationIds.clear(); this.notificationPromptClaim = null; this.observations.clear();
     const guard=()=>{if(transition!==this.generation)throw new Error('Account changed; refresh to continue.');};
     const warning=()=>{guard();this.patch({storageError:'Device storage could not be updated. This session was logged out; saved credentials may remain on this device.'});};
     await saveAccounts(accounts,this.state.baseUrl).catch(warning);guard();

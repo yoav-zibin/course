@@ -59,6 +59,8 @@ class UserNotification:
     url: str
     created_at: dt.datetime
     read_at: dt.datetime | None = None
+    # Optional for compatibility with entries stored before match grouping.
+    match_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

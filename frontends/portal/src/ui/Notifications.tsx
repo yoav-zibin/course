@@ -1,8 +1,8 @@
-import React from 'react';
-import {Switch, View} from 'react-native';
+import React, {useState} from 'react';
+import {Pressable, Switch, View} from 'react-native';
 import {copyText} from '../platform/i18n';
 import type {InAppNotification} from '../core/types';
-import {Button, Card, Copy, Dialog, Empty, Row, Title, colors} from './components';
+import {Button, Card, Copy, Dialog, Empty, Notice, Row, Title, colors} from './components';
 import {useApp} from './context';
 
 export function NotificationPreferences() {
@@ -21,14 +21,21 @@ export function NotificationInbox({visible, onClose, onOpen}: {visible:boolean; 
   const {p,run} = useApp();
   return <Dialog visible={visible} title={copyText('Notifications')} onClose={onClose}>
     <Copy small muted>{copyText('Your match updates and requests appear here, even when push notifications are off.')}</Copy>
-    <Button compact secondary disabled={!p.network} onPress={() => run(() => p.actions.refreshNotifications())}>{copyText('Refresh')}</Button>
     {!p.notifications.length && <Empty>{copyText('No notifications yet.')}</Empty>}
-    {p.notifications.map(item => <Card key={item.id} style={{padding:16,borderColor:item.read_at?colors.border:colors.accent}}>
-      <Copy style={{fontWeight:'700'}}>{!item.read_at?'● ':''}{item.title}</Copy><Copy>{item.body}</Copy><Copy small muted>{new Date(item.created_at).toLocaleString()}</Copy>
-      <Row><Button compact onPress={() => run(() => onOpen(item))}>{item.event==='rematch_request'?copyText('Join rematch'):item.event==='invite_request'?copyText('View invitation'):copyText('Open')}</Button>{!item.read_at && <Button compact secondary onPress={() => run(() => p.actions.readNotification(item.id))}>{copyText('Mark read')}</Button>}</Row>
-    </Card>)}
+    {p.notifications.map(item => <NotificationItem key={item.id} item={item} onOpen={onOpen}/>)}
     {p.notificationCursor && <Button secondary onPress={() => run(() => p.actions.refreshNotifications(true))}>{copyText('Load more notifications')}</Button>}
   </Dialog>;
+}
+
+export function NotificationItem({item,onOpen}: {item:InAppNotification;onOpen:(notification:InAppNotification)=>Promise<void>}) {
+  const [opening,setOpening]=useState(false),[error,setError]=useState('');
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${item.title}. ${item.body}`} accessibilityState={{disabled:opening,busy:opening}} disabled={opening} testID={`notification-${item.id}`}
+    onPress={async()=>{if(opening)return;setOpening(true);setError('');try{await onOpen(item);}catch(reason){setError(reason instanceof Error?reason.message:String(reason));}finally{setOpening(false);}}}
+    style={({pressed,focused}:any)=>[opening&&{opacity:.5},pressed&&{opacity:.8},focused&&{outlineColor:colors.blue,outlineStyle:'solid',outlineWidth:2,borderRadius:14}]}>
+    <Card style={{padding:16,borderColor:colors.accent}}>
+      <Copy style={{fontWeight:'700'}}>{item.title}</Copy><Copy>{item.body}</Copy>{error&&<Notice error>{error}</Notice>}<Copy small muted>{new Date(item.created_at).toLocaleString()}</Copy>
+    </Card>
+  </Pressable>;
 }
 
 export function NotificationPrompt() {

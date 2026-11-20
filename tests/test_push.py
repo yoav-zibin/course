@@ -287,7 +287,7 @@ def test_a_move_notifies_the_players_who_gained_the_turn() -> None:
 
     assert api.move(match_id, as_user=alice, next_turn=1).is_success
     (message,) = _messages_to(notifier, bob)
-    assert (message.title, message.body) == ("Poker", "Your turn in Poker")
+    assert (message.title, message.body) == ("Poker", "alice moved. Your turn in Poker")
     assert message.url == f"/static/portal.html#match={match_id}"
     assert message.tag == f"match-{match_id}-turn"
     assert _messages_to(notifier, alice) == []
@@ -345,6 +345,7 @@ def test_solo_client_does_not_notify_itself_after_a_computer_move() -> None:
     # gets exactly one your-turn message — none for her own move itself.
     api.move(match_id, as_user=alice, next_turn=2)
     assert len(_messages_to(notifier, bob)) == 1
+    assert _messages_to(notifier, bob)[0].body == "Computer 2 moved. Your turn in Poker"
     assert api.match_summary(match_id)["turn"] == [0]
 
 
@@ -372,7 +373,7 @@ def test_notifications_are_localized_for_the_recipient() -> None:
 
     api.move(match_id, as_user=alice, next_turn=1)
     (message,) = _messages_to(notifier, bob)
-    assert message.body == "Tu turno en Poker"
+    assert message.body == "alice ha jugado. Tu turno en Poker"
 
 
 def test_joining_a_match_notifies_the_players_already_in_it() -> None:
