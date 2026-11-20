@@ -5,6 +5,8 @@ import pytest
 
 from game_platform.agent_import import GameImport
 from game_platform.game_logic import GameLogic, InvalidMoveError
+from game_platform.tests.test_declarative_example_hints import inputs
+from game_platform.tools.publish_declarative_games import scene_event
 
 
 PACKAGE = Path(__file__).resolve().parents[1] / 'games' / 'declarative' / 'ataxx.json'
@@ -104,3 +106,22 @@ def test_moves_beyond_two_squares_are_rejected():
 
     with pytest.raises(InvalidMoveError):
         game.call('applyMove', state, 'black', {'from': 0, 'to': 24}, ctx=ctx, seed=13)
+
+
+def test_tapping_an_actionable_piece_then_a_destination_reaches_legal_moves():
+    ui, message = inputs('ataxx')
+    frame = ui.reduce(message)
+    legal = message['view']['legal']
+    for move in legal:
+        assert scene_event(ui, message, frame, move)['make_move'] == move
+
+    source = legal[0]['from']
+    chosen = ui.reduce({'type':'ui_event', 'event':{'type':'tap', 'id':f'select_{source}'},
+                        'state_changed':message}, frame['local_state'])
+    assert {target['id'] for target in chosen['scene']['targets'] if target['id'].startswith('from_')} == {
+        f"from_{move['from']}_to_{move['to']}" for move in legal if move['from'] == source}
+    assert ui.reduce({**message, 'move_count':message['move_count'] + 1},
+                     chosen['local_state'])['local_state']['selectedFrom'] is None
+    for waiting in ({'acting_for_player_index':None}, {'replay':{'index':0,'total':2}},
+                    {'status':'over'}):
+        assert not ui.reduce({**message, **waiting}, chosen['local_state'])['scene']['targets']

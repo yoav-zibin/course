@@ -18,7 +18,7 @@ const gameUI = {
       &&Number.isInteger(localState.selectedFrom)?localState.selectedFrom:null;
     const event=message.type==='ui_event'?message.event:null;
     if(KIND==='ataxx'&&active&&event&&event.type==='tap'&&event.id) {
-      const source=/^piece_(\d+)$/.exec(event.id);
+      const source=/^select_(\d+)$/.exec(event.id);
       if(source) {
         const cell=Number(source[1]);
         if(legal.some(move=>move.from===cell))selectedFrom=selectedFrom===cell?null:cell;
@@ -37,10 +37,15 @@ const gameUI = {
     }else if(KIND==='ataxx'){
       s.board.forEach((value,cell)=>{
         if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},
-          scale:selectedFrom===cell?1.12:1,actions:active&&legal.some(move=>move.from===cell)?['tap']:[]});
+          scale:selectedFrom===cell?1.12:1,actions:[]});
+        if(active&&legal.some(move=>move.from===cell))
+          targets.push({id:'select_'+cell,board:'main',position:{cell:String(cell)},
+            color:'#00000000',aria_label:t('cell',{n:cell+1})});
       });
       if(selectedFrom!==null)legal.filter(move=>move.from===selectedFrom).forEach(move=>
-        targets.push({id:keyOf(move),board:'main',position:{cell:String(move.to)},label:t('cell',{n:move.to+1})}));
+        targets.push({id:keyOf(move),board:'main',position:{cell:String(move.to)},label:'•',aria_label:t('cell',{n:move.to+1})}));
+      const counts=[0,1].map(player=>s.board.filter(value=>value===player).length);
+      labels.push({id:'score',text:t('score',{a:counts[0],b:counts[1]}),x:275,y:520,font_size:20});
     }else{
       s.board.forEach((value,cell)=>{
         if(KIND==='memory')pieces.push({id:'card_'+cell,type:value===-1?'back':'card',board:'main',position:{cell:String(cell)},text:value===-1?'':String(value+1),face:value===-1?'back':'front',scale:s.matched.includes(cell)?0.86:1,opacity:s.matched.includes(cell)?0.6:1,actions:legal.some(move=>move.cell===cell)?['tap']:[]});

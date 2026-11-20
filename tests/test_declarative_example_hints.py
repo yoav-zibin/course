@@ -35,8 +35,7 @@ def test_examples_declare_only_real_piece_actions(kind):
             pit=int(piece['id'].split('_')[1])
             assert piece['actions']==(['tap']if {'pit':pit}in message['view']['legal']else [])
         elif kind=='ataxx':
-            cell=int(piece['id'].split('_')[1])
-            assert piece['actions']==(['tap']if any(move['from']==cell for move in message['view']['legal'])else [])
+            assert piece['actions']==[]
         elif kind=='domineering'and piece['id']=='domino':
             assert piece['actions']==['move']
             assert set(piece['move_targets'])=={target['id']for target in scene['targets']}
@@ -44,6 +43,9 @@ def test_examples_declare_only_real_piece_actions(kind):
             assert piece['actions']==['tap']
         else:
             assert piece['actions']==[]
+    if kind=='ataxx':
+        assert {target['id'] for target in scene['targets']} == {
+            f"select_{move['from']}" for move in message['view']['legal']}
 
 
 @pytest.mark.parametrize('kind', KINDS)

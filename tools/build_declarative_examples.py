@@ -6,6 +6,7 @@ Fixture secrets are public examples: replace them before submitting to a live se
 from __future__ import annotations
 
 import base64
+import argparse
 import copy
 import html
 import json
@@ -114,6 +115,8 @@ def specification(kind):
     dimensions={'tictactoe':(3,3),'connect4':(6,7),'reversi':(8,8),'gomoku':(9,9),'connect6':(19,19),'ataxx':(7,7),'hex':(7,7),'domineering':(6,6),'memory':(4,4)}
     rows, cols=dimensions.get(kind,(1,1)); unit=min(480/cols,400/rows)
     board={'id':'main','kind':'grid','x':24,'y':100,'width':cols*unit,'height':rows*unit,'rows':rows,'columns':cols,'color':'#172743','alternate_color':'#1e3352','line_color':'#5c7190'}
+    if kind=='ataxx':
+        board['x']=(600-board['width'])/2
     if kind=='connect6':
         unit=40
         board.update(width=760,height=760,color='#d8b36b',alternate_color='#e4c27f',line_color='#624825')
@@ -206,9 +209,19 @@ def package(kind):
 
 
 def main():
-    for kind in TITLES:
-        payload=package(kind)
-        (DEST/(kind+'.json')).write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n')
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('kinds', nargs='*', choices=list(TITLES))
+    parser.add_argument('--presentation-only', action='store_true',
+                        help='Update only the portable presentation in existing packages')
+    args=parser.parse_args()
+    for kind in args.kinds or TITLES:
+        filename=DEST/(kind+'.json')
+        if args.presentation_only:
+            payload=json.loads(filename.read_text(encoding='utf-8'))
+            payload['declarative_ui']=specification(kind)
+        else:
+            payload=package(kind)
+        filename.write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         print(kind, len(json.dumps(payload).encode()), 'bytes')
 
 
