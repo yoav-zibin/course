@@ -69,7 +69,8 @@ Catan is a three- to four-player game on a 19-hex island: settlements and
 cities sit on vertex anchors, roads on edge anchors, and the hex board carries
 the terrain and number tokens. Players roll dice, collect resources, trade
 with the bank, ports or each other, move the robber and play development
-cards; the first player to 3 victory points wins. Resource and
+cards. First to 10 points wins by default; the first player may set the
+target (3–15) before placing settlements. Resource and
 development-card hands are hidden information — only hand counts are public —
 so the package declares `all_state_public: false`. Select it for publication
 with `--kinds catan`.
