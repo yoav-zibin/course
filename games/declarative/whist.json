@@ -21,26 +21,30 @@
         "y": 0,
         "width": 640,
         "height": 590,
-        "color": "#174d42",
-        "line_color": "#e2c47a"
+        "color": "#316f68",
+        "line_color": "#e9dcb7"
       }
     ],
     "piece_types": {
       "red": {
-        "shape": "card",
+        "shape": "image",
+        "asset": "card_face_soft",
         "width": 74,
         "height": 96,
-        "color": "#fffdf6",
-        "text_color": "#b02e35",
-        "border_color": "#d5c6a9"
+        "text_color": "#b02e35"
       },
       "black": {
-        "shape": "card",
+        "shape": "image",
+        "asset": "card_face_soft",
         "width": 74,
         "height": 96,
-        "color": "#fffdf6",
-        "text_color": "#1c2b31",
-        "border_color": "#d5c6a9"
+        "text_color": "#1c2b31"
+      }
+    },
+    "assets": {
+      "card_face_soft": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCAxMDQiPg0KICA8cmVjdCB4PSIzIiB5PSI0IiB3aWR0aD0iNzQiIGhlaWdodD0iOTYiIHJ4PSIxMiIgZmlsbD0iIzE2M2EzNyIgb3BhY2l0eT0iLjIzIi8+DQogIDxyZWN0IHg9IjEuNSIgeT0iMS41IiB3aWR0aD0iNzQiIGhlaWdodD0iOTYiIHJ4PSIxMiIgZmlsbD0iI2ZmZmFmMCIgc3Ryb2tlPSIjZTVkN2MzIiBzdHJva2Utd2lkdGg9IjIiLz4NCiAgPHJlY3QgeD0iNiIgeT0iNiIgd2lkdGg9IjY1IiBoZWlnaHQ9Ijg3IiByeD0iOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjBlNWQ1IiBzdHJva2Utd2lkdGg9IjEuNSIvPg0KICA8Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIyIiBmaWxsPSIjZWFjZGM2Ii8+DQogIDxjaXJjbGUgY3g9IjY1IiBjeT0iODciIHI9IjIiIGZpbGw9IiNlYWNkYzYiLz4NCjwvc3ZnPg0K"
       }
     },
     "strings": {

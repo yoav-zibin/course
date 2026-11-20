@@ -281,23 +281,23 @@ const COLORS = {
 function board(kind) {
   const free = {kind:'free',x:0,y:0,width:640,height:740,color:'#145b4e',line_color:'#6ee7b7'};
   if (kind === 'mau_mau') return {viewport:{width:640,height:600},boards:[
-    {id:'table',kind:'free',x:0,y:0,width:640,height:600,color:'#174d42',line_color:'#e2c47a'}]};
+    {id:'table',kind:'free',x:0,y:0,width:640,height:600,color:'#316f68',line_color:'#e9dcb7'}]};
   if (kind === 'dos') return {viewport:{width:640,height:720},boards:[
-    {id:'table',kind:'free',x:0,y:0,width:640,height:720,color:'#174d42',line_color:'#e2c47a'}]};
+    {id:'table',kind:'free',x:0,y:0,width:640,height:720,color:'#316f68',line_color:'#e9dcb7'}]};
   if (kind === 'thirty_one') return {viewport:{width:640,height:590},boards:[
-    {id:'table',kind:'free',x:0,y:0,width:640,height:590,color:'#174d42',line_color:'#e2c47a'}]};
+    {id:'table',kind:'free',x:0,y:0,width:640,height:590,color:'#316f68',line_color:'#e9dcb7'}]};
   if (kind === 'table') return {viewport:{width:640,height:720},boards:[{id:'table',...free}]};
   if (kind === 'kisolo') return {viewport:{width:620,height:530},boards:[
-    {id:'main',kind:'grid',x:30,y:110,width:560,height:280,rows:4,columns:7,color:'#d7ad75',alternate_color:'#d7ad75',line_color:'#b98c58'}]};
+    {id:'main',kind:'grid',x:30,y:110,width:560,height:280,rows:4,columns:7,color:'#e6c6a1',alternate_color:'#e6c6a1',line_color:'#c79b79'}]};
   if (kind === 'gobblet') return {viewport:{width:600,height:785},boards:[
-    {id:'main',kind:'grid',x:40,y:100,width:520,height:520,rows:4,columns:4,color:'#ead1a0',alternate_color:'#d5b37d',line_color:'#745033'},
-    {id:'tray',kind:'free',x:40,y:650,width:520,height:110,color:'#80573c',line_color:'#4a3022'}]};
+    {id:'main',kind:'grid',x:40,y:100,width:520,height:520,rows:4,columns:4,color:'#f3dfc5',alternate_color:'#e8c9ae',line_color:'#b68b73'},
+    {id:'tray',kind:'free',x:40,y:650,width:520,height:110,color:'#936d60',line_color:'#725246'}]};
   if (kind === 'chutes_ladders') return {viewport:{width:620,height:720},boards:[
-    {id:'main',kind:'grid',x:30,y:112,width:560,height:560,rows:10,columns:10,color:'#fff3d4',alternate_color:'#e9e9d1',line_color:'#b6b99f'}]};
+    {id:'main',kind:'grid',x:30,y:112,width:560,height:560,rows:10,columns:10,color:'#fff1df',alternate_color:'#dceee4',line_color:'#adc7b7'}]};
   if (kind === 'dots_boxes') return {viewport:{width:620,height:710},boards:[{id:'main',...free}]};
   if (kind === 'mastermind') return {viewport:{width:620,height:780},boards:[{id:'main',...free}]};
   if (kind === 'six_mens_morris') return {viewport:{width:620,height:680},boards:[
-    {id:'main',kind:'free',x:0,y:0,width:620,height:680,color:'#eed5a6',line_color:'#60452e'}]};
+    {id:'main',kind:'free',x:0,y:0,width:620,height:680,color:'#f4dfc4',line_color:'#60452e'}]};
   return {viewport:{width:640,height:720},boards:[{id:'table',...free}]};
 }
 
@@ -308,9 +308,11 @@ function typesFor(kind) {
   };
   if (kind === 'thirty_one' || kind === 'mau_mau') {
     const [width,height] = kind === 'thirty_one' ? [92,126] : [70,96];
-    types.red_card = {shape:'card',width,height,color:'#fffdf6',text_color:'#b02e35',border_color:'#d5c6a9'};
-    types.black_card = {shape:'card',width,height,color:'#fffdf6',text_color:'#1c2b31',border_color:'#d5c6a9'};
-    types.deck = {shape:'card',width,height,color:'#982f39',text_color:'#f5d894',border_color:'#f5d894'};
+    types.red_card = {shape:'image',asset:'card_face_soft',width,height,text_color:'#b02e35'};
+    types.black_card = {shape:'image',asset:'card_face_soft',width,height,text_color:'#1c2b31'};
+    types.deck = {shape:'image',asset:'card_back_soft',width,height,text_color:'#fff1d9'};
+    if (kind === 'thirty_one') types.knock_button = {shape:'card',width:150,height:52,
+      color:'#f8d994',text_color:'#533b35',border_color:'#fff1c8',font_size:22};
     if (kind === 'mau_mau') {
       types.suit_red = {shape:'circle',width:56,height:56,color:'#fffdf6',text_color:'#b02e35',border_color:'#d5c6a9'};
       types.suit_black = {shape:'circle',width:56,height:56,color:'#fffdf6',text_color:'#1c2b31',border_color:'#d5c6a9'};
@@ -324,9 +326,8 @@ function typesFor(kind) {
   }
   if (kind === 'kisolo') types.pit = {shape:'circle',width:66,height:54,color:'#70452b',text_color:'#fff3d4',border_color:'#4d2e1d'};
   if (kind === 'gobblet') for (let size=1;size<=4;size++) for (let owner=0;owner<2;owner++)
-    types[`goblet_${size}_${owner}`] = {shape:'circle',width:28 + size * 9,height:28 + size * 9,
-      color:owner===0?'#d7e6f4':'#374151',text_color:owner===0?'#172033':'#ffffff',
-      border_color:owner===0?'#34465e':'#cbd5e1'};
+    types[`goblet_${size}_${owner}`] = {shape:'image',asset:`goblet_${owner}`,
+      width:38 + size * 13,height:38 + size * 13};
   if (kind === 'chutes_ladders') {
     for (let i=0;i<4;i++) types[`token_${i}`] = {shape:'circle',width:20,height:20,
       color:['#dc2626','#2563eb','#16a34a','#9333ea'][i],text_color:'#ffffff'};
@@ -345,6 +346,32 @@ function typesFor(kind) {
     types.stone_1 = {shape:'circle',width:48,height:48,color:'#263b4a',text_color:'#ffffff',border_color:'#10232f'};
   }
   return types;
+}
+
+function softCardAssets() {
+  return Object.fromEntries(['card_face_soft','card_back_soft'].map(key => [key, {
+    media_type:'image/svg+xml',
+    uri:`data:image/svg+xml;base64,${fs.readFileSync(path.join(OUT,`${key}.svg`)).toString('base64')}`
+  }]));
+}
+
+function gobbletAssets() {
+  return Object.fromEntries([
+    ['goblet_0', ['#caeee4','#66b0a5','#33786f']],
+    ['goblet_1', ['#ffd4d7','#dc8594','#a94e65']]
+  ].map(([key,[light,mid,dark]]) => {
+    const body = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+      <ellipse cx="64" cy="113" rx="43" ry="9" fill="#573e3a" opacity=".22"/>
+      <path d="M25 35 C25 25 103 25 103 35 L95 98 Q92 113 64 114 Q36 113 33 98 Z"
+        fill="${mid}" stroke="${dark}" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M36 49 Q39 90 43 99 Q48 106 54 107" fill="none" stroke="${light}" stroke-width="8" stroke-linecap="round" opacity=".7"/>
+      <ellipse cx="64" cy="35" rx="39" ry="17" fill="${light}" stroke="${dark}" stroke-width="4"/>
+      <ellipse cx="64" cy="34" rx="29" ry="10" fill="${dark}" opacity=".72"/>
+      <ellipse cx="55" cy="29" rx="15" ry="3" fill="#ffffff" opacity=".5"/>
+    </svg>`;
+    return [key,{media_type:'image/svg+xml',width:128,height:128,
+      uri:`data:image/svg+xml;base64,${Buffer.from(body).toString('base64')}`}];
+  }));
 }
 
 function dosAssets() {
@@ -537,7 +564,9 @@ function build(entry) {
   const layout=board(['thirty_one','mau_mau','dos'].includes(entry.kind) ? entry.kind : entry.board);
   const spec={format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
     piece_types:typesFor(entry.kind),strings,
-    ...(entry.kind === 'dos' ? {assets:dosAssets()} : {}),
+    ...(entry.kind === 'dos' ? {assets:dosAssets()} :
+      entry.kind === 'gobblet' ? {assets:gobbletAssets()} :
+        ['thirty_one','mau_mau'].includes(entry.kind) ? {assets:softCardAssets()} : {}),
     ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n`+UI};
   const tutorial=custom ? {text:rules,html:`<meta name="viewport" content="width=device-width,initial-scale=1"><main><h1>How to play</h1><p>${rules}</p><p>${ui}</p></main>`} : source.tutorial;
   if(custom) {

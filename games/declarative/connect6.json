@@ -25,9 +25,9 @@
         "height": 760,
         "rows": 19,
         "columns": 19,
-        "color": "#d8b36b",
-        "alternate_color": "#d8b36b",
-        "line_color": "#d8b36b"
+        "color": "#ecd3a9",
+        "alternate_color": "#ecd3a9",
+        "line_color": "#ecd3a9"
       }
     ],
     "piece_types": {
@@ -91,7 +91,7 @@
         "media_type": "image/svg+xml"
       },
       "connect6_cell": {
-        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0MCI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZDhiMzZiIi8+PHBhdGggZD0iTTAgMjBINDAgTTIwIDBWNDAiIHN0cm9rZT0iIzYyNDgyNSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz48L3N2Zz4=",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0MCI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZWNkM2E5Ii8+PHBhdGggZD0iTTAgMjBINDAgTTIwIDBWNDAiIHN0cm9rZT0iIzYyNDgyNSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz48L3N2Zz4=",
         "media_type": "image/svg+xml"
       }
     },

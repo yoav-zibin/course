@@ -237,7 +237,10 @@ def test_thirty_one_direct_pile_and_card_actions_and_revealed_hands():
          'players':[{'name':'A'}, {'name':'B'}], 'acting_for_player_index':0,
          'my_player_index':0, 'move_count':0}
     initial = ui.reduce(m)
-    assert {control['label'] for control in initial['scene']['controls']} == {'Knock'}
+    assert not initial['scene']['controls']
+    assert any(piece['id'] == 'knock_button' and piece['text'] == 'Knock'
+               for piece in initial['scene']['pieces'])
+    assert scene_event(ui, m, initial, {'action':'knock'})['make_move'] == {'action':'knock'}
     for source in ('stock', 'discard'):
         assert scene_event(ui, m, initial, {'action':'draw', 'source':source})['make_move'] == {
             'action':'draw', 'source':source}
@@ -253,7 +256,8 @@ def test_thirty_one_direct_pile_and_card_actions_and_revealed_hands():
 
     final_turn = {**m, 'view':{**view, 'phase':'final_draw'}}
     frame = ui.reduce(final_turn)
-    assert [control['label'] for control in frame['scene']['controls']] == ['Stand']
+    assert any(piece['id'] == 'knock_button' and piece['text'] == 'Stand'
+               for piece in frame['scene']['pieces'])
     assert scene_event(ui, final_turn, frame, {'action':'stand'})['make_move'] == {'action':'stand'}
 
     final = {**m, 'status':'over', 'acting_for_player_index':None, 'my_player_index':None,
@@ -278,6 +282,10 @@ def test_gobblet_reserves_and_covered_own_pieces_are_reachable():
          'my_player_index':0, 'move_count':2}
     initial = ui.reduce(m)
     assert not initial['scene']['controls']
+    assert all('text' not in piece for piece in initial['scene']['pieces']
+               if piece['id'].startswith(('reserve_art_', 'stack_')))
+    assert all(body.declarative_ui['piece_types'][f'goblet_{size}_{owner}']['shape'] == 'image'
+               for size in range(1, 5) for owner in range(2))
     assert {t['id'] for t in initial['scene']['targets'] if t['id'].startswith('reserve_')} == {
         'reserve_1','reserve_2','reserve_3','reserve_4'}
     selected = ui.reduce({'type':'ui_event', 'event':{'type':'tap', 'id':'reserve_4'},

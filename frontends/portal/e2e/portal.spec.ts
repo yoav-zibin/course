@@ -130,15 +130,21 @@ test('browser Back from a local match restores its game detail screen and play c
 
 test('full localized instructions remain available between public turns, at game end and read-only replay',async({page,request})=>{
   const created=await game(request,uniqueName('Instruction game'));await page.goto(`/portal#game=${created.id}`);
-  await page.getByRole('button',{name:'Log in',exact:true}).click();await page.getByRole('button').filter({hasText:'العربية'}).last().click();
+  await page.getByTestId('header-account').click();await page.getByRole('button').filter({hasText:'العربية'}).last().click();
   await expect(page.locator('html')).toHaveAttribute('lang','ar');await page.getByRole('button',{name:sharedCopy['Close dialog'].ar,exact:true}).click();
   await expect(page.getByTestId('game-instructions')).toContainText(created.translations.ar.game_logic_rules);
   await expect(page.getByTestId('game-instructions')).toContainText(created.translations.ar.game_ui_rules);
-  await page.getByRole('button',{name:sharedCopy['Log in'].ar,exact:true}).click();await page.getByRole('button').filter({hasText:'English'}).last().click();
+  await page.getByTestId('header-account').click();await page.getByRole('button').filter({hasText:'English'}).last().click();
   await expect(page.locator('html')).toHaveAttribute('lang','en');await page.getByRole('button',{name:'Close dialog',exact:true}).click();
   await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
   await expect(page.getByTestId('game-instructions')).not.toContainText(created.translations.ar.game_logic_rules);
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  await expect(page.getByTestId('game-stage')).toBeVisible();
+  const helpButton=page.getByRole('button',{name:'How to play',exact:true});
+  const helpBounds=await helpButton.boundingBox(),boardBounds=await page.getByTestId('game-stage').boundingBox();
+  expect(helpBounds).not.toBeNull();expect(boardBounds).not.toBeNull();
+  expect(Math.abs(helpBounds!.x+helpBounds!.width-(boardBounds!.x+boardBounds!.width))).toBeLessThan(4);
+  expect(helpBounds!.y+helpBounds!.height).toBeLessThanOrEqual(boardBounds!.y);
   for(const [index,cell] of [1,4,2,5,3].entries()){
     if(index){
       await expect(page.getByTestId('game-stage')).toBeVisible();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);

@@ -27,8 +27,8 @@ const gameUI = {
       if (!active) return null;
       const id = `intent_${offers.length}`;
       offers.push(move);
-      if (mode === 'hit' || mode === 'mau_hit' || mode === 'dos_hit' || mode === 'suit_hit') {
-        const dimensions = mode === 'hit' ? [92,126] : mode === 'dos_hit' ? [76,96] : mode === 'mau_hit' ? [70,96] : [60,60];
+      if (mode === 'hit' || mode === 'mau_hit' || mode === 'dos_hit' || mode === 'suit_hit' || mode === 'knock_hit') {
+        const dimensions = mode === 'hit' ? [92,126] : mode === 'dos_hit' ? [76,96] : mode === 'mau_hit' ? [70,96] : mode === 'knock_hit' ? [150,52] : [60,60];
         scene.targets.push({id, board, position, color:'#00000000',
           hit_area:{x:-dimensions[0]/2,y:-dimensions[1]/2,width:dimensions[0],height:dimensions[1]},
           ...(aria_label ? {aria_label} : {})});
@@ -58,7 +58,7 @@ const gameUI = {
     };
     const boardCell = (i, columns) => ({cell:String(i)});
     if (KIND !== 'six_mens_morris' && KIND !== 'thirty_one' && KIND !== 'kisolo' && KIND !== 'mau_mau' && KIND !== 'dos')
-      label('title', title, 22, 16, 25);
+      label('title', title, KIND === 'gobblet' ? Math.max(22, 300 - title.length * 6.4) : 22, 16, 25);
     if (Number.isInteger(s.to_move) || Number.isInteger(s.toMove) ||
         Number.isInteger(s.turn) || Number.isInteger(s.turnSeat) ||
         (KIND === 'six_mens_morris' && Number.isInteger(m.turn_of_player_indices?.[0]))) {
@@ -69,7 +69,7 @@ const gameUI = {
       label('status', m.status === 'over' ? text('Game over') :
         (active ? text('Your turn · {name}', {name:playerName(turn)}) :
           text('{name} to play', {name:playerName(turn)})),
-        KIND === 'thirty_one' || KIND === 'kisolo' || KIND === 'mau_mau' || KIND === 'dos' ? 220 : 22,
+        KIND === 'thirty_one' || KIND === 'kisolo' || KIND === 'mau_mau' || KIND === 'dos' ? 220 : KIND === 'gobblet' ? 190 : 22,
         KIND === 'six_mens_morris' ? 22 : KIND === 'thirty_one' || KIND === 'mau_mau' || KIND === 'dos' ? 55 : 52, 16);
     }
 
@@ -362,8 +362,10 @@ const gameUI = {
         if (s.discard_top)
           offer({action:'draw',source:'discard'}, '', 'table', {x:395,y:230}, 'hit',
             text('Take {card}', {card:cardText(s.discard_top)}));
-        if (s.phase === 'draw') offer({action:'knock'}, text('Knock'));
-        else offer({action:'stand'}, text('Stand'));
+        const action = s.phase === 'draw' ? 'knock' : 'stand';
+        const caption = text(action === 'knock' ? 'Knock' : 'Stand');
+        staticPiece('knock_button', 'knock_button', 'table', {x:320,y:350}, {text:caption});
+        offer({action}, '', 'table', {x:320,y:350}, 'knock_hit', caption);
       }
       const hands = s.phase === 'over' && Array.isArray(s.hands) ? s.hands : [hand];
       hands.forEach((cards, row) => {
@@ -392,7 +394,7 @@ const gameUI = {
       board.forEach((stack, cell) => {
         (stack || []).forEach((goblet, level) => staticPiece(`stack_${cell}_${level}`,
           `goblet_${goblet[0]}_${goblet[1]}`, 'main', boardCell(cell,4),
-          {text:String(goblet[0]),z:level}));
+          {z:level}));
       });
       if (Number.isInteger(m.my_player_index)) {
         for (let size = 1; size <= 4; size++) {
@@ -400,7 +402,8 @@ const gameUI = {
           if (!count) continue;
           const position = {x:65 + (size - 1) * 130,y:55};
           staticPiece(`reserve_art_${size}`, `goblet_${size}_${seat}`, 'tray', position,
-            {text:String(count),scale:selectedSize === size ? 1.1 : 1});
+            {scale:selectedSize === size ? 1.1 : 1});
+          label(`reserve_count_${size}`, `×${count}`, 130 + (size - 1) * 130, 657, 15);
           if (active && moves.some(move => move.place?.size === size))
             scene.targets.push({id:`reserve_${size}`,board:'tray',position,color:'#00000000',
               hit_area:{x:-45,y:-45,width:90,height:90},

@@ -117,9 +117,10 @@ def specification(kind):
     board={'id':'main','kind':'grid','x':24,'y':100,'width':cols*unit,'height':rows*unit,'rows':rows,'columns':cols,'color':'#172743','alternate_color':'#1e3352','line_color':'#5c7190'}
     if kind=='ataxx':
         board['x']=(600-board['width'])/2
+        board.update(color='#668f88',alternate_color='#7ca69c',line_color='#b7d1c3')
     if kind=='connect6':
         unit=40
-        board.update(width=760,height=760,color='#d8b36b',alternate_color='#d8b36b',line_color='#d8b36b')
+        board.update(width=760,height=760,color='#ecd3a9',alternate_color='#ecd3a9',line_color='#ecd3a9')
     if kind in ('nim','pig'):board.update(kind='free',width=480,height=360);board.pop('rows');board.pop('columns')
     if kind=='hex':
         board.update(kind='hex',width=520,height=380,cells=[{'id':str(r*7+c),'x':28+c*54+r*22,'y':28+r*48}for r in range(7)for c in range(7)])
@@ -145,7 +146,7 @@ def specification(kind):
           'piece_types':types,'assets':{'card_back':{'uri':'data:image/svg+xml;base64,'+base64.b64encode(svg.encode()).decode(),'media_type':'image/svg+xml'}},
           'strings':strings(kind),'ui_code':f'const KIND={json.dumps(kind)};\nconst SOURCE_STRINGS={json.dumps(strings(kind),ensure_ascii=False)};\n'+(DEST/'presentation.js').read_text()}
     if kind=='connect6':
-        tile='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#d8b36b"/><path d="M0 20H40 M20 0V40" stroke="#624825" stroke-width="1.5"/></svg>'
+        tile='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#ecd3a9"/><path d="M0 20H40 M20 0V40" stroke="#624825" stroke-width="1.5"/></svg>'
         spec['assets']['connect6_cell']={'uri':'data:image/svg+xml;base64,'+base64.b64encode(tile.encode()).decode(),'media_type':'image/svg+xml'}
     if kind=='domineering':spec['boards'].append({'id':'tray','kind':'zone','x':470,'y':400,'width':120,'height':140,'color':'#172743'})
     return spec
