@@ -1,0 +1,1417 @@
+{
+  "name": "Sergeant Major",
+  "description": "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.",
+  "allowed_player_counts": [
+    3
+  ],
+  "all_state_public": false,
+  "allows_leave_mid_match": false,
+  "allows_join_mid_match": false,
+  "server_code": "const bridge = \"sergeant-major\" === \"call-bridge\";\nconst rank = card => card % 13;\nconst suit = card => Math.floor(card / 13);\nconst seatCount = bridge ? 4 : 3;\nconst handSize = bridge ? 13 : 16;\nfunction legal(s) {\n  const hand = s.hands[s.seat];\n  if (!s.trick.length) return hand;\n  const follow = hand.filter(c=>suit(c)===suit(s.trick[0].card));\n  if(follow.length)return follow;\n  if(!bridge)return hand;\n  const spades=hand.filter(c=>suit(c)===3);\n  const high=Math.max(-1,...s.trick.filter(x=>suit(x.card)===3).map(x=>rank(x.card)));\n  const beating=spades.filter(c=>rank(c)>high);\n  return beating.length?beating:hand;\n}\nconst game={\n newMatch(ctx){\n  let seed=2166136261;\n  for(const p of ctx.players)for(const c of p.id)seed=Math.imul(seed^c.charCodeAt(0),16777619);\n  const deck=Array.from({length:52},(_,i)=>i);\n  for(let i=51;i>0;i--){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const j=seed%(i+1);[deck[i],deck[j]]=[deck[j],deck[i]];}\n  const hands=ctx.players.map((_,i)=>deck.slice(i*handSize,(i+1)*handSize));\n  return {state:{hands,kitty:deck.slice(seatCount*handSize),seat:0,trump:bridge?3:-1,bids:bridge?[-1,-1,-1,-1]:[8,5,3],scores:ctx.players.map(()=>0),trick:[],winners:[]},turn:[ctx.players[0].id]};\n },\n applyMove(s,id,m,ctx){\n  const invalid=()=>{throw new InvalidMove(\"Choose a legal move on your turn.\");};\n  if(!m||Object.keys(m).length!==1||s.winners.length||id!==ctx.players[s.seat].id)invalid();\n  const next={...s,seat:(s.seat+1)%seatCount};\n  if(bridge&&s.bids[s.seat]<0){\n   if(!Number.isInteger(m.bid)||m.bid<2||m.bid>8)invalid();\n   next.bids=[...s.bids];next.bids[s.seat]=m.bid;\n   return {state:next,turn:[ctx.players[next.seat].id]};\n  }\n  if(!bridge&&s.trump<0){\n   if(!Number.isInteger(m.trump)||m.trump<0||m.trump>3)invalid();\n   next.trump=m.trump;\n   next.hands=s.hands.map((hand,i)=>i===0?[...hand,...s.kitty]:hand);\n   next.seat=0;\n   return {state:next,turn:[id]};\n  }\n  if(!bridge&&s.hands[0].length>handSize){\n   if(!s.hands[0].includes(m.discard))invalid();\n   next.hands=s.hands.map((hand,i)=>i===0?hand.filter(c=>c!==m.discard):hand);\n   next.seat=next.hands[0].length===handSize?1:0;\n   return {state:next,turn:[ctx.players[next.seat].id]};\n  }\n  if(!legal(s).includes(m.card))invalid();\n  next.hands=s.hands.map((hand,i)=>i===s.seat?hand.filter(c=>c!==m.card):hand);\n  next.trick=[...s.trick,{seat:s.seat,card:m.card}];\n  if(next.trick.length===seatCount){\n   const lead=suit(next.trick[0].card);\n   const strength=c=>rank(c)+(suit(c)===s.trump?26:suit(c)===lead?13:0);\n   next.seat=next.trick.reduce((a,b)=>strength(b.card)>strength(a.card)?b:a).seat;\n   next.trick=[];\n   next.scores=[...s.scores];next.scores[next.seat]++;\n   if(next.hands.every(h=>!h.length)){\n    const totals=next.scores.map((tricks,i)=>bridge?\n      (tricks>=s.bids[i]?10*s.bids[i]+tricks-s.bids[i]:-10*s.bids[i]):tricks-s.bids[i]);\n    next.winners=totals.flatMap((score,i)=>score===Math.max(...totals)?[i]:[]);\n   }\n  }\n  if(!next.winners.length)return {state:next,turn:[ctx.players[next.seat].id]};\n  const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false);\n  const eligible=humans.filter(p=>next.winners.includes(ctx.players.indexOf(p)));\n  const paid=eligible.length?eligible:humans;\n  return {state:next,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,Math.floor(ctx.pot/paid.length)+(i<ctx.pot%paid.length?1:0)]))};\n },\n viewFor(s,id,ctx){\n  const {hands,kitty,...visible}=s;\n  const i=ctx.players.findIndex(p=>p.id===id);\n  return {...visible,hand:hands[i]??[],legal:i===s.seat&&!s.winners.length?legal(s):[],discarding:!bridge&&hands[0].length>handSize};\n },\n computerMove(s){\n  if(bridge&&s.bids[s.seat]<0)return {bid:Math.max(2,Math.min(8,s.hands[s.seat].filter(c=>rank(c)>=10).length))};\n  if(!bridge&&s.trump<0)return {trump:suit(s.hands[0][0])};\n  if(!bridge&&s.hands[0].length>handSize)return {discard:s.hands[0][0]};\n  return {card:legal(s)[0]};\n },\n randomMove(s,id,ctx){\n  if((bridge&&s.bids[s.seat]<0)||(!bridge&&(s.trump<0||s.hands[0].length>handSize)))return this.computerMove(s);\n  const cards=legal(s);return {card:cards[Math.floor(ctx.random()*cards.length)]};\n }\n};\n",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 548,
+      "height": 374,
+      "camera_enabled": false
+    },
+    "boards": [
+      {
+        "id": "hand",
+        "kind": "free",
+        "x": 18,
+        "y": 110,
+        "width": 512,
+        "height": 246,
+        "color": "#143339",
+        "line_color": "#557877"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 60,
+        "height": 72,
+        "color": "#fff7df",
+        "text_color": "#172743"
+      }
+    },
+    "assets": {},
+    "strings": {
+      "title": "Sergeant Major",
+      "cards": "Cards: {cards}",
+      "pile": "Pile: {cards}",
+      "turn": "Player {name}'s turn",
+      "winners": "{names} wins",
+      "server_illegal": "Choose a legal move on your turn."
+    },
+    "ui_code": "const KIND = \"sergeant_major\";\nconst SOURCE_STRINGS = {\"title\": \"Sergeant Major\", \"cards\": \"Cards: {cards}\", \"pile\": \"Pile: {cards}\", \"turn\": \"Player {name}'s turn\", \"winners\": \"{names} wins\", \"server_illegal\": \"Choose a legal move on your turn.\"};\nconst gameUI = {\n  reduce(message, previous) {\n    const match = message.type === \"ui_event\" ? message.state_changed : message;\n    const v = match.view || match.state;\n    const over = match.status === \"over\";\n    const actor = match.acting_for_player_index;\n    const active = !over && !match.replay && Number.isInteger(actor) &&\n      match.turn_of_player_indices?.includes(actor);\n    const click = message.event?.type === \"tap\" ? message.event.id : null;\n    const strings = { ...SOURCE_STRINGS, ...match.strings };\n    const t = (key, values = {}) => (strings[key] || key)\n      .replace(/\\{(\\w+)\\}/g, (_, name) => String(values[name] ?? \"\"));\n    const who = seat => match.players?.[seat]?.name || String(seat + 1);\n    const suits = [\"♣\", \"♦\", \"♥\", \"♠\"];\n    const faces = [\"25\",\"50\",\"75\",\"100\",\"200\",\"⛽\",\"🛞\",\"💥\",\"🛑\",\"🚧\",\"🛢\",\"🔧\",\"🚑\",\"🟢\",\"🏁\",\"🛡⛽\",\"🛡🛞\",\"🛡💥\",\"🛡🚦\"];\n    const face = c => KIND === \"mille_bornes\" ? faces[c] :\n      c >= 104 ? \"🃏\" : [\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\",\"10\",\"J\",\"Q\",\"K\",\"A\"][c % 13] +\n      suits[Math.floor((c % 52) / 13)];\n    const scene = { labels: [], pieces: [], controls: [] };\n    const moves = new Map();\n    const label = (id,text,y,size = 19) => scene.labels.push({id,text,x:20,y,font_size:size});\n    const button = (id,text,move) => {\n      if (!active) return;\n      scene.controls.push({id,kind:\"button\",label:String(text)});\n      moves.set(id,move);\n    };\n    const winners = v.winners || [];\n    label(\"status\", over ? winners.length ? t(\"winners\",{names:winners.map(who).join(\", \")}) :\n      (strings.tie || \"Game over\") : t(\"turn\",{name:who(v.seat)}), 15, 24);\n    const scores = v.totals || v.miles || v.scores || v.counts;\n    if (scores) label(\"scores\",t(\"cards\",{cards:scores.join(\" · \")}),50);\n    const table = v.table || v.trick?.map(play => play.card) || [];\n    const publicCards = KIND === \"catch_the_ten\" ? [v.up,...table] :\n      KIND === \"conquian\" && v.top >= 0 ? [v.top] : table;\n    const trump = v.trump >= 0 ? suits[v.trump] + \"  \" : \"\";\n    label(\"table\",t(\"pile\",{cards:trump + publicCards.map(face).join(\" \")}),78);\n    let picked = previous?.moveCount === match.move_count && previous?.actor === actor\n      ? previous.picked || [] : [];\n    const hand = v.hand || [];\n    if (KIND === \"big_two\" && active && /^hand_\\d+$/.test(click || \"\")) {\n      const card = Number(click.slice(5));\n      if (hand.includes(card)) {\n        if (picked.includes(card)) picked = picked.filter(value => value !== card);\n        else if (picked.length < 5) picked = [...picked,card];\n      }\n    }\n    const direct = v.discarding ? hand : v.legal || [];\n    hand.forEach((card, i) => {\n      const directMove = active && direct.includes(card);\n      const id = KIND === \"big_two\" ? \"hand_\" + card : \"hand_\" + i;\n      scene.pieces.push({\n        id,type:\"card\",board:\"hand\",text:face(card),\n        position:{x:32+(i%8)*64,y:39+Math.floor(i/8)*80},\n        actions:active && (KIND === \"big_two\" || directMove) ? [\"tap\"] : [],\n        selected:picked.includes(card)\n      });\n      if (directMove) moves.set(id,v.discarding ? {discard:card} : {card});\n    });\n    if (KIND === \"big_two\") {\n      if (picked.length) button(\"play\",t(\"playSelected\"),{cards:picked});\n      if (table.length) button(\"pass\",t(\"pass\"),{pass:true});\n    }\n    if (KIND === \"pedro\" && v.phase === 0) {\n      for (let bid = Math.max(7,v.bid+1); bid <= 14; bid++) button(\"bid_\"+bid,t(\"bid\",{number:bid}),{bid});\n      if (v.bid || v.bids < 3) button(\"pass\",t(\"pass\"),{pass:true});\n    }\n    if ((v.trump < 0 && [\"court_piece\",\"sergeant_major\"].includes(KIND)) ||\n        (KIND === \"pedro\" && v.phase === 1)) {\n      suits.forEach((symbol,trump) => button(\"trump_\"+trump,symbol,{trump}));\n    }\n    if (KIND === \"sergeant_major\" && v.bids[v.seat] < 0) {\n      for (let bid=2; bid<=8; bid++) button(\"bid_\"+bid,bid,{bid});\n    }\n    (v.choices || []).forEach((move,index) => {\n      let caption;\n      if (KIND === \"conquian\") {\n        caption = move.pass ? t(\"pass\") : move.draw !== undefined ? t(move.draw ? \"take\" : \"stock\") :\n          move.cards ? t(\"meld\",{cards:move.cards.map(face).join(\" \")}) :\n          move.discard !== undefined ? t(\"discard\",{card:face(move.discard)}) :\n          move.close !== undefined ? t(\"close\",{card:face(move.close)}) :\n          t(\"append\",{card:face(move.append ? move.append[1] : v.top),number:(move.append ? move.append[0] : move.extend)+1});\n      } else {\n        caption = move.draw ? t(\"stock\") :\n          move.attack ? face(hand[move.attack[0]])+\" → \"+who(move.attack[1]) :\n          move.discard !== undefined ? t(\"discard\",{card:face(hand[move.discard])}) : face(hand[move.play]);\n      }\n      button(\"choice_\"+index,caption,move);\n    });\n    const result = {scene,local_state:{moveCount:match.move_count,actor,picked}};\n    if (moves.has(click)) result.make_move = moves.get(click);\n    return result;\n  }\n};\n"
+  },
+  "rules": "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.",
+  "ui_instructions": "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.",
+  "tutorial": {
+    "html": "<meta name=\"viewport\" content=\"width=device-width\"><p>The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.</p>",
+    "text": "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins."
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/></svg>"
+    },
+    {
+      "caption": "Opening",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Turn",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Result",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "cases": [
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Carol",
+              "id": "u3",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_state": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "hands": [
+            [
+              0,
+              10,
+              2,
+              48,
+              28,
+              44,
+              25,
+              8,
+              45,
+              36,
+              4,
+              20,
+              16,
+              49,
+              42,
+              37,
+              14,
+              21,
+              1,
+              51
+            ],
+            [
+              6,
+              47,
+              26,
+              22,
+              32,
+              24,
+              30,
+              31,
+              29,
+              3,
+              40,
+              15,
+              38,
+              41,
+              11,
+              35
+            ],
+            [
+              43,
+              50,
+              18,
+              39,
+              34,
+              17,
+              9,
+              23,
+              13,
+              46,
+              12,
+              27,
+              5,
+              19,
+              33,
+              7
+            ]
+          ],
+          "kitty": [
+            14,
+            21,
+            1,
+            51
+          ],
+          "scores": [
+            0,
+            0,
+            0
+          ],
+          "seat": 0,
+          "trick": [],
+          "trump": 0,
+          "winners": []
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": true,
+          "hand": [
+            0,
+            10,
+            2,
+            48,
+            28,
+            44,
+            25,
+            8,
+            45,
+            36,
+            4,
+            20,
+            16,
+            49,
+            42,
+            37,
+            14,
+            21,
+            1,
+            51
+          ],
+          "legal": [
+            0,
+            10,
+            2,
+            48,
+            28,
+            44,
+            25,
+            8,
+            45,
+            36,
+            4,
+            20,
+            16,
+            49,
+            42,
+            37,
+            14,
+            21,
+            1,
+            51
+          ],
+          "scores": [
+            0,
+            0,
+            0
+          ],
+          "seat": 0,
+          "trick": [],
+          "trump": 0,
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": true,
+          "hand": [
+            6,
+            47,
+            26,
+            22,
+            32,
+            24,
+            30,
+            31,
+            29,
+            3,
+            40,
+            15,
+            38,
+            41,
+            11,
+            35
+          ],
+          "legal": [],
+          "scores": [
+            0,
+            0,
+            0
+          ],
+          "seat": 0,
+          "trick": [],
+          "trump": 0,
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "initial",
+        "move": {
+          "trump": 0
+        },
+        "name": "initial move",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "hands": [
+            [
+              0,
+              10,
+              2,
+              48,
+              28,
+              44,
+              25,
+              8,
+              45,
+              36,
+              4,
+              20,
+              16,
+              49,
+              42,
+              37
+            ],
+            [
+              6,
+              47,
+              26,
+              22,
+              32,
+              24,
+              30,
+              31,
+              29,
+              3,
+              40,
+              15,
+              38,
+              41,
+              11,
+              35
+            ],
+            [
+              43,
+              50,
+              18,
+              39,
+              34,
+              17,
+              9,
+              23,
+              13,
+              46,
+              12,
+              27,
+              5,
+              19,
+              33,
+              7
+            ]
+          ],
+          "kitty": [
+            14,
+            21,
+            1,
+            51
+          ],
+          "scores": [
+            0,
+            0,
+            0
+          ],
+          "seat": 0,
+          "trick": [],
+          "trump": -1,
+          "winners": []
+        },
+        "view_of_mover": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [
+            0,
+            10,
+            2,
+            48,
+            28,
+            44,
+            25,
+            8,
+            45,
+            36,
+            4,
+            20,
+            16,
+            49,
+            42,
+            37
+          ],
+          "legal": [
+            0,
+            10,
+            2,
+            48,
+            28,
+            44,
+            25,
+            8,
+            45,
+            36,
+            4,
+            20,
+            16,
+            49,
+            42,
+            37
+          ],
+          "scores": [
+            0,
+            0,
+            0
+          ],
+          "seat": 0,
+          "trick": [],
+          "trump": -1,
+          "winners": []
+        },
+        "view_of_other": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [
+            6,
+            47,
+            26,
+            22,
+            32,
+            24,
+            30,
+            31,
+            29,
+            3,
+            40,
+            15,
+            38,
+            41,
+            11,
+            35
+          ],
+          "legal": [],
+          "scores": [
+            0,
+            0,
+            0
+          ],
+          "seat": 0,
+          "trick": [],
+          "trump": -1,
+          "winners": []
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 26,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Carol",
+              "id": "u3",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_state": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "hands": [
+            [
+              20,
+              16,
+              49,
+              42,
+              37,
+              14,
+              21,
+              1,
+              51
+            ],
+            [
+              24,
+              30,
+              31,
+              29,
+              15,
+              38,
+              41,
+              11,
+              35
+            ],
+            [
+              17,
+              23,
+              13,
+              46,
+              5,
+              19,
+              33,
+              7
+            ]
+          ],
+          "kitty": [
+            14,
+            21,
+            1,
+            51
+          ],
+          "scores": [
+            2,
+            1,
+            4
+          ],
+          "seat": 0,
+          "trick": [
+            {
+              "card": 39,
+              "seat": 2
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [
+            17,
+            23,
+            13,
+            46,
+            5,
+            19,
+            33,
+            7
+          ],
+          "legal": [],
+          "scores": [
+            2,
+            1,
+            4
+          ],
+          "seat": 0,
+          "trick": [
+            {
+              "card": 39,
+              "seat": 2
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [
+            20,
+            16,
+            49,
+            42,
+            37,
+            14,
+            21,
+            1,
+            51
+          ],
+          "legal": [
+            49,
+            42,
+            51
+          ],
+          "scores": [
+            2,
+            1,
+            4
+          ],
+          "seat": 0,
+          "trick": [
+            {
+              "card": 39,
+              "seat": 2
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "intermediate",
+        "move": {
+          "card": 39
+        },
+        "name": "intermediate move",
+        "other_player_id": "u1",
+        "player_id": "u3",
+        "state": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "hands": [
+            [
+              20,
+              16,
+              49,
+              42,
+              37,
+              14,
+              21,
+              1,
+              51
+            ],
+            [
+              24,
+              30,
+              31,
+              29,
+              15,
+              38,
+              41,
+              11,
+              35
+            ],
+            [
+              39,
+              17,
+              23,
+              13,
+              46,
+              5,
+              19,
+              33,
+              7
+            ]
+          ],
+          "kitty": [
+            14,
+            21,
+            1,
+            51
+          ],
+          "scores": [
+            2,
+            1,
+            4
+          ],
+          "seat": 2,
+          "trick": [],
+          "trump": 0,
+          "winners": []
+        },
+        "view_of_mover": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [
+            39,
+            17,
+            23,
+            13,
+            46,
+            5,
+            19,
+            33,
+            7
+          ],
+          "legal": [
+            39,
+            17,
+            23,
+            13,
+            46,
+            5,
+            19,
+            33,
+            7
+          ],
+          "scores": [
+            2,
+            1,
+            4
+          ],
+          "seat": 2,
+          "trick": [],
+          "trump": 0,
+          "winners": []
+        },
+        "view_of_other": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [
+            20,
+            16,
+            49,
+            42,
+            37,
+            14,
+            21,
+            1,
+            51
+          ],
+          "legal": [],
+          "scores": [
+            2,
+            1,
+            4
+          ],
+          "seat": 2,
+          "trick": [],
+          "trump": 0,
+          "winners": []
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 52,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Carol",
+              "id": "u3",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_payouts": {
+          "u3": 0
+        },
+        "expected_state": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "hands": [
+            [],
+            [],
+            []
+          ],
+          "kitty": [
+            14,
+            21,
+            1,
+            51
+          ],
+          "scores": [
+            5,
+            4,
+            7
+          ],
+          "seat": 2,
+          "trick": [],
+          "trump": 0,
+          "winners": [
+            2
+          ]
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [],
+          "legal": [],
+          "scores": [
+            5,
+            4,
+            7
+          ],
+          "seat": 2,
+          "trick": [],
+          "trump": 0,
+          "winners": [
+            2
+          ]
+        },
+        "expected_view_of_other": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [],
+          "legal": [],
+          "scores": [
+            5,
+            4,
+            7
+          ],
+          "seat": 2,
+          "trick": [],
+          "trump": 0,
+          "winners": [
+            2
+          ]
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "terminal",
+        "move": {
+          "card": 51
+        },
+        "name": "terminal move",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "hands": [
+            [
+              51
+            ],
+            [],
+            []
+          ],
+          "kitty": [
+            14,
+            21,
+            1,
+            51
+          ],
+          "scores": [
+            5,
+            4,
+            6
+          ],
+          "seat": 0,
+          "trick": [
+            {
+              "card": 35,
+              "seat": 1
+            },
+            {
+              "card": 7,
+              "seat": 2
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "view_of_mover": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [
+            51
+          ],
+          "legal": [
+            51
+          ],
+          "scores": [
+            5,
+            4,
+            6
+          ],
+          "seat": 0,
+          "trick": [
+            {
+              "card": 35,
+              "seat": 1
+            },
+            {
+              "card": 7,
+              "seat": 2
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "view_of_other": {
+          "bids": [
+            8,
+            5,
+            3
+          ],
+          "discarding": false,
+          "hand": [],
+          "legal": [],
+          "scores": [
+            5,
+            4,
+            6
+          ],
+          "seat": 0,
+          "trick": [
+            {
+              "card": 35,
+              "seat": 1
+            },
+            {
+              "card": 7,
+              "seat": 2
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        }
+      }
+    ],
+    "move_schema": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "bid": {
+              "maximum": 8,
+              "minimum": 2,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "bid"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "trump": {
+              "maximum": 3,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "trump"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "discard": {
+              "maximum": 51,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "discard"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "card": {
+              "maximum": 51,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "card"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "state_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "bids": {
+          "items": {
+            "maximum": 8,
+            "minimum": -1,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "hands": {
+          "items": {
+            "items": {
+              "maximum": 51,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "kitty": {
+          "items": {
+            "maximum": 51,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "scores": {
+          "items": {
+            "maximum": 16,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "seat": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "trick": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "card": {
+                "maximum": 51,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seat": {
+                "maximum": 5,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "seat",
+              "card"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "trump": {
+          "maximum": 3,
+          "minimum": -1,
+          "type": "integer"
+        },
+        "winners": {
+          "items": {
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        }
+      },
+      "required": [
+        "seat",
+        "trump",
+        "bids",
+        "scores",
+        "trick",
+        "winners",
+        "hands",
+        "kitty"
+      ],
+      "type": "object"
+    },
+    "view_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "bids": {
+          "items": {
+            "maximum": 8,
+            "minimum": -1,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "discarding": {
+          "type": "boolean"
+        },
+        "hand": {
+          "items": {
+            "maximum": 51,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
+        "legal": {
+          "items": {
+            "maximum": 51,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
+        "scores": {
+          "items": {
+            "maximum": 16,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "seat": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "trick": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "card": {
+                "maximum": 51,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seat": {
+                "maximum": 5,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "seat",
+              "card"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "trump": {
+          "maximum": 3,
+          "minimum": -1,
+          "type": "integer"
+        },
+        "winners": {
+          "items": {
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        }
+      },
+      "required": [
+        "seat",
+        "trump",
+        "bids",
+        "scores",
+        "trick",
+        "winners",
+        "hand",
+        "legal",
+        "discarding"
+      ],
+      "type": "object"
+    }
+  },
+  "translations": {
+    "ar": {
+      "display_name": "Sergeant Major",
+      "short_description": "يختار الموزع النوع الرابح ويأخذ الاحتياط ويرمي أربع بطاقات. الأهداف ثماني وخمس وثلاث لفات. يفوز من يتجاوز هدفه بأكبر قدر.",
+      "game_logic_rules": "يختار الموزع النوع الرابح ويأخذ الاحتياط ويرمي أربع بطاقات. الأهداف ثماني وخمس وثلاث لفات. يفوز من يتجاوز هدفه بأكبر قدر.",
+      "game_ui_rules": "يختار الموزع النوع الرابح ويأخذ الاحتياط ويرمي أربع بطاقات. الأهداف ثماني وخمس وثلاث لفات. يفوز من يتجاوز هدفه بأكبر قدر.",
+      "tutorial_strings": {
+        "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.": "يختار الموزع النوع الرابح ويأخذ الاحتياط ويرمي أربع بطاقات. الأهداف ثماني وخمس وثلاث لفات. يفوز من يتجاوز هدفه بأكبر قدر."
+      },
+      "client_strings": {
+        "cards": "البطاقات: {cards}",
+        "pile": "الكومة: {cards}",
+        "server_illegal": "اختر حركة قانونية في دورك.",
+        "title": "Sergeant Major",
+        "turn": "دور {name}",
+        "winners": "الفائز: {names}"
+      }
+    },
+    "de": {
+      "display_name": "Sergeant Major",
+      "short_description": "Der Geber wählt Trumpf, nimmt den Talon und legt vier Karten ab. Die Ziele sind acht, fünf und drei Stiche. Wer sein Ziel am meisten übertrifft, gewinnt.",
+      "game_logic_rules": "Der Geber wählt Trumpf, nimmt den Talon und legt vier Karten ab. Die Ziele sind acht, fünf und drei Stiche. Wer sein Ziel am meisten übertrifft, gewinnt.",
+      "game_ui_rules": "Der Geber wählt Trumpf, nimmt den Talon und legt vier Karten ab. Die Ziele sind acht, fünf und drei Stiche. Wer sein Ziel am meisten übertrifft, gewinnt.",
+      "tutorial_strings": {
+        "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.": "Der Geber wählt Trumpf, nimmt den Talon und legt vier Karten ab. Die Ziele sind acht, fünf und drei Stiche. Wer sein Ziel am meisten übertrifft, gewinnt."
+      },
+      "client_strings": {
+        "cards": "Karten: {cards}",
+        "pile": "Stapel: {cards}",
+        "server_illegal": "Wähle einen gültigen Zug, wenn du an der Reihe bist.",
+        "title": "Sergeant Major",
+        "turn": "{name} ist am Zug",
+        "winners": "Gewonnen: {names}"
+      }
+    },
+    "es": {
+      "display_name": "Sergeant Major",
+      "short_description": "El repartidor elige triunfo, toma la reserva y descarta cuatro cartas. Los objetivos son ocho, cinco y tres bazas. Gana quien más supera su objetivo.",
+      "game_logic_rules": "El repartidor elige triunfo, toma la reserva y descarta cuatro cartas. Los objetivos son ocho, cinco y tres bazas. Gana quien más supera su objetivo.",
+      "game_ui_rules": "El repartidor elige triunfo, toma la reserva y descarta cuatro cartas. Los objetivos son ocho, cinco y tres bazas. Gana quien más supera su objetivo.",
+      "tutorial_strings": {
+        "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.": "El repartidor elige triunfo, toma la reserva y descarta cuatro cartas. Los objetivos son ocho, cinco y tres bazas. Gana quien más supera su objetivo."
+      },
+      "client_strings": {
+        "cards": "Cartas: {cards}",
+        "pile": "Pila: {cards}",
+        "server_illegal": "Elige una jugada válida en tu turno.",
+        "title": "Sergeant Major",
+        "turn": "Turno de {name}",
+        "winners": "Gana: {names}"
+      }
+    },
+    "fr": {
+      "display_name": "Sergeant Major",
+      "short_description": "Le donneur choisit l’atout, prend le talon et écarte quatre cartes. Les objectifs sont huit, cinq et trois plis. Gagne qui dépasse le plus son objectif.",
+      "game_logic_rules": "Le donneur choisit l’atout, prend le talon et écarte quatre cartes. Les objectifs sont huit, cinq et trois plis. Gagne qui dépasse le plus son objectif.",
+      "game_ui_rules": "Le donneur choisit l’atout, prend le talon et écarte quatre cartes. Les objectifs sont huit, cinq et trois plis. Gagne qui dépasse le plus son objectif.",
+      "tutorial_strings": {
+        "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.": "Le donneur choisit l’atout, prend le talon et écarte quatre cartes. Les objectifs sont huit, cinq et trois plis. Gagne qui dépasse le plus son objectif."
+      },
+      "client_strings": {
+        "cards": "Cartes : {cards}",
+        "pile": "Pile : {cards}",
+        "server_illegal": "Choisissez un coup légal à votre tour.",
+        "title": "Sergeant Major",
+        "turn": "Tour de {name}",
+        "winners": "Victoire : {names}"
+      }
+    },
+    "hi": {
+      "display_name": "Sergeant Major",
+      "short_description": "डीलर तुरुप चुनकर बची गड्डी लेता है और चार पत्ते हटाता है। लक्ष्य आठ, पाँच और तीन बाज़ियाँ हैं। लक्ष्य से सबसे अधिक आगे वाला जीतता है।",
+      "game_logic_rules": "डीलर तुरुप चुनकर बची गड्डी लेता है और चार पत्ते हटाता है। लक्ष्य आठ, पाँच और तीन बाज़ियाँ हैं। लक्ष्य से सबसे अधिक आगे वाला जीतता है।",
+      "game_ui_rules": "डीलर तुरुप चुनकर बची गड्डी लेता है और चार पत्ते हटाता है। लक्ष्य आठ, पाँच और तीन बाज़ियाँ हैं। लक्ष्य से सबसे अधिक आगे वाला जीतता है।",
+      "tutorial_strings": {
+        "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.": "डीलर तुरुप चुनकर बची गड्डी लेता है और चार पत्ते हटाता है। लक्ष्य आठ, पाँच और तीन बाज़ियाँ हैं। लक्ष्य से सबसे अधिक आगे वाला जीतता है।"
+      },
+      "client_strings": {
+        "cards": "पत्ते: {cards}",
+        "pile": "ढेर: {cards}",
+        "server_illegal": "अपनी बारी में वैध चाल चुनें।",
+        "title": "Sergeant Major",
+        "turn": "{name} की बारी",
+        "winners": "विजेता: {names}"
+      }
+    },
+    "pt": {
+      "display_name": "Sergeant Major",
+      "short_description": "O dador escolhe trunfo, recolhe a reserva e descarta quatro cartas. As metas são oito, cinco e três vazas. Vence quem mais superar a meta.",
+      "game_logic_rules": "O dador escolhe trunfo, recolhe a reserva e descarta quatro cartas. As metas são oito, cinco e três vazas. Vence quem mais superar a meta.",
+      "game_ui_rules": "O dador escolhe trunfo, recolhe a reserva e descarta quatro cartas. As metas são oito, cinco e três vazas. Vence quem mais superar a meta.",
+      "tutorial_strings": {
+        "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.": "O dador escolhe trunfo, recolhe a reserva e descarta quatro cartas. As metas são oito, cinco e três vazas. Vence quem mais superar a meta."
+      },
+      "client_strings": {
+        "cards": "Cartas: {cards}",
+        "pile": "Pilha: {cards}",
+        "server_illegal": "Escolhe uma jogada válida na tua vez.",
+        "title": "Sergeant Major",
+        "turn": "Vez de {name}",
+        "winners": "Vitória: {names}"
+      }
+    },
+    "zh": {
+      "display_name": "Sergeant Major",
+      "short_description": "庄家选将，拿底牌并弃四张。目标分别是八、五、三墩。超过目标最多者获胜。",
+      "game_logic_rules": "庄家选将，拿底牌并弃四张。目标分别是八、五、三墩。超过目标最多者获胜。",
+      "game_ui_rules": "庄家选将，拿底牌并弃四张。目标分别是八、五、三墩。超过目标最多者获胜。",
+      "tutorial_strings": {
+        "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.": "庄家选将，拿底牌并弃四张。目标分别是八、五、三墩。超过目标最多者获胜。"
+      },
+      "client_strings": {
+        "cards": "手牌：{cards}",
+        "pile": "牌堆：{cards}",
+        "server_illegal": "请在自己的回合选择合法走法。",
+        "title": "Sergeant Major",
+        "turn": "轮到 {name}",
+        "winners": "获胜：{names}"
+      }
+    }
+  }
+}

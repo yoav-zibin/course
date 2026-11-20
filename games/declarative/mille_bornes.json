@@ -1,0 +1,1965 @@
+{
+  "name": "Mille Bornes",
+  "description": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+  "allowed_player_counts": [
+    2,
+    3
+  ],
+  "all_state_public": false,
+  "allows_leave_mid_match": false,
+  "allows_join_mid_match": false,
+  "server_code": "const distances=[25,50,75,100,200];\nconst hazard=c=>c>=5&&c<=9, remedy=c=>c>=10&&c<=14;\nfunction choices(s){\n const i=s.seat;\n if(!s.drawn)return [{draw:true}];\n return s.hands[i].flatMap((c,index)=>{\n  const out=[{discard:index}];\n  if(c<5&&s.running[i]&&(!s.limited[i]||c<2)&&s.miles[i]+distances[c]<=1000&&(c!==4||s.large[i]<2))out.unshift({play:index});\n  if(remedy(c)&&(c===14?s.limited[i]:c===13?!s.running[i]&&s.block[i]<0:s.block[i]===c-10))out.unshift({play:index});\n  if(c>=15&&!s.safety[i].includes(c-15))out.unshift({play:index});\n  if(hazard(c))for(let j=0;j<s.hands.length;j++)if(j!==i&&!s.safety[j].includes(c-5)&&(c===9?!s.limited[j]:s.running[j]))out.unshift({attack:[index,j]});\n  return out;\n });\n}\nfunction finish(s,ctx){\n const high=Math.max(...s.miles);s.winners=s.miles.flatMap((v,i)=>v===high?[i]:[]);\n const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false),w=humans.filter(p=>s.winners.includes(ctx.players.indexOf(p))),paid=w.length?w:humans;\n return {state:s,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,Math.floor(ctx.pot/paid.length)+Number(i<ctx.pot%paid.length)]))};\n}\nconst game={\n newMatch(ctx){\n const n=ctx.players.length,deck=[10,10,10,12,4,2,2,2,4,3,6,6,6,14,6,1,1,1,1].flatMap((q,c)=>Array(q).fill(c));\n let seed=2166136261;for(const p of ctx.players)for(const c of p.id)seed=Math.imul(seed^c.charCodeAt(0),16777619);\n for(let i=deck.length-1;i>0;i--){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const j=seed%(i+1);[deck[i],deck[j]]=[deck[j],deck[i]];}\n const hands=ctx.players.map(()=>deck.splice(0,6));\n const state={hands,stock:deck,miles:Array(n).fill(0),block:Array(n).fill(-1),running:Array(n).fill(false),limited:Array(n).fill(false),large:Array(n).fill(0),safety:hands.map(()=>[]),seat:0,drawn:false,winners:[]};\n return {state,turn:[ctx.players[0].id]};\n },\n applyMove(s,id,m,ctx){\n if(!m||s.winners.length||ctx.players[s.seat].id!==id||!choices(s).some(o=>JSON.stringify(o)===JSON.stringify(m)))throw new InvalidMove(\"Choose a legal move on your turn.\");\n const i=s.seat,n=s.hands.length,state={...s,hands:s.hands.map(h=>[...h]),stock:[...s.stock],miles:[...s.miles],block:[...s.block],running:[...s.running],limited:[...s.limited],large:[...s.large],safety:s.safety.map(a=>[...a])};\n if(m.draw){if(!state.stock.length)return finish(state,ctx);state.hands[i].push(state.stock.shift());state.drawn=true;}\n else{\n const [c]=state.hands[i].splice(m.attack?m.attack[0]:m.play??m.discard,1);\n if(m.attack){const j=m.attack[1];if(c===9)state.limited[j]=true;else{state.running[j]=false;state.block[j]=c===8?-1:c-5;}}\n else if(m.play!==undefined){\n if(c<5){state.miles[i]+=distances[c];if(c===4)state.large[i]++;}\n else if(c===14)state.limited[i]=false;\n else if(c===13)state.running[i]=true;\n else if(c>=15){state.safety[i].push(c-15);if(state.block[i]===c-15)state.block[i]=-1;if(c===18){state.limited[i]=false;state.running[i]=state.block[i]<0;state.safety[i].push(4);}}\n else {state.block[i]=-1;if(state.safety[i].includes(3))state.running[i]=true;}\n }\n if(state.miles[i]===1000)return finish(state,ctx);\n state.seat=(i+1)%n;state.drawn=false;\n }\n return {state,turn:[ctx.players[state.seat].id]};\n },\n viewFor(s,id,ctx){const {hands,stock,...pub}=s,i=ctx.players.findIndex(p=>p.id===id);return {...pub,hand:hands[i]??[],choices:i===s.seat?choices(s):[]};},\n computerMove(s){const opts=choices(s);return opts.find(m=>m.play!==undefined)??opts.find(m=>m.attack)??opts[0];},\n randomMove(s,id,ctx){return this.computerMove(s);}\n};\n",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 548,
+      "height": 374,
+      "camera_enabled": false
+    },
+    "boards": [
+      {
+        "id": "hand",
+        "kind": "free",
+        "x": 18,
+        "y": 110,
+        "width": 512,
+        "height": 246,
+        "color": "#143339",
+        "line_color": "#557877"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 60,
+        "height": 72,
+        "color": "#fff7df",
+        "text_color": "#172743"
+      }
+    },
+    "assets": {},
+    "strings": {
+      "title": "Mille Bornes",
+      "stock": "Draw stock",
+      "discard": "Discard {card}",
+      "cards": "Cards: {cards}",
+      "pile": "Pile: {cards}",
+      "turn": "Player {name}'s turn",
+      "winners": "{names} wins",
+      "server_illegal": "Choose a legal move on your turn."
+    },
+    "ui_code": "const KIND = \"mille_bornes\";\nconst SOURCE_STRINGS = {\"title\": \"Mille Bornes\", \"stock\": \"Draw stock\", \"discard\": \"Discard {card}\", \"cards\": \"Cards: {cards}\", \"pile\": \"Pile: {cards}\", \"turn\": \"Player {name}'s turn\", \"winners\": \"{names} wins\", \"server_illegal\": \"Choose a legal move on your turn.\"};\nconst gameUI = {\n  reduce(message, previous) {\n    const match = message.type === \"ui_event\" ? message.state_changed : message;\n    const v = match.view || match.state;\n    const over = match.status === \"over\";\n    const actor = match.acting_for_player_index;\n    const active = !over && !match.replay && Number.isInteger(actor) &&\n      match.turn_of_player_indices?.includes(actor);\n    const click = message.event?.type === \"tap\" ? message.event.id : null;\n    const strings = { ...SOURCE_STRINGS, ...match.strings };\n    const t = (key, values = {}) => (strings[key] || key)\n      .replace(/\\{(\\w+)\\}/g, (_, name) => String(values[name] ?? \"\"));\n    const who = seat => match.players?.[seat]?.name || String(seat + 1);\n    const suits = [\"♣\", \"♦\", \"♥\", \"♠\"];\n    const faces = [\"25\",\"50\",\"75\",\"100\",\"200\",\"⛽\",\"🛞\",\"💥\",\"🛑\",\"🚧\",\"🛢\",\"🔧\",\"🚑\",\"🟢\",\"🏁\",\"🛡⛽\",\"🛡🛞\",\"🛡💥\",\"🛡🚦\"];\n    const face = c => KIND === \"mille_bornes\" ? faces[c] :\n      c >= 104 ? \"🃏\" : [\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\",\"10\",\"J\",\"Q\",\"K\",\"A\"][c % 13] +\n      suits[Math.floor((c % 52) / 13)];\n    const scene = { labels: [], pieces: [], controls: [] };\n    const moves = new Map();\n    const label = (id,text,y,size = 19) => scene.labels.push({id,text,x:20,y,font_size:size});\n    const button = (id,text,move) => {\n      if (!active) return;\n      scene.controls.push({id,kind:\"button\",label:String(text)});\n      moves.set(id,move);\n    };\n    const winners = v.winners || [];\n    label(\"status\", over ? winners.length ? t(\"winners\",{names:winners.map(who).join(\", \")}) :\n      (strings.tie || \"Game over\") : t(\"turn\",{name:who(v.seat)}), 15, 24);\n    const scores = v.totals || v.miles || v.scores || v.counts;\n    if (scores) label(\"scores\",t(\"cards\",{cards:scores.join(\" · \")}),50);\n    const table = v.table || v.trick?.map(play => play.card) || [];\n    const publicCards = KIND === \"catch_the_ten\" ? [v.up,...table] :\n      KIND === \"conquian\" && v.top >= 0 ? [v.top] : table;\n    const trump = v.trump >= 0 ? suits[v.trump] + \"  \" : \"\";\n    label(\"table\",t(\"pile\",{cards:trump + publicCards.map(face).join(\" \")}),78);\n    let picked = previous?.moveCount === match.move_count && previous?.actor === actor\n      ? previous.picked || [] : [];\n    const hand = v.hand || [];\n    if (KIND === \"big_two\" && active && /^hand_\\d+$/.test(click || \"\")) {\n      const card = Number(click.slice(5));\n      if (hand.includes(card)) {\n        if (picked.includes(card)) picked = picked.filter(value => value !== card);\n        else if (picked.length < 5) picked = [...picked,card];\n      }\n    }\n    const direct = v.discarding ? hand : v.legal || [];\n    hand.forEach((card, i) => {\n      const directMove = active && direct.includes(card);\n      const id = KIND === \"big_two\" ? \"hand_\" + card : \"hand_\" + i;\n      scene.pieces.push({\n        id,type:\"card\",board:\"hand\",text:face(card),\n        position:{x:32+(i%8)*64,y:39+Math.floor(i/8)*80},\n        actions:active && (KIND === \"big_two\" || directMove) ? [\"tap\"] : [],\n        selected:picked.includes(card)\n      });\n      if (directMove) moves.set(id,v.discarding ? {discard:card} : {card});\n    });\n    if (KIND === \"big_two\") {\n      if (picked.length) button(\"play\",t(\"playSelected\"),{cards:picked});\n      if (table.length) button(\"pass\",t(\"pass\"),{pass:true});\n    }\n    if (KIND === \"pedro\" && v.phase === 0) {\n      for (let bid = Math.max(7,v.bid+1); bid <= 14; bid++) button(\"bid_\"+bid,t(\"bid\",{number:bid}),{bid});\n      if (v.bid || v.bids < 3) button(\"pass\",t(\"pass\"),{pass:true});\n    }\n    if ((v.trump < 0 && [\"court_piece\",\"sergeant_major\"].includes(KIND)) ||\n        (KIND === \"pedro\" && v.phase === 1)) {\n      suits.forEach((symbol,trump) => button(\"trump_\"+trump,symbol,{trump}));\n    }\n    if (KIND === \"sergeant_major\" && v.bids[v.seat] < 0) {\n      for (let bid=2; bid<=8; bid++) button(\"bid_\"+bid,bid,{bid});\n    }\n    (v.choices || []).forEach((move,index) => {\n      let caption;\n      if (KIND === \"conquian\") {\n        caption = move.pass ? t(\"pass\") : move.draw !== undefined ? t(move.draw ? \"take\" : \"stock\") :\n          move.cards ? t(\"meld\",{cards:move.cards.map(face).join(\" \")}) :\n          move.discard !== undefined ? t(\"discard\",{card:face(move.discard)}) :\n          move.close !== undefined ? t(\"close\",{card:face(move.close)}) :\n          t(\"append\",{card:face(move.append ? move.append[1] : v.top),number:(move.append ? move.append[0] : move.extend)+1});\n      } else {\n        caption = move.draw ? t(\"stock\") :\n          move.attack ? face(hand[move.attack[0]])+\" → \"+who(move.attack[1]) :\n          move.discard !== undefined ? t(\"discard\",{card:face(hand[move.discard])}) : face(hand[move.play]);\n      }\n      button(\"choice_\"+index,caption,move);\n    });\n    const result = {scene,local_state:{moveCount:match.move_count,actor,picked}};\n    if (moves.has(click)) result.make_move = moves.get(click);\n    return result;\n  }\n};\n"
+  },
+  "rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+  "ui_instructions": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+  "tutorial": {
+    "html": "<meta name=\"viewport\" content=\"width=device-width\"><p>Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.</p>",
+    "text": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out."
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/></svg>"
+    },
+    {
+      "caption": "Opening",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Turn",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Result",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "cases": [
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_state": {
+          "block": [
+            -1,
+            -1
+          ],
+          "drawn": true,
+          "hands": [
+            [
+              11,
+              0,
+              11,
+              13,
+              1,
+              3,
+              0
+            ],
+            [
+              1,
+              6,
+              4,
+              7,
+              0,
+              1
+            ]
+          ],
+          "large": [
+            0,
+            0
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "miles": [
+            0,
+            0
+          ],
+          "running": [
+            false,
+            false
+          ],
+          "safety": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "stock": [
+            11,
+            3,
+            13,
+            1,
+            2,
+            13,
+            13,
+            4,
+            13,
+            2,
+            2,
+            2,
+            13,
+            1,
+            7,
+            1,
+            9,
+            2,
+            13,
+            10,
+            6,
+            8,
+            16,
+            3,
+            11,
+            12,
+            14,
+            12,
+            9,
+            0,
+            0,
+            5,
+            12,
+            2,
+            18,
+            2,
+            2,
+            3,
+            13,
+            9,
+            3,
+            3,
+            13,
+            12,
+            12,
+            4,
+            10,
+            1,
+            4,
+            0,
+            3,
+            3,
+            10,
+            0,
+            14,
+            10,
+            1,
+            10,
+            14,
+            0,
+            0,
+            3,
+            1,
+            8,
+            13,
+            14,
+            0,
+            3,
+            11,
+            1,
+            13,
+            13,
+            2,
+            8,
+            14,
+            14,
+            15,
+            12,
+            2,
+            3,
+            17,
+            3,
+            11,
+            5,
+            13,
+            8,
+            13,
+            10
+          ],
+          "winners": []
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [
+            {
+              "discard": 0
+            },
+            {
+              "discard": 1
+            },
+            {
+              "discard": 2
+            },
+            {
+              "play": 3
+            },
+            {
+              "discard": 3
+            },
+            {
+              "discard": 4
+            },
+            {
+              "discard": 5
+            },
+            {
+              "discard": 6
+            }
+          ],
+          "drawn": true,
+          "hand": [
+            11,
+            0,
+            11,
+            13,
+            1,
+            3,
+            0
+          ],
+          "large": [
+            0,
+            0
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "miles": [
+            0,
+            0
+          ],
+          "running": [
+            false,
+            false
+          ],
+          "safety": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [],
+          "drawn": true,
+          "hand": [
+            1,
+            6,
+            4,
+            7,
+            0,
+            1
+          ],
+          "large": [
+            0,
+            0
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "miles": [
+            0,
+            0
+          ],
+          "running": [
+            false,
+            false
+          ],
+          "safety": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "initial",
+        "move": {
+          "draw": true
+        },
+        "name": "initial move",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "block": [
+            -1,
+            -1
+          ],
+          "drawn": false,
+          "hands": [
+            [
+              11,
+              0,
+              11,
+              13,
+              1,
+              3
+            ],
+            [
+              1,
+              6,
+              4,
+              7,
+              0,
+              1
+            ]
+          ],
+          "large": [
+            0,
+            0
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "miles": [
+            0,
+            0
+          ],
+          "running": [
+            false,
+            false
+          ],
+          "safety": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "stock": [
+            0,
+            11,
+            3,
+            13,
+            1,
+            2,
+            13,
+            13,
+            4,
+            13,
+            2,
+            2,
+            2,
+            13,
+            1,
+            7,
+            1,
+            9,
+            2,
+            13,
+            10,
+            6,
+            8,
+            16,
+            3,
+            11,
+            12,
+            14,
+            12,
+            9,
+            0,
+            0,
+            5,
+            12,
+            2,
+            18,
+            2,
+            2,
+            3,
+            13,
+            9,
+            3,
+            3,
+            13,
+            12,
+            12,
+            4,
+            10,
+            1,
+            4,
+            0,
+            3,
+            3,
+            10,
+            0,
+            14,
+            10,
+            1,
+            10,
+            14,
+            0,
+            0,
+            3,
+            1,
+            8,
+            13,
+            14,
+            0,
+            3,
+            11,
+            1,
+            13,
+            13,
+            2,
+            8,
+            14,
+            14,
+            15,
+            12,
+            2,
+            3,
+            17,
+            3,
+            11,
+            5,
+            13,
+            8,
+            13,
+            10
+          ],
+          "winners": []
+        },
+        "view_of_mover": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [
+            {
+              "draw": true
+            }
+          ],
+          "drawn": false,
+          "hand": [
+            11,
+            0,
+            11,
+            13,
+            1,
+            3
+          ],
+          "large": [
+            0,
+            0
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "miles": [
+            0,
+            0
+          ],
+          "running": [
+            false,
+            false
+          ],
+          "safety": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "winners": []
+        },
+        "view_of_other": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [],
+          "drawn": false,
+          "hand": [
+            1,
+            6,
+            4,
+            7,
+            0,
+            1
+          ],
+          "large": [
+            0,
+            0
+          ],
+          "limited": [
+            false,
+            false
+          ],
+          "miles": [
+            0,
+            0
+          ],
+          "running": [
+            false,
+            false
+          ],
+          "safety": [
+            [],
+            []
+          ],
+          "seat": 0,
+          "winners": []
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 62,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_state": {
+          "block": [
+            -1,
+            -1
+          ],
+          "drawn": true,
+          "hands": [
+            [
+              1,
+              2,
+              10,
+              3,
+              12,
+              0
+            ],
+            [
+              7,
+              13,
+              6,
+              11,
+              14,
+              9,
+              0
+            ]
+          ],
+          "large": [
+            0,
+            1
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            475
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1
+            ]
+          ],
+          "seat": 1,
+          "stock": [
+            5,
+            12,
+            2,
+            18,
+            2,
+            2,
+            3,
+            13,
+            9,
+            3,
+            3,
+            13,
+            12,
+            12,
+            4,
+            10,
+            1,
+            4,
+            0,
+            3,
+            3,
+            10,
+            0,
+            14,
+            10,
+            1,
+            10,
+            14,
+            0,
+            0,
+            3,
+            1,
+            8,
+            13,
+            14,
+            0,
+            3,
+            11,
+            1,
+            13,
+            13,
+            2,
+            8,
+            14,
+            14,
+            15,
+            12,
+            2,
+            3,
+            17,
+            3,
+            11,
+            5,
+            13,
+            8,
+            13,
+            10
+          ],
+          "winners": []
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [
+            {
+              "discard": 0
+            },
+            {
+              "discard": 1
+            },
+            {
+              "discard": 2
+            },
+            {
+              "discard": 3
+            },
+            {
+              "discard": 4
+            },
+            {
+              "discard": 5
+            },
+            {
+              "play": 6
+            },
+            {
+              "discard": 6
+            }
+          ],
+          "drawn": true,
+          "hand": [
+            7,
+            13,
+            6,
+            11,
+            14,
+            9,
+            0
+          ],
+          "large": [
+            0,
+            1
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            475
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1
+            ]
+          ],
+          "seat": 1,
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [],
+          "drawn": true,
+          "hand": [
+            1,
+            2,
+            10,
+            3,
+            12,
+            0
+          ],
+          "large": [
+            0,
+            1
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            475
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1
+            ]
+          ],
+          "seat": 1,
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "intermediate",
+        "move": {
+          "draw": true
+        },
+        "name": "intermediate move",
+        "other_player_id": "u1",
+        "player_id": "u2",
+        "state": {
+          "block": [
+            -1,
+            -1
+          ],
+          "drawn": false,
+          "hands": [
+            [
+              1,
+              2,
+              10,
+              3,
+              12,
+              0
+            ],
+            [
+              7,
+              13,
+              6,
+              11,
+              14,
+              9
+            ]
+          ],
+          "large": [
+            0,
+            1
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            475
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1
+            ]
+          ],
+          "seat": 1,
+          "stock": [
+            0,
+            5,
+            12,
+            2,
+            18,
+            2,
+            2,
+            3,
+            13,
+            9,
+            3,
+            3,
+            13,
+            12,
+            12,
+            4,
+            10,
+            1,
+            4,
+            0,
+            3,
+            3,
+            10,
+            0,
+            14,
+            10,
+            1,
+            10,
+            14,
+            0,
+            0,
+            3,
+            1,
+            8,
+            13,
+            14,
+            0,
+            3,
+            11,
+            1,
+            13,
+            13,
+            2,
+            8,
+            14,
+            14,
+            15,
+            12,
+            2,
+            3,
+            17,
+            3,
+            11,
+            5,
+            13,
+            8,
+            13,
+            10
+          ],
+          "winners": []
+        },
+        "view_of_mover": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [
+            {
+              "draw": true
+            }
+          ],
+          "drawn": false,
+          "hand": [
+            7,
+            13,
+            6,
+            11,
+            14,
+            9
+          ],
+          "large": [
+            0,
+            1
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            475
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1
+            ]
+          ],
+          "seat": 1,
+          "winners": []
+        },
+        "view_of_other": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [],
+          "drawn": false,
+          "hand": [
+            1,
+            2,
+            10,
+            3,
+            12,
+            0
+          ],
+          "large": [
+            0,
+            1
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            475
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1
+            ]
+          ],
+          "seat": 1,
+          "winners": []
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 123,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_payouts": {
+          "u2": 0
+        },
+        "expected_state": {
+          "block": [
+            -1,
+            -1
+          ],
+          "drawn": true,
+          "hands": [
+            [
+              0,
+              3,
+              0,
+              10,
+              10,
+              0
+            ],
+            [
+              13,
+              12,
+              10,
+              14,
+              1,
+              14
+            ]
+          ],
+          "large": [
+            0,
+            2
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            1000
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1,
+              3,
+              4
+            ]
+          ],
+          "seat": 1,
+          "stock": [
+            3,
+            1,
+            8,
+            13,
+            14,
+            0,
+            3,
+            11,
+            1,
+            13,
+            13,
+            2,
+            8,
+            14,
+            14,
+            15,
+            12,
+            2,
+            3,
+            17,
+            3,
+            11,
+            5,
+            13,
+            8,
+            13,
+            10
+          ],
+          "winners": [
+            1
+          ]
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [
+            {
+              "discard": 0
+            },
+            {
+              "discard": 1
+            },
+            {
+              "discard": 2
+            },
+            {
+              "discard": 3
+            },
+            {
+              "discard": 4
+            },
+            {
+              "discard": 5
+            }
+          ],
+          "drawn": true,
+          "hand": [
+            13,
+            12,
+            10,
+            14,
+            1,
+            14
+          ],
+          "large": [
+            0,
+            2
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            1000
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1,
+              3,
+              4
+            ]
+          ],
+          "seat": 1,
+          "winners": [
+            1
+          ]
+        },
+        "expected_view_of_other": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [],
+          "drawn": true,
+          "hand": [
+            0,
+            3,
+            0,
+            10,
+            10,
+            0
+          ],
+          "large": [
+            0,
+            2
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            1000
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1,
+              3,
+              4
+            ]
+          ],
+          "seat": 1,
+          "winners": [
+            1
+          ]
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "terminal",
+        "move": {
+          "play": 6
+        },
+        "name": "terminal move",
+        "other_player_id": "u1",
+        "player_id": "u2",
+        "state": {
+          "block": [
+            -1,
+            -1
+          ],
+          "drawn": true,
+          "hands": [
+            [
+              0,
+              3,
+              0,
+              10,
+              10,
+              0
+            ],
+            [
+              13,
+              12,
+              10,
+              14,
+              1,
+              14,
+              0
+            ]
+          ],
+          "large": [
+            0,
+            2
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            975
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1,
+              3,
+              4
+            ]
+          ],
+          "seat": 1,
+          "stock": [
+            3,
+            1,
+            8,
+            13,
+            14,
+            0,
+            3,
+            11,
+            1,
+            13,
+            13,
+            2,
+            8,
+            14,
+            14,
+            15,
+            12,
+            2,
+            3,
+            17,
+            3,
+            11,
+            5,
+            13,
+            8,
+            13,
+            10
+          ],
+          "winners": []
+        },
+        "view_of_mover": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [
+            {
+              "discard": 0
+            },
+            {
+              "discard": 1
+            },
+            {
+              "discard": 2
+            },
+            {
+              "discard": 3
+            },
+            {
+              "discard": 4
+            },
+            {
+              "discard": 5
+            },
+            {
+              "play": 6
+            },
+            {
+              "discard": 6
+            }
+          ],
+          "drawn": true,
+          "hand": [
+            13,
+            12,
+            10,
+            14,
+            1,
+            14,
+            0
+          ],
+          "large": [
+            0,
+            2
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            975
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1,
+              3,
+              4
+            ]
+          ],
+          "seat": 1,
+          "winners": []
+        },
+        "view_of_other": {
+          "block": [
+            -1,
+            -1
+          ],
+          "choices": [],
+          "drawn": true,
+          "hand": [
+            0,
+            3,
+            0,
+            10,
+            10,
+            0
+          ],
+          "large": [
+            0,
+            2
+          ],
+          "limited": [
+            true,
+            false
+          ],
+          "miles": [
+            325,
+            975
+          ],
+          "running": [
+            false,
+            true
+          ],
+          "safety": [
+            [],
+            [
+              1,
+              3,
+              4
+            ]
+          ],
+          "seat": 1,
+          "winners": []
+        }
+      }
+    ],
+    "move_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "draw": {
+              "const": true
+            }
+          },
+          "required": [
+            "draw"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "play": {
+              "maximum": 6,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "play"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "discard": {
+              "maximum": 6,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "discard"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "attack": {
+              "items": {
+                "maximum": 6,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "type": "array"
+            }
+          },
+          "required": [
+            "attack"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "state_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "block": {
+          "items": {
+            "maximum": 2,
+            "minimum": -1,
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "drawn": {
+          "type": "boolean"
+        },
+        "hands": {
+          "items": {
+            "items": {
+              "maximum": 18,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 7,
+            "type": "array"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "large": {
+          "items": {
+            "maximum": 2,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "limited": {
+          "items": {
+            "type": "boolean"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "miles": {
+          "items": {
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "running": {
+          "items": {
+            "type": "boolean"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "safety": {
+          "items": {
+            "items": {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 5,
+            "type": "array"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "seat": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stock": {
+          "items": {
+            "maximum": 18,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 110,
+          "type": "array"
+        },
+        "winners": {
+          "items": {
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "type": "array"
+        }
+      },
+      "required": [
+        "seat",
+        "drawn",
+        "winners",
+        "miles",
+        "block",
+        "running",
+        "limited",
+        "large",
+        "safety",
+        "hands",
+        "stock"
+      ],
+      "type": "object"
+    },
+    "view_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "block": {
+          "items": {
+            "maximum": 2,
+            "minimum": -1,
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "choices": {
+          "items": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "draw": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "draw"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "play": {
+                    "maximum": 6,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "play"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "discard": {
+                    "maximum": 6,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "discard"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "attack": {
+                    "items": {
+                      "maximum": 6,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "maxItems": 2,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "attack"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "maxItems": 30,
+          "type": "array"
+        },
+        "drawn": {
+          "type": "boolean"
+        },
+        "hand": {
+          "items": {
+            "maximum": 18,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 7,
+          "type": "array"
+        },
+        "large": {
+          "items": {
+            "maximum": 2,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "limited": {
+          "items": {
+            "type": "boolean"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "miles": {
+          "items": {
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "running": {
+          "items": {
+            "type": "boolean"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "safety": {
+          "items": {
+            "items": {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 5,
+            "type": "array"
+          },
+          "maxItems": 3,
+          "type": "array"
+        },
+        "seat": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "winners": {
+          "items": {
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "type": "array"
+        }
+      },
+      "required": [
+        "seat",
+        "drawn",
+        "winners",
+        "miles",
+        "block",
+        "running",
+        "limited",
+        "large",
+        "safety",
+        "hand",
+        "choices"
+      ],
+      "type": "object"
+    }
+  },
+  "translations": {
+    "ar": {
+      "display_name": "Mille Bornes",
+      "short_description": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_logic_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_ui_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "tutorial_strings": {
+        "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out."
+      },
+      "client_strings": {
+        "cards": "البطاقات: {cards}",
+        "discard": "ارمِ {card}",
+        "pile": "الكومة: {cards}",
+        "server_illegal": "اختر حركة قانونية في دورك.",
+        "stock": "اسحب بطاقة",
+        "title": "Mille Bornes",
+        "turn": "دور {name}",
+        "winners": "الفائز: {names}"
+      }
+    },
+    "de": {
+      "display_name": "Mille Bornes",
+      "short_description": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_logic_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_ui_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "tutorial_strings": {
+        "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out."
+      },
+      "client_strings": {
+        "cards": "Karten: {cards}",
+        "discard": "{card} ablegen",
+        "pile": "Stapel: {cards}",
+        "server_illegal": "Wähle einen gültigen Zug, wenn du an der Reihe bist.",
+        "stock": "Ziehen",
+        "title": "Mille Bornes",
+        "turn": "{name} ist am Zug",
+        "winners": "Gewonnen: {names}"
+      }
+    },
+    "es": {
+      "display_name": "Mille Bornes",
+      "short_description": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_logic_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_ui_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "tutorial_strings": {
+        "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out."
+      },
+      "client_strings": {
+        "cards": "Cartas: {cards}",
+        "discard": "Descartar {card}",
+        "pile": "Pila: {cards}",
+        "server_illegal": "Elige una jugada válida en tu turno.",
+        "stock": "Robar",
+        "title": "Mille Bornes",
+        "turn": "Turno de {name}",
+        "winners": "Gana: {names}"
+      }
+    },
+    "fr": {
+      "display_name": "Mille Bornes",
+      "short_description": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_logic_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_ui_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "tutorial_strings": {
+        "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out."
+      },
+      "client_strings": {
+        "cards": "Cartes : {cards}",
+        "discard": "Défausser {card}",
+        "pile": "Pile : {cards}",
+        "server_illegal": "Choisissez un coup légal à votre tour.",
+        "stock": "Piocher",
+        "title": "Mille Bornes",
+        "turn": "Tour de {name}",
+        "winners": "Victoire : {names}"
+      }
+    },
+    "hi": {
+      "display_name": "Mille Bornes",
+      "short_description": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_logic_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_ui_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "tutorial_strings": {
+        "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out."
+      },
+      "client_strings": {
+        "cards": "पत्ते: {cards}",
+        "discard": "{card} छोड़ें",
+        "pile": "ढेर: {cards}",
+        "server_illegal": "अपनी बारी में वैध चाल चुनें।",
+        "stock": "पत्ता खींचें",
+        "title": "Mille Bornes",
+        "turn": "{name} की बारी",
+        "winners": "विजेता: {names}"
+      }
+    },
+    "pt": {
+      "display_name": "Mille Bornes",
+      "short_description": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_logic_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "game_ui_rules": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
+      "tutorial_strings": {
+        "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out."
+      },
+      "client_strings": {
+        "cards": "Cartas: {cards}",
+        "discard": "Descartar {card}",
+        "pile": "Pilha: {cards}",
+        "server_illegal": "Escolhe uma jogada válida na tua vez.",
+        "stock": "Comprar",
+        "title": "Mille Bornes",
+        "turn": "Vez de {name}",
+        "winners": "Vitória: {names}"
+      }
+    },
+    "zh": {
+      "display_name": "Mille Bornes",
+      "short_description": "抽牌后可打里程、障碍、补救或安全牌，也可弃牌。恰好达到一千英里即获胜，牌库耗尽时里程最高者赢。",
+      "game_logic_rules": "抽牌后可打里程、障碍、补救或安全牌，也可弃牌。恰好达到一千英里即获胜，牌库耗尽时里程最高者赢。",
+      "game_ui_rules": "抽牌后可打里程、障碍、补救或安全牌，也可弃牌。恰好达到一千英里即获胜，牌库耗尽时里程最高者赢。",
+      "tutorial_strings": {
+        "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.": "抽牌后可打里程、障碍、补救或安全牌，也可弃牌。恰好达到一千英里即获胜，牌库耗尽时里程最高者赢。"
+      },
+      "client_strings": {
+        "cards": "手牌：{cards}",
+        "discard": "弃掉 {card}",
+        "pile": "牌堆：{cards}",
+        "server_illegal": "请在自己的回合选择合法走法。",
+        "stock": "摸牌",
+        "title": "Mille Bornes",
+        "turn": "轮到 {name}",
+        "winners": "获胜：{names}"
+      }
+    }
+  }
+}

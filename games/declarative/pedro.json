@@ -1,0 +1,1503 @@
+{
+  "name": "Pedro",
+  "description": "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.",
+  "allowed_player_counts": [
+    4
+  ],
+  "all_state_public": false,
+  "allows_leave_mid_match": false,
+  "allows_join_mid_match": false,
+  "server_code": "const suit=c=>Math.floor(c/13);\nconst rank=c=>c%13+2;\nconst other=c=>[3,2,1,0][c];\nconst color=(c,t)=>rank(c)===5&&suit(c)===other(t)?t:suit(c);\nconst points=(c,t)=>color(c,t)!==t?0:rank(c)===5?5:[2,10,11,14].includes(rank(c))?1:0;\nfunction deal(s){\n  const deck=Array.from({length:52},(_,i)=>i);\n  for(let i=51;i>0;i--){\n    s.seed=(Math.imul(s.seed,1664525)+1013904223)>>>0;\n    const j=s.seed%(i+1);\n    [deck[i],deck[j]]=[deck[j],deck[i]];\n  }\n  s.hands=Array.from({length:4},(_,i)=>deck.slice(i*9,i*9+9));\n  s.stock=deck.slice(36);\n  Object.assign(s,{seat:(s.dealer+1)%4,phase:0,trump:-1,bid:0,bidder:-1,bids:0,trick:[],captured:[0,0]});\n}\nfunction legal(s){\n  const hand=s.hands[s.seat];\n  if(!s.trick.length)return hand;\n  const lead=color(s.trick[0].card,s.trump);\n  return hand.some(c=>color(c,s.trump)===lead)?hand.filter(c=>[lead,s.trump].includes(color(c,s.trump))):hand;\n}\nfunction fill(s){\n  const t=s.trump;\n  const reserve=s.hands.flat().filter(c=>color(c,t)!==t);\n  for(let i=0;i<4;i++)s.hands[i]=s.hands[i].filter(c=>color(c,t)===t);\n  for(let offset=1;offset<4;offset++){\n    const h=s.hands[(s.dealer+offset)%4];\n    while(h.length<6)h.push(s.stock.length?s.stock.shift():reserve.shift());\n  }\n  const h=s.hands[s.dealer];\n  h.push(...s.stock.filter(c=>color(c,t)===t));\n  for(const c of [...s.stock.filter(c=>color(c,t)!==t),...reserve])if(h.length<6)h.push(c);\n  s.stock=[];\n  const low=t*13;\n  const holder=s.hands.findIndex(hand=>hand.includes(low));\n  s.captured[holder%2]=1;\n}\nfunction finish(state,ctx,team){\n  state.winners=ctx.players.flatMap((_,i)=>team<0||i%2===team?[i]:[]);\n  const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false);\n  const winners=humans.filter(p=>state.winners.includes(ctx.players.indexOf(p)));\n  const paid=winners.length?winners:humans;\n  return {state,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,\n    Math.floor(ctx.pot/paid.length)+Number(i<ctx.pot%paid.length)]))};\n}\nconst game={\n  newMatch(ctx){\n    let seed=2166136261;\n    for(const p of ctx.players)for(const c of p.id)seed=Math.imul(seed^c.charCodeAt(0),16777619);\n    const state={seed:seed>>>0,dealer:3,round:0,totals:[0,0],winners:[]};\n    deal(state);\n    return {state,turn:[ctx.players[0].id]};\n  },\n  applyMove(s,id,m,ctx){\n    const fail=()=>{throw new InvalidMove(\"Choose a legal move on your turn.\");};\n    const i=s.seat;\n    if(!m||Object.keys(m).length!==1||s.winners.length||ctx.players[i].id!==id)fail();\n    const state={...s,hands:s.hands.map(h=>[...h]),stock:[...s.stock],trick:[...s.trick],\n      totals:[...s.totals],captured:[...s.captured]};\n    if(s.phase===0){\n      if(m.pass===true){if(s.bids===3&&s.bid===0)fail();}\n      else{\n        if(!Number.isInteger(m.bid)||m.bid<Math.max(7,s.bid+1)||m.bid>14)fail();\n        state.bid=m.bid;state.bidder=i;\n      }\n      state.bids++;\n      state.seat=(i+1)%4;\n      if(state.bids===4){state.seat=state.bidder;state.phase=1;}\n    }else if(s.phase===1){\n      if(!Number.isInteger(m.trump)||m.trump<0||m.trump>3)fail();\n      state.trump=m.trump;\n      fill(state);\n      state.phase=2;\n    }else{\n      if(!legal(s).includes(m.card))fail();\n      const remaining=state.hands[i].filter(c=>c!==m.card);\n      if(remaining.length>5){\n        const buried=remaining.filter(c=>points(c,s.trump)===0).slice(0,remaining.length-5);\n        if(remaining.length-buried.length!==5)fail();\n        state.hands[i]=remaining.filter(c=>!buried.includes(c));\n      }else state.hands[i]=remaining;\n      state.trick.push({seat:i,card:m.card});\n      state.seat=(i+1)%4;\n      if(state.trick.length===4){\n        const lead=color(state.trick[0].card,s.trump);\n        const strength=c=>rank(c)*2-Number(suit(c)!==s.trump&&color(c,s.trump)===s.trump)+\n          (color(c,s.trump)===s.trump?100:color(c,s.trump)===lead?50:0);\n        state.seat=state.trick.reduce((a,b)=>strength(b.card)>strength(a.card)?b:a).seat;\n        state.captured[state.seat%2]+=state.trick.reduce((sum,p)=>sum+\n          (rank(p.card)===2?0:points(p.card,s.trump)),0);\n        state.trick=[];\n        if(state.hands.every(h=>!h.length)){\n          const bidTeam=s.bidder%2, success=state.captured[bidTeam]>=s.bid;\n          const overtime=s.totals.every(score=>score>=55);\n          state.totals=state.totals.map((score,j)=>score+(j===bidTeam&&!success?-s.bid:state.captured[j]));\n          if(overtime&&success)return finish(state,ctx,bidTeam);\n          const qualified=state.totals.flatMap((score,j)=>score>=62?[j]:[]);\n          if(qualified.length===1)return finish(state,ctx,qualified[0]);\n          if(s.round===23)return finish(state,ctx,state.totals[0]===state.totals[1]?-1:state.totals[0]>state.totals[1]?0:1);\n          state.round++;\n          state.dealer=(state.dealer+1)%4;\n          deal(state);\n        }\n      }\n    }\n    return {state,turn:[ctx.players[state.seat].id]};\n  },\n  viewFor(s,id,ctx){\n    const {hands,stock,seed,...visible}=s;\n    const i=ctx.players.findIndex(p=>p.id===id);\n    return {...visible,hand:hands[i]??[],legal:s.phase===2&&i===s.seat?legal(s):[]};\n  },\n  computerMove(s){\n    const hand=s.hands[s.seat];\n    const support=t=>hand.reduce((sum,c)=>sum+(color(c,t)===t?1+points(c,t):0),0);\n    if(s.phase===0){\n      const bid=Math.max(7,s.bid+1);\n      return bid<=14&&(Math.max(...[0,1,2,3].map(support))>=bid||s.bids===3&&!s.bid)?{bid}:{pass:true};\n    }\n    if(s.phase===1)return {trump:[0,1,2,3].sort((a,b)=>support(b)-support(a))[0]};\n    return {card:[...legal(s)].sort((a,b)=>rank(b)-rank(a))[0]};\n  },\n  randomMove(s,id,ctx){\n    if(s.phase<2)return this.computerMove(s);\n    const choices=legal(s);\n    return {card:choices[Math.floor(ctx.random()*choices.length)]};\n  }\n};\n",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 548,
+      "height": 374,
+      "camera_enabled": false
+    },
+    "boards": [
+      {
+        "id": "hand",
+        "kind": "free",
+        "x": 18,
+        "y": 110,
+        "width": 512,
+        "height": 246,
+        "color": "#143339",
+        "line_color": "#557877"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 60,
+        "height": 72,
+        "color": "#fff7df",
+        "text_color": "#172743"
+      }
+    },
+    "assets": {},
+    "strings": {
+      "title": "Pedro",
+      "bid": "Bid {number}",
+      "pass": "Pass",
+      "cards": "Cards: {cards}",
+      "pile": "Pile: {cards}",
+      "turn": "Player {name}'s turn",
+      "winners": "{names} wins",
+      "server_illegal": "Choose a legal move on your turn."
+    },
+    "ui_code": "const KIND = \"pedro\";\nconst SOURCE_STRINGS = {\"title\": \"Pedro\", \"bid\": \"Bid {number}\", \"pass\": \"Pass\", \"cards\": \"Cards: {cards}\", \"pile\": \"Pile: {cards}\", \"turn\": \"Player {name}'s turn\", \"winners\": \"{names} wins\", \"server_illegal\": \"Choose a legal move on your turn.\"};\nconst gameUI = {\n  reduce(message, previous) {\n    const match = message.type === \"ui_event\" ? message.state_changed : message;\n    const v = match.view || match.state;\n    const over = match.status === \"over\";\n    const actor = match.acting_for_player_index;\n    const active = !over && !match.replay && Number.isInteger(actor) &&\n      match.turn_of_player_indices?.includes(actor);\n    const click = message.event?.type === \"tap\" ? message.event.id : null;\n    const strings = { ...SOURCE_STRINGS, ...match.strings };\n    const t = (key, values = {}) => (strings[key] || key)\n      .replace(/\\{(\\w+)\\}/g, (_, name) => String(values[name] ?? \"\"));\n    const who = seat => match.players?.[seat]?.name || String(seat + 1);\n    const suits = [\"♣\", \"♦\", \"♥\", \"♠\"];\n    const faces = [\"25\",\"50\",\"75\",\"100\",\"200\",\"⛽\",\"🛞\",\"💥\",\"🛑\",\"🚧\",\"🛢\",\"🔧\",\"🚑\",\"🟢\",\"🏁\",\"🛡⛽\",\"🛡🛞\",\"🛡💥\",\"🛡🚦\"];\n    const face = c => KIND === \"mille_bornes\" ? faces[c] :\n      c >= 104 ? \"🃏\" : [\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\",\"10\",\"J\",\"Q\",\"K\",\"A\"][c % 13] +\n      suits[Math.floor((c % 52) / 13)];\n    const scene = { labels: [], pieces: [], controls: [] };\n    const moves = new Map();\n    const label = (id,text,y,size = 19) => scene.labels.push({id,text,x:20,y,font_size:size});\n    const button = (id,text,move) => {\n      if (!active) return;\n      scene.controls.push({id,kind:\"button\",label:String(text)});\n      moves.set(id,move);\n    };\n    const winners = v.winners || [];\n    label(\"status\", over ? winners.length ? t(\"winners\",{names:winners.map(who).join(\", \")}) :\n      (strings.tie || \"Game over\") : t(\"turn\",{name:who(v.seat)}), 15, 24);\n    const scores = v.totals || v.miles || v.scores || v.counts;\n    if (scores) label(\"scores\",t(\"cards\",{cards:scores.join(\" · \")}),50);\n    const table = v.table || v.trick?.map(play => play.card) || [];\n    const publicCards = KIND === \"catch_the_ten\" ? [v.up,...table] :\n      KIND === \"conquian\" && v.top >= 0 ? [v.top] : table;\n    const trump = v.trump >= 0 ? suits[v.trump] + \"  \" : \"\";\n    label(\"table\",t(\"pile\",{cards:trump + publicCards.map(face).join(\" \")}),78);\n    let picked = previous?.moveCount === match.move_count && previous?.actor === actor\n      ? previous.picked || [] : [];\n    const hand = v.hand || [];\n    if (KIND === \"big_two\" && active && /^hand_\\d+$/.test(click || \"\")) {\n      const card = Number(click.slice(5));\n      if (hand.includes(card)) {\n        if (picked.includes(card)) picked = picked.filter(value => value !== card);\n        else if (picked.length < 5) picked = [...picked,card];\n      }\n    }\n    const direct = v.discarding ? hand : v.legal || [];\n    hand.forEach((card, i) => {\n      const directMove = active && direct.includes(card);\n      const id = KIND === \"big_two\" ? \"hand_\" + card : \"hand_\" + i;\n      scene.pieces.push({\n        id,type:\"card\",board:\"hand\",text:face(card),\n        position:{x:32+(i%8)*64,y:39+Math.floor(i/8)*80},\n        actions:active && (KIND === \"big_two\" || directMove) ? [\"tap\"] : [],\n        selected:picked.includes(card)\n      });\n      if (directMove) moves.set(id,v.discarding ? {discard:card} : {card});\n    });\n    if (KIND === \"big_two\") {\n      if (picked.length) button(\"play\",t(\"playSelected\"),{cards:picked});\n      if (table.length) button(\"pass\",t(\"pass\"),{pass:true});\n    }\n    if (KIND === \"pedro\" && v.phase === 0) {\n      for (let bid = Math.max(7,v.bid+1); bid <= 14; bid++) button(\"bid_\"+bid,t(\"bid\",{number:bid}),{bid});\n      if (v.bid || v.bids < 3) button(\"pass\",t(\"pass\"),{pass:true});\n    }\n    if ((v.trump < 0 && [\"court_piece\",\"sergeant_major\"].includes(KIND)) ||\n        (KIND === \"pedro\" && v.phase === 1)) {\n      suits.forEach((symbol,trump) => button(\"trump_\"+trump,symbol,{trump}));\n    }\n    if (KIND === \"sergeant_major\" && v.bids[v.seat] < 0) {\n      for (let bid=2; bid<=8; bid++) button(\"bid_\"+bid,bid,{bid});\n    }\n    (v.choices || []).forEach((move,index) => {\n      let caption;\n      if (KIND === \"conquian\") {\n        caption = move.pass ? t(\"pass\") : move.draw !== undefined ? t(move.draw ? \"take\" : \"stock\") :\n          move.cards ? t(\"meld\",{cards:move.cards.map(face).join(\" \")}) :\n          move.discard !== undefined ? t(\"discard\",{card:face(move.discard)}) :\n          move.close !== undefined ? t(\"close\",{card:face(move.close)}) :\n          t(\"append\",{card:face(move.append ? move.append[1] : v.top),number:(move.append ? move.append[0] : move.extend)+1});\n      } else {\n        caption = move.draw ? t(\"stock\") :\n          move.attack ? face(hand[move.attack[0]])+\" → \"+who(move.attack[1]) :\n          move.discard !== undefined ? t(\"discard\",{card:face(hand[move.discard])}) : face(hand[move.play]);\n      }\n      button(\"choice_\"+index,caption,move);\n    });\n    const result = {scene,local_state:{moveCount:match.move_count,actor,picked}};\n    if (moves.has(click)) result.make_move = moves.get(click);\n    return result;\n  }\n};\n"
+  },
+  "rules": "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.",
+  "ui_instructions": "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.",
+  "tutorial": {
+    "html": "<meta name=\"viewport\" content=\"width=device-width\"><p>Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.</p>",
+    "text": "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals."
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/></svg>"
+    },
+    {
+      "caption": "Opening",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Turn",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Result",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "cases": [
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Carol",
+              "id": "u3",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Drew",
+              "id": "u4",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_state": {
+          "bid": 0,
+          "bidder": -1,
+          "bids": 1,
+          "captured": [
+            0,
+            0
+          ],
+          "dealer": 3,
+          "hands": [
+            [
+              51,
+              32,
+              8,
+              46,
+              14,
+              18,
+              1,
+              45,
+              7
+            ],
+            [
+              11,
+              30,
+              48,
+              19,
+              10,
+              2,
+              40,
+              43,
+              33
+            ],
+            [
+              36,
+              50,
+              25,
+              31,
+              3,
+              12,
+              41,
+              29,
+              9
+            ],
+            [
+              39,
+              35,
+              38,
+              17,
+              47,
+              49,
+              42,
+              5,
+              16
+            ]
+          ],
+          "phase": 0,
+          "round": 0,
+          "seat": 1,
+          "seed": 952036354,
+          "stock": [
+            23,
+            6,
+            24,
+            28,
+            21,
+            0,
+            37,
+            20,
+            13,
+            26,
+            34,
+            4,
+            15,
+            22,
+            27,
+            44
+          ],
+          "totals": [
+            0,
+            0
+          ],
+          "trick": [],
+          "trump": -1,
+          "winners": []
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "bid": 0,
+          "bidder": -1,
+          "bids": 1,
+          "captured": [
+            0,
+            0
+          ],
+          "dealer": 3,
+          "hand": [
+            51,
+            32,
+            8,
+            46,
+            14,
+            18,
+            1,
+            45,
+            7
+          ],
+          "legal": [],
+          "phase": 0,
+          "round": 0,
+          "seat": 1,
+          "totals": [
+            0,
+            0
+          ],
+          "trick": [],
+          "trump": -1,
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "bid": 0,
+          "bidder": -1,
+          "bids": 1,
+          "captured": [
+            0,
+            0
+          ],
+          "dealer": 3,
+          "hand": [
+            11,
+            30,
+            48,
+            19,
+            10,
+            2,
+            40,
+            43,
+            33
+          ],
+          "legal": [],
+          "phase": 0,
+          "round": 0,
+          "seat": 1,
+          "totals": [
+            0,
+            0
+          ],
+          "trick": [],
+          "trump": -1,
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "initial",
+        "move": {
+          "pass": true
+        },
+        "name": "initial move",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "bid": 0,
+          "bidder": -1,
+          "bids": 0,
+          "captured": [
+            0,
+            0
+          ],
+          "dealer": 3,
+          "hands": [
+            [
+              51,
+              32,
+              8,
+              46,
+              14,
+              18,
+              1,
+              45,
+              7
+            ],
+            [
+              11,
+              30,
+              48,
+              19,
+              10,
+              2,
+              40,
+              43,
+              33
+            ],
+            [
+              36,
+              50,
+              25,
+              31,
+              3,
+              12,
+              41,
+              29,
+              9
+            ],
+            [
+              39,
+              35,
+              38,
+              17,
+              47,
+              49,
+              42,
+              5,
+              16
+            ]
+          ],
+          "phase": 0,
+          "round": 0,
+          "seat": 0,
+          "seed": 952036354,
+          "stock": [
+            23,
+            6,
+            24,
+            28,
+            21,
+            0,
+            37,
+            20,
+            13,
+            26,
+            34,
+            4,
+            15,
+            22,
+            27,
+            44
+          ],
+          "totals": [
+            0,
+            0
+          ],
+          "trick": [],
+          "trump": -1,
+          "winners": []
+        },
+        "view_of_mover": {
+          "bid": 0,
+          "bidder": -1,
+          "bids": 0,
+          "captured": [
+            0,
+            0
+          ],
+          "dealer": 3,
+          "hand": [
+            51,
+            32,
+            8,
+            46,
+            14,
+            18,
+            1,
+            45,
+            7
+          ],
+          "legal": [],
+          "phase": 0,
+          "round": 0,
+          "seat": 0,
+          "totals": [
+            0,
+            0
+          ],
+          "trick": [],
+          "trump": -1,
+          "winners": []
+        },
+        "view_of_other": {
+          "bid": 0,
+          "bidder": -1,
+          "bids": 0,
+          "captured": [
+            0,
+            0
+          ],
+          "dealer": 3,
+          "hand": [
+            11,
+            30,
+            48,
+            19,
+            10,
+            2,
+            40,
+            43,
+            33
+          ],
+          "legal": [],
+          "phase": 0,
+          "round": 0,
+          "seat": 0,
+          "totals": [
+            0,
+            0
+          ],
+          "trick": [],
+          "trump": -1,
+          "winners": []
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 159,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Carol",
+              "id": "u3",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Drew",
+              "id": "u4",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_state": {
+          "bid": 8,
+          "bidder": 2,
+          "bids": 4,
+          "captured": [
+            2,
+            2
+          ],
+          "dealer": 0,
+          "hands": [
+            [
+              0,
+              2,
+              6,
+              10
+            ],
+            [
+              3,
+              46,
+              5,
+              33
+            ],
+            [
+              42,
+              1,
+              7
+            ],
+            [
+              29,
+              26,
+              50
+            ]
+          ],
+          "phase": 2,
+          "round": 5,
+          "seat": 0,
+          "seed": 3833003631,
+          "stock": [],
+          "totals": [
+            4,
+            13
+          ],
+          "trick": [
+            {
+              "card": 21,
+              "seat": 2
+            },
+            {
+              "card": 22,
+              "seat": 3
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "bid": 8,
+          "bidder": 2,
+          "bids": 4,
+          "captured": [
+            2,
+            2
+          ],
+          "dealer": 0,
+          "hand": [
+            29,
+            26,
+            50
+          ],
+          "legal": [],
+          "phase": 2,
+          "round": 5,
+          "seat": 0,
+          "totals": [
+            4,
+            13
+          ],
+          "trick": [
+            {
+              "card": 21,
+              "seat": 2
+            },
+            {
+              "card": 22,
+              "seat": 3
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "bid": 8,
+          "bidder": 2,
+          "bids": 4,
+          "captured": [
+            2,
+            2
+          ],
+          "dealer": 0,
+          "hand": [
+            0,
+            2,
+            6,
+            10
+          ],
+          "legal": [
+            0,
+            2,
+            6,
+            10
+          ],
+          "phase": 2,
+          "round": 5,
+          "seat": 0,
+          "totals": [
+            4,
+            13
+          ],
+          "trick": [
+            {
+              "card": 21,
+              "seat": 2
+            },
+            {
+              "card": 22,
+              "seat": 3
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "intermediate",
+        "move": {
+          "card": 22
+        },
+        "name": "intermediate move",
+        "other_player_id": "u1",
+        "player_id": "u4",
+        "state": {
+          "bid": 8,
+          "bidder": 2,
+          "bids": 4,
+          "captured": [
+            2,
+            2
+          ],
+          "dealer": 0,
+          "hands": [
+            [
+              0,
+              2,
+              6,
+              10
+            ],
+            [
+              3,
+              46,
+              5,
+              33
+            ],
+            [
+              42,
+              1,
+              7
+            ],
+            [
+              22,
+              29,
+              26,
+              50
+            ]
+          ],
+          "phase": 2,
+          "round": 5,
+          "seat": 3,
+          "seed": 3833003631,
+          "stock": [],
+          "totals": [
+            4,
+            13
+          ],
+          "trick": [
+            {
+              "card": 21,
+              "seat": 2
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "view_of_mover": {
+          "bid": 8,
+          "bidder": 2,
+          "bids": 4,
+          "captured": [
+            2,
+            2
+          ],
+          "dealer": 0,
+          "hand": [
+            22,
+            29,
+            26,
+            50
+          ],
+          "legal": [
+            22
+          ],
+          "phase": 2,
+          "round": 5,
+          "seat": 3,
+          "totals": [
+            4,
+            13
+          ],
+          "trick": [
+            {
+              "card": 21,
+              "seat": 2
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        },
+        "view_of_other": {
+          "bid": 8,
+          "bidder": 2,
+          "bids": 4,
+          "captured": [
+            2,
+            2
+          ],
+          "dealer": 0,
+          "hand": [
+            0,
+            2,
+            6,
+            10
+          ],
+          "legal": [],
+          "phase": 2,
+          "round": 5,
+          "seat": 3,
+          "totals": [
+            4,
+            13
+          ],
+          "trick": [
+            {
+              "card": 21,
+              "seat": 2
+            }
+          ],
+          "trump": 0,
+          "winners": []
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 318,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Carol",
+              "id": "u3",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Drew",
+              "id": "u4",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_payouts": {
+          "u2": 0,
+          "u4": 0
+        },
+        "expected_state": {
+          "bid": 7,
+          "bidder": 0,
+          "bids": 4,
+          "captured": [
+            2,
+            12
+          ],
+          "dealer": 1,
+          "hands": [
+            [],
+            [],
+            [],
+            []
+          ],
+          "phase": 2,
+          "round": 10,
+          "seat": 1,
+          "seed": 2638866512,
+          "stock": [],
+          "totals": [
+            -12,
+            72
+          ],
+          "trick": [],
+          "trump": 1,
+          "winners": [
+            1,
+            3
+          ]
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "bid": 7,
+          "bidder": 0,
+          "bids": 4,
+          "captured": [
+            2,
+            12
+          ],
+          "dealer": 1,
+          "hand": [],
+          "legal": [],
+          "phase": 2,
+          "round": 10,
+          "seat": 1,
+          "totals": [
+            -12,
+            72
+          ],
+          "trick": [],
+          "trump": 1,
+          "winners": [
+            1,
+            3
+          ]
+        },
+        "expected_view_of_other": {
+          "bid": 7,
+          "bidder": 0,
+          "bids": 4,
+          "captured": [
+            2,
+            12
+          ],
+          "dealer": 1,
+          "hand": [],
+          "legal": [],
+          "phase": 2,
+          "round": 10,
+          "seat": 1,
+          "totals": [
+            -12,
+            72
+          ],
+          "trick": [],
+          "trump": 1,
+          "winners": [
+            1,
+            3
+          ]
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "terminal",
+        "move": {
+          "card": 42
+        },
+        "name": "terminal move",
+        "other_player_id": "u1",
+        "player_id": "u3",
+        "state": {
+          "bid": 7,
+          "bidder": 0,
+          "bids": 4,
+          "captured": [
+            2,
+            12
+          ],
+          "dealer": 1,
+          "hands": [
+            [],
+            [],
+            [
+              42
+            ],
+            []
+          ],
+          "phase": 2,
+          "round": 10,
+          "seat": 2,
+          "seed": 2638866512,
+          "stock": [],
+          "totals": [
+            -5,
+            60
+          ],
+          "trick": [
+            {
+              "card": 26,
+              "seat": 3
+            },
+            {
+              "card": 2,
+              "seat": 0
+            },
+            {
+              "card": 14,
+              "seat": 1
+            }
+          ],
+          "trump": 1,
+          "winners": []
+        },
+        "view_of_mover": {
+          "bid": 7,
+          "bidder": 0,
+          "bids": 4,
+          "captured": [
+            2,
+            12
+          ],
+          "dealer": 1,
+          "hand": [
+            42
+          ],
+          "legal": [
+            42
+          ],
+          "phase": 2,
+          "round": 10,
+          "seat": 2,
+          "totals": [
+            -5,
+            60
+          ],
+          "trick": [
+            {
+              "card": 26,
+              "seat": 3
+            },
+            {
+              "card": 2,
+              "seat": 0
+            },
+            {
+              "card": 14,
+              "seat": 1
+            }
+          ],
+          "trump": 1,
+          "winners": []
+        },
+        "view_of_other": {
+          "bid": 7,
+          "bidder": 0,
+          "bids": 4,
+          "captured": [
+            2,
+            12
+          ],
+          "dealer": 1,
+          "hand": [],
+          "legal": [],
+          "phase": 2,
+          "round": 10,
+          "seat": 2,
+          "totals": [
+            -5,
+            60
+          ],
+          "trick": [
+            {
+              "card": 26,
+              "seat": 3
+            },
+            {
+              "card": 2,
+              "seat": 0
+            },
+            {
+              "card": 14,
+              "seat": 1
+            }
+          ],
+          "trump": 1,
+          "winners": []
+        }
+      }
+    ],
+    "move_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "card": {
+              "maximum": 51,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "card"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "bid": {
+              "maximum": 14,
+              "minimum": 7,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "bid"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "trump": {
+              "maximum": 3,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "trump"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "const": true
+            }
+          },
+          "required": [
+            "pass"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "state_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "bid": {
+          "maximum": 14,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "bidder": {
+          "maximum": 3,
+          "minimum": -1,
+          "type": "integer"
+        },
+        "bids": {
+          "maximum": 4,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "captured": {
+          "items": {
+            "maximum": 14,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "type": "array"
+        },
+        "dealer": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "hands": {
+          "items": {
+            "items": {
+              "maximum": 51,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 14,
+            "type": "array"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "phase": {
+          "maximum": 2,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "round": {
+          "maximum": 23,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seat": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seed": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stock": {
+          "items": {
+            "maximum": 51,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "totals": {
+          "items": {
+            "maximum": 75,
+            "minimum": -336,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "type": "array"
+        },
+        "trick": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "card": {
+                "maximum": 51,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seat": {
+                "maximum": 5,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "seat",
+              "card"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "trump": {
+          "maximum": 3,
+          "minimum": -1,
+          "type": "integer"
+        },
+        "winners": {
+          "items": {
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        }
+      },
+      "required": [
+        "seat",
+        "dealer",
+        "trump",
+        "bid",
+        "bidder",
+        "phase",
+        "round",
+        "bids",
+        "captured",
+        "totals",
+        "trick",
+        "winners",
+        "seed",
+        "hands",
+        "stock"
+      ],
+      "type": "object"
+    },
+    "view_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "bid": {
+          "maximum": 14,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "bidder": {
+          "maximum": 3,
+          "minimum": -1,
+          "type": "integer"
+        },
+        "bids": {
+          "maximum": 4,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "captured": {
+          "items": {
+            "maximum": 14,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "type": "array"
+        },
+        "dealer": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "hand": {
+          "items": {
+            "maximum": 51,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 14,
+          "type": "array"
+        },
+        "legal": {
+          "items": {
+            "maximum": 51,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 14,
+          "type": "array"
+        },
+        "phase": {
+          "maximum": 2,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "round": {
+          "maximum": 23,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seat": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totals": {
+          "items": {
+            "maximum": 75,
+            "minimum": -336,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "type": "array"
+        },
+        "trick": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "card": {
+                "maximum": 51,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seat": {
+                "maximum": 5,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "seat",
+              "card"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "trump": {
+          "maximum": 3,
+          "minimum": -1,
+          "type": "integer"
+        },
+        "winners": {
+          "items": {
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        }
+      },
+      "required": [
+        "seat",
+        "dealer",
+        "trump",
+        "bid",
+        "bidder",
+        "phase",
+        "round",
+        "bids",
+        "captured",
+        "totals",
+        "trick",
+        "winners",
+        "hand",
+        "legal"
+      ],
+      "type": "object"
+    }
+  },
+  "translations": {
+    "ar": {
+      "display_name": "Pedro",
+      "short_description": "يجلس الشريكان متقابلين. زايد من 7 إلى 14 ويختار أعلى مزايد الحكم. تعطي كل خمسة من لون الحكم خمس نقاط. اتبع النوع أو العب حكماً. تخصم قيمة العرض الفاشل. يفوز من يبلغ 62 أو يتقدم بعد 24 جولة.",
+      "game_logic_rules": "يجلس الشريكان متقابلين. زايد من 7 إلى 14 ويختار أعلى مزايد الحكم. تعطي كل خمسة من لون الحكم خمس نقاط. اتبع النوع أو العب حكماً. تخصم قيمة العرض الفاشل. يفوز من يبلغ 62 أو يتقدم بعد 24 جولة.",
+      "game_ui_rules": "يجلس الشريكان متقابلين. زايد من 7 إلى 14 ويختار أعلى مزايد الحكم. تعطي كل خمسة من لون الحكم خمس نقاط. اتبع النوع أو العب حكماً. تخصم قيمة العرض الفاشل. يفوز من يبلغ 62 أو يتقدم بعد 24 جولة.",
+      "tutorial_strings": {
+        "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.": "يجلس الشريكان متقابلين. زايد من 7 إلى 14 ويختار أعلى مزايد الحكم. تعطي كل خمسة من لون الحكم خمس نقاط. اتبع النوع أو العب حكماً. تخصم قيمة العرض الفاشل. يفوز من يبلغ 62 أو يتقدم بعد 24 جولة."
+      },
+      "client_strings": {
+        "bid": "زايد بمبلغ {number}",
+        "cards": "البطاقات: {cards}",
+        "pass": "مرر",
+        "pile": "الكومة: {cards}",
+        "server_illegal": "اختر حركة قانونية في دورك.",
+        "title": "Pedro",
+        "turn": "دور {name}",
+        "winners": "الفائز: {names}"
+      }
+    },
+    "de": {
+      "display_name": "Pedro",
+      "short_description": "Partner sitzen gegenüber. Biete 7 bis 14, der Höchstbietende wählt Trumpf. Beide Fünfen der Trumpffarbe zählen je fünf Punkte. Bediene die Farbe oder trumpfe. Ein verfehltes Gebot wird abgezogen. 62 Punkte oder Führung nach 24 Runden gewinnt.",
+      "game_logic_rules": "Partner sitzen gegenüber. Biete 7 bis 14, der Höchstbietende wählt Trumpf. Beide Fünfen der Trumpffarbe zählen je fünf Punkte. Bediene die Farbe oder trumpfe. Ein verfehltes Gebot wird abgezogen. 62 Punkte oder Führung nach 24 Runden gewinnt.",
+      "game_ui_rules": "Partner sitzen gegenüber. Biete 7 bis 14, der Höchstbietende wählt Trumpf. Beide Fünfen der Trumpffarbe zählen je fünf Punkte. Bediene die Farbe oder trumpfe. Ein verfehltes Gebot wird abgezogen. 62 Punkte oder Führung nach 24 Runden gewinnt.",
+      "tutorial_strings": {
+        "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.": "Partner sitzen gegenüber. Biete 7 bis 14, der Höchstbietende wählt Trumpf. Beide Fünfen der Trumpffarbe zählen je fünf Punkte. Bediene die Farbe oder trumpfe. Ein verfehltes Gebot wird abgezogen. 62 Punkte oder Führung nach 24 Runden gewinnt."
+      },
+      "client_strings": {
+        "bid": "{number} bieten",
+        "cards": "Karten: {cards}",
+        "pass": "Passen",
+        "pile": "Stapel: {cards}",
+        "server_illegal": "Wähle einen gültigen Zug, wenn du an der Reihe bist.",
+        "title": "Pedro",
+        "turn": "{name} ist am Zug",
+        "winners": "Gewonnen: {names}"
+      }
+    },
+    "es": {
+      "display_name": "Pedro",
+      "short_description": "Juegan parejas enfrentadas. Puja de 7 a 14 y el mejor postor elige triunfo. Ambos cincos del color de triunfo valen cinco. Sigue el palo o juega triunfo. Un contrato fallido resta la puja. Gana quien alcance 62 o lidere tras 24 manos.",
+      "game_logic_rules": "Juegan parejas enfrentadas. Puja de 7 a 14 y el mejor postor elige triunfo. Ambos cincos del color de triunfo valen cinco. Sigue el palo o juega triunfo. Un contrato fallido resta la puja. Gana quien alcance 62 o lidere tras 24 manos.",
+      "game_ui_rules": "Juegan parejas enfrentadas. Puja de 7 a 14 y el mejor postor elige triunfo. Ambos cincos del color de triunfo valen cinco. Sigue el palo o juega triunfo. Un contrato fallido resta la puja. Gana quien alcance 62 o lidere tras 24 manos.",
+      "tutorial_strings": {
+        "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.": "Juegan parejas enfrentadas. Puja de 7 a 14 y el mejor postor elige triunfo. Ambos cincos del color de triunfo valen cinco. Sigue el palo o juega triunfo. Un contrato fallido resta la puja. Gana quien alcance 62 o lidere tras 24 manos."
+      },
+      "client_strings": {
+        "bid": "Pujar {number}",
+        "cards": "Cartas: {cards}",
+        "pass": "Pasar",
+        "pile": "Pila: {cards}",
+        "server_illegal": "Elige una jugada válida en tu turno.",
+        "title": "Pedro",
+        "turn": "Turno de {name}",
+        "winners": "Gana: {names}"
+      }
+    },
+    "fr": {
+      "display_name": "Pedro",
+      "short_description": "Les partenaires se font face. Enchérissez de 7 à 14 et le gagnant choisit l’atout. Les deux cinq de la couleur d’atout valent cinq points chacun. Fournissez ou coupez. Une enchère manquée est déduite. Gagnez à 62 ou en tête après 24 donnes.",
+      "game_logic_rules": "Les partenaires se font face. Enchérissez de 7 à 14 et le gagnant choisit l’atout. Les deux cinq de la couleur d’atout valent cinq points chacun. Fournissez ou coupez. Une enchère manquée est déduite. Gagnez à 62 ou en tête après 24 donnes.",
+      "game_ui_rules": "Les partenaires se font face. Enchérissez de 7 à 14 et le gagnant choisit l’atout. Les deux cinq de la couleur d’atout valent cinq points chacun. Fournissez ou coupez. Une enchère manquée est déduite. Gagnez à 62 ou en tête après 24 donnes.",
+      "tutorial_strings": {
+        "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.": "Les partenaires se font face. Enchérissez de 7 à 14 et le gagnant choisit l’atout. Les deux cinq de la couleur d’atout valent cinq points chacun. Fournissez ou coupez. Une enchère manquée est déduite. Gagnez à 62 ou en tête après 24 donnes."
+      },
+      "client_strings": {
+        "bid": "Offrir {number}",
+        "cards": "Cartes : {cards}",
+        "pass": "Passer",
+        "pile": "Pile : {cards}",
+        "server_illegal": "Choisissez un coup légal à votre tour.",
+        "title": "Pedro",
+        "turn": "Tour de {name}",
+        "winners": "Victoire : {names}"
+      }
+    },
+    "hi": {
+      "display_name": "Pedro",
+      "short_description": "साझेदार आमने-सामने बैठते हैं। 7 से 14 की बोली लगाएँ, ऊँची बोली तुरुप चुनती है। तुरुप के रंग के दोनों पाँच पाँच अंक देते हैं। सूट का पालन करें या तुरुप खेलें। असफल बोली कटती है। 62 अंक या 24 दौर बाद बढ़त से जीतें।",
+      "game_logic_rules": "साझेदार आमने-सामने बैठते हैं। 7 से 14 की बोली लगाएँ, ऊँची बोली तुरुप चुनती है। तुरुप के रंग के दोनों पाँच पाँच अंक देते हैं। सूट का पालन करें या तुरुप खेलें। असफल बोली कटती है। 62 अंक या 24 दौर बाद बढ़त से जीतें।",
+      "game_ui_rules": "साझेदार आमने-सामने बैठते हैं। 7 से 14 की बोली लगाएँ, ऊँची बोली तुरुप चुनती है। तुरुप के रंग के दोनों पाँच पाँच अंक देते हैं। सूट का पालन करें या तुरुप खेलें। असफल बोली कटती है। 62 अंक या 24 दौर बाद बढ़त से जीतें।",
+      "tutorial_strings": {
+        "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.": "साझेदार आमने-सामने बैठते हैं। 7 से 14 की बोली लगाएँ, ऊँची बोली तुरुप चुनती है। तुरुप के रंग के दोनों पाँच पाँच अंक देते हैं। सूट का पालन करें या तुरुप खेलें। असफल बोली कटती है। 62 अंक या 24 दौर बाद बढ़त से जीतें।"
+      },
+      "client_strings": {
+        "bid": "{number} की बोली",
+        "cards": "पत्ते: {cards}",
+        "pass": "पास",
+        "pile": "ढेर: {cards}",
+        "server_illegal": "अपनी बारी में वैध चाल चुनें।",
+        "title": "Pedro",
+        "turn": "{name} की बारी",
+        "winners": "विजेता: {names}"
+      }
+    },
+    "pt": {
+      "display_name": "Pedro",
+      "short_description": "Parceiros sentam-se em frente. Licita de 7 a 14 e o vencedor escolhe trunfo. Ambos os cincos da cor do trunfo valem cinco pontos. Segue o naipe ou joga trunfo. Uma licitação falhada é deduzida. Ganha a 62 ou liderando após 24 mãos.",
+      "game_logic_rules": "Parceiros sentam-se em frente. Licita de 7 a 14 e o vencedor escolhe trunfo. Ambos os cincos da cor do trunfo valem cinco pontos. Segue o naipe ou joga trunfo. Uma licitação falhada é deduzida. Ganha a 62 ou liderando após 24 mãos.",
+      "game_ui_rules": "Parceiros sentam-se em frente. Licita de 7 a 14 e o vencedor escolhe trunfo. Ambos os cincos da cor do trunfo valem cinco pontos. Segue o naipe ou joga trunfo. Uma licitação falhada é deduzida. Ganha a 62 ou liderando após 24 mãos.",
+      "tutorial_strings": {
+        "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.": "Parceiros sentam-se em frente. Licita de 7 a 14 e o vencedor escolhe trunfo. Ambos os cincos da cor do trunfo valem cinco pontos. Segue o naipe ou joga trunfo. Uma licitação falhada é deduzida. Ganha a 62 ou liderando após 24 mãos."
+      },
+      "client_strings": {
+        "bid": "Oferecer {number}",
+        "cards": "Cartas: {cards}",
+        "pass": "Passar",
+        "pile": "Pilha: {cards}",
+        "server_illegal": "Escolhe uma jogada válida na tua vez.",
+        "title": "Pedro",
+        "turn": "Vez de {name}",
+        "winners": "Vitória: {names}"
+      }
+    },
+    "zh": {
+      "display_name": "Pedro",
+      "short_description": "对座搭档。竞叫 7 到 14 分，最高叫分者定主。与主花色同色的两张 5 各值五分。跟领出花色或打主牌。未达叫分要扣分。达到 62 分获胜，或打满 24 局时领先者获胜。",
+      "game_logic_rules": "对座搭档。竞叫 7 到 14 分，最高叫分者定主。与主花色同色的两张 5 各值五分。跟领出花色或打主牌。未达叫分要扣分。达到 62 分获胜，或打满 24 局时领先者获胜。",
+      "game_ui_rules": "对座搭档。竞叫 7 到 14 分，最高叫分者定主。与主花色同色的两张 5 各值五分。跟领出花色或打主牌。未达叫分要扣分。达到 62 分获胜，或打满 24 局时领先者获胜。",
+      "tutorial_strings": {
+        "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.": "对座搭档。竞叫 7 到 14 分，最高叫分者定主。与主花色同色的两张 5 各值五分。跟领出花色或打主牌。未达叫分要扣分。达到 62 分获胜，或打满 24 局时领先者获胜。"
+      },
+      "client_strings": {
+        "bid": "出价 {number}",
+        "cards": "手牌：{cards}",
+        "pass": "退出竞拍",
+        "pile": "牌堆：{cards}",
+        "server_illegal": "请在自己的回合选择合法走法。",
+        "title": "Pedro",
+        "turn": "轮到 {name}",
+        "winners": "获胜：{names}"
+      }
+    }
+  }
+}

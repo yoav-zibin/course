@@ -1,0 +1,1177 @@
+{
+  "name": "Big Two",
+  "description": "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.",
+  "allowed_player_counts": [
+    4
+  ],
+  "all_state_public": false,
+  "allows_leave_mid_match": false,
+  "allows_join_mid_match": false,
+  "server_code": "const rank=c=>(c%13+12)%13;\nconst suit=c=>[1,0,2,3][Math.floor(c/13)];\nconst strength=c=>rank(c)*4+suit(c);\nconst opening=14;\nfunction score(cards) {\n  const sorted=[...cards].sort((a,b)=>strength(a)-strength(b));\n  const high=sorted[sorted.length-1];\n  const groups=Array.from({length:13},(_,r)=>sorted.filter(c=>rank(c)===r));\n  if([1,2,3].includes(cards.length))\n    return groups.some(g=>g.length===cards.length)?strength(high):-1;\n  if(cards.length!==5)return -1;\n  const ranks=sorted.map(rank);\n  const flush=sorted.every(c=>suit(c)===suit(high));\n  const straightHigh=ranks.join(\",\")===\"0,1,2,11,12\"?2:ranks.join(\",\")===\"0,1,2,3,12\"?3:\n    ranks[4]<12&&ranks.every((r,i)=>r===ranks[0]+i)?ranks[4]:-1;\n  const straightValue=straightHigh*4+suit(sorted.find(c=>rank(c)===straightHigh));\n  if(flush&&straightHigh>=0)return 500+straightValue;\n  const four=groups.findIndex(g=>g.length===4);\n  if(four>=0)return 400+four;\n  const three=groups.findIndex(g=>g.length===3);\n  if(three>=0&&groups.some(g=>g.length===2))return 300+three;\n  if(flush)return 200+suit(high)*16+rank(high);\n  return straightHigh>=0?100+straightValue:-1;\n}\nfunction allowed(s,cards) {\n  if(!Array.isArray(cards)||!cards.length||new Set(cards).size!==cards.length||\n    !cards.every(c=>s.hands[s.seat].includes(c))||s.open&&!cards.includes(opening))return false;\n  const value=score(cards);\n  return value>=0&&(!s.table.length||s.table.length===cards.length&&value>score(s.table));\n}\nfunction moves(s) {\n  const hand=s.hands[s.seat],options=[];\n  const search=(selection,start,size)=>{\n    if(selection.length===size){if(allowed(s,selection))options.push({cards:selection});return;}\n    for(let i=start;i<=hand.length-(size-selection.length);i++)search([...selection,hand[i]],i+1,size);\n  };\n  for(const size of s.table.length?[s.table.length]:[1,2,3,5])search([],0,size);\n  if(s.table.length)options.push({pass:true});\n  return options;\n}\nconst game={\n  newMatch(ctx){\n    let seed=2166136261;\n    for(const p of ctx.players)for(const c of p.id)seed=Math.imul(seed^c.charCodeAt(0),16777619);\n    const deck=Array.from({length:52},(_,i)=>i);\n    for(let i=deck.length-1;i>0;i--){\n      seed=(Math.imul(seed,1664525)+1013904223)>>>0;\n      const j=seed%(i+1);\n      [deck[i],deck[j]]=[deck[j],deck[i]];\n    }\n    const hands=ctx.players.map((_,i)=>deck.slice(i*13,i*13+13).sort((a,b)=>strength(a)-strength(b)));\n    const seat=hands.findIndex(h=>h.includes(opening));\n    return {state:{hands,seat,leader:seat,passes:0,table:[],open:true,winners:[]},turn:[ctx.players[seat].id]};\n  },\n  applyMove(s,id,m,ctx){\n    if(!m||Object.keys(m).length!==1||ctx.players[s.seat].id!==id||s.winners.length||\n      !(m.pass===true?s.table.length:allowed(s,m.cards)))\n      throw new InvalidMove(\"Choose a legal move on your turn.\");\n    const state={...s,seat:(s.seat+1)%4};\n    if(m.pass){\n      state.passes++;\n      if(state.passes===3){state.table=[];state.passes=0;state.seat=s.leader;}\n    }else{\n      state.hands=s.hands.map((hand,i)=>i===s.seat?hand.filter(c=>!m.cards.includes(c)):hand);\n      state.table=[...m.cards];\n      state.leader=s.seat;\n      state.passes=0;\n      state.open=false;\n      if(!state.hands[s.seat].length){\n        state.winners=[s.seat];\n        const humans=ctx.players.filter(p=>p.kind===\"human\"&&p.active!==false);\n        const winner=ctx.players[s.seat];\n        const paid=humans.includes(winner)?[winner]:humans;\n        return {state,turn:null,payouts:Object.fromEntries(paid.map((p,i)=>[p.id,\n          Math.floor(ctx.pot/paid.length)+Number(i<ctx.pot%paid.length)]))};\n      }\n    }\n    return {state,turn:[ctx.players[state.seat].id]};\n  },\n  viewFor(s,id,ctx){\n    const {hands,...visible}=s;\n    const i=ctx.players.findIndex(p=>p.id===id);\n    return {...visible,hand:hands[i]??[],counts:hands.map(h=>h.length)};\n  },\n  computerMove(s){\n    return moves(s).sort((a,b)=>(b.cards?.length??0)-(a.cards?.length??0)||\n      (a.cards&&b.cards?score(a.cards)-score(b.cards):0))[0];\n  },\n  randomMove(s,id,ctx){\n    const options=moves(s);\n    return options[Math.floor(ctx.random()*options.length)];\n  }\n};\n",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 548,
+      "height": 374,
+      "camera_enabled": false
+    },
+    "boards": [
+      {
+        "id": "hand",
+        "kind": "free",
+        "x": 18,
+        "y": 110,
+        "width": 512,
+        "height": 246,
+        "color": "#143339",
+        "line_color": "#557877"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 60,
+        "height": 72,
+        "color": "#fff7df",
+        "text_color": "#172743"
+      }
+    },
+    "assets": {},
+    "strings": {
+      "title": "Big Two",
+      "playSelected": "Play selected cards",
+      "pass": "Pass",
+      "cards": "Cards: {cards}",
+      "pile": "Pile: {cards}",
+      "turn": "Player {name}'s turn",
+      "winners": "{names} wins",
+      "server_illegal": "Choose a legal move on your turn."
+    },
+    "ui_code": "const KIND = \"big_two\";\nconst SOURCE_STRINGS = {\"title\": \"Big Two\", \"playSelected\": \"Play selected cards\", \"pass\": \"Pass\", \"cards\": \"Cards: {cards}\", \"pile\": \"Pile: {cards}\", \"turn\": \"Player {name}'s turn\", \"winners\": \"{names} wins\", \"server_illegal\": \"Choose a legal move on your turn.\"};\nconst rank=c=>(c%13+12)%13;\nconst suit=c=>[1,0,2,3][Math.floor(c/13)];\nconst strength=c=>rank(c)*4+suit(c);\nconst opening=14;\nfunction score(cards) {\n  const sorted=[...cards].sort((a,b)=>strength(a)-strength(b));\n  const high=sorted[sorted.length-1];\n  const groups=Array.from({length:13},(_,r)=>sorted.filter(c=>rank(c)===r));\n  if([1,2,3].includes(cards.length))\n    return groups.some(g=>g.length===cards.length)?strength(high):-1;\n  if(cards.length!==5)return -1;\n  const ranks=sorted.map(rank);\n  const flush=sorted.every(c=>suit(c)===suit(high));\n  const straightHigh=ranks.join(\",\")===\"0,1,2,11,12\"?2:ranks.join(\",\")===\"0,1,2,3,12\"?3:\n    ranks[4]<12&&ranks.every((r,i)=>r===ranks[0]+i)?ranks[4]:-1;\n  const straightValue=straightHigh*4+suit(sorted.find(c=>rank(c)===straightHigh));\n  if(flush&&straightHigh>=0)return 500+straightValue;\n  const four=groups.findIndex(g=>g.length===4);\n  if(four>=0)return 400+four;\n  const three=groups.findIndex(g=>g.length===3);\n  if(three>=0&&groups.some(g=>g.length===2))return 300+three;\n  if(flush)return 200+suit(high)*16+rank(high);\n  return straightHigh>=0?100+straightValue:-1;\n}\nfunction allowed(s,cards) {\n  if(!Array.isArray(cards)||!cards.length||new Set(cards).size!==cards.length||\n    !cards.every(c=>s.hands[s.seat].includes(c))||s.open&&!cards.includes(opening))return false;\n  const value=score(cards);\n  return value>=0&&(!s.table.length||s.table.length===cards.length&&value>score(s.table));\n}\n\nconst gameUI = {\n  reduce(message, previous) {\n    const match = message.type === \"ui_event\" ? message.state_changed : message;\n    const v = match.view || match.state;\n    const over = match.status === \"over\";\n    const actor = match.acting_for_player_index;\n    const active = !over && !match.replay && Number.isInteger(actor) &&\n      match.turn_of_player_indices?.includes(actor);\n    const click = message.event?.type === \"tap\" ? message.event.id : null;\n    const strings = { ...SOURCE_STRINGS, ...match.strings };\n    const t = (key, values = {}) => (strings[key] || key)\n      .replace(/\\{(\\w+)\\}/g, (_, name) => String(values[name] ?? \"\"));\n    const who = seat => match.players?.[seat]?.name || String(seat + 1);\n    const suits = [\"♣\", \"♦\", \"♥\", \"♠\"];\n    const faces = [\"25\",\"50\",\"75\",\"100\",\"200\",\"⛽\",\"🛞\",\"💥\",\"🛑\",\"🚧\",\"🛢\",\"🔧\",\"🚑\",\"🟢\",\"🏁\",\"🛡⛽\",\"🛡🛞\",\"🛡💥\",\"🛡🚦\"];\n    const face = c => KIND === \"mille_bornes\" ? faces[c] :\n      c >= 104 ? \"🃏\" : [\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\",\"10\",\"J\",\"Q\",\"K\",\"A\"][c % 13] +\n      suits[Math.floor((c % 52) / 13)];\n    const scene = { labels: [], pieces: [], controls: [] };\n    const moves = new Map();\n    const label = (id,text,y,size = 19) => scene.labels.push({id,text,x:20,y,font_size:size});\n    const button = (id,text,move) => {\n      if (!active) return;\n      scene.controls.push({id,kind:\"button\",label:String(text)});\n      moves.set(id,move);\n    };\n    const winners = v.winners || [];\n    label(\"status\", over ? winners.length ? t(\"winners\",{names:winners.map(who).join(\", \")}) :\n      (strings.tie || \"Game over\") : t(\"turn\",{name:who(v.seat)}), 15, 24);\n    const scores = v.totals || v.miles || v.scores || v.counts;\n    if (scores) label(\"scores\",t(\"cards\",{cards:scores.join(\" · \")}),50);\n    const table = v.table || v.trick?.map(play => play.card) || [];\n    const publicCards = KIND === \"catch_the_ten\" ? [v.up,...table] :\n      KIND === \"conquian\" && v.top >= 0 ? [v.top] : table;\n    const trump = v.trump >= 0 ? suits[v.trump] + \"  \" : \"\";\n    label(\"table\",t(\"pile\",{cards:trump + publicCards.map(face).join(\" \")}),78);\n    let picked = previous?.moveCount === match.move_count && previous?.actor === actor\n      ? previous.picked || [] : [];\n    const hand = v.hand || [];\n    if (KIND === \"big_two\" && active && /^hand_\\d+$/.test(click || \"\")) {\n      const card = Number(click.slice(5));\n      if (hand.includes(card)) {\n        if (picked.includes(card)) picked = picked.filter(value => value !== card);\n        else if (picked.length < 5) picked = [...picked,card];\n      }\n    }\n    const direct = v.discarding ? hand : v.legal || [];\n    hand.forEach((card, i) => {\n      const directMove = active && direct.includes(card);\n      const id = KIND === \"big_two\" ? \"hand_\" + card : \"hand_\" + i;\n      scene.pieces.push({\n        id,type:\"card\",board:\"hand\",text:face(card),\n        position:{x:32+(i%8)*64,y:39+Math.floor(i/8)*80},\n        actions:active && (KIND === \"big_two\" || directMove) ? [\"tap\"] : [],\n        selected:picked.includes(card)\n      });\n      if (directMove) moves.set(id,v.discarding ? {discard:card} : {card});\n    });\n    if (KIND === \"big_two\") {\n      if (allowed({...v,hands:{[v.seat]:hand}},picked)) button(\"play\",t(\"playSelected\"),{cards:picked});\n      if (table.length) button(\"pass\",t(\"pass\"),{pass:true});\n    }\n    if (KIND === \"pedro\" && v.phase === 0) {\n      for (let bid = Math.max(7,v.bid+1); bid <= 14; bid++) button(\"bid_\"+bid,t(\"bid\",{number:bid}),{bid});\n      if (v.bid || v.bids < 3) button(\"pass\",t(\"pass\"),{pass:true});\n    }\n    if ((v.trump < 0 && [\"court_piece\",\"sergeant_major\"].includes(KIND)) ||\n        (KIND === \"pedro\" && v.phase === 1)) {\n      suits.forEach((symbol,trump) => button(\"trump_\"+trump,symbol,{trump}));\n    }\n    if (KIND === \"sergeant_major\" && v.bids[v.seat] < 0) {\n      for (let bid=2; bid<=8; bid++) button(\"bid_\"+bid,bid,{bid});\n    }\n    (v.choices || []).forEach((move,index) => {\n      let caption;\n      if (KIND === \"conquian\") {\n        caption = move.pass ? t(\"pass\") : move.draw !== undefined ? t(move.draw ? \"take\" : \"stock\") :\n          move.cards ? t(\"meld\",{cards:move.cards.map(face).join(\" \")}) :\n          move.discard !== undefined ? t(\"discard\",{card:face(move.discard)}) :\n          move.close !== undefined ? t(\"close\",{card:face(move.close)}) :\n          t(\"append\",{card:face(move.append ? move.append[1] : v.top),number:(move.append ? move.append[0] : move.extend)+1});\n      } else {\n        caption = move.draw ? t(\"stock\") :\n          move.attack ? face(hand[move.attack[0]])+\" → \"+who(move.attack[1]) :\n          move.discard !== undefined ? t(\"discard\",{card:face(hand[move.discard])}) : face(hand[move.play]);\n      }\n      button(\"choice_\"+index,caption,move);\n    });\n    const result = {scene,local_state:{moveCount:match.move_count,actor,picked}};\n    if (moves.has(click)) result.make_move = moves.get(click);\n    return result;\n  }\n};\n"
+  },
+  "rules": "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.",
+  "ui_instructions": "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.",
+  "tutorial": {
+    "html": "<meta name=\"viewport\" content=\"width=device-width\"><p>Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.</p>",
+    "text": "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins."
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/></svg>"
+    },
+    {
+      "caption": "Opening",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Turn",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    },
+    {
+      "caption": "Result",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "cases": [
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Carol",
+              "id": "u3",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Drew",
+              "id": "u4",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_state": {
+          "hands": [
+            [
+              30,
+              18,
+              7,
+              46,
+              8,
+              48,
+              11,
+              51
+            ],
+            [
+              40,
+              2,
+              41,
+              3,
+              29,
+              43,
+              31,
+              33,
+              10,
+              36,
+              50,
+              25,
+              12
+            ],
+            [
+              16,
+              42,
+              17,
+              5,
+              6,
+              47,
+              9,
+              35,
+              23,
+              49,
+              24,
+              38,
+              39
+            ],
+            [
+              27,
+              15,
+              28,
+              4,
+              44,
+              20,
+              21,
+              34,
+              22,
+              37,
+              13,
+              0,
+              26
+            ]
+          ],
+          "leader": 0,
+          "open": false,
+          "passes": 0,
+          "seat": 1,
+          "table": [
+            14,
+            1,
+            19,
+            32,
+            45
+          ],
+          "winners": []
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "counts": [
+            8,
+            13,
+            13,
+            13
+          ],
+          "hand": [
+            30,
+            18,
+            7,
+            46,
+            8,
+            48,
+            11,
+            51
+          ],
+          "leader": 0,
+          "open": false,
+          "passes": 0,
+          "seat": 1,
+          "table": [
+            14,
+            1,
+            19,
+            32,
+            45
+          ],
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "counts": [
+            8,
+            13,
+            13,
+            13
+          ],
+          "hand": [
+            40,
+            2,
+            41,
+            3,
+            29,
+            43,
+            31,
+            33,
+            10,
+            36,
+            50,
+            25,
+            12
+          ],
+          "leader": 0,
+          "open": false,
+          "passes": 0,
+          "seat": 1,
+          "table": [
+            14,
+            1,
+            19,
+            32,
+            45
+          ],
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "initial",
+        "move": {
+          "cards": [
+            14,
+            1,
+            19,
+            32,
+            45
+          ]
+        },
+        "name": "initial move",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "hands": [
+            [
+              14,
+              1,
+              30,
+              18,
+              19,
+              32,
+              45,
+              7,
+              46,
+              8,
+              48,
+              11,
+              51
+            ],
+            [
+              40,
+              2,
+              41,
+              3,
+              29,
+              43,
+              31,
+              33,
+              10,
+              36,
+              50,
+              25,
+              12
+            ],
+            [
+              16,
+              42,
+              17,
+              5,
+              6,
+              47,
+              9,
+              35,
+              23,
+              49,
+              24,
+              38,
+              39
+            ],
+            [
+              27,
+              15,
+              28,
+              4,
+              44,
+              20,
+              21,
+              34,
+              22,
+              37,
+              13,
+              0,
+              26
+            ]
+          ],
+          "leader": 0,
+          "open": true,
+          "passes": 0,
+          "seat": 0,
+          "table": [],
+          "winners": []
+        },
+        "view_of_mover": {
+          "counts": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "hand": [
+            14,
+            1,
+            30,
+            18,
+            19,
+            32,
+            45,
+            7,
+            46,
+            8,
+            48,
+            11,
+            51
+          ],
+          "leader": 0,
+          "open": true,
+          "passes": 0,
+          "seat": 0,
+          "table": [],
+          "winners": []
+        },
+        "view_of_other": {
+          "counts": [
+            13,
+            13,
+            13,
+            13
+          ],
+          "hand": [
+            40,
+            2,
+            41,
+            3,
+            29,
+            43,
+            31,
+            33,
+            10,
+            36,
+            50,
+            25,
+            12
+          ],
+          "leader": 0,
+          "open": true,
+          "passes": 0,
+          "seat": 0,
+          "table": [],
+          "winners": []
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 28,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Carol",
+              "id": "u3",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Drew",
+              "id": "u4",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_state": {
+          "hands": [
+            [
+              18,
+              7,
+              46,
+              8,
+              11,
+              51
+            ],
+            [
+              29,
+              50
+            ],
+            [
+              42,
+              17,
+              5,
+              6,
+              9,
+              35,
+              24,
+              38,
+              39
+            ],
+            [
+              27,
+              44,
+              20,
+              37
+            ]
+          ],
+          "leader": 0,
+          "open": false,
+          "passes": 0,
+          "seat": 1,
+          "table": [
+            48
+          ],
+          "winners": []
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "counts": [
+            6,
+            2,
+            9,
+            4
+          ],
+          "hand": [
+            18,
+            7,
+            46,
+            8,
+            11,
+            51
+          ],
+          "leader": 0,
+          "open": false,
+          "passes": 0,
+          "seat": 1,
+          "table": [
+            48
+          ],
+          "winners": []
+        },
+        "expected_view_of_other": {
+          "counts": [
+            6,
+            2,
+            9,
+            4
+          ],
+          "hand": [
+            29,
+            50
+          ],
+          "leader": 0,
+          "open": false,
+          "passes": 0,
+          "seat": 1,
+          "table": [
+            48
+          ],
+          "winners": []
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "intermediate",
+        "move": {
+          "cards": [
+            48
+          ]
+        },
+        "name": "intermediate move",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "hands": [
+            [
+              18,
+              7,
+              46,
+              8,
+              48,
+              11,
+              51
+            ],
+            [
+              29,
+              50
+            ],
+            [
+              42,
+              17,
+              5,
+              6,
+              9,
+              35,
+              24,
+              38,
+              39
+            ],
+            [
+              27,
+              44,
+              20,
+              37
+            ]
+          ],
+          "leader": 3,
+          "open": false,
+          "passes": 0,
+          "seat": 0,
+          "table": [
+            22
+          ],
+          "winners": []
+        },
+        "view_of_mover": {
+          "counts": [
+            7,
+            2,
+            9,
+            4
+          ],
+          "hand": [
+            18,
+            7,
+            46,
+            8,
+            48,
+            11,
+            51
+          ],
+          "leader": 3,
+          "open": false,
+          "passes": 0,
+          "seat": 0,
+          "table": [
+            22
+          ],
+          "winners": []
+        },
+        "view_of_other": {
+          "counts": [
+            7,
+            2,
+            9,
+            4
+          ],
+          "hand": [
+            29,
+            50
+          ],
+          "leader": 3,
+          "open": false,
+          "passes": 0,
+          "seat": 0,
+          "table": [
+            22
+          ],
+          "winners": []
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 55,
+          "players": [
+            {
+              "active": true,
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Carol",
+              "id": "u3",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "active": true,
+              "display_name": "Drew",
+              "id": "u4",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Apply the selected legal card move.",
+        "expected_payouts": {
+          "u4": 0
+        },
+        "expected_state": {
+          "hands": [
+            [
+              46,
+              8,
+              11
+            ],
+            [
+              29
+            ],
+            [
+              17,
+              6
+            ],
+            []
+          ],
+          "leader": 3,
+          "open": false,
+          "passes": 0,
+          "seat": 0,
+          "table": [
+            20
+          ],
+          "winners": [
+            3
+          ]
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "counts": [
+            3,
+            1,
+            2,
+            0
+          ],
+          "hand": [],
+          "leader": 3,
+          "open": false,
+          "passes": 0,
+          "seat": 0,
+          "table": [
+            20
+          ],
+          "winners": [
+            3
+          ]
+        },
+        "expected_view_of_other": {
+          "counts": [
+            3,
+            1,
+            2,
+            0
+          ],
+          "hand": [
+            46,
+            8,
+            11
+          ],
+          "leader": 3,
+          "open": false,
+          "passes": 0,
+          "seat": 0,
+          "table": [
+            20
+          ],
+          "winners": [
+            3
+          ]
+        },
+        "images": [
+          {
+            "caption": "Before: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "Before: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: mover",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          },
+          {
+            "caption": "After: other",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 180\"><rect width=\"320\" height=\"180\" fill=\"#1b2442\"/><rect x=\"105\" y=\"40\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#f9e6ba\"/><rect x=\"145\" y=\"47\" width=\"74\" height=\"100\" rx=\"9\" fill=\"#9ee6d6\"/><circle cx=\"183\" cy=\"95\" r=\"15\" fill=\"#1b2442\"/></svg>"
+          }
+        ],
+        "kind": "terminal",
+        "move": {
+          "cards": [
+            20
+          ]
+        },
+        "name": "terminal move",
+        "other_player_id": "u1",
+        "player_id": "u4",
+        "state": {
+          "hands": [
+            [
+              46,
+              8,
+              11
+            ],
+            [
+              29
+            ],
+            [
+              17,
+              6
+            ],
+            [
+              20
+            ]
+          ],
+          "leader": 2,
+          "open": false,
+          "passes": 0,
+          "seat": 3,
+          "table": [
+            5
+          ],
+          "winners": []
+        },
+        "view_of_mover": {
+          "counts": [
+            3,
+            1,
+            2,
+            1
+          ],
+          "hand": [
+            20
+          ],
+          "leader": 2,
+          "open": false,
+          "passes": 0,
+          "seat": 3,
+          "table": [
+            5
+          ],
+          "winners": []
+        },
+        "view_of_other": {
+          "counts": [
+            3,
+            1,
+            2,
+            1
+          ],
+          "hand": [
+            46,
+            8,
+            11
+          ],
+          "leader": 2,
+          "open": false,
+          "passes": 0,
+          "seat": 3,
+          "table": [
+            5
+          ],
+          "winners": []
+        }
+      }
+    ],
+    "move_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cards": {
+              "items": {
+                "maximum": 51,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 5,
+              "type": "array"
+            }
+          },
+          "required": [
+            "cards"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "const": true
+            }
+          },
+          "required": [
+            "pass"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "state_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "hands": {
+          "items": {
+            "items": {
+              "maximum": 51,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 13,
+            "type": "array"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "leader": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open": {
+          "type": "boolean"
+        },
+        "passes": {
+          "maximum": 2,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seat": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "table": {
+          "items": {
+            "maximum": 51,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "winners": {
+          "items": {
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "seat",
+        "leader",
+        "passes",
+        "table",
+        "open",
+        "winners",
+        "hands"
+      ],
+      "type": "object"
+    },
+    "view_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "counts": {
+          "items": {
+            "maximum": 13,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "hand": {
+          "items": {
+            "maximum": 51,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 13,
+          "type": "array"
+        },
+        "leader": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open": {
+          "type": "boolean"
+        },
+        "passes": {
+          "maximum": 2,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seat": {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "table": {
+          "items": {
+            "maximum": 51,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 5,
+          "type": "array"
+        },
+        "winners": {
+          "items": {
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "seat",
+        "leader",
+        "passes",
+        "table",
+        "open",
+        "winners",
+        "hand",
+        "counts"
+      ],
+      "type": "object"
+    }
+  },
+  "translations": {
+    "ar": {
+      "display_name": "Big Two",
+      "short_description": "ابدأ بتركيبة فيها ثلاثة الماس. تغلب على آخر لعب بنفس عدد البطاقات أو مرر. العب مفردة أو زوجاً أو ثلاثية أو خمس بطاقات. بعد ثلاثة تمريرات يبدأ آخر لاعب مجدداً. يفوز أول من ينهي بطاقاته.",
+      "game_logic_rules": "ابدأ بتركيبة فيها ثلاثة الماس. تغلب على آخر لعب بنفس عدد البطاقات أو مرر. العب مفردة أو زوجاً أو ثلاثية أو خمس بطاقات. بعد ثلاثة تمريرات يبدأ آخر لاعب مجدداً. يفوز أول من ينهي بطاقاته.",
+      "game_ui_rules": "ابدأ بتركيبة فيها ثلاثة الماس. تغلب على آخر لعب بنفس عدد البطاقات أو مرر. العب مفردة أو زوجاً أو ثلاثية أو خمس بطاقات. بعد ثلاثة تمريرات يبدأ آخر لاعب مجدداً. يفوز أول من ينهي بطاقاته.",
+      "tutorial_strings": {
+        "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.": "ابدأ بتركيبة فيها ثلاثة الماس. تغلب على آخر لعب بنفس عدد البطاقات أو مرر. العب مفردة أو زوجاً أو ثلاثية أو خمس بطاقات. بعد ثلاثة تمريرات يبدأ آخر لاعب مجدداً. يفوز أول من ينهي بطاقاته."
+      },
+      "client_strings": {
+        "cards": "البطاقات: {cards}",
+        "pass": "مرر",
+        "pile": "الكومة: {cards}",
+        "playSelected": "العب البطاقات المحددة",
+        "server_illegal": "اختر حركة قانونية في دورك.",
+        "title": "Big Two",
+        "turn": "دور {name}",
+        "winners": "الفائز: {names}"
+      }
+    },
+    "de": {
+      "display_name": "Big Two",
+      "short_description": "Eröffne mit einer Kombination mit der Karo-Drei. Überbiete mit gleicher Kartenzahl oder passe. Spiele Einzelkarten, Paare, Drillinge oder Fünferkombinationen. Nach drei Pässen eröffnet der letzte Spieler erneut. Wer zuerst keine Karten mehr hat, gewinnt.",
+      "game_logic_rules": "Eröffne mit einer Kombination mit der Karo-Drei. Überbiete mit gleicher Kartenzahl oder passe. Spiele Einzelkarten, Paare, Drillinge oder Fünferkombinationen. Nach drei Pässen eröffnet der letzte Spieler erneut. Wer zuerst keine Karten mehr hat, gewinnt.",
+      "game_ui_rules": "Eröffne mit einer Kombination mit der Karo-Drei. Überbiete mit gleicher Kartenzahl oder passe. Spiele Einzelkarten, Paare, Drillinge oder Fünferkombinationen. Nach drei Pässen eröffnet der letzte Spieler erneut. Wer zuerst keine Karten mehr hat, gewinnt.",
+      "tutorial_strings": {
+        "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.": "Eröffne mit einer Kombination mit der Karo-Drei. Überbiete mit gleicher Kartenzahl oder passe. Spiele Einzelkarten, Paare, Drillinge oder Fünferkombinationen. Nach drei Pässen eröffnet der letzte Spieler erneut. Wer zuerst keine Karten mehr hat, gewinnt."
+      },
+      "client_strings": {
+        "cards": "Karten: {cards}",
+        "pass": "Passen",
+        "pile": "Stapel: {cards}",
+        "playSelected": "Ausgewählte Karten spielen",
+        "server_illegal": "Wähle einen gültigen Zug, wenn du an der Reihe bist.",
+        "title": "Big Two",
+        "turn": "{name} ist am Zug",
+        "winners": "Gewonnen: {names}"
+      }
+    },
+    "es": {
+      "display_name": "Big Two",
+      "short_description": "Abre con una combinación que incluya el tres de diamantes. Supera la jugada con el mismo número de cartas o pasa. Juega una carta, pareja, trío o mano de cinco. Tras tres pases vuelve a abrir el último jugador. Gana quien se quede sin cartas.",
+      "game_logic_rules": "Abre con una combinación que incluya el tres de diamantes. Supera la jugada con el mismo número de cartas o pasa. Juega una carta, pareja, trío o mano de cinco. Tras tres pases vuelve a abrir el último jugador. Gana quien se quede sin cartas.",
+      "game_ui_rules": "Abre con una combinación que incluya el tres de diamantes. Supera la jugada con el mismo número de cartas o pasa. Juega una carta, pareja, trío o mano de cinco. Tras tres pases vuelve a abrir el último jugador. Gana quien se quede sin cartas.",
+      "tutorial_strings": {
+        "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.": "Abre con una combinación que incluya el tres de diamantes. Supera la jugada con el mismo número de cartas o pasa. Juega una carta, pareja, trío o mano de cinco. Tras tres pases vuelve a abrir el último jugador. Gana quien se quede sin cartas."
+      },
+      "client_strings": {
+        "cards": "Cartas: {cards}",
+        "pass": "Pasar",
+        "pile": "Pila: {cards}",
+        "playSelected": "Jugar cartas elegidas",
+        "server_illegal": "Elige una jugada válida en tu turno.",
+        "title": "Big Two",
+        "turn": "Turno de {name}",
+        "winners": "Gana: {names}"
+      }
+    },
+    "fr": {
+      "display_name": "Big Two",
+      "short_description": "Ouvrez avec une combinaison contenant le trois de carreau. Battez la dernière combinaison avec le même nombre de cartes ou passez. Jouez une carte, une paire, un brelan ou cinq cartes. Après trois passes, le dernier joueur ouvre. Le premier sans cartes gagne.",
+      "game_logic_rules": "Ouvrez avec une combinaison contenant le trois de carreau. Battez la dernière combinaison avec le même nombre de cartes ou passez. Jouez une carte, une paire, un brelan ou cinq cartes. Après trois passes, le dernier joueur ouvre. Le premier sans cartes gagne.",
+      "game_ui_rules": "Ouvrez avec une combinaison contenant le trois de carreau. Battez la dernière combinaison avec le même nombre de cartes ou passez. Jouez une carte, une paire, un brelan ou cinq cartes. Après trois passes, le dernier joueur ouvre. Le premier sans cartes gagne.",
+      "tutorial_strings": {
+        "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.": "Ouvrez avec une combinaison contenant le trois de carreau. Battez la dernière combinaison avec le même nombre de cartes ou passez. Jouez une carte, une paire, un brelan ou cinq cartes. Après trois passes, le dernier joueur ouvre. Le premier sans cartes gagne."
+      },
+      "client_strings": {
+        "cards": "Cartes : {cards}",
+        "pass": "Passer",
+        "pile": "Pile : {cards}",
+        "playSelected": "Jouer les cartes choisies",
+        "server_illegal": "Choisissez un coup légal à votre tour.",
+        "title": "Big Two",
+        "turn": "Tour de {name}",
+        "winners": "Victoire : {names}"
+      }
+    },
+    "hi": {
+      "display_name": "Big Two",
+      "short_description": "हीरे के तीन वाले मेल से शुरू करें। उतने ही पत्तों का बड़ा मेल खेलें या पास करें। एक पत्ता, जोड़ी, तिकड़ी या पाँच पत्ते खेलें। तीन पास के बाद पिछला खिलाड़ी फिर शुरू करता है। जिसके पत्ते पहले खत्म हों, वह जीतता है।",
+      "game_logic_rules": "हीरे के तीन वाले मेल से शुरू करें। उतने ही पत्तों का बड़ा मेल खेलें या पास करें। एक पत्ता, जोड़ी, तिकड़ी या पाँच पत्ते खेलें। तीन पास के बाद पिछला खिलाड़ी फिर शुरू करता है। जिसके पत्ते पहले खत्म हों, वह जीतता है।",
+      "game_ui_rules": "हीरे के तीन वाले मेल से शुरू करें। उतने ही पत्तों का बड़ा मेल खेलें या पास करें। एक पत्ता, जोड़ी, तिकड़ी या पाँच पत्ते खेलें। तीन पास के बाद पिछला खिलाड़ी फिर शुरू करता है। जिसके पत्ते पहले खत्म हों, वह जीतता है।",
+      "tutorial_strings": {
+        "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.": "हीरे के तीन वाले मेल से शुरू करें। उतने ही पत्तों का बड़ा मेल खेलें या पास करें। एक पत्ता, जोड़ी, तिकड़ी या पाँच पत्ते खेलें। तीन पास के बाद पिछला खिलाड़ी फिर शुरू करता है। जिसके पत्ते पहले खत्म हों, वह जीतता है।"
+      },
+      "client_strings": {
+        "cards": "पत्ते: {cards}",
+        "pass": "पास",
+        "pile": "ढेर: {cards}",
+        "playSelected": "चुने हुए पत्ते खेलें",
+        "server_illegal": "अपनी बारी में वैध चाल चुनें।",
+        "title": "Big Two",
+        "turn": "{name} की बारी",
+        "winners": "विजेता: {names}"
+      }
+    },
+    "pt": {
+      "display_name": "Big Two",
+      "short_description": "Abre com uma combinação que inclua o três de ouros. Supera a última jogada com o mesmo número de cartas ou passa. Joga uma carta, par, trio ou mão de cinco. Após três passes, o último a jogar abre. Vence quem ficar sem cartas.",
+      "game_logic_rules": "Abre com uma combinação que inclua o três de ouros. Supera a última jogada com o mesmo número de cartas ou passa. Joga uma carta, par, trio ou mão de cinco. Após três passes, o último a jogar abre. Vence quem ficar sem cartas.",
+      "game_ui_rules": "Abre com uma combinação que inclua o três de ouros. Supera a última jogada com o mesmo número de cartas ou passa. Joga uma carta, par, trio ou mão de cinco. Após três passes, o último a jogar abre. Vence quem ficar sem cartas.",
+      "tutorial_strings": {
+        "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.": "Abre com uma combinação que inclua o três de ouros. Supera a última jogada com o mesmo número de cartas ou passa. Joga uma carta, par, trio ou mão de cinco. Após três passes, o último a jogar abre. Vence quem ficar sem cartas."
+      },
+      "client_strings": {
+        "cards": "Cartas: {cards}",
+        "pass": "Passar",
+        "pile": "Pilha: {cards}",
+        "playSelected": "Jogar cartas escolhidas",
+        "server_illegal": "Escolhe uma jogada válida na tua vez.",
+        "title": "Big Two",
+        "turn": "Vez de {name}",
+        "winners": "Vitória: {names}"
+      }
+    },
+    "zh": {
+      "display_name": "Big Two",
+      "short_description": "首手必须包含方块 3。用同样张数的更大牌型压过上家，或跳过。可以出单张、对子、三张同点或五张组合。三人跳过后，最后出牌者重新领出。先出完牌的人获胜。",
+      "game_logic_rules": "首手必须包含方块 3。用同样张数的更大牌型压过上家，或跳过。可以出单张、对子、三张同点或五张组合。三人跳过后，最后出牌者重新领出。先出完牌的人获胜。",
+      "game_ui_rules": "首手必须包含方块 3。用同样张数的更大牌型压过上家，或跳过。可以出单张、对子、三张同点或五张组合。三人跳过后，最后出牌者重新领出。先出完牌的人获胜。",
+      "tutorial_strings": {
+        "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.": "首手必须包含方块 3。用同样张数的更大牌型压过上家，或跳过。可以出单张、对子、三张同点或五张组合。三人跳过后，最后出牌者重新领出。先出完牌的人获胜。"
+      },
+      "client_strings": {
+        "cards": "手牌：{cards}",
+        "pass": "退出竞拍",
+        "pile": "牌堆：{cards}",
+        "playSelected": "打出所选牌",
+        "server_illegal": "请在自己的回合选择合法走法。",
+        "title": "Big Two",
+        "turn": "轮到 {name}",
+        "winners": "获胜：{names}"
+      }
+    }
+  }
+}
