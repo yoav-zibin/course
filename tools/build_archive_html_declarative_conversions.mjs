@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'games', 'declarative');
-const UI = fs.readFileSync(path.join(OUT, 'archive_conversions_ui.js'), 'utf8');
+const UI = fs.readFileSync(path.join(OUT, 'archive_conversions_ui.js'), 'utf8').replace(/\r\n?/g, '\n');
 const COPY = JSON.parse(fs.readFileSync(path.join(OUT, 'locales', 'html_conversions.json'), 'utf8'));
 const ARCHIVE_SERVER = JSON.parse(fs.readFileSync(path.join(OUT, 'locales', 'archive_server_strings.json'), 'utf8'));
 const LOCALES = ['es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar'];
