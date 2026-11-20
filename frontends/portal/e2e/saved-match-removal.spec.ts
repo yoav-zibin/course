@@ -69,4 +69,20 @@ for(const source of ['list','board'])test(`an old unsynced copy can be removed f
   await page.getByRole('button',{name:'Copy preserved data',exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>navigator.clipboard.readText())).toBe(JSON.stringify(after.data.archives,null,2));
   expect(matchWrites).toEqual([]);
+
+  // The cloud copy can still exist after a slow upload. An old browser entry
+  // must not reopen it as a board without an active device save.
+  const snapshot=before.data.local[target],cloud={...Object.fromEntries(['id','game_id','game_version','owner_user_id','match_kind','players','status','state','turn_of_player_indices','move_count','created_at'].map(key=>[key,snapshot[key]])),
+    cloud_revision:1,single_player_state:snapshot};
+  let oldLinkReads=0;
+  await page.route(url=>url.pathname===`/matches/${target}`,route=>{
+    if(route.request().method()!=='GET')return route.fallback();
+    oldLinkReads++;return route.fulfill({json:cloud});
+  });
+  if(source==='board')await page.goBack();else await page.goto(`/portal#match=${target}`);
+  await expect(page).toHaveURL(new RegExp(`#match=${target}$`));
+  const removedNotice=page.getByText('This saved copy was removed from this device. Its recovery data is available in Preserved previous app data.',{exact:true});
+  await expect(removedNotice).toBeVisible();await expect(page.getByTestId('game-stage')).toHaveCount(0);
+  await page.reload();await expect(removedNotice).toBeVisible();await expect(page.getByTestId('game-stage')).toHaveCount(0);
+  expect(oldLinkReads).toBe(0);expect((await read()).data.archives).toEqual(after.data.archives);expect(matchWrites).toEqual([]);
 });

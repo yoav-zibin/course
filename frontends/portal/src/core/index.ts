@@ -8,7 +8,7 @@ import {isValidDownloadedGame, presentationHistoryPath} from './offline-match-da
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
 import {RetryableSyncCompatibilityError} from './sync-compatibility';
-import {hiddenMatchIds, hydrateSinglePlayer, localRevision, needsCloudSave, REMOVED_SAVED_MATCH, savedMatchBranch, singlePlayerKind} from './single-player';
+import {hiddenMatchIds, hydrateSinglePlayer, localRevision, needsCloudSave, REMOVED_SAVED_MATCH, removedSavedMatch, savedMatchBranch, singlePlayerKind} from './single-player';
 import {handsTurnToOpponent, pendingNotifications} from './notifications';
 import {redactedArchive} from './redaction';
 import { importNativeLegacy, finishNativeImport } from './native-migration';
@@ -345,9 +345,9 @@ export class PortalStore {
       const account = (id === null ? accounts[0] : accounts.find(a => a.id === id)) || null;
       this.patch({ accounts, account }); await this.reloadData();
       const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);if(incoming)await rememberUrlAttribution(incoming,base,accounts);
-      const snapshot = this.data;
-      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList(snapshot.responses['/matches']), savedGames: savedList(snapshot.responses['/users/me/saved-games']) });
-      if (snapshot.selectedId) { const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`]; if (match) this.patch({ selectedMatch: this.decorate(match), game: snapshot.responses[`/games/${match.game_id}/versions/${match.game_version}`] || null }); }
+      const snapshot = this.data, hidden = hiddenMatchIds(snapshot);
+      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']) });
+      if (snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) { const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`]; if (match) this.patch({ selectedMatch: this.decorate(match), game: snapshot.responses[`/games/${match.game_id}/versions/${match.game_version}`] || null }); }
       subscribeI18n(() => this.localize());
       if (!localOnly) this.stopConnectivity = watchConnectivity(online => { this.patch({ network: online }); if (online) { this.retryAfter = 0; void this.refresh().catch(() => {}); } });
       await configureI18n(base, account?.locale, localOnly).catch(() => {});
@@ -565,6 +565,7 @@ export class PortalStore {
     if (inviteToken) this.selectedInvite = {matchId: id, token: inviteToken};
     else if (this.selectedInvite?.matchId !== id) this.selectedInvite = null;
     const token = ++this.selection; const guard = this.capture(); await this.reloadData();
+    if(removedSavedMatch(this.data,id))throw new Error(copyText('This saved copy was removed from this device. Its recovery data is available in Preserved previous app data.'));
     const fetched = initialMatch || this.data.local[id] || (this.data.creations?.[id] ? this.data.responses[`/matches/${id}`] : await this.read(`/matches/${encodeURIComponent(id)}`)); guard(); if (token !== this.selection) return;
     if (initialMatch?.single_player_state) {
       await this.cache(`/matches/${encodeURIComponent(id)}`,initialMatch); guard();

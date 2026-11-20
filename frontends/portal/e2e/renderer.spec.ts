@@ -136,7 +136,20 @@ test('Catan setup keeps the score choice visible and its island and placement ma
   expect((await start.boundingBox())!.y).toBeLessThan(canvasBox.y);
   expect(canvasBox.height).toBeLessThanOrEqual(720);
   await expect(page.getByRole('radio',{name:'✓ 10',exact:true})).toBeVisible();
-  await expect(page.locator('g[aria-label="6"] polygon')).toHaveCount(19);
+  // Terrain is authored SVG artwork now, rather than renderer-generated
+  // polygons. Verify all nineteen actual assets and their drawn hex borders.
+  const terrain=page.locator('g[aria-label="6"] svg[viewBox="0 0 104 104"]');
+  await expect(terrain).toHaveCount(19);
+  for(let index=0;index<19;index++){
+    const tile=terrain.nth(index);
+    await expect(tile).toBeVisible();
+    await expect(tile.locator(':scope > path[fill="none"][stroke]')).toHaveAttribute('d','M52 2 L95 27 L95 77 L52 102 L9 77 L9 27 Z');
+    const box=(await tile.boundingBox())!;
+    expect(box.width).toBeGreaterThan(0);expect(box.height).toBeGreaterThan(0);
+    expect(box.x).toBeGreaterThanOrEqual(canvasBox.x);expect(box.y).toBeGreaterThanOrEqual(canvasBox.y);
+    expect(box.x+box.width).toBeLessThanOrEqual(canvasBox.x+canvasBox.width);
+    expect(box.y+box.height).toBeLessThanOrEqual(canvasBox.y+canvasBox.height);
+  }
   await page.screenshot({path:info.outputPath('catan-target-choice.png'),fullPage:true});
 
   const setupView={...view,ph:'setup',legal:Array.from({length:12},(_,vertex)=>({type:'placeSettlement',vertex}))};

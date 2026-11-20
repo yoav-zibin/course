@@ -2,6 +2,10 @@ import type {AccountData, LocalMatch, Match, MatchKind} from './types';
 
 export const REMOVED_SAVED_MATCH = 'removed-single-player-save';
 
+export function removedSavedMatch(data: AccountData, id: string): boolean {
+  return data.archives.some(entry => entry?.kind === REMOVED_SAVED_MATCH && entry.id === id);
+}
+
 /** Recovery archives are durable; unlike ordinary hidden-match caches they
  * must survive quota trimming and keep a discarded device branch retired. */
 export function hiddenMatchIds(data: AccountData): Set<string> {
@@ -58,7 +62,7 @@ export function singlePlayerSnapshot(match: LocalMatch, owner: string): LocalMat
 /** An authoritative private snapshot is usable on every signed-in device, but
  * must never replace this device's unsent branch during an ordinary download. */
 export function hydrateSinglePlayer(data: AccountData, cloud: Match): LocalMatch | null {
-  if (data.archives.some(entry => entry?.kind === REMOVED_SAVED_MATCH && entry.id === cloud.id)) return null;
+  if (removedSavedMatch(data,cloud.id)) return null;
   const snapshot = cloud.single_player_state;
   if (!singlePlayerKind(cloud) || !snapshot || snapshot.id !== cloud.id || !Array.isArray(snapshot.players)
     || !Number.isSafeInteger(cloud.cloud_revision) || cloud.cloud_revision! < 1) return null;

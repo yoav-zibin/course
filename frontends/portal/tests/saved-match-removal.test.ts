@@ -158,3 +158,29 @@ test('an account change while removal waits prevents archiving either account',a
     assert.equal((await f.repository.read('alice')).archives.length,0);assert.equal((await f.repository.read('bob')).archives.length,0);
   }finally{release();AccountRepository.prototype.mutate=original;f.restore();}
 });
+
+test('old links and a stale saved selection cannot reopen a removed cloud copy as an actionable board',async()=>{
+  const f=await fixture();
+  try{
+    await f.repository.mutate('alice',data=>{data.local['keep-me'].game_id='bundled-tictactoe';});
+    await f.store.actions.selectMatch('keep-me');
+    await f.store.actions.removeSavedMatch(id,f.expected());
+    const archive=copy((await f.repository.read('alice')).archives),snapshot=archive[0].match;
+    // MatchOut keeps portable localMode inside single_player_state, never as
+    // an outer field. Without the guard this can look like an online board.
+    const remote:Match={...Object.fromEntries(['id','game_id','game_version','owner_user_id','match_kind','players','status','state','turn_of_player_indices','move_count','created_at'].map(key=>[key,snapshot[key]])),
+      cloud_revision:1,single_player_state:snapshot} as Match;
+    f.showCloud(remote);const before=f.calls.length;
+    await assert.rejects(f.store.actions.selectMatch(id),/saved copy was removed.*recovery data/);
+    assert.equal(f.store.getSnapshot().selectedMatch?.id,'keep-me');
+    assert.equal(f.calls.slice(before).some(call=>call===`GET /matches/${id}`),false);
+    await f.repository.mutate('alice',data=>{data.selectedId=id;data.responses[`/matches/${id}`]=remote;data.responses['/matches']=[remote];});
+    const restarted=new PortalStore(async()=>({})),seen:{retiredRow:boolean;retiredBoard:boolean}[]=[];
+    restarted.subscribe(()=>{const state=restarted.getSnapshot();seen.push({retiredRow:state.myMatches.some(match=>match.id===id),retiredBoard:state.selectedMatch?.id===id});});
+    await restarted.bootstrap(base);
+    assert.ok(seen.length>0);assert.ok(seen.every(state=>!state.retiredRow&&!state.retiredBoard),'no stale retired row or board flashes during any bootstrap state');
+    assert.equal(restarted.getSnapshot().selectedMatch,null);
+    await assert.rejects(restarted.actions.selectMatch(id),/saved copy was removed.*recovery data/);
+    const after=await f.repository.read('alice');assert.equal(after.local[id],undefined);assert.deepEqual(after.archives,archive);
+  }finally{f.restore();}
+});

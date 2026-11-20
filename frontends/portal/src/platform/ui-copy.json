@@ -3697,5 +3697,14 @@
     "zh": "已保存的游戏和待处理分支会保存在此处以便恢复。清除应用数据前请先复制。旧版 HTML 系统的操作无法提交到当前在线对局。",
     "hi": "सहेजे गए गेम और लंबित शाखाएँ पुनर्प्राप्ति के लिए यहाँ रखी जाती हैं। ऐप का डेटा मिटाने से पहले इन्हें कॉपी कर लें। पुराने HTML सिस्टम की चालें वर्तमान ऑनलाइन मैचों में नहीं भेजी जा सकतीं।",
     "ar": "تُحفظ الألعاب المحفوظة والفروع المعلّقة هنا للاستعادة. انسخها قبل مسح بيانات التطبيق. لا يمكن إرسال حركات نظام HTML القديم إلى المباريات الحالية عبر الإنترنت."
+  },
+  "This saved copy was removed from this device. Its recovery data is available in Preserved previous app data.": {
+    "es": "Esta copia guardada se quitó de este dispositivo. Sus datos de recuperación están disponibles en Datos conservados de la aplicación anterior.",
+    "fr": "Cette copie sauvegardée a été retirée de cet appareil. Ses données de récupération sont disponibles dans Données conservées de l’ancienne application.",
+    "de": "Diese gespeicherte Kopie wurde von diesem Gerät entfernt. Ihre Wiederherstellungsdaten findest du unter „Erhaltene Daten der früheren App“.",
+    "pt": "Esta cópia salva foi removida deste dispositivo. Os dados de recuperação estão disponíveis em Dados preservados do aplicativo anterior.",
+    "zh": "此存档副本已从此设备移除。可在“保留的旧版应用数据”中找到其恢复数据。",
+    "hi": "यह सहेजी गई प्रति इस डिवाइस से हटा दी गई है। इसकी पुनर्प्राप्ति का डेटा “पिछले ऐप का सुरक्षित रखा डेटा” में उपलब्ध है।",
+    "ar": "أُزيلت هذه النسخة المحفوظة من هذا الجهاز. تتوفر بيانات استعادتها في «بيانات التطبيق السابق المحفوظة»."
   }
 }
