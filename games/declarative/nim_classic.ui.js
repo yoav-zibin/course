@@ -20,8 +20,9 @@ const gameUI={
   for(let i=0;i<3;i++){
    const y=174+i*80,n=v.piles[i];
    const heapAsset=selected===i?'heap_selected':'heap';
-   if(active&&n>0)scene.targets.push({id:'pile_'+i,board:'surface',position:{x:240,y},hit_area:{x:-216,y:-36,width:432,height:72},asset:heapAsset,aria_label:t('pile_count',{pile:i+1,n})});
-   else piece('pile_'+i,heapAsset,240,y,{opacity:n>0?1:.4});
+   piece('row_'+i,heapAsset,240,y,{opacity:n>0?1:.4});
+   if(active&&n>0)scene.targets.push({id:'pile_'+i,board:'surface',position:{x:240,y},hit_area:{x:-216,y:-36,width:432,height:72},asset:'nim_hit_area',aria_label:t('pile_count',{pile:i+1,n})});
+
    label('pile_label_'+i,t('pile',{pile:i+1}),42,y-20,17,'#f4edda');
    label('pile_count_'+i,String(n),42,y+4,16,'#b4d2c4');
    for(let j=0;j<n;j++)piece('stone_'+i+'_'+j,'nim_gem',174+j*38,y,{opacity:selected===i?1:.8});
