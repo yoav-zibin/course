@@ -11,6 +11,7 @@ const gameUI = {
     const pieces=[],targets=[],controls=[];
     const labels=[{id:'title',text:t('title'),x:24,y:18,font_size:26},
       {id:'turn',text:m.status==='over'||s.over?t('finished'):t('turn',{n:s.turn+1}),x:24,y:54,font_size:18}];
+    if(KIND==='connect6'&&s.pending)labels.push({id:'turn-progress',text:t('place_second'),x:24,y:82,font_size:14});
     if(KIND==='pig'||KIND==='memory')labels.push({id:'score',text:t('score',{a:s.scores[0],b:s.scores[1]}),x:350,y:54,font_size:20});
     const keyOf=move=>Object.keys(move).map(k=>k+'_'+move[k]).join('_');
     if(KIND==='nim'){

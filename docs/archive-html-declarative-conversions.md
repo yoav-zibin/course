@@ -1,6 +1,6 @@
 # Archived HTML game declarative conversions
 
-These packages convert ten games that have archived HTML editions into the
+These packages convert eight games that have archived HTML editions into the
 declarative scene format. The archived edition supplies the executable rules
 and tested move examples; the public references below are comparison sources
 for the documented game family or variant.
@@ -14,8 +14,6 @@ for the documented game family or variant.
 | `gobblet` | Gobblet | [Gobblet](https://en.wikipedia.org/wiki/Gobblet) |
 | `chutes_ladders` | Chutes & Ladders | [Chutes and Ladders](https://en.wikipedia.org/wiki/Chutes_and_Ladders) |
 | `dots_boxes` | Dots & Boxes | [Dots and Boxes](https://en.wikipedia.org/wiki/Dots_and_boxes) |
-| `mastermind` | Mastermind | [Mastermind](https://en.wikipedia.org/wiki/Mastermind_(board_game)) |
-| `old_maid` | Old Maid | [Old Maid](https://en.wikipedia.org/wiki/Old_Maid) |
 | `six_mens_morris` | Six Men's Morris | [Six Men's Morris](https://en.wikipedia.org/wiki/Six_men%27s_morris) |
 
 ## Scope and variant notes
@@ -29,15 +27,14 @@ for the documented game family or variant.
   race-game family as Snakes and Ladders.
 - Six Men's Morris is the current archived six-piece variant, not Nine Men's
   Morris. The archived rules and public reference identify its own piece count.
-- Old Maid is an additional simple archived card game, not a dominoes variant.
-- `main` already contains a declarative Old Maid package at
+- Old Maid is omitted because `main` already has a declarative package at
   [`games/declarative/card-table/old-maid.json`](../games/declarative/card-table/old-maid.json).
-  This archived conversion would be a second implementation of the same game
-  family, so do not publish both as separate catalog entries without a reason.
+- Mastermind is omitted because the live catalog already has a declarative
+  Mastermind game; avoid publishing a second catalog entry for the same game.
 - The archive does not contain exact current HTML editions for Dominoes,
   Snakes and Ladders, or Nine Men's Morris; the selected packages above are
   distinct archived games or variants, not claims of exact replacements.
-- Dots & Boxes, Mastermind, and the other listed packages retain their archived
+- Dots & Boxes and the other listed packages retain their archived
   rules and tested examples; the public pages are references, not substitutes
   for those executable rules.
 

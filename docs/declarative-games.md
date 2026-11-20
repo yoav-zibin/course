@@ -51,6 +51,11 @@ the legal actions and viewer-filtered state through the shared scene renderer.
 After publication, each is searchable in the portal by its name with the
 “(Declarative)” suffix.
 
+Connect6 is a separate 19-by-19 declarative game. Its publication selection is
+`--kinds connect6`; the publisher creates a unique game submission secret and
+stores it in the private state file outside the checkout. Creating a new game
+does not require the administrator/master password.
+
 The Backgammon package keeps the regular audited game's rules as its base,
 with reviewed wrappers for retained rolls and unambiguous moves that use several
 dice with one checker. Its strict move schema describes roll, pass and moves

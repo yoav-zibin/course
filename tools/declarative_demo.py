@@ -1,4 +1,4 @@
-"""Serve the ordinary portal with thirty-one games in a disposable local store.
+"""Serve the ordinary portal with thirty games in a disposable local store.
 
 Every game is added through the normal HTTP submission endpoint, including all
 validation. This takes a few minutes. No existing data file, production
@@ -28,7 +28,7 @@ KINDS = ('tictactoe','connect4','reversi','nim','mancala','gomoku','hex','domine
          'battleship','checkers','chess',
          'four_player_chess','quoridor','crazy_eights','go_fish','hearts','spades','guess_who',
          'mau_mau','dos','kisolo','thirty_one','gobblet','chutes_ladders','dots_boxes',
-         'mastermind','old_maid','six_mens_morris')
+         'six_mens_morris','connect6')
 DEMO_KINDS = (*KINDS, 'backgammon')
 
 

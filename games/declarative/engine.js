@@ -1,9 +1,10 @@
-// Shared rules for the ten declarative examples. The generated package prefixes
+// Shared rules for the eleven declarative examples. The generated package prefixes
 // this file with a constant KIND. No rendering, network or device APIs are used.
 function fresh() {
   const sizes = {tictactoe:9, connect4:42, reversi:64, gomoku:81, hex:49, domineering:36, memory:16};
   const s = {board:Array(sizes[KIND] || 0).fill(-1), turn:0, scores:[0,0],
     selected:[], matched:[], roll:0, total:0, winner:-1, turns:0, over:false};
+  if (KIND === 'connect6') {s.board=Array(361).fill(-1);s.opening=true;s.pending=0;}
   if (KIND === 'reversi') {s.board[27]=1;s.board[28]=0;s.board[35]=0;s.board[36]=1;}
   if (KIND === 'nim') s.board = [15];
   if (KIND === 'mancala') s.board = [4,4,4,4,4,4,0,4,4,4,4,4,4,0];
@@ -110,6 +111,14 @@ function apply(s,move,ctx) {
     let cell=move.cell;
     if(KIND==='connect4'){cell=move.column;while(cell+7<42&&s.board[cell+7]===-1)cell+=7;}
     s.board[cell]=seat;
+    if(KIND==='connect6') {
+      if(lineWon(s,cell,19,6))finish(s,seat);
+      else if(s.board.every(v=>v!==-1))finish(s,-1);
+      else if(s.opening){s.opening=false;s.turn=1-seat;}
+      else if(s.pending){s.pending=0;s.turn=1-seat;}
+      else s.pending=1;
+      return;
+    }
     const won=KIND==='hex'?hexWon(s):lineWon(s,cell,KIND==='tictactoe'?3:KIND==='connect4'?7:9,KIND==='tictactoe'?3:KIND==='connect4'?4:5);
     if(won)finish(s,seat);else if(s.board.every(v=>v!==-1))finish(s,-1);
   }

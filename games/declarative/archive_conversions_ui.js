@@ -1,4 +1,4 @@
-// Presentation for ten archived HTML games converted to the portable scene UI.
+// Presentation for eight archived HTML games converted to the portable scene UI.
 const gameUI = {
   reduce(message, localState) {
     const m = message.type === 'ui_event' ? message.state_changed : message;
@@ -63,7 +63,6 @@ const gameUI = {
 
     let selectedSize = localValid ? localState.selectedSize : null;
     let selectedFrom = localValid ? localState.selectedFrom : null;
-    let draft = localValid && Array.isArray(localState.draft) ? localState.draft.slice() : null;
     let dosPlacements = localValid && Array.isArray(localState.dosPlacements)
       ? localState.dosPlacements.slice() : [];
     let dosBonus = localValid && Array.isArray(localState.dosBonus) ? localState.dosBonus.slice() : [];
@@ -77,15 +76,6 @@ const gameUI = {
       if (click === 'reserve_place') selectedFrom = -1;
       const source = /^source_(\d+)$/.exec(click);
       if (source) selectedFrom = Number(source[1]);
-    }
-    if (KIND === 'mastermind') {
-      const peg = /^peg_(\d+)_(\d+)$/.exec(click);
-      if (peg) {
-        draft = Array.isArray(draft) ? draft : [-1,-1,-1,-1];
-        const slot = Number(peg[1]);
-        if (slot === draft.indexOf(-1)) draft[slot] = Number(peg[2]);
-      }
-      if (click === 'reset_draft') draft = [-1,-1,-1,-1];
     }
     if (KIND === 'dos') {
       const selected = /^dos_pick_(\d+)_/.exec(click);
@@ -297,45 +287,6 @@ const gameUI = {
       const counts = [0,1].map(i => (s.boxes || []).filter(owner => owner === i).length);
       label('scores', `${playerName(0)} · ${counts[0]}    ${playerName(1)} · ${counts[1]}`,
         100, 635, 15);
-    } else if (KIND === 'mastermind') {
-      const colors = s.hexes || ['#e53935','#1e88e5','#43a047','#fdd835','#fb8c00','#8e24aa'];
-      draft = Array.isArray(draft) ? draft : [-1,-1,-1,-1];
-      draft.forEach((color,slot) => {
-        if (color >= 0)
-          staticPiece(`draft_${slot}`, `peg_${color}`, 'main',
-            {x:110 + slot * 90,y:150},{text:String(slot + 1),z:2});
-      });
-      const nextSlot = draft.indexOf(-1);
-      if (active && nextSlot >= 0) {
-        for (let option = 0; option < Math.min(6,colors.length); option++)
-          scene.pieces.push({id:`peg_${nextSlot}_${option}`,type:`peg_${option}`,board:'main',
-            position:{x:110 + nextSlot * 90,y:230 + option * 47},text:String(option + 1),
-            actions:['tap'],aria_label:`${nextSlot + 1}: ${colors[option]}`});
-      }
-      if (active) {
-        if (nextSlot < 0) {
-          const move = s.phase === 'set' ? {secret:draft} : {guess:draft};
-          offer(move, text('Play {card}', {card:draft.map(x => x + 1).join(' · ')}));
-        }
-        if (draft.some(color => color >= 0))
-          scene.controls.push({id:'reset_draft',kind:'button',label:text('Reset guess')});
-      }
-      (s.guesses || []).forEach((guess,i) => {
-        const y = 535 + i * 25;
-        (guess.code || []).forEach((color,slot) => staticPiece(`guess_${i}_${slot}`,
-          `peg_${color}`, 'main', {x:110 + slot * 52,y}));
-        label(`feedback_${i}`, `${guess.black} ●  ${guess.white} ○`, 355, y + 5, 13);
-      });
-      label('remaining', `Guesses · ${s.guesses_left ?? 0}`, 22, 105, 15);
-    } else if (KIND === 'old_maid') {
-      const hand = Array.isArray(s.hand) ? s.hand : [];
-      hand.forEach((card,i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i),
-        {text:cardText(card)}));
-      const opponent = 1 - seat, count = s.counts?.[opponent] || 0;
-      if (active) for (let i = 0; i < count; i++)
-        offer({draw:i}, text('Draw a card ({n} left)', {n:count}));
-      label('pairs', `Pairs · ${s.pairs ?? 0}`, 22, 470, 15);
-      label('opponent-count', `${playerName(opponent)} · ${count}`, 22, 495, 14);
     } else if (KIND === 'six_mens_morris') {
       const points = [
         [70,70],[300,70],[530,70],[530,300],[530,530],[300,530],[70,530],[70,300],
@@ -383,7 +334,7 @@ const gameUI = {
 
     const match = /^intent_(\d+)$/.exec(click);
     const move = match && active ? offers[Number(match[1])] : undefined;
-    const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,draft,
+    const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,
       dosPlacements,dosBonus};
     if (message.type === 'ui_event' && move !== undefined)
       return {scene,local_state:nextLocal,make_move:move};
