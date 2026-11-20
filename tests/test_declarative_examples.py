@@ -1,4 +1,5 @@
 """Play declarative rules engines through their JSON-only presentation reducers."""
+import copy
 import json
 import shutil
 import subprocess
@@ -158,19 +159,30 @@ def test_chutes_ladders_links_and_shared_square_tokens_remain_visible():
 def test_dos_wild_card_added_to_center_has_a_valid_declaration(card, declaration):
     body = load('dos')
     case = body.unit_tests['cases'][0]
-    state = case['state']
-    state['phase'] = 'add_center'
-    index = state['hands'][0].index(card)
+    # Reserve explicit cards for this branch instead of relying on a random deal.
+    cards = (case['state']['deck'] + case['state']['discard'] +
+             sum(case['state']['hands'], []) + [entry['id'] for entry in case['state']['center']])
+    for reserved in (card, 'B5', 'G7', 'Y4', 'B4'):
+        cards.remove(reserved)
+    state = {**case['state'], 'deck':cards, 'discard':[],
+             'hands':[[card, 'B5'], ['G7']], 'turn':0, 'phase':'add_center', 'drawn_card':card,
+             'center':[{'id':'Y4', 'num':4, 'color':'Y'}, {'id':'B4', 'num':4, 'color':'B'}]}
+    index = 0
     ctx = case['ctx']
+    player = ctx['players'][0]['id']
     rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
-    view = rules.call('viewFor',state,case['player_id'],ctx=ctx,seed=17)
+    view = rules.call('viewFor',state,player,ctx=ctx,seed=17)
+    assert view['hand'] == [card, 'B5']
+    assert rules.call('viewFor',state,None,ctx=ctx,seed=17)['hand'] == []
     ui = DeclarativeLogic(body.declarative_ui)
     m = {'type':'state_changed','view':view,'status':'ongoing',
          'acting_for_player_index':0,'my_player_index':0,'move_count':0}
     move = {'type':'add_center','card':{'i':index,**declaration}}
     emitted = scene_event(ui,m,ui.reduce(m),move)['make_move']
-    result = rules.call('applyMove',state,case['player_id'],emitted,ctx=ctx,seed=17)
-    assert result['state']['center'][-1]['id'] == card
+    result = rules.call('applyMove',state,player,emitted,ctx=ctx,seed=17)
+    assert result['state']['center'][-1] == {
+        'id':card, 'num':declaration.get('num', 2), 'color':declaration.get('color', 'R')}
+    assert result['state']['hands'] == [['B5'], ['G7']]
 
 
 @pytest.mark.parametrize(('hand','center','move'), [
@@ -325,37 +337,65 @@ def test_kisolo_pit_targets_preserve_visible_seed_counts():
 
 def test_mau_mau_cards_jack_suits_and_restricted_turns():
     body = load('mau_mau')
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
     ui = DeclarativeLogic(body.declarative_ui)
-    view = body.unit_tests['cases'][0]['view_of_mover']
+    ctx = body.unit_tests['cases'][0]['ctx']
+    player = ctx['players'][0]['id']
+
+    def position(hand, top='AH', **updates):
+        deck = [rank + suit for suit in 'SHDC'
+                for rank in ('2','3','4','5','6','7','8','9','10','J','Q','K','A')
+                if rank + suit not in hand and rank + suit != top]
+        return {'hands':[hand, deck[:7]], 'stock':deck[7:], 'discard':[top],
+                'top_suit':top[-1], 'to_move':0, 'pending_draw':0, 'drew':None,
+                'winner':None, 'phase':'play', 'reshuffles':0, **updates}
+
+    state = position(['9H','JC','2S','3D','4C','5S','6D'])
+    view = rules.call('viewFor',state,player,ctx=ctx,seed=17)
+    assert rules.call('viewFor',state,None,ctx=ctx,seed=17)['hand'] == []
     m = {'type':'state_changed', 'view':view, 'status':'ongoing',
          'acting_for_player_index':0, 'my_player_index':0, 'move_count':0}
     frame = ui.reduce(m)
     for move in ({'type':'play','card':'9H'}, {'type':'draw'},
                  *({'type':'play','card':'JC','suit':s} for s in 'SHDC')):
-        assert scene_event(ui, m, frame, move)['make_move'] == move
+        emitted = scene_event(ui, m, frame, move)['make_move']
+        assert emitted == move
+        rules.call('applyMove',state,player,emitted,ctx=ctx,seed=17)
 
-    penalty_view = body.unit_tests['cases'][1]['view_of_mover']
+    penalty_state = position(['7H','JC','2S','3D','4C','5S','6D'], '7D', pending_draw=2)
+    penalty_view = rules.call('viewFor',penalty_state,player,ctx=ctx,seed=17)
     penalty = {**m, 'view':penalty_view}
     frame = ui.reduce(penalty)
     assert {t['aria_label'] for t in frame['scene']['targets']} == {
         'Play 7♥', 'Draw a card (37 left)'}
     assert scene_event(ui, penalty, frame, {'type':'play','card':'7H'})['make_move'] == {
         'type':'play','card':'7H'}
+    rules.call('applyMove',penalty_state,player,{'type':'play','card':'7H'},ctx=ctx,seed=17)
 
-    drawn = {**m, 'view':{**view, 'drew':'9H', 'stock_count':0}}
+    before_draw = position(['JC','2S','3D','4C','5S','6D'])
+    before_draw['discard'] = [card for card in before_draw['stock'] if card != '9H'] + ['AH']
+    before_draw['stock'] = ['9H']
+    drawn_state = rules.call('applyMove',before_draw,player,{'type':'draw'},ctx=ctx,seed=17)['state']
+    drawn = {**m, 'view':rules.call('viewFor',drawn_state,player,ctx=ctx,seed=17)}
     frame = ui.reduce(drawn)
     assert {t['aria_label'] for t in frame['scene']['targets']} == {'Play 9♥'}
     assert [c['label'] for c in frame['scene']['controls']] == ['Pass']
-    empty_stock = {**m, 'view':{**view, 'stock_count':0}}
+    empty_state = copy.deepcopy(state)
+    empty_state['discard'] = empty_state['stock'] + empty_state['discard']
+    empty_state['stock'] = []
+    empty_stock = {**m, 'view':rules.call('viewFor',empty_state,player,ctx=ctx,seed=17)}
     frame = ui.reduce(empty_stock)
     assert scene_event(ui, empty_stock, frame, {'type':'draw'})['make_move'] == {'type':'draw'}
+    rules.call('applyMove',empty_state,player,{'type':'draw'},ctx=ctx,seed=17)
 
     large_hand = [f'{rank}S' for rank in ('2','3','4','5','6','7','8','9','10','Q','K','A')] + ['2H','3H','JC']
-    long = {**m, 'view':{**view, 'hand':large_hand, 'legal_plays':['JC']}}
+    long_state = position(large_hand)
+    long = {**m, 'view':rules.call('viewFor',long_state,player,ctx=ctx,seed=17)}
     frame = ui.reduce(long)
     assert [c['label'] for c in frame['scene']['controls']] == ['Next cards']
     assert scene_event(ui, long, frame, {'type':'play','card':'JC','suit':'D'})['make_move'] == {
         'type':'play','card':'JC','suit':'D'}
+    rules.call('applyMove',long_state,player,{'type':'play','card':'JC','suit':'D'},ctx=ctx,seed=17)
     assert not ui.reduce({**m, 'acting_for_player_index':None})['scene']['targets']
 
 
