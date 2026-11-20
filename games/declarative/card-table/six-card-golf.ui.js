@@ -1,5 +1,5 @@
 const SOURCE_STRINGS={
- title:"Six-Card Golf", phase_flip:"Choose two cards to turn face up.", phase_draw:"Draw from the stock or discard pile.", phase_replace:"Hidden card: discard and reveal. Face-up card: replace.", phase_discard:"Choose one of your face-down cards to reveal.", waiting:"Waiting for {name}…", your_turn:"Your turn", draw_stock:"Draw from stock", draw_discard:"Take discard", discard_flip:"Discard drawn card and reveal a hidden card", cancel:"Cancel", flip_selected:"Turn over selected cards", selected:"{count} selected — tap one more card", score:"Known score: {score}", final_score:"Final score: {score}", stock:"Stock · {count}", discard:"Discard", drawn:"Drawn card", card_hidden:"Face-down card", card_named:"{rank} of {suit}", win:"{name} wins · {score}", tie:"Tie · {score}",
+ title:"Six-Card Golf", phase_flip:"Choose two cards to turn face up.", phase_draw:"Draw from the stock or discard pile.", phase_replace:"Tap one of your six cards to replace it.", phase_discard:"Choose one of your face-down cards to reveal.", waiting:"Waiting for {name}…", your_turn:"Your turn", draw_stock:"Draw from stock", draw_discard:"Take discard", discard_flip:"Discard drawn card and reveal a hidden card", cancel:"Cancel", flip_selected:"Turn over selected cards", selected:"{count} selected — tap one more card", score:"Known score: {score}", final_score:"Final score: {score}", stock:"Stock · {count}", discard:"Discard", drawn:"Drawn card", card_hidden:"Face-down card", card_named:"{rank} of {suit}", win:"{name} wins · {score}", tie:"Tie · {score}",
  suit_clubs:"Clubs",suit_diamonds:"Diamonds",suit_hearts:"Hearts",suit_spades:"Spades", server_not_seated:"not seated", server_game_over:"game over", server_not_your_flip:"not your flip", server_flip_2_cards:"flip 2 cards", server_pick_2_different_cards:"pick 2 different cards", server_already_face_up:"already face up", server_not_in_play:"not in play", server_not_your_turn:"not your turn", server_bad_move:"bad move", server_already_drew:"already drew", server_draw_stock_or_discard:"draw stock or discard", server_discard_empty:"discard empty", server_stock_empty:"stock empty", server_draw_first:"draw first", server_pick_a_card:"pick a card", server_only_stock_draw_can_flip:"only stock draw can flip", server_unknown_move:"unknown move"
 };
 function golfText(m,key,args={}){let s=(m.strings||{})[key]||SOURCE_STRINGS[key]||key;return s.replace(/\{(\w+)\}/g,(_,k)=>args[k]===undefined?"":String(args[k]));}
@@ -14,6 +14,11 @@ var gameUI={reduce(message,localState){
  const old=localState&&localState.moveCount===m.move_count?localState:{};
  let selected=Array.isArray(old.selected)?old.selected.slice(0,1):[],make_move;
  const hands=v.hands||[],phase=v.phase,hand=hands[seat]||[];
+ let discardDraw=old.discardDraw===true&&phase==="play"&&v.drew&&v.drew.from==="stock";
+ if(e.type==="tap"&&active&&phase==="play"&&v.drew&&v.drew.from==="stock"){
+   if(e.id==="discard-draw"&&hand.some(c=>!c.up))discardDraw=true;
+   if(e.id==="cancel-discard")discardDraw=false;
+ }
  const cardId=uid=>`card-${uid}`;
  const rankName=r=>golfRank(r);
  const cardArt=(c)=>`face-${golfRank(c.r)}-${c.s}`;
@@ -24,8 +29,8 @@ var gameUI={reduce(message,localState){
    if(phase==="flip"&&index>=0&&!hand[index].up){
      if(selected.length===0)selected=[index];else if(selected[0]!==index){make_move={kind:"flip",idxs:[selected[0],index]};selected=[];}
    }else if(phase==="play"&&v.drew&&!v.drew.hidden&&index>=0){
-     if(v.drew.from==="stock"&&!hand[index].up)make_move={kind:"discardFlip",idx:index};
-     else make_move={kind:"replace",idx:index};
+     if(!discardDraw)make_move={kind:"replace",idx:index};
+     else if(!hand[index].up)make_move={kind:"discardFlip",idx:index};
    }else if(phase==="play"&&!v.drew){
      if(v.stockTopUid!=null&&String(v.stockTopUid)===uid)make_move={kind:"draw",from:"stock"};
      else if(v.discard&&v.discard.length&&String(v.discard[v.discard.length-1].uid)===uid)make_move={kind:"draw",from:"discard"};
@@ -54,7 +59,7 @@ var gameUI={reduce(message,localState){
      const isSelected=canTouch&&selected[0]===j;
      let enabled=false;
      if(canTouch&&phase==="flip")enabled=!c.up;
-     if(canTouch&&phase==="play"&&v.drew&&!v.drew.hidden)enabled=true;
+     if(canTouch&&phase==="play"&&v.drew&&!v.drew.hidden)enabled=!discardDraw||!c.up;
      pieces.push({id,type:"card",board:"table",position:{x,y},scale:cardScale,face:c.up?"front":"back",asset:c.up?faceAsset(c):"card_back",text:"",selected:isSelected,actions:enabled?["tap"]:[],aria_label:c.up?golfText(m,"card_named",{rank:rankName(c.r),suit:faceSuit(c)}):golfText(m,"card_hidden"),animation:{kind:"move",key:`golf:${id}:${c.up?"up":"down"}`,duration_ms:520}});
    }
  }
@@ -64,9 +69,10 @@ var gameUI={reduce(message,localState){
  if(v.drew){const c=v.drew, id=cardId(c.uid);pieces.push({id,type:"card",board:"table",position:{x:drawnX,y:pileY},face:c.hidden?"back":"front",asset:c.hidden?"card_back":faceAsset(c),aria_label:c.hidden?golfText(m,"card_hidden"):golfText(m,"card_named",{rank:rankName(c.r),suit:faceSuit(c)}),actions:[],animation:{kind:"move",key:`golf:${m.move_count}:${id}`,duration_ms:520}});}
  const stockLabel=golfText(m,"stock",{count:v.stockCount||0}),discardLabel=golfText(m,"discard"),drawnLabel=golfText(m,"drawn");labels.push({id:"stock-label",text:stockLabel,x:golfCenterX(stockLabel,13,stackX),y:n===2?545:445,font_size:13,color:"#fff1d6"});labels.push({id:"discard-label",text:discardLabel,x:golfCenterX(discardLabel,13,discardX),y:n===2?545:445,font_size:13,color:"#fff1d6"});if(v.drew)labels.push({id:"drawn-label",text:drawnLabel,x:golfCenterX(drawnLabel,13,drawnX),y:n===2?545:445,font_size:13,color:"#fff1d6"});
  let hint=m.status==="over"?"All cards revealed · lowest score wins.":golfText(m,"waiting",{name:"…"});
- if(active){if(phase==="flip")hint=selected.length?golfText(m,"selected",{count:1}):golfText(m,"phase_flip");else if(v.drew)hint=v.drew.from==="stock"?"Tap a hidden card to discard and reveal.":golfText(m,"phase_replace");else hint=golfText(m,"phase_draw");}
+ if(active){if(phase==="flip")hint=selected.length?golfText(m,"selected",{count:1}):golfText(m,"phase_flip");else if(v.drew)hint=golfText(m,discardDraw?"phase_discard":"phase_replace");else hint=golfText(m,"phase_draw");}
+ if(active&&phase==="play"&&v.drew&&v.drew.from==="stock"&&hand.some(c=>!c.up))controls.push({id:discardDraw?"cancel-discard":"discard-draw",kind:"button",label:golfText(m,discardDraw?"cancel":"discard_flip")});
  labels.push({id:"hint",text:hint,x:golfCenterX(hint,15),y:78,font_size:15,color:"#d7cfb7"});
  for(const piece of pieces)piece.position.x*=600/760;for(const label of labels)label.x*=600/760;
- const result={scene:{pieces,targets:[],labels,controls},local_state:{moveCount:m.move_count,selected}};
+ const result={scene:{pieces,targets:[],labels,controls},local_state:{moveCount:m.move_count,selected,discardDraw:make_move?false:!!discardDraw}};
  if(make_move)result.make_move=make_move;return result;
 }};
