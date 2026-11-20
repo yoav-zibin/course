@@ -113,26 +113,56 @@ def test_two_central_dice_replace_the_roll_button_and_only_offer_legal_rolls(bod
     rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
     ui = DeclarativeLogic(body.declarative_ui)
     ctx = context()
+
+    def check_roll_controls(result, expected_assets, expected_actions):
+        viewer = result['turn'][0]
+        changed = message(rules, result, ctx, viewer)
+        frame = ui.reduce(changed)
+        assert [piece['id'] for piece in dice(frame)] == ['die_0', 'die_1']
+        assert [piece['position'] for piece in dice(frame)] == [{'x': 452, 'y': 220}, {'x': 530, 'y': 220}]
+        assert [piece['asset'] for piece in dice(frame)] == expected_assets
+        assert [piece['actions'] for piece in dice(frame)] == expected_actions
+        assert not frame['scene']['controls']
+        other = next(player['id'] for player in ctx['players'] if player['id'] != viewer)
+        for index, piece in enumerate(dice(frame)):
+            event = {'type': 'ui_event', 'event': {'type': 'tap', 'id': piece['id']}, 'state_changed': changed}
+            emitted = ui.reduce(event, frame['local_state'])
+            if expected_actions[index]:
+                assert emitted['make_move'] == {'action': 'roll'}
+            else:
+                assert 'make_move' not in emitted
+            for passive in (message(rules, result, ctx, None), message(rules, result, ctx, other),
+                            {**changed, 'replay': True}, {**changed, 'acting_for_player_index': None}):
+                passive_frame = ui.reduce(passive, frame['local_state'])
+                assert len(dice(passive_frame)) == 2
+                assert all(piece['actions'] == [] for piece in dice(passive_frame))
+                assert 'make_move' not in ui.reduce({**event, 'state_changed': passive}, frame['local_state'])
+
     result = rules.call('newMatch', ctx=ctx, seed=7)
     result = rules.call('applyMove', result['state'], 'a',
                         {'action': 'configure', 'difficulty': 1, 'goal': 5, 'cube_enabled': True}, ctx=ctx, seed=7)
     ctx['move_count'] = 1
-    viewer = result['turn'][0]
-    changed = message(rules, result, ctx, viewer)
-    frame = ui.reduce(changed)
-    assert [piece['id'] for piece in dice(frame)] == ['die_0', 'die_1']
-    assert [piece['position'] for piece in dice(frame)] == [{'x': 452, 'y': 220}, {'x': 530, 'y': 220}]
-    assert all(piece['asset'] == 'die_0_used_0' and piece['actions'] == ['tap'] for piece in dice(frame))
-    assert not frame['scene']['controls']
-    for piece in dice(frame):
-        event = {'type': 'ui_event', 'event': {'type': 'tap', 'id': piece['id']}, 'state_changed': changed}
-        assert ui.reduce(event, frame['local_state'])['make_move'] == {'action': 'roll'}
-        for passive in (message(rules, result, ctx, None), {**changed, 'replay': True},
-                        {**changed, 'acting_for_player_index': None}):
-            passive_frame = ui.reduce(passive, frame['local_state'])
-            assert len(dice(passive_frame)) == 2
-            assert all(piece['actions'] == [] for piece in dice(passive_frame))
-            assert 'make_move' not in ui.reduce({**event, 'state_changed': passive}, frame['local_state'])
+    check_roll_controls(result, ['die_0_used_0', 'die_0_used_0'], [['tap'], []])
+    # The first player has now rolled: only the other opening die is actionable.
+    result = apply_with_counted_random(body.server_code, result['state'], ctx,
+                                       {'action': 'roll'}, (.1,))['result']
+    ctx['move_count'] += 1
+    check_roll_controls(result, ['die_1_used_0', 'die_0_used_0'], [[], ['tap']])
+    result = apply_with_counted_random(body.server_code, result['state'], ctx,
+                                       {'action': 'roll'}, (.8,))['result']
+    ctx['move_count'] += 1
+    assert not result['state']['opening']
+    # Complete that legal opening turn. Ordinary turns still allow either die
+    # to roll the pair, while preserving the previous faces until it is accepted.
+    for _ in range(4):
+        if result['state']['needRoll']:
+            break
+        actor = result['turn'][0]
+        move = rules.call('computerMove', result['state'], actor, ctx=ctx, seed=7)
+        result = rules.call('applyMove', result['state'], actor, move, ctx=ctx, seed=7)
+        ctx['move_count'] += 1
+    assert result['state']['needRoll']
+    check_roll_controls(result, ['die_1_used_2', 'die_5_used_2'], [['tap'], ['tap']])
 
 
 def test_doubles_show_four_dice_and_gray_one_per_authoritative_move(body):
