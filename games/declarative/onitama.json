@@ -6,7 +6,7 @@
  "allowed_player_counts": [
   2
  ],
- "server_code": "// Onitama (Declarative). Two players (Red = seat 0, Blue = seat 1) each lead\n// one master and four students on a 5x5 board (cells 0-24, row-major from\n// Blue's back rank at the top to Red's back rank at the bottom). Pieces are\n// encoded 0 = Red student, 1 = Red master, 2 = Blue student, 3 = Blue master,\n// -1 = empty. Red's temple is cell 22 (its own back-centre), Blue's temple is\n// cell 2; a master wins by reaching the OPPONENT's temple (Red -> 2,\n// Blue -> 22) or by capturing the opponent's master.\n//\n// CARD OFFSET TABLE (all 16 real base-game cards). Offsets are\n// [forward, right] from the CARD HOLDER's perspective: forward is toward the\n// opponent, right is the holder's own right. Board transform: Red (seat 0,\n// facing up-board) dr = -forward, dc = +right; Blue (seat 1, facing\n// down-board) dr = +forward, dc = -right. Verified against the printed cards:\n//   Tiger    (blue stamp): [2,0] [-1,0]\n//   Crab     (blue stamp): [1,0] [0,-2] [0,2]\n//   Monkey   (blue stamp): [1,-1] [1,1] [-1,-1] [-1,1]\n//   Crane    (blue stamp): [1,0] [-1,-1] [-1,1]\n//   Dragon   (red stamp):  [1,-2] [1,2] [-1,-1] [-1,1]\n//   Elephant (red stamp):  [1,-1] [1,1] [0,-1] [0,1]\n//   Mantis   (red stamp):  [1,-1] [1,1] [-1,0]\n//   Boar     (red stamp):  [1,0] [0,-1] [0,1]\n//   Frog     (red stamp):  [0,-2] [1,-1] [-1,1]\n//   Goose    (blue stamp): [1,-1] [0,-1] [0,1] [-1,1]\n//   Rooster  (red stamp):  [1,1] [0,1] [0,-1] [-1,-1]\n//   Rabbit   (blue stamp): [0,2] [1,1] [-1,-1]\n//   Ox       (blue stamp): [1,0] [0,1] [-1,0]\n//   Horse    (red stamp):  [1,0] [0,-1] [-1,0]\n//   Eel      (blue stamp): [1,-1] [-1,-1] [0,1]\n//   Cobra    (red stamp):  [1,1] [-1,1] [0,-1]\n// Eight cards carry a red stamp and eight a blue stamp, as in the real game.\n// The player whose colour matches the NEUTRAL card's stamp moves first.\nconst CARDS = {\n  tiger: { name: 'Tiger', stamp: 'blue', off: [[2, 0], [-1, 0]] },\n  crab: { name: 'Crab', stamp: 'blue', off: [[1, 0], [0, -2], [0, 2]] },\n  monkey: { name: 'Monkey', stamp: 'blue', off: [[1, -1], [1, 1], [-1, -1], [-1, 1]] },\n  crane: { name: 'Crane', stamp: 'blue', off: [[1, 0], [-1, -1], [-1, 1]] },\n  dragon: { name: 'Dragon', stamp: 'red', off: [[1, -2], [1, 2], [-1, -1], [-1, 1]] },\n  elephant: { name: 'Elephant', stamp: 'red', off: [[1, -1], [1, 1], [0, -1], [0, 1]] },\n  mantis: { name: 'Mantis', stamp: 'red', off: [[1, -1], [1, 1], [-1, 0]] },\n  boar: { name: 'Boar', stamp: 'red', off: [[1, 0], [0, -1], [0, 1]] },\n  frog: { name: 'Frog', stamp: 'red', off: [[0, -2], [1, -1], [-1, 1]] },\n  goose: { name: 'Goose', stamp: 'blue', off: [[1, -1], [0, -1], [0, 1], [-1, 1]] },\n  rooster: { name: 'Rooster', stamp: 'red', off: [[1, 1], [0, 1], [0, -1], [-1, -1]] },\n  rabbit: { name: 'Rabbit', stamp: 'blue', off: [[0, 2], [1, 1], [-1, -1]] },\n  ox: { name: 'Ox', stamp: 'blue', off: [[1, 0], [0, 1], [-1, 0]] },\n  horse: { name: 'Horse', stamp: 'red', off: [[1, 0], [0, -1], [-1, 0]] },\n  eel: { name: 'Eel', stamp: 'blue', off: [[1, -1], [-1, -1], [0, 1]] },\n  cobra: { name: 'Cobra', stamp: 'red', off: [[1, 1], [-1, 1], [0, -1]] }\n};\nconst DECK = ['tiger', 'crab', 'monkey', 'crane', 'dragon', 'elephant', 'mantis', 'boar',\n  'frog', 'goose', 'rooster', 'rabbit', 'ox', 'horse', 'eel', 'cobra'];\nconst MAX_MOVES = 500; // safety valve: 500 moves without a win is a draw, pot split\n\nfunction ownerOf(piece) { return piece < 0 ? -1 : (piece >= 2 ? 1 : 0); }\nfunction isMaster(piece) { return piece === 1 || piece === 3; }\nfunction copyState(s) { return JSON.parse(JSON.stringify(s)); }\nfunction seatOf(ctx, playerId) {\n  for (let i = 0; i < ctx.players.length; i++) if (ctx.players[i].id === playerId) return i;\n  return -1;\n}\nfunction destFor(seat, from, off) {\n  const r = Math.floor(from / 5), c = from % 5;\n  const dr = seat === 0 ? -off[0] : off[0];\n  const dc = seat === 0 ? off[1] : -off[1];\n  const nr = r + dr, nc = c + dc;\n  if (nr < 0 || nr > 4 || nc < 0 || nc > 4) return -1;\n  return nr * 5 + nc;\n}\n// Every real move (not passes) available to `seat` in state s.\nfunction realMoves(s, seat) {\n  const out = [];\n  const hand = s.hands[seat] || [];\n  for (const card of hand) {\n    const def = CARDS[card];\n    if (!def) continue;\n    for (let from = 0; from < 25; from++) {\n      if (ownerOf(s.board[from]) !== seat) continue;\n      for (const off of def.off) {\n        const to = destFor(seat, from, off);\n        if (to < 0) continue;\n        if (ownerOf(s.board[to]) === seat) continue;\n        out.push({ type: 'move', from: from, to: to, card: card });\n      }\n    }\n  }\n  return out;\n}\n// Legal moves for the side to move: real moves, or a pass of either card\n// when no real move exists (the real Onitama pass rule).\nfunction legalMoves(s) {\n  const moves = realMoves(s, s.turn);\n  if (moves.length) return moves;\n  return (s.hands[s.turn] || []).map(card => ({ type: 'pass', card: card }));\n}\nfunction payoutsFor(s, ctx) {\n  const pot = ctx.pot || 0;\n  if (pot <= 0) return {};\n  const humans = ctx.players.filter(p => p.kind === 'human' && p.active !== false);\n  if (!humans.length) return {};\n  const out = {};\n  if (!s.draw && s.winner >= 0) {\n    const w = ctx.players[s.winner];\n    if (w && w.kind === 'human' && w.active !== false) {\n      for (const p of humans) out[p.id] = 0;\n      out[w.id] = pot;\n      return out;\n    }\n  }\n  const each = Math.floor(pot / humans.length);\n  let rem = pot - each * humans.length;\n  for (const p of humans) { out[p.id] = each + (rem > 0 ? 1 : 0); if (rem > 0) rem--; }\n  return out;\n}\nfunction swapCard(s, seat, card) {\n  const idx = s.hands[seat].indexOf(card);\n  const old = s.hands[seat][idx];\n  s.hands[seat][idx] = s.neutral;\n  s.neutral = old;\n}\n\nconst game = {\n  newMatch(ctx) {\n    const deck = DECK.slice();\n    for (let i = deck.length - 1; i > 0; i--) {\n      const j = Math.floor(ctx.random() * (i + 1));\n      const t = deck[i]; deck[i] = deck[j]; deck[j] = t;\n    }\n    const board = Array(25).fill(-1);\n    board[0] = 2; board[1] = 2; board[2] = 3; board[3] = 2; board[4] = 2;\n    board[20] = 0; board[21] = 0; board[22] = 1; board[23] = 0; board[24] = 0;\n    const neutral = deck[4];\n    const start = CARDS[neutral].stamp === 'red' ? 0 : 1;\n    const s = {\n      board: board,\n      hands: [[deck[0], deck[1]], [deck[2], deck[3]]],\n      neutral: neutral,\n      turn: start, winner: -1, draw: false, moves: 0, over: false\n    };\n    return { state: s, turn: [ctx.players[start].id] };\n  },\n  applyMove(state, playerId, move, ctx) {\n    if (!state || state.over) throw new InvalidMove('game over');\n    const seat = seatOf(ctx, playerId);\n    if (seat < 0 || seat !== state.turn) throw new InvalidMove('not your turn');\n    if (!move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('bad move');\n    const keys = Object.keys(move).sort().join(',');\n    if (typeof move.card !== 'string' || !CARDS[move.card]) throw new InvalidMove('unknown card');\n    if (state.hands[seat].indexOf(move.card) < 0) throw new InvalidMove('card not held');\n    const s = copyState(state);\n    if (move.type === 'pass') {\n      if (keys !== 'card,type') throw new InvalidMove('bad move');\n      if (realMoves(s, seat).length) throw new InvalidMove('a move is available');\n      swapCard(s, seat, move.card);\n    } else if (move.type === 'move') {\n      if (keys !== 'card,from,to,type') throw new InvalidMove('bad move');\n      const from = move.from, to = move.to;\n      if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from > 24 || to < 0 || to > 24)\n        throw new InvalidMove('off board');\n      const piece = s.board[from];\n      if (ownerOf(piece) !== seat) throw new InvalidMove('not your piece');\n      if (ownerOf(s.board[to]) === seat) throw new InvalidMove('your own piece is there');\n      let ok = false;\n      for (const off of CARDS[move.card].off) if (destFor(seat, from, off) === to) { ok = true; break; }\n      if (!ok) throw new InvalidMove('card does not move like that');\n      const captured = s.board[to];\n      s.board[to] = piece;\n      s.board[from] = -1;\n      swapCard(s, seat, move.card);\n      if (isMaster(captured) && ownerOf(captured) === 1 - seat) { s.winner = seat; s.over = true; }\n      else if (isMaster(piece) && to === (seat === 0 ? 2 : 22)) { s.winner = seat; s.over = true; }\n    } else {\n      throw new InvalidMove('bad move');\n    }\n    s.moves++;\n    if (!s.over && s.moves >= MAX_MOVES) { s.draw = true; s.over = true; s.winner = -1; }\n    if (s.over) return { state: s, turn: null, payouts: payoutsFor(s, ctx) };\n    s.turn = 1 - seat;\n    return { state: s, turn: [ctx.players[s.turn].id] };\n  },\n  viewFor(state, playerId, ctx) {\n    const s = copyState(state);\n    const seat = seatOf(ctx, playerId);\n    const view = {\n      board: s.board, hands: s.hands, neutral: s.neutral, turn: s.turn,\n      winner: s.winner, draw: s.draw, moves: s.moves, over: s.over,\n      me: seat, legal: []\n    };\n    if (!s.over && seat === s.turn) view.legal = legalMoves(s);\n    return view;\n  },\n  randomMove(state, playerId, ctx) {\n    const options = legalMoves(state);\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n  computerMove(state, playerId, ctx) {\n    const seat = state.turn;\n    const options = legalMoves(state);\n    let best = options[0], bestScore = -1e9;\n    for (const m of options) {\n      let score = ctx.random() * 1.5;\n      if (m.type === 'pass') { score -= 5; }\n      else {\n        const piece = state.board[m.from];\n        const target = state.board[m.to];\n        if (isMaster(target) && ownerOf(target) === 1 - seat) score += 1000;\n        else if (isMaster(piece) && m.to === (seat === 0 ? 2 : 22)) score += 1000;\n        else if (target >= 0) score += 100; // capture a student\n        const progress = seat === 0 ? (Math.floor(m.from / 5) - Math.floor(m.to / 5))\n                                    : (Math.floor(m.to / 5) - Math.floor(m.from / 5));\n        score += isMaster(piece) ? progress * 8 : progress * 2;\n        if (isMaster(piece)) score += 4;\n      }\n      if (score > bestScore) { bestScore = score; best = m; }\n    }\n    return best;\n  }\n};\n",
+ "server_code": "// Onitama (Declarative). Two players (Red = seat 0, Blue = seat 1) each lead\n// one master and four students on a 5x5 board (cells 0-24, row-major from\n// Blue's back rank at the top to Red's back rank at the bottom). Pieces are\n// encoded 0 = Red student, 1 = Red master, 2 = Blue student, 3 = Blue master,\n// -1 = empty. Red's temple is cell 22 (its own back-centre), Blue's temple is\n// cell 2; a master wins by reaching the OPPONENT's temple (Red -> 2,\n// Blue -> 22) or by capturing the opponent's master.\n//\n// CARD OFFSET TABLE (all 16 real base-game cards). Offsets are\n// [forward, right] from the CARD HOLDER's perspective: forward is toward the\n// opponent, right is the holder's own right. Board transform: Red (seat 0,\n// facing up-board) dr = -forward, dc = +right; Blue (seat 1, facing\n// down-board) dr = +forward, dc = -right. Verified against the printed cards:\n//   Tiger    (blue stamp): [2,0] [-1,0]\n//   Crab     (blue stamp): [1,0] [0,-2] [0,2]\n//   Monkey   (blue stamp): [1,-1] [1,1] [-1,-1] [-1,1]\n//   Crane    (blue stamp): [1,0] [-1,-1] [-1,1]\n//   Dragon   (red stamp):  [1,-2] [1,2] [-1,-1] [-1,1]\n//   Elephant (red stamp):  [1,-1] [1,1] [0,-1] [0,1]\n//   Mantis   (red stamp):  [1,-1] [1,1] [-1,0]\n//   Boar     (red stamp):  [1,0] [0,-1] [0,1]\n//   Frog     (red stamp):  [0,-2] [1,-1] [-1,1]\n//   Goose    (blue stamp): [1,-1] [0,-1] [0,1] [-1,1]\n//   Rooster  (red stamp):  [1,1] [0,1] [0,-1] [-1,-1]\n//   Rabbit   (blue stamp): [0,2] [1,1] [-1,-1]\n//   Ox       (blue stamp): [1,0] [0,1] [-1,0]\n//   Horse    (red stamp):  [1,0] [0,-1] [-1,0]\n//   Eel      (blue stamp): [1,-1] [-1,-1] [0,1]\n//   Cobra    (red stamp):  [1,1] [-1,1] [0,-1]\n// Eight cards carry a red stamp and eight a blue stamp, as in the real game.\n// The player whose colour matches the NEUTRAL card's stamp moves first.\nconst CARDS = {\n  tiger: { name: 'Tiger', stamp: 'blue', off: [[2, 0], [-1, 0]] },\n  crab: { name: 'Crab', stamp: 'blue', off: [[1, 0], [0, -2], [0, 2]] },\n  monkey: { name: 'Monkey', stamp: 'blue', off: [[1, -1], [1, 1], [-1, -1], [-1, 1]] },\n  crane: { name: 'Crane', stamp: 'blue', off: [[1, 0], [-1, -1], [-1, 1]] },\n  dragon: { name: 'Dragon', stamp: 'red', off: [[1, -2], [1, 2], [-1, -1], [-1, 1]] },\n  elephant: { name: 'Elephant', stamp: 'red', off: [[1, -1], [1, 1], [0, -1], [0, 1]] },\n  mantis: { name: 'Mantis', stamp: 'red', off: [[1, -1], [1, 1], [-1, 0]] },\n  boar: { name: 'Boar', stamp: 'red', off: [[1, 0], [0, -1], [0, 1]] },\n  frog: { name: 'Frog', stamp: 'red', off: [[0, -2], [1, -1], [-1, 1]] },\n  goose: { name: 'Goose', stamp: 'blue', off: [[1, -1], [0, -1], [0, 1], [-1, 1]] },\n  rooster: { name: 'Rooster', stamp: 'red', off: [[1, 1], [0, 1], [0, -1], [-1, -1]] },\n  rabbit: { name: 'Rabbit', stamp: 'blue', off: [[0, 2], [1, 1], [-1, -1]] },\n  ox: { name: 'Ox', stamp: 'blue', off: [[1, 0], [0, 1], [-1, 0]] },\n  horse: { name: 'Horse', stamp: 'red', off: [[1, 0], [0, -1], [-1, 0]] },\n  eel: { name: 'Eel', stamp: 'blue', off: [[1, -1], [-1, -1], [0, 1]] },\n  cobra: { name: 'Cobra', stamp: 'red', off: [[1, 1], [-1, 1], [0, -1]] }\n};\nconst DECK = ['tiger', 'crab', 'monkey', 'crane', 'dragon', 'elephant', 'mantis', 'boar',\n  'frog', 'goose', 'rooster', 'rabbit', 'ox', 'horse', 'eel', 'cobra'];\nconst MAX_MOVES = 500; // safety valve: 500 moves without a win is a draw, pot split\n\nfunction ownerOf(piece) { return piece < 0 ? -1 : (piece >= 2 ? 1 : 0); }\n// Stable piece identities. state.pieces maps a permanent pawn id to its\n// current cell: Blue students b_s0..b_s3 and master b_m start on cells\n// 0,1,2,3,4 and Red students r_s0..r_s3 and master r_m on cells\n// 20,21,22,23,24 (students numbered in cell order over their home rank).\n// An id never changes hands: a move updates only the mover's cell and a\n// capture deletes only the captured pawn's entry. The board array alone\n// cannot carry identity (two students of one colour share one code), so\n// the presentation renders pawn ids from this map. piecesFromBoard\n// rebuilds the map in cell order for a legacy state that predates it.\nfunction piecesFromBoard(board) {\n  const pieces = {}; let rs = 0, bs = 0;\n  for (let cell = 0; cell < 25; cell++) {\n    const v = board[cell];\n    if (v === 0) pieces['r_s' + (rs++)] = cell;\n    else if (v === 1) pieces.r_m = cell;\n    else if (v === 2) pieces['b_s' + (bs++)] = cell;\n    else if (v === 3) pieces.b_m = cell;\n  }\n  return pieces;\n}\nfunction pieceIdAt(pieces, cell) {\n  for (const id of Object.keys(pieces)) if (pieces[id] === cell) return id;\n  return null;\n}\nfunction cellPos(cell) { return { board: 'main', position: { cell: String(cell) } }; }\nfunction isMaster(piece) { return piece === 1 || piece === 3; }\nfunction copyState(s) { return JSON.parse(JSON.stringify(s)); }\nfunction seatOf(ctx, playerId) {\n  for (let i = 0; i < ctx.players.length; i++) if (ctx.players[i].id === playerId) return i;\n  return -1;\n}\nfunction destFor(seat, from, off) {\n  const r = Math.floor(from / 5), c = from % 5;\n  const dr = seat === 0 ? -off[0] : off[0];\n  const dc = seat === 0 ? off[1] : -off[1];\n  const nr = r + dr, nc = c + dc;\n  if (nr < 0 || nr > 4 || nc < 0 || nc > 4) return -1;\n  return nr * 5 + nc;\n}\n// Every real move (not passes) available to `seat` in state s.\nfunction realMoves(s, seat) {\n  const out = [];\n  const hand = s.hands[seat] || [];\n  for (const card of hand) {\n    const def = CARDS[card];\n    if (!def) continue;\n    for (let from = 0; from < 25; from++) {\n      if (ownerOf(s.board[from]) !== seat) continue;\n      for (const off of def.off) {\n        const to = destFor(seat, from, off);\n        if (to < 0) continue;\n        if (ownerOf(s.board[to]) === seat) continue;\n        out.push({ type: 'move', from: from, to: to, card: card });\n      }\n    }\n  }\n  return out;\n}\n// Legal moves for the side to move: real moves, or a pass of either card\n// when no real move exists (the real Onitama pass rule).\nfunction legalMoves(s) {\n  const moves = realMoves(s, s.turn);\n  if (moves.length) return moves;\n  return (s.hands[s.turn] || []).map(card => ({ type: 'pass', card: card }));\n}\nfunction payoutsFor(s, ctx) {\n  const pot = ctx.pot || 0;\n  if (pot <= 0) return {};\n  const humans = ctx.players.filter(p => p.kind === 'human' && p.active !== false);\n  if (!humans.length) return {};\n  const out = {};\n  if (!s.draw && s.winner >= 0) {\n    const w = ctx.players[s.winner];\n    if (w && w.kind === 'human' && w.active !== false) {\n      for (const p of humans) out[p.id] = 0;\n      out[w.id] = pot;\n      return out;\n    }\n  }\n  const each = Math.floor(pot / humans.length);\n  let rem = pot - each * humans.length;\n  for (const p of humans) { out[p.id] = each + (rem > 0 ? 1 : 0); if (rem > 0) rem--; }\n  return out;\n}\nfunction swapCard(s, seat, card) {\n  const idx = s.hands[seat].indexOf(card);\n  const old = s.hands[seat][idx];\n  s.hands[seat][idx] = s.neutral;\n  s.neutral = old;\n}\n\nconst game = {\n  newMatch(ctx) {\n    const deck = DECK.slice();\n    for (let i = deck.length - 1; i > 0; i--) {\n      const j = Math.floor(ctx.random() * (i + 1));\n      const t = deck[i]; deck[i] = deck[j]; deck[j] = t;\n    }\n    const board = Array(25).fill(-1);\n    board[0] = 2; board[1] = 2; board[2] = 3; board[3] = 2; board[4] = 2;\n    board[20] = 0; board[21] = 0; board[22] = 1; board[23] = 0; board[24] = 0;\n    const neutral = deck[4];\n    const start = CARDS[neutral].stamp === 'red' ? 0 : 1;\n    const s = {\n      board: board, pieces: piecesFromBoard(board),\n      hands: [[deck[0], deck[1]], [deck[2], deck[3]]],\n      neutral: neutral,\n      turn: start, winner: -1, draw: false, moves: 0, over: false,\n      last_move: null\n    };\n    return { state: s, turn: [ctx.players[start].id] };\n  },\n  applyMove(state, playerId, move, ctx) {\n    if (!state || state.over) throw new InvalidMove('game over');\n    const seat = seatOf(ctx, playerId);\n    if (seat < 0 || seat !== state.turn) throw new InvalidMove('not your turn');\n    if (!move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('bad move');\n    const keys = Object.keys(move).sort().join(',');\n    if (typeof move.card !== 'string' || !CARDS[move.card]) throw new InvalidMove('unknown card');\n    if (state.hands[seat].indexOf(move.card) < 0) throw new InvalidMove('card not held');\n    const s = copyState(state);\n    if (!s.pieces) s.pieces = piecesFromBoard(s.board);\n    if (move.type === 'pass') {\n      if (keys !== 'card,type') throw new InvalidMove('bad move');\n      if (realMoves(s, seat).length) throw new InvalidMove('a move is available');\n      swapCard(s, seat, move.card);\n      s.last_move = { kind: 'pass', piece_id: null, from: null, to: null, captured_piece_id: null };\n    } else if (move.type === 'move') {\n      if (keys !== 'card,from,to,type') throw new InvalidMove('bad move');\n      const from = move.from, to = move.to;\n      if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from > 24 || to < 0 || to > 24)\n        throw new InvalidMove('off board');\n      const piece = s.board[from];\n      if (ownerOf(piece) !== seat) throw new InvalidMove('not your piece');\n      if (ownerOf(s.board[to]) === seat) throw new InvalidMove('your own piece is there');\n      let ok = false;\n      for (const off of CARDS[move.card].off) if (destFor(seat, from, off) === to) { ok = true; break; }\n      if (!ok) throw new InvalidMove('card does not move like that');\n      const captured = s.board[to];\n      const moverId = pieceIdAt(s.pieces, from);\n      const capturedId = captured >= 0 ? pieceIdAt(s.pieces, to) : null;\n      s.board[to] = piece;\n      s.board[from] = -1;\n      if (capturedId) delete s.pieces[capturedId];\n      if (moverId) s.pieces[moverId] = to;\n      s.last_move = { kind: 'move', piece_id: moverId, from: cellPos(from), to: cellPos(to), captured_piece_id: capturedId };\n      swapCard(s, seat, move.card);\n      if (isMaster(captured) && ownerOf(captured) === 1 - seat) { s.winner = seat; s.over = true; }\n      else if (isMaster(piece) && to === (seat === 0 ? 2 : 22)) { s.winner = seat; s.over = true; }\n    } else {\n      throw new InvalidMove('bad move');\n    }\n    s.moves++;\n    if (!s.over && s.moves >= MAX_MOVES) { s.draw = true; s.over = true; s.winner = -1; }\n    if (s.over) return { state: s, turn: null, payouts: payoutsFor(s, ctx) };\n    s.turn = 1 - seat;\n    return { state: s, turn: [ctx.players[s.turn].id] };\n  },\n  viewFor(state, playerId, ctx) {\n    const s = copyState(state);\n    const seat = seatOf(ctx, playerId);\n    const view = {\n      board: s.board, pieces: s.pieces || piecesFromBoard(s.board),\n      hands: s.hands, neutral: s.neutral, turn: s.turn,\n      winner: s.winner, draw: s.draw, moves: s.moves, over: s.over,\n      last_move: s.last_move === undefined ? null : s.last_move,\n      me: seat, legal: []\n    };\n    if (!s.over && seat === s.turn) view.legal = legalMoves(s);\n    return view;\n  },\n  randomMove(state, playerId, ctx) {\n    const options = legalMoves(state);\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n  computerMove(state, playerId, ctx) {\n    const seat = state.turn;\n    const options = legalMoves(state);\n    let best = options[0], bestScore = -1e9;\n    for (const m of options) {\n      let score = ctx.random() * 1.5;\n      if (m.type === 'pass') { score -= 5; }\n      else {\n        const piece = state.board[m.from];\n        const target = state.board[m.to];\n        if (isMaster(target) && ownerOf(target) === 1 - seat) score += 1000;\n        else if (isMaster(piece) && m.to === (seat === 0 ? 2 : 22)) score += 1000;\n        else if (target >= 0) score += 100; // capture a student\n        const progress = seat === 0 ? (Math.floor(m.from / 5) - Math.floor(m.to / 5))\n                                    : (Math.floor(m.to / 5) - Math.floor(m.from / 5));\n        score += isMaster(piece) ? progress * 8 : progress * 2;\n        if (isMaster(piece)) score += 4;\n      }\n      if (score > bestScore) { bestScore = score; best = m; }\n    }\n    return best;\n  }\n};\n",
  "declarative_ui": {
   "format": "buildplay-ui",
   "version": 1,
@@ -125,7 +125,7 @@
    "server_own_piece": "your own piece is there",
    "server_card_move": "card does not move like that"
   },
-  "ui_code": "// Onitama presentation. Pure reducer: scene + staged local selection.\n// Interaction (acting viewer only): tap one of your card panels (a target\n// over the panel), then tap a highlighted piece (origin target), then tap a\n// highlighted destination target. The destination targets are only emitted\n// for the staged (card, piece) pair, so every legal (from, to, card) move is\n// reachable and unambiguous even when both cards reach the same square.\n// When no legal move exists, a Pass button per held card emits the pass.\n// Spectators, replay and finished games get no targets or controls.\nconst SOURCE_STRINGS = {\"title\": \"Onitama\", \"red\": \"Red\", \"blue\": \"Blue\", \"turn\": \"{name} to move\", \"your_turn\": \"Your turn \\u00b7 {name}\", \"finished\": \"Game over\", \"winner\": \"Winner: {name}\", \"draw\": \"Draw\", \"temple\": \"TEMPLE\", \"neutral\": \"Neutral card\", \"red_cards\": \"Red cards\", \"blue_cards\": \"Blue cards\", \"hint_card\": \"Tap one of your cards to choose it.\", \"hint_piece\": \"Tap a highlighted piece to move.\", \"hint_dest\": \"Tap a highlighted destination.\", \"hint_pass\": \"No legal move \\u2014 pass a card instead.\", \"pass_card\": \"Pass {card}\", \"use_card\": \"Use the {card} card\", \"move_to\": \"Move to row {r}, column {c}\", \"select_piece\": \"Select piece at row {r}, column {c}\", \"master\": \"Master\", \"student\": \"Student\", \"server_game_over\": \"game over\", \"server_not_your_turn\": \"not your turn\", \"server_bad_move\": \"bad move\", \"server_unknown_card\": \"unknown card\", \"server_card_not_held\": \"card not held\", \"server_move_available\": \"a move is available\", \"server_off_board\": \"off board\", \"server_not_your_piece\": \"not your piece\", \"server_own_piece\": \"your own piece is there\", \"server_card_move\": \"card does not move like that\"};\nconst CARD_INFO = {\"tiger\": {\"name\": \"Tiger\", \"stamp\": \"blue\", \"off\": [[2, 0], [-1, 0]]}, \"crab\": {\"name\": \"Crab\", \"stamp\": \"blue\", \"off\": [[1, 0], [0, -2], [0, 2]]}, \"monkey\": {\"name\": \"Monkey\", \"stamp\": \"blue\", \"off\": [[1, -1], [1, 1], [-1, -1], [-1, 1]]}, \"crane\": {\"name\": \"Crane\", \"stamp\": \"blue\", \"off\": [[1, 0], [-1, -1], [-1, 1]]}, \"dragon\": {\"name\": \"Dragon\", \"stamp\": \"red\", \"off\": [[1, -2], [1, 2], [-1, -1], [-1, 1]]}, \"elephant\": {\"name\": \"Elephant\", \"stamp\": \"red\", \"off\": [[1, -1], [1, 1], [0, -1], [0, 1]]}, \"mantis\": {\"name\": \"Mantis\", \"stamp\": \"red\", \"off\": [[1, -1], [1, 1], [-1, 0]]}, \"boar\": {\"name\": \"Boar\", \"stamp\": \"red\", \"off\": [[1, 0], [0, -1], [0, 1]]}, \"frog\": {\"name\": \"Frog\", \"stamp\": \"red\", \"off\": [[0, -2], [1, -1], [-1, 1]]}, \"goose\": {\"name\": \"Goose\", \"stamp\": \"blue\", \"off\": [[1, -1], [0, -1], [0, 1], [-1, 1]]}, \"rooster\": {\"name\": \"Rooster\", \"stamp\": \"red\", \"off\": [[1, 1], [0, 1], [0, -1], [-1, -1]]}, \"rabbit\": {\"name\": \"Rabbit\", \"stamp\": \"blue\", \"off\": [[0, 2], [1, 1], [-1, -1]]}, \"ox\": {\"name\": \"Ox\", \"stamp\": \"blue\", \"off\": [[1, 0], [0, 1], [-1, 0]]}, \"horse\": {\"name\": \"Horse\", \"stamp\": \"red\", \"off\": [[1, 0], [0, -1], [-1, 0]]}, \"eel\": {\"name\": \"Eel\", \"stamp\": \"blue\", \"off\": [[1, -1], [-1, -1], [0, 1]]}, \"cobra\": {\"name\": \"Cobra\", \"stamp\": \"red\", \"off\": [[1, 1], [-1, 1], [0, -1]]}};\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args) => String(strings[key] || SOURCE_STRINGS[key] || key).replace(/\\{(\\w+)\\}/g,\n      (_, k) => String((args || {})[k] === undefined ? '' : (args || {})[k]));\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const mySeat = (m.my_player_index === 0 || m.my_player_index === 1) ? m.my_player_index : -1;\n    const legal = active ? (s.legal || []) : [];\n    const moves = legal.filter(x => x.type === 'move');\n    const passes = legal.filter(x => x.type === 'pass');\n    const playerName = i => {\n      const p = (m.players || [])[i];\n      return p && p.name ? p.name : t(i === 0 ? 'red' : 'blue');\n    };\n    // --- staged selection, retained only for the same move and viewer ---\n    let selCard = null, selFrom = null;\n    if (localState && localState.mc === m.move_count && localState.vw === mySeat) {\n      selCard = localState.card || null;\n      selFrom = typeof localState.from === 'number' ? localState.from : null;\n    }\n    if (!moves.some(x => x.card === selCard)) { selCard = null; selFrom = null; }\n    if (selCard !== null && !moves.some(x => x.card === selCard && x.from === selFrom)) selFrom = null;\n    let makeMove = null;\n    if (message.type === 'ui_event' && active && message.event && message.event.type === 'tap') {\n      const id = String(message.event.id || '');\n      if (id.indexOf('pass_') === 0) {\n        const cid = id.slice(5);\n        if (passes.some(x => x.card === cid)) makeMove = { type: 'pass', card: cid };\n      } else if (id.indexOf('card_') === 0) {\n        const cid = id.slice(5);\n        if (moves.some(x => x.card === cid)) { selCard = cid; selFrom = null; }\n      } else if (id.indexOf('from_') === 0) {\n        const cell = parseInt(id.slice(5), 10);\n        if (selCard && moves.some(x => x.card === selCard && x.from === cell)) selFrom = cell;\n      } else if (id.indexOf('to_') === 0) {\n        const cell = parseInt(id.slice(3), 10);\n        const found = moves.find(x => x.card === selCard && x.from === selFrom && x.to === cell);\n        if (found) makeMove = { type: 'move', from: found.from, to: found.to, card: found.card };\n      }\n    }\n    // --- scene ---\n    const pieces = [], targets = [], controls = [], labels = [];\n    labels.push({ id: 'title', text: t('title'), x: 24, y: 14, font_size: 25 });\n    const over = s.over || m.status === 'over';\n    if (over) {\n      labels.push({ id: 'status', text: t('finished'), x: 24, y: 46, font_size: 17 });\n      if (s.draw) labels.push({ id: 'winner', text: t('draw'), x: 24, y: 70, font_size: 15 });\n      else if (s.winner === 0 || s.winner === 1)\n        labels.push({ id: 'winner', text: t('winner', { name: playerName(s.winner) }), x: 24, y: 70, font_size: 15 });\n    } else {\n      const nm = playerName(s.turn);\n      labels.push({ id: 'status', text: active && mySeat === s.turn ? t('your_turn', { name: nm }) : t('turn', { name: nm }), x: 24, y: 46, font_size: 17 });\n      if (active && passes.length)\n        labels.push({ id: 'hint', text: t('hint_pass'), x: 24, y: 70, font_size: 14 });\n      else if (active && moves.length)\n        labels.push({ id: 'hint', text: t(!selCard ? 'hint_card' : selFrom === null ? 'hint_piece' : 'hint_dest'), x: 24, y: 70, font_size: 14 });\n    }\n    labels.push({ id: 'temple_top', text: t('temple'), x: 256, y: 95, font_size: 10 });\n    labels.push({ id: 'temple_bottom', text: t('temple'), x: 256, y: 383, font_size: 10 });\n    // Board pieces. Board cell for index i is String(i) on the 5x5 grid.\n    (s.board || []).forEach((v, cell) => {\n      if (v < 0) return;\n      const seat = v >= 2 ? 1 : 0, master = v % 2 === 1;\n      pieces.push({\n        id: 'piece_' + cell,\n        type: master ? (seat === 0 ? 'red_master' : 'blue_master') : (seat === 0 ? 'red_student' : 'blue_student'),\n        board: 'main', position: { cell: String(cell) }, text: master ? 'M' : 'S',\n        aria_label: (seat === 0 ? t('red') : t('blue')) + ' ' + (master ? t('master') : t('student')),\n        selected: selFrom === cell, actions: []\n      });\n    });\n    // Card panels: Red's two, the neutral card, Blue's two.\n    const hands = s.hands || [[], []];\n    const slots = [\n      { key: 'r0', card: hands[0][0], seat: 0, x: 16 },\n      { key: 'r1', card: hands[0][1], seat: 0, x: 128 },\n      { key: 'n', card: s.neutral, seat: s.turn, x: 252 },\n      { key: 'b0', card: hands[1][0], seat: 1, x: 376 },\n      { key: 'b1', card: hands[1][1], seat: 1, x: 488 }\n    ];\n    labels.push({ id: 'head_red', text: t('red_cards'), x: 16, y: 470, font_size: 14 });\n    labels.push({ id: 'head_neutral', text: t('neutral'), x: 252, y: 470, font_size: 14 });\n    labels.push({ id: 'head_blue', text: t('blue_cards'), x: 376, y: 470, font_size: 14 });\n    for (const slot of slots) {\n      if (!slot.card || !CARD_INFO[slot.card]) continue;\n      const info = CARD_INFO[slot.card];\n      pieces.push({\n        id: 'panel_' + slot.key, type: slot.key === 'n' ? 'panel_neutral' : slot.seat === 0 ? 'panel_red' : 'panel_blue',\n        board: 'cards', position: { x: slot.x, y: 30 }, text: '', actions: []\n      });\n      labels.push({ id: 'name_' + slot.key, text: info.name, x: slot.x + 8, y: 498, font_size: 15 });\n      // Mini offset diagram, drawn as it acts on the board for its holder:\n      // the holder's forward is up for Red and down for Blue.\n      const grid = [['·', '·', '·', '·', '·'], ['·', '·', '·', '·', '·'], ['·', '·', '◎', '·', '·'],\n        ['·', '·', '·', '·', '·'], ['·', '·', '·', '·', '·']];\n      for (const off of info.off) {\n        const dr = slot.seat === 0 ? -off[0] : off[0];\n        const dc = slot.seat === 0 ? off[1] : -off[1];\n        const gr = 2 + dr, gc = 2 + dc;\n        if (gr >= 0 && gr < 5 && gc >= 0 && gc < 5) grid[gr][gc] = '●';\n      }\n      grid.forEach((row, i) => labels.push({\n        id: 'grid_' + slot.key + '_' + i, text: row.join(' '),\n        x: slot.x + 13, y: 528 + i * 16, font_size: 13\n      }));\n      labels.push({\n        id: 'stamp_' + slot.key,\n        text: (info.stamp === 'red' ? t('red') : t('blue')) + ' ●',\n        x: slot.x + 8, y: 606, font_size: 11, color: info.stamp === 'red' ? '#e0654f' : '#5b8dd9'\n      });\n    }\n    // Interaction targets and controls, acting viewer only.\n    if (active && moves.length) {\n      const cardIds = [];\n      for (const mv of moves) if (!cardIds.includes(mv.card)) cardIds.push(mv.card);\n      for (const cid of cardIds) {\n        const slot = slots.find(sl => sl.card === cid && sl.seat === s.turn);\n        if (!slot) continue;\n        targets.push({\n          id: 'card_' + cid, board: 'cards', position: { x: slot.x + 48, y: 110 },\n          label: selCard === cid ? '◉' : '◆', aria_label: t('use_card', { card: CARD_INFO[cid].name })\n        });\n      }\n      if (selCard) {\n        const froms = [];\n        for (const mv of moves) if (mv.card === selCard && !froms.includes(mv.from)) froms.push(mv.from);\n        for (const from of froms) targets.push({\n          id: 'from_' + from, board: 'main', position: { cell: String(from) },\n          label: selFrom === from ? '◉' : '◇',\n          aria_label: t('select_piece', { r: Math.floor(from / 5) + 1, c: from % 5 + 1 })\n        });\n        if (selFrom !== null) for (const mv of moves) {\n          if (mv.card !== selCard || mv.from !== selFrom) continue;\n          targets.push({\n            id: 'to_' + mv.to, board: 'main', position: { cell: String(mv.to) }, label: '●',\n            aria_label: t('move_to', { r: Math.floor(mv.to / 5) + 1, c: mv.to % 5 + 1 })\n          });\n        }\n      }\n    }\n    if (active && passes.length) for (const p of passes)\n      controls.push({ id: 'pass_' + p.card, kind: 'button', label: t('pass_card', { card: CARD_INFO[p.card].name }) });\n    const scene = { pieces, targets, controls, labels };\n    const out = { scene, local_state: { mc: m.move_count, vw: mySeat, card: selCard, from: selFrom } };\n    if (makeMove) out.make_move = makeMove;\n    return out;\n  }\n};\n"
+  "ui_code": "// Onitama presentation. Pure reducer: scene + staged local selection.\n// Interaction (acting viewer only): tap one of your card panels (a target\n// over the panel), then tap a highlighted piece (origin target), then tap a\n// highlighted destination target. The destination targets are only emitted\n// for the staged (card, piece) pair, so every legal (from, to, card) move is\n// reachable and unambiguous even when both cards reach the same square.\n// When no legal move exists, a Pass button per held card emits the pass.\n// Spectators, replay and finished games get no targets or controls.\nconst SOURCE_STRINGS = {\"title\": \"Onitama\", \"red\": \"Red\", \"blue\": \"Blue\", \"turn\": \"{name} to move\", \"your_turn\": \"Your turn \\u00b7 {name}\", \"finished\": \"Game over\", \"winner\": \"Winner: {name}\", \"draw\": \"Draw\", \"temple\": \"TEMPLE\", \"neutral\": \"Neutral card\", \"red_cards\": \"Red cards\", \"blue_cards\": \"Blue cards\", \"hint_card\": \"Tap one of your cards to choose it.\", \"hint_piece\": \"Tap a highlighted piece to move.\", \"hint_dest\": \"Tap a highlighted destination.\", \"hint_pass\": \"No legal move \\u2014 pass a card instead.\", \"pass_card\": \"Pass {card}\", \"use_card\": \"Use the {card} card\", \"move_to\": \"Move to row {r}, column {c}\", \"select_piece\": \"Select piece at row {r}, column {c}\", \"master\": \"Master\", \"student\": \"Student\", \"server_game_over\": \"game over\", \"server_not_your_turn\": \"not your turn\", \"server_bad_move\": \"bad move\", \"server_unknown_card\": \"unknown card\", \"server_card_not_held\": \"card not held\", \"server_move_available\": \"a move is available\", \"server_off_board\": \"off board\", \"server_not_your_piece\": \"not your piece\", \"server_own_piece\": \"your own piece is there\", \"server_card_move\": \"card does not move like that\"};\nconst CARD_INFO = {\"tiger\": {\"name\": \"Tiger\", \"stamp\": \"blue\", \"off\": [[2, 0], [-1, 0]]}, \"crab\": {\"name\": \"Crab\", \"stamp\": \"blue\", \"off\": [[1, 0], [0, -2], [0, 2]]}, \"monkey\": {\"name\": \"Monkey\", \"stamp\": \"blue\", \"off\": [[1, -1], [1, 1], [-1, -1], [-1, 1]]}, \"crane\": {\"name\": \"Crane\", \"stamp\": \"blue\", \"off\": [[1, 0], [-1, -1], [-1, 1]]}, \"dragon\": {\"name\": \"Dragon\", \"stamp\": \"red\", \"off\": [[1, -2], [1, 2], [-1, -1], [-1, 1]]}, \"elephant\": {\"name\": \"Elephant\", \"stamp\": \"red\", \"off\": [[1, -1], [1, 1], [0, -1], [0, 1]]}, \"mantis\": {\"name\": \"Mantis\", \"stamp\": \"red\", \"off\": [[1, -1], [1, 1], [-1, 0]]}, \"boar\": {\"name\": \"Boar\", \"stamp\": \"red\", \"off\": [[1, 0], [0, -1], [0, 1]]}, \"frog\": {\"name\": \"Frog\", \"stamp\": \"red\", \"off\": [[0, -2], [1, -1], [-1, 1]]}, \"goose\": {\"name\": \"Goose\", \"stamp\": \"blue\", \"off\": [[1, -1], [0, -1], [0, 1], [-1, 1]]}, \"rooster\": {\"name\": \"Rooster\", \"stamp\": \"red\", \"off\": [[1, 1], [0, 1], [0, -1], [-1, -1]]}, \"rabbit\": {\"name\": \"Rabbit\", \"stamp\": \"blue\", \"off\": [[0, 2], [1, 1], [-1, -1]]}, \"ox\": {\"name\": \"Ox\", \"stamp\": \"blue\", \"off\": [[1, 0], [0, 1], [-1, 0]]}, \"horse\": {\"name\": \"Horse\", \"stamp\": \"red\", \"off\": [[1, 0], [0, -1], [-1, 0]]}, \"eel\": {\"name\": \"Eel\", \"stamp\": \"blue\", \"off\": [[1, -1], [-1, -1], [0, 1]]}, \"cobra\": {\"name\": \"Cobra\", \"stamp\": \"red\", \"off\": [[1, 1], [-1, 1], [0, -1]]}};\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args) => String(strings[key] || SOURCE_STRINGS[key] || key).replace(/\\{(\\w+)\\}/g,\n      (_, k) => String((args || {})[k] === undefined ? '' : (args || {})[k]));\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const mySeat = (m.my_player_index === 0 || m.my_player_index === 1) ? m.my_player_index : -1;\n    const legal = active ? (s.legal || []) : [];\n    const moves = legal.filter(x => x.type === 'move');\n    const passes = legal.filter(x => x.type === 'pass');\n    const playerName = i => {\n      const p = (m.players || [])[i];\n      return p && p.name ? p.name : t(i === 0 ? 'red' : 'blue');\n    };\n    // --- staged selection, retained only for the same move and viewer ---\n    let selCard = null, selFrom = null;\n    if (localState && localState.mc === m.move_count && localState.vw === mySeat) {\n      selCard = localState.card || null;\n      selFrom = typeof localState.from === 'number' ? localState.from : null;\n    }\n    if (!moves.some(x => x.card === selCard)) { selCard = null; selFrom = null; }\n    if (selCard !== null && !moves.some(x => x.card === selCard && x.from === selFrom)) selFrom = null;\n    let makeMove = null;\n    if (message.type === 'ui_event' && active && message.event && message.event.type === 'tap') {\n      const id = String(message.event.id || '');\n      if (id.indexOf('pass_') === 0) {\n        const cid = id.slice(5);\n        if (passes.some(x => x.card === cid)) makeMove = { type: 'pass', card: cid };\n      } else if (id.indexOf('card_') === 0) {\n        const cid = id.slice(5);\n        if (moves.some(x => x.card === cid)) { selCard = cid; selFrom = null; }\n      } else if (id.indexOf('from_') === 0) {\n        const cell = parseInt(id.slice(5), 10);\n        if (selCard && moves.some(x => x.card === selCard && x.from === cell)) selFrom = cell;\n      } else if (id.indexOf('to_') === 0) {\n        const cell = parseInt(id.slice(3), 10);\n        const found = moves.find(x => x.card === selCard && x.from === selFrom && x.to === cell);\n        if (found) makeMove = { type: 'move', from: found.from, to: found.to, card: found.card };\n      }\n    }\n    // --- scene ---\n    const pieces = [], targets = [], controls = [], labels = [];\n    labels.push({ id: 'title', text: t('title'), x: 24, y: 14, font_size: 25 });\n    const over = s.over || m.status === 'over';\n    if (over) {\n      labels.push({ id: 'status', text: t('finished'), x: 24, y: 46, font_size: 17 });\n      if (s.draw) labels.push({ id: 'winner', text: t('draw'), x: 24, y: 70, font_size: 15 });\n      else if (s.winner === 0 || s.winner === 1)\n        labels.push({ id: 'winner', text: t('winner', { name: playerName(s.winner) }), x: 24, y: 70, font_size: 15 });\n    } else {\n      const nm = playerName(s.turn);\n      labels.push({ id: 'status', text: active && mySeat === s.turn ? t('your_turn', { name: nm }) : t('turn', { name: nm }), x: 24, y: 46, font_size: 17 });\n      if (active && passes.length)\n        labels.push({ id: 'hint', text: t('hint_pass'), x: 24, y: 70, font_size: 14 });\n      else if (active && moves.length)\n        labels.push({ id: 'hint', text: t(!selCard ? 'hint_card' : selFrom === null ? 'hint_piece' : 'hint_dest'), x: 24, y: 70, font_size: 14 });\n    }\n    labels.push({ id: 'temple_top', text: t('temple'), x: 256, y: 95, font_size: 10 });\n    labels.push({ id: 'temple_bottom', text: t('temple'), x: 256, y: 383, font_size: 10 });\n    // Board pieces carry STABLE ids from view.pieces (permanent pawn id ->\n    // current cell), never the cell itself: a pawn keeps its id as it\n    // moves, so the host can animate it, and a captured pawn simply\n    // disappears. A legacy view without a pieces map derives one in cell\n    // order from the board codes, matching the server's rebuild.\n    const pieceMap = (s.pieces && typeof s.pieces === 'object') ? s.pieces : (() => {\n      const map = {}; let rs = 0, bs = 0;\n      (s.board || []).forEach((v, cell) => {\n        if (v === 0) map['r_s' + (rs++)] = cell;\n        else if (v === 1) map.r_m = cell;\n        else if (v === 2) map['b_s' + (bs++)] = cell;\n        else if (v === 3) map.b_m = cell;\n      });\n      return map;\n    })();\n    for (const pid of Object.keys(pieceMap)) {\n      const cell = pieceMap[pid];\n      if (typeof cell !== 'number' || cell < 0 || cell > 24) continue;\n      const v = (s.board || [])[cell];\n      const seat = typeof v === 'number' && v >= 0 ? (v >= 2 ? 1 : 0) : (pid.charAt(0) === 'b' ? 1 : 0);\n      const master = typeof v === 'number' && v >= 0 ? v % 2 === 1 : pid.indexOf('_m') >= 0;\n      pieces.push({\n        id: pid,\n        type: master ? (seat === 0 ? 'red_master' : 'blue_master') : (seat === 0 ? 'red_student' : 'blue_student'),\n        board: 'main', position: { cell: String(cell) }, text: master ? 'M' : 'S',\n        aria_label: (seat === 0 ? t('red') : t('blue')) + ' ' + (master ? t('master') : t('student')),\n        selected: selFrom === cell, actions: []\n      });\n    }\n    // Card panels: Red's two, the neutral card, Blue's two.\n    const hands = s.hands || [[], []];\n    const slots = [\n      { key: 'r0', card: hands[0][0], seat: 0, x: 16 },\n      { key: 'r1', card: hands[0][1], seat: 0, x: 128 },\n      { key: 'n', card: s.neutral, seat: s.turn, x: 252 },\n      { key: 'b0', card: hands[1][0], seat: 1, x: 376 },\n      { key: 'b1', card: hands[1][1], seat: 1, x: 488 }\n    ];\n    labels.push({ id: 'head_red', text: t('red_cards'), x: 16, y: 470, font_size: 14 });\n    labels.push({ id: 'head_neutral', text: t('neutral'), x: 252, y: 470, font_size: 14 });\n    labels.push({ id: 'head_blue', text: t('blue_cards'), x: 376, y: 470, font_size: 14 });\n    for (const slot of slots) {\n      if (!slot.card || !CARD_INFO[slot.card]) continue;\n      const info = CARD_INFO[slot.card];\n      pieces.push({\n        id: 'panel_' + slot.key, type: slot.key === 'n' ? 'panel_neutral' : slot.seat === 0 ? 'panel_red' : 'panel_blue',\n        board: 'cards', position: { x: slot.x, y: 30 }, text: '', actions: []\n      });\n      labels.push({ id: 'name_' + slot.key, text: info.name, x: slot.x + 8, y: 498, font_size: 15 });\n      // Mini offset diagram, drawn as it acts on the board for its holder:\n      // the holder's forward is up for Red and down for Blue.\n      const grid = [['·', '·', '·', '·', '·'], ['·', '·', '·', '·', '·'], ['·', '·', '◎', '·', '·'],\n        ['·', '·', '·', '·', '·'], ['·', '·', '·', '·', '·']];\n      for (const off of info.off) {\n        const dr = slot.seat === 0 ? -off[0] : off[0];\n        const dc = slot.seat === 0 ? off[1] : -off[1];\n        const gr = 2 + dr, gc = 2 + dc;\n        if (gr >= 0 && gr < 5 && gc >= 0 && gc < 5) grid[gr][gc] = '●';\n      }\n      grid.forEach((row, i) => labels.push({\n        id: 'grid_' + slot.key + '_' + i, text: row.join(' '),\n        x: slot.x + 13, y: 528 + i * 16, font_size: 13\n      }));\n      labels.push({\n        id: 'stamp_' + slot.key,\n        text: (info.stamp === 'red' ? t('red') : t('blue')) + ' ●',\n        x: slot.x + 8, y: 606, font_size: 11, color: info.stamp === 'red' ? '#e0654f' : '#5b8dd9'\n      });\n    }\n    // Interaction targets and controls, acting viewer only.\n    if (active && moves.length) {\n      const cardIds = [];\n      for (const mv of moves) if (!cardIds.includes(mv.card)) cardIds.push(mv.card);\n      for (const cid of cardIds) {\n        const slot = slots.find(sl => sl.card === cid && sl.seat === s.turn);\n        if (!slot) continue;\n        targets.push({\n          id: 'card_' + cid, board: 'cards', position: { x: slot.x + 48, y: 110 },\n          label: selCard === cid ? '◉' : '◆', aria_label: t('use_card', { card: CARD_INFO[cid].name })\n        });\n      }\n      if (selCard) {\n        const froms = [];\n        for (const mv of moves) if (mv.card === selCard && !froms.includes(mv.from)) froms.push(mv.from);\n        for (const from of froms) targets.push({\n          id: 'from_' + from, board: 'main', position: { cell: String(from) },\n          label: selFrom === from ? '◉' : '◇',\n          aria_label: t('select_piece', { r: Math.floor(from / 5) + 1, c: from % 5 + 1 })\n        });\n        if (selFrom !== null) for (const mv of moves) {\n          if (mv.card !== selCard || mv.from !== selFrom) continue;\n          targets.push({\n            id: 'to_' + mv.to, board: 'main', position: { cell: String(mv.to) }, label: '●',\n            aria_label: t('move_to', { r: Math.floor(mv.to / 5) + 1, c: mv.to % 5 + 1 })\n          });\n        }\n      }\n    }\n    if (active && passes.length) for (const p of passes)\n      controls.push({ id: 'pass_' + p.card, kind: 'button', label: t('pass_card', { card: CARD_INFO[p.card].name }) });\n    const scene = { pieces, targets, controls, labels };\n    const out = { scene, local_state: { mc: m.move_count, vw: mySeat, card: selCard, from: selFrom } };\n    if (makeMove) out.make_move = makeMove;\n    return out;\n  },\n  getLastMoveAnimations(view, scene) {\n    // Declared path for the last accepted move, reconstructed only from\n    // view.last_move, which the server replaces on every accepted action.\n    // A view without the field is an older pinned package: return null to\n    // keep the host's position-difference animation. An initial snapshot\n    // (null) or a pass card swap explicitly animates nothing ([]).\n    if (!view || !Object.prototype.hasOwnProperty.call(view, 'last_move')) return null;\n    const move = view.last_move;\n    if (!move || move.kind !== 'move' || !move.piece_id || !move.from || !move.to) return [];\n    const piece = (scene.pieces || []).find(p => p.id === move.piece_id);\n    if (!piece || piece.board !== move.to.board || !piece.position ||\n        piece.position.cell !== (move.to.position || {}).cell) return [];\n    return [{ piece_id: move.piece_id, duration_ms: 800, path: [move.from, move.to] }];\n  }\n};\n"
  },
  "rules": "Onitama for two players, Red (first seat) against Blue, on a 5x5 board. Each side has one master and four students, starting on its back rank with the master on its own temple square in the centre. Five of the sixteen movement cards are drawn at random: two for each player and one neutral card; the player whose colour matches the neutral card's stamp (red or blue) moves first. On your turn, move one of your pieces by one of the offsets shown on one of your two cards, read from your own side of the board: forward is toward your opponent. You may land on an empty square or capture an opponent piece, but never on your own piece or off the board. The card you used is then swapped with the neutral card. If neither of your cards gives any of your pieces a legal move, you must instead pass: swap one of your cards with the neutral card without moving. Win by capturing the opponent's master, or by moving your own master onto the opponent's temple square. The winner takes the pot. If 500 moves pass without a win, the game is a draw and the pot is split.",
  "ui_instructions": "Board on top with both temple squares marked; masters are the larger pieces marked M, students S. Below the board are Red's two cards, the neutral card and Blue's two cards, each showing its name, its stamp colour and a mini diagram of its moves (centre dot is the piece, filled dots are where it can go, drawn as the card acts for its holder). On your turn tap one of your cards, then tap a highlighted piece, then tap a highlighted destination. If you have no legal move, use the Pass button for one of your cards. Only the player to move sees targets and buttons.",
@@ -160,13 +160,15 @@
    "type": "object",
    "required": [
     "board",
+    "pieces",
     "hands",
     "neutral",
     "turn",
     "winner",
     "draw",
     "moves",
-    "over"
+    "over",
+    "last_move"
    ],
    "additionalProperties": false,
    "properties": {
@@ -178,6 +180,62 @@
       "type": "integer",
       "minimum": -1,
       "maximum": 3
+     }
+    },
+    "pieces": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "b_s0": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "b_s1": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "b_m": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "b_s2": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "b_s3": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_s0": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_s1": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_m": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_s2": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_s3": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      }
      }
     },
     "hands": {
@@ -255,6 +313,194 @@
     },
     "over": {
      "type": "boolean"
+    },
+    "last_move": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "required": [
+        "kind",
+        "piece_id",
+        "from",
+        "to",
+        "captured_piece_id"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "move",
+          "pass"
+         ]
+        },
+        "piece_id": {
+         "anyOf": [
+          {
+           "type": "string",
+           "enum": [
+            "b_s0",
+            "b_s1",
+            "b_m",
+            "b_s2",
+            "b_s3",
+            "r_s0",
+            "r_s1",
+            "r_m",
+            "r_s2",
+            "r_s3"
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "from": {
+         "anyOf": [
+          {
+           "type": "object",
+           "required": [
+            "board",
+            "position"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "board": {
+             "const": "main"
+            },
+            "position": {
+             "type": "object",
+             "required": [
+              "cell"
+             ],
+             "additionalProperties": false,
+             "properties": {
+              "cell": {
+               "type": "string",
+               "enum": [
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14",
+                "15",
+                "16",
+                "17",
+                "18",
+                "19",
+                "20",
+                "21",
+                "22",
+                "23",
+                "24"
+               ]
+              }
+             }
+            }
+           }
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "to": {
+         "anyOf": [
+          {
+           "type": "object",
+           "required": [
+            "board",
+            "position"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "board": {
+             "const": "main"
+            },
+            "position": {
+             "type": "object",
+             "required": [
+              "cell"
+             ],
+             "additionalProperties": false,
+             "properties": {
+              "cell": {
+               "type": "string",
+               "enum": [
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14",
+                "15",
+                "16",
+                "17",
+                "18",
+                "19",
+                "20",
+                "21",
+                "22",
+                "23",
+                "24"
+               ]
+              }
+             }
+            }
+           }
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "captured_piece_id": {
+         "anyOf": [
+          {
+           "type": "string",
+           "enum": [
+            "b_s0",
+            "b_s1",
+            "b_m",
+            "b_s2",
+            "b_s3",
+            "r_s0",
+            "r_s1",
+            "r_m",
+            "r_s2",
+            "r_s3"
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ]
+        }
+       }
+      }
+     ]
     }
    }
   },
@@ -262,6 +508,7 @@
    "type": "object",
    "required": [
     "board",
+    "pieces",
     "hands",
     "neutral",
     "turn",
@@ -269,6 +516,7 @@
     "draw",
     "moves",
     "over",
+    "last_move",
     "me",
     "legal"
    ],
@@ -284,6 +532,62 @@
       "maximum": 3
      }
     },
+    "pieces": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "b_s0": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "b_s1": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "b_m": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "b_s2": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "b_s3": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_s0": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_s1": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_m": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_s2": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "r_s3": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      }
+     }
+    },
     "hands": {
      "type": "array",
      "minItems": 2,
@@ -359,6 +663,194 @@
     },
     "over": {
      "type": "boolean"
+    },
+    "last_move": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "required": [
+        "kind",
+        "piece_id",
+        "from",
+        "to",
+        "captured_piece_id"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "move",
+          "pass"
+         ]
+        },
+        "piece_id": {
+         "anyOf": [
+          {
+           "type": "string",
+           "enum": [
+            "b_s0",
+            "b_s1",
+            "b_m",
+            "b_s2",
+            "b_s3",
+            "r_s0",
+            "r_s1",
+            "r_m",
+            "r_s2",
+            "r_s3"
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "from": {
+         "anyOf": [
+          {
+           "type": "object",
+           "required": [
+            "board",
+            "position"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "board": {
+             "const": "main"
+            },
+            "position": {
+             "type": "object",
+             "required": [
+              "cell"
+             ],
+             "additionalProperties": false,
+             "properties": {
+              "cell": {
+               "type": "string",
+               "enum": [
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14",
+                "15",
+                "16",
+                "17",
+                "18",
+                "19",
+                "20",
+                "21",
+                "22",
+                "23",
+                "24"
+               ]
+              }
+             }
+            }
+           }
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "to": {
+         "anyOf": [
+          {
+           "type": "object",
+           "required": [
+            "board",
+            "position"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "board": {
+             "const": "main"
+            },
+            "position": {
+             "type": "object",
+             "required": [
+              "cell"
+             ],
+             "additionalProperties": false,
+             "properties": {
+              "cell": {
+               "type": "string",
+               "enum": [
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14",
+                "15",
+                "16",
+                "17",
+                "18",
+                "19",
+                "20",
+                "21",
+                "22",
+                "23",
+                "24"
+               ]
+              }
+             }
+            }
+           }
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "captured_piece_id": {
+         "anyOf": [
+          {
+           "type": "string",
+           "enum": [
+            "b_s0",
+            "b_s1",
+            "b_m",
+            "b_s2",
+            "b_s3",
+            "r_s0",
+            "r_s1",
+            "r_m",
+            "r_s2",
+            "r_s3"
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ]
+        }
+       }
+      }
+     ]
     },
     "me": {
      "enum": [
@@ -559,6 +1051,18 @@
       0,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 1,
+      "b_m": 2,
+      "b_s2": 3,
+      "b_s3": 4,
+      "r_s0": 20,
+      "r_s1": 21,
+      "r_m": 22,
+      "r_s2": 23,
+      "r_s3": 24
+     },
      "hands": [
       [
        "goose",
@@ -574,7 +1078,8 @@
      "winner": -1,
      "draw": false,
      "moves": 0,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "board": [
@@ -604,6 +1109,18 @@
       0,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 1,
+      "b_m": 2,
+      "b_s2": 3,
+      "b_s3": 4,
+      "r_s0": 20,
+      "r_s1": 21,
+      "r_m": 22,
+      "r_s2": 23,
+      "r_s3": 24
+     },
      "hands": [
       [
        "goose",
@@ -620,6 +1137,7 @@
      "draw": false,
      "moves": 0,
      "over": false,
+     "last_move": null,
      "me": 1,
      "legal": [
       {
@@ -706,6 +1224,18 @@
       0,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 1,
+      "b_m": 2,
+      "b_s2": 3,
+      "b_s3": 4,
+      "r_s0": 20,
+      "r_s1": 21,
+      "r_m": 22,
+      "r_s2": 23,
+      "r_s3": 24
+     },
      "hands": [
       [
        "goose",
@@ -722,6 +1252,7 @@
      "draw": false,
      "moves": 0,
      "over": false,
+     "last_move": null,
      "me": 0,
      "legal": []
     },
@@ -761,6 +1292,18 @@
       0,
       0
      ],
+     "pieces": {
+      "b_s0": 5,
+      "b_s1": 1,
+      "b_m": 2,
+      "b_s2": 3,
+      "b_s3": 4,
+      "r_s0": 20,
+      "r_s1": 21,
+      "r_m": 22,
+      "r_s2": 23,
+      "r_s3": 24
+     },
      "hands": [
       [
        "goose",
@@ -776,7 +1319,24 @@
      "winner": -1,
      "draw": false,
      "moves": 1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "b_s0",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "5"
+       }
+      },
+      "captured_piece_id": null
+     }
     },
     "expected_turn": [
      "u1"
@@ -809,6 +1369,18 @@
       0,
       0
      ],
+     "pieces": {
+      "b_s0": 5,
+      "b_s1": 1,
+      "b_m": 2,
+      "b_s2": 3,
+      "b_s3": 4,
+      "r_s0": 20,
+      "r_s1": 21,
+      "r_m": 22,
+      "r_s2": 23,
+      "r_s3": 24
+     },
      "hands": [
       [
        "goose",
@@ -825,6 +1397,23 @@
      "draw": false,
      "moves": 1,
      "over": false,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "b_s0",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "5"
+       }
+      },
+      "captured_piece_id": null
+     },
      "me": 1,
      "legal": []
     },
@@ -856,6 +1445,18 @@
       0,
       0
      ],
+     "pieces": {
+      "b_s0": 5,
+      "b_s1": 1,
+      "b_m": 2,
+      "b_s2": 3,
+      "b_s3": 4,
+      "r_s0": 20,
+      "r_s1": 21,
+      "r_m": 22,
+      "r_s2": 23,
+      "r_s3": 24
+     },
      "hands": [
       [
        "goose",
@@ -872,6 +1473,23 @@
      "draw": false,
      "moves": 1,
      "over": false,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "b_s0",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "5"
+       }
+      },
+      "captured_piece_id": null
+     },
      "me": 0,
      "legal": [
       {
@@ -1022,6 +1640,14 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "b_s1": 6,
+      "r_s0": 12,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -1037,7 +1663,8 @@
      "winner": -1,
      "draw": false,
      "moves": 7,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "board": [
@@ -1067,6 +1694,14 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "b_s1": 6,
+      "r_s0": 12,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -1083,6 +1718,7 @@
      "draw": false,
      "moves": 7,
      "over": false,
+     "last_move": null,
      "me": 0,
      "legal": [
       {
@@ -1205,6 +1841,14 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "b_s1": 6,
+      "r_s0": 12,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -1221,6 +1865,7 @@
      "draw": false,
      "moves": 7,
      "over": false,
+     "last_move": null,
      "me": 1,
      "legal": []
     },
@@ -1260,6 +1905,13 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "r_s0": 6,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "tiger",
@@ -1275,7 +1927,24 @@
      "winner": -1,
      "draw": false,
      "moves": 8,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_s0",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "12"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "6"
+       }
+      },
+      "captured_piece_id": "b_s1"
+     }
     },
     "expected_turn": [
      "u2"
@@ -1308,6 +1977,13 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "r_s0": 6,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "tiger",
@@ -1324,6 +2000,23 @@
      "draw": false,
      "moves": 8,
      "over": false,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_s0",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "12"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "6"
+       }
+      },
+      "captured_piece_id": "b_s1"
+     },
      "me": 0,
      "legal": []
     },
@@ -1355,6 +2048,13 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "r_s0": 6,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "tiger",
@@ -1371,6 +2071,23 @@
      "draw": false,
      "moves": 8,
      "over": false,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_s0",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "12"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "6"
+       }
+      },
+      "captured_piece_id": "b_s1"
+     },
      "me": 1,
      "legal": [
       {
@@ -1467,6 +2184,12 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_m": 3,
+      "r_m": 17,
+      "r_s0": 24
+     },
      "hands": [
       [
        "boar",
@@ -1482,7 +2205,8 @@
      "winner": -1,
      "draw": false,
      "moves": 3,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "board": [
@@ -1512,6 +2236,12 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_m": 3,
+      "r_m": 17,
+      "r_s0": 24
+     },
      "hands": [
       [
        "boar",
@@ -1528,6 +2258,7 @@
      "draw": false,
      "moves": 3,
      "over": false,
+     "last_move": null,
      "me": 0,
      "legal": [
       {
@@ -1614,6 +2345,12 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_m": 3,
+      "r_m": 17,
+      "r_s0": 24
+     },
      "hands": [
       [
        "boar",
@@ -1630,6 +2367,7 @@
      "draw": false,
      "moves": 3,
      "over": false,
+     "last_move": null,
      "me": 1,
      "legal": []
     },
@@ -1669,6 +2407,12 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_m": 3,
+      "r_m": 12,
+      "r_s0": 24
+     },
      "hands": [
       [
        "eel",
@@ -1684,7 +2428,24 @@
      "winner": -1,
      "draw": false,
      "moves": 4,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_m",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "17"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "12"
+       }
+      },
+      "captured_piece_id": null
+     }
     },
     "expected_turn": [
      "u2"
@@ -1717,6 +2478,12 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_m": 3,
+      "r_m": 12,
+      "r_s0": 24
+     },
      "hands": [
       [
        "eel",
@@ -1733,6 +2500,23 @@
      "draw": false,
      "moves": 4,
      "over": false,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_m",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "17"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "12"
+       }
+      },
+      "captured_piece_id": null
+     },
      "me": 0,
      "legal": []
     },
@@ -1764,6 +2548,12 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_m": 3,
+      "r_m": 12,
+      "r_s0": 24
+     },
      "hands": [
       [
        "eel",
@@ -1780,6 +2570,23 @@
      "draw": false,
      "moves": 4,
      "over": false,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_m",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "17"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "12"
+       }
+      },
+      "captured_piece_id": null
+     },
      "me": 1,
      "legal": [
       {
@@ -1906,6 +2713,18 @@
       2,
       2
      ],
+     "pieces": {
+      "r_s0": 0,
+      "r_s1": 1,
+      "r_m": 2,
+      "r_s2": 3,
+      "r_s3": 4,
+      "b_s0": 20,
+      "b_s1": 21,
+      "b_m": 22,
+      "b_s2": 23,
+      "b_s3": 24
+     },
      "hands": [
       [
        "boar",
@@ -1921,7 +2740,8 @@
      "winner": -1,
      "draw": false,
      "moves": 20,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "board": [
@@ -1951,6 +2771,18 @@
       2,
       2
      ],
+     "pieces": {
+      "r_s0": 0,
+      "r_s1": 1,
+      "r_m": 2,
+      "r_s2": 3,
+      "r_s3": 4,
+      "b_s0": 20,
+      "b_s1": 21,
+      "b_m": 22,
+      "b_s2": 23,
+      "b_s3": 24
+     },
      "hands": [
       [
        "boar",
@@ -1967,6 +2799,7 @@
      "draw": false,
      "moves": 20,
      "over": false,
+     "last_move": null,
      "me": 0,
      "legal": [
       {
@@ -2007,6 +2840,18 @@
       2,
       2
      ],
+     "pieces": {
+      "r_s0": 0,
+      "r_s1": 1,
+      "r_m": 2,
+      "r_s2": 3,
+      "r_s3": 4,
+      "b_s0": 20,
+      "b_s1": 21,
+      "b_m": 22,
+      "b_s2": 23,
+      "b_s3": 24
+     },
      "hands": [
       [
        "boar",
@@ -2023,6 +2868,7 @@
      "draw": false,
      "moves": 20,
      "over": false,
+     "last_move": null,
      "me": 1,
      "legal": []
     },
@@ -2060,6 +2906,18 @@
       2,
       2
      ],
+     "pieces": {
+      "r_s0": 0,
+      "r_s1": 1,
+      "r_m": 2,
+      "r_s2": 3,
+      "r_s3": 4,
+      "b_s0": 20,
+      "b_s1": 21,
+      "b_m": 22,
+      "b_s2": 23,
+      "b_s3": 24
+     },
      "hands": [
       [
        "dragon",
@@ -2075,7 +2933,14 @@
      "winner": -1,
      "draw": false,
      "moves": 21,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "pass",
+      "piece_id": null,
+      "from": null,
+      "to": null,
+      "captured_piece_id": null
+     }
     },
     "expected_turn": [
      "u2"
@@ -2108,6 +2973,18 @@
       2,
       2
      ],
+     "pieces": {
+      "r_s0": 0,
+      "r_s1": 1,
+      "r_m": 2,
+      "r_s2": 3,
+      "r_s3": 4,
+      "b_s0": 20,
+      "b_s1": 21,
+      "b_m": 22,
+      "b_s2": 23,
+      "b_s3": 24
+     },
      "hands": [
       [
        "dragon",
@@ -2124,6 +3001,13 @@
      "draw": false,
      "moves": 21,
      "over": false,
+     "last_move": {
+      "kind": "pass",
+      "piece_id": null,
+      "from": null,
+      "to": null,
+      "captured_piece_id": null
+     },
      "me": 0,
      "legal": []
     },
@@ -2155,6 +3039,18 @@
       2,
       2
      ],
+     "pieces": {
+      "r_s0": 0,
+      "r_s1": 1,
+      "r_m": 2,
+      "r_s2": 3,
+      "r_s3": 4,
+      "b_s0": 20,
+      "b_s1": 21,
+      "b_m": 22,
+      "b_s2": 23,
+      "b_s3": 24
+     },
      "hands": [
       [
        "dragon",
@@ -2171,6 +3067,13 @@
      "draw": false,
      "moves": 21,
      "over": false,
+     "last_move": {
+      "kind": "pass",
+      "piece_id": null,
+      "from": null,
+      "to": null,
+      "captured_piece_id": null
+     },
      "me": 1,
      "legal": [
       {
@@ -2327,6 +3230,14 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "b_s1": 6,
+      "r_s0": 12,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -2342,7 +3253,8 @@
      "winner": -1,
      "draw": false,
      "moves": 7,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "board": [
@@ -2372,6 +3284,14 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "b_s1": 6,
+      "r_s0": 12,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -2388,6 +3308,7 @@
      "draw": false,
      "moves": 7,
      "over": false,
+     "last_move": null,
      "me": 0,
      "legal": [
       {
@@ -2510,6 +3431,14 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "b_s1": 6,
+      "r_s0": 12,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -2526,6 +3455,7 @@
      "draw": false,
      "moves": 7,
      "over": false,
+     "last_move": null,
      "me": 1,
      "legal": []
     },
@@ -2569,6 +3499,14 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "b_s1": 6,
+      "r_s0": 12,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -2584,7 +3522,8 @@
      "winner": -1,
      "draw": false,
      "moves": 7,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "expected_turn": [
      "u1"
@@ -2617,6 +3556,14 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "b_s1": 6,
+      "r_s0": 12,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -2633,6 +3580,7 @@
      "draw": false,
      "moves": 7,
      "over": false,
+     "last_move": null,
      "me": 0,
      "legal": [
       {
@@ -2755,6 +3703,14 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_m": 2,
+      "b_s0": 4,
+      "b_s1": 6,
+      "r_s0": 12,
+      "r_s1": 20,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -2771,6 +3727,7 @@
      "draw": false,
      "moves": 7,
      "over": false,
+     "last_move": null,
      "me": 1,
      "legal": []
     },
@@ -2848,6 +3805,13 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "b_m": 6,
+      "r_s0": 12,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -2863,7 +3827,8 @@
      "winner": -1,
      "draw": false,
      "moves": 30,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "board": [
@@ -2893,6 +3858,13 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "b_m": 6,
+      "r_s0": 12,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -2909,6 +3881,7 @@
      "draw": false,
      "moves": 30,
      "over": false,
+     "last_move": null,
      "me": 0,
      "legal": [
       {
@@ -3013,6 +3986,13 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "b_m": 6,
+      "r_s0": 12,
+      "r_m": 22
+     },
      "hands": [
       [
        "monkey",
@@ -3029,6 +4009,7 @@
      "draw": false,
      "moves": 30,
      "over": false,
+     "last_move": null,
      "me": 1,
      "legal": []
     },
@@ -3068,6 +4049,12 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "r_s0": 6,
+      "r_m": 22
+     },
      "hands": [
       [
        "tiger",
@@ -3083,7 +4070,24 @@
      "winner": 0,
      "draw": false,
      "moves": 31,
-     "over": true
+     "over": true,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_s0",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "12"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "6"
+       }
+      },
+      "captured_piece_id": "b_m"
+     }
     },
     "expected_turn": null,
     "expected_payouts": {},
@@ -3115,6 +4119,12 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "r_s0": 6,
+      "r_m": 22
+     },
      "hands": [
       [
        "tiger",
@@ -3131,6 +4141,23 @@
      "draw": false,
      "moves": 31,
      "over": true,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_s0",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "12"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "6"
+       }
+      },
+      "captured_piece_id": "b_m"
+     },
      "me": 0,
      "legal": []
     },
@@ -3162,6 +4189,12 @@
       -1,
       -1
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "r_s0": 6,
+      "r_m": 22
+     },
      "hands": [
       [
        "tiger",
@@ -3178,6 +4211,23 @@
      "draw": false,
      "moves": 31,
      "over": true,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_s0",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "12"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "6"
+       }
+      },
+      "captured_piece_id": "b_m"
+     },
      "me": 1,
      "legal": []
     },
@@ -3255,6 +4305,14 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "r_m": 7,
+      "b_m": 8,
+      "r_s0": 20,
+      "r_s1": 24
+     },
      "hands": [
       [
        "crane",
@@ -3270,7 +4328,8 @@
      "winner": -1,
      "draw": false,
      "moves": 12,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "view_of_mover": {
      "board": [
@@ -3300,6 +4359,14 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "r_m": 7,
+      "b_m": 8,
+      "r_s0": 20,
+      "r_s1": 24
+     },
      "hands": [
       [
        "crane",
@@ -3316,6 +4383,7 @@
      "draw": false,
      "moves": 12,
      "over": false,
+     "last_move": null,
      "me": 0,
      "legal": [
       {
@@ -3408,6 +4476,14 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "r_m": 7,
+      "b_m": 8,
+      "r_s0": 20,
+      "r_s1": 24
+     },
      "hands": [
       [
        "crane",
@@ -3424,6 +4500,7 @@
      "draw": false,
      "moves": 12,
      "over": false,
+     "last_move": null,
      "me": 1,
      "legal": []
     },
@@ -3463,6 +4540,14 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "r_m": 2,
+      "b_m": 8,
+      "r_s0": 20,
+      "r_s1": 24
+     },
      "hands": [
       [
        "monkey",
@@ -3478,7 +4563,24 @@
      "winner": 0,
      "draw": false,
      "moves": 13,
-     "over": true
+     "over": true,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_m",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "7"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "2"
+       }
+      },
+      "captured_piece_id": null
+     }
     },
     "expected_turn": null,
     "expected_payouts": {},
@@ -3510,6 +4612,14 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "r_m": 2,
+      "b_m": 8,
+      "r_s0": 20,
+      "r_s1": 24
+     },
      "hands": [
       [
        "monkey",
@@ -3526,6 +4636,23 @@
      "draw": false,
      "moves": 13,
      "over": true,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_m",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "7"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "2"
+       }
+      },
+      "captured_piece_id": null
+     },
      "me": 0,
      "legal": []
     },
@@ -3557,6 +4684,14 @@
       -1,
       0
      ],
+     "pieces": {
+      "b_s0": 0,
+      "b_s1": 4,
+      "r_m": 2,
+      "b_m": 8,
+      "r_s0": 20,
+      "r_s1": 24
+     },
      "hands": [
       [
        "monkey",
@@ -3573,6 +4708,23 @@
      "draw": false,
      "moves": 13,
      "over": true,
+     "last_move": {
+      "kind": "move",
+      "piece_id": "r_m",
+      "from": {
+       "board": "main",
+       "position": {
+        "cell": "7"
+       }
+      },
+      "to": {
+       "board": "main",
+       "position": {
+        "cell": "2"
+       }
+      },
+      "captured_piece_id": null
+     },
      "me": 1,
      "legal": []
     },
