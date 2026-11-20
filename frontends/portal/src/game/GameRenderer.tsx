@@ -376,6 +376,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     </View>
     {!ready&&<ActivityIndicator accessibilityLabel={copyText("Loading game board")} color="#91d7c4" style={styles.loading}/>}
     {!!error&&<Text accessibilityRole="alert" style={styles.error}>{playerText(error)}</Text>}
+    <View style={styles.controls}>{display.scene.controls?.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>
     <View ref={canvas} collapsable={false} focusable style={[styles.canvas,{height}]} {...webProps} {...responders.panHandlers}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);measureOrigin();}}
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
@@ -412,7 +413,6 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       </View>
       {previewTarget?.preview?.length? <Text accessibilityLiveRegion="polite" style={styles.preview}>{copyText("Preview:")} {playerText(previewTarget.aria_label||previewTarget.label||copyText('placement'))}{copyText(". Tap the destination again to confirm.")}</Text>:null}
     </View>
-    <View style={styles.controls}>{display.scene.controls?.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>
   </View>;
 }
 
@@ -482,7 +482,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const accessibility:Record<string,unknown>=effect==='exit'?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:'history-ghost',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
     accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length?onPress:undefined};
   return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale})`} opacity={(piece.opacity??1)*notice*fade} {...accessibility}>
-    {type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:((type.shape!=='text'&&type.shape!=='image')||piece.face==='back')?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={type.shape==='card'?7:4} fill={piece.face==='back'?'#324a88':type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
+    {type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:type.shape==='hex'?<Polygon points={Array.from({length:6},(_,i)=>`${Math.cos((i*60+30)*Math.PI/180)*size.width/2},${Math.sin((i*60+30)*Math.PI/180)*size.height/2}`).join(' ')} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:((type.shape!=='text'&&type.shape!=='image')||piece.face==='back')?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={type.shape==='card'?7:4} fill={piece.face==='back'?'#324a88':type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
     <Asset spec={spec} id={piece.face==='back'?type.back_asset:piece.asset||type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
     {(piece.face==='back'||piece.text!==undefined)&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{piece.face==='back'?'◆':playerText(piece.text||'')}</SvgText>}
     {type.action_outline!=='none'&&(type.action_outline==='ellipse'?<Ellipse rx={size.width/2+4} ry={size.height/2+4} fill="none" stroke={outline} strokeWidth={selected?4:2}/>:<Rect x={-size.width/2-4} y={-size.height/2-4} width={size.width+8} height={size.height+8} rx={8} fill="none" stroke={outline} strokeWidth={selected?4:2}/>)}
@@ -491,16 +491,24 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
 });
 
 const TargetGraphic=memo(function TargetGraphic({target,spec,enabled,selected,onPress}:{target:Target;spec:GameSpec;enabled:boolean;selected:boolean;onPress:()=>void}) {
-  const point=position(spec,target),box=targetBox(spec,target),art=!!target.asset;
+  const point=position(spec,target),box=targetBox(spec,target),art=!!target.asset,board=point.board;
   // Keep the accessible group's geometry in scene coordinates. Android SVG
   // virtual-node bounds misplace a translated group under a scaled viewBox;
   // its reported Cell 1 rectangle can otherwise physically hit Cell 4.
   return <G opacity={enabled?selected?1:.72:.18}
     accessible accessibilityRole="button" accessibilityLabel={playerText(target.aria_label||target.label||copyText("Destination {v0}",{v0:target.id}))} accessibilityState={{disabled:!enabled,selected}}
     onPress={enabled?onPress:undefined}>
-    <Rect x={box.x} y={box.y} width={box.width} height={box.height} rx={5} fill={art?'transparent':target.color||'#b8ef5b'} stroke={selected?'#ffffff':'#c9ff63'} strokeWidth={selected?4:2}/>
-    <Asset spec={spec} id={target.asset} x={box.x} y={box.y} width={box.width} height={box.height}/>
-    {!!target.label&&!art&&<SvgText x={point.x} y={point.y} textAnchor="middle" alignmentBaseline="central" fill="#102330" fontSize={14}>{playerText(target.label)}</SvgText>}
+    {board.kind==='graph'?<>
+      <Rect x={box.x} y={box.y} width={box.width} height={box.height} fill="transparent" stroke="none"/>
+      <Circle cx={point.x} cy={point.y} r={14} fill={art?'transparent':target.color||'#b8ef5b'} fillOpacity={art?1:.32} stroke={selected?'#ffffff':'#c9ff63'} strokeWidth={selected?3:2}/>
+      {!art&&<Circle cx={point.x} cy={point.y} r={5} fill="#f4ffe4"/>}
+      <Asset spec={spec} id={target.asset} x={box.x} y={box.y} width={box.width} height={box.height}/>
+      {!!target.label&&!art&&<SvgText x={point.x} y={point.y} textAnchor="middle" alignmentBaseline="central" fill="#102330" fontSize={14}>{playerText(target.label)}</SvgText>}
+    </>:<>
+      <Rect x={box.x} y={box.y} width={box.width} height={box.height} rx={5} fill={art?'transparent':target.color||'#b8ef5b'} stroke={selected?'#ffffff':'#c9ff63'} strokeWidth={selected?4:2}/>
+      <Asset spec={spec} id={target.asset} x={box.x} y={box.y} width={box.width} height={box.height}/>
+      {!!target.label&&!art&&<SvgText x={point.x} y={point.y} textAnchor="middle" alignmentBaseline="central" fill="#102330" fontSize={14}>{playerText(target.label)}</SvgText>}
+    </>}
   </G>;
 });
 
@@ -516,7 +524,7 @@ function SceneControl({control,enabled,dispatch}:{control:Control;enabled:boolea
   return <View style={styles.field}>
     <Text style={styles.fieldLabel}>{playerText(control.label)}</Text>
     {control.kind==='choice'?<ScrollView horizontal contentContainerStyle={styles.row}>{control.options?.map((option,index)=><Pressable key={index} accessibilityRole="radio" accessibilityState={{checked:Object.is(option.value,control.value),disabled:!enabled}} disabled={!enabled}
-      onPress={()=>dispatch({type:'change',id:control.id,value:option.value})} style={[styles.tool,Object.is(option.value,control.value)&&styles.chosen,!enabled&&styles.disabled]}><Text style={styles.toolText}>{playerText(option.label)}</Text></Pressable>)}</ScrollView>:
+      onPress={()=>dispatch({type:'change',id:control.id,value:option.value})} style={[styles.tool,Object.is(option.value,control.value)&&styles.chosen,!enabled&&styles.disabled]}><Text style={styles.toolText}>{Object.is(option.value,control.value)?'✓ ':''}{playerText(option.label)}</Text></Pressable>)}</ScrollView>:
       <TextInput accessibilityLabel={playerText(control.label)} editable={enabled} value={draft} maxLength={2000} keyboardType={control.kind==='number'?'numeric':'default'} onChangeText={setDraft} onEndEditing={submit} onSubmitEditing={submit} style={[styles.input,!enabled&&styles.disabled]}/>}
   </View>;
 }

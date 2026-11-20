@@ -68,6 +68,12 @@ def test_schema_is_valid_and_reducer_returns_json_without_browser_apis():
     assert result["local_state"] == {"selected": "add"}
 
 
+def test_hex_piece_type_is_valid():
+    ui = spec()
+    ui["piece_types"]["token"]["shape"] = "hex"
+    assert validate_spec(ui)["piece_types"]["token"]["shape"] == "hex"
+
+
 @pytest.mark.parametrize("camera_enabled", [True, False])
 def test_viewport_camera_preference_is_portable_and_optional(camera_enabled):
     original = spec()

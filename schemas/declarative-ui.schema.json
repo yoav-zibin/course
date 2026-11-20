@@ -439,6 +439,7 @@
         "shape": {
           "enum": [
             "circle",
+            "hex",
             "rect",
             "card",
             "dice",

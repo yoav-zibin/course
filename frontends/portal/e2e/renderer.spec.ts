@@ -73,6 +73,65 @@ test('shared renderer isolates game code, guards replay, hides private identity 
   await page.screenshot({path:info.outputPath('shared-renderer.png'),fullPage:true});
 });
 
+test('board controls stay above the canvas and hexes and graph targets use board-matched shapes',async({page,request})=>{
+  const pkg={
+    format:'buildplay-ui',version:1,viewport:{width:400,height:300},
+    boards:[
+      {id:'island',kind:'hex',x:0,y:0,width:400,height:300,cells:[{id:'tile',x:200,y:150}]},
+      {id:'vertices',kind:'graph',x:0,y:0,width:400,height:300,cells:[{id:'vertex',x:100,y:100}]}
+    ],
+    piece_types:{tile:{shape:'hex',width:80,height:80,color:'#8bc34a'}},
+    ui_code:`const gameUI={reduce(){return {scene:{
+      pieces:[{id:'tile',type:'tile',board:'island',position:{cell:'tile'},text:'6',actions:[]}],
+      targets:[{id:'destination',board:'vertices',position:{cell:'vertex'},label:'Build here'}],
+      controls:[{id:'target',kind:'choice',label:'Target',value:'10',options:[{label:'10',value:'10'}]},{id:'start',kind:'button',label:'Start game'}]
+    }}}};`
+  };
+  await mount(page,request,pkg);
+  const canvas=page.getByLabel('Game board. Use pieces and highlighted destinations.');
+  const control=page.getByRole('button',{name:'Start game',exact:true});
+  expect((await control.boundingBox())!.y).toBeLessThan((await canvas.boundingBox())!.y);
+  await expect(page.getByRole('radio',{name:'✓ 10',exact:true})).toBeVisible();
+  await expect(page.locator('g[aria-label="6"] polygon')).toHaveCount(1);
+  const target=page.getByRole('button',{name:'Build here',exact:true});
+  await expect(target.locator('circle')).toHaveCount(2);
+  await expect(target.locator('rect')).toHaveAttribute('fill','transparent');
+});
+
+test('Catan setup keeps the score choice visible and its island and placement markers legible',async({page,request},info)=>{
+  const catan=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/catan.json'),'utf8')).declarative_ui;
+  const view={
+    ph:'target',seat:0,winVp:10,setupIdx:0,setupSub:'settlement',setupVertex:-1,
+    hexT:Array(19).fill(0),hexN:Array(19).fill(6),robber:18,
+    verts:Array(54).fill(-1),roads:Array(72).fill(-1),vp:[0,0,0],
+    myHand:[0,0,0,0,0],myDev:[0,0,0,0,0],legal:[]
+  };
+  await mount(page,request,catan,state({view}));
+  const canvas=page.getByLabel('Game board. Use pieces and highlighted destinations.');
+  const start=page.getByRole('button',{name:'Start game',exact:true});
+  const canvasBox=(await canvas.boundingBox())!;
+  expect((await start.boundingBox())!.y).toBeLessThan(canvasBox.y);
+  expect(canvasBox.height).toBeLessThanOrEqual(720);
+  await expect(page.getByRole('radio',{name:'✓ 10',exact:true})).toBeVisible();
+  await expect(page.locator('g[aria-label="6"] polygon')).toHaveCount(19);
+  await page.screenshot({path:info.outputPath('catan-target-choice.png'),fullPage:true});
+
+  const setupView={...view,ph:'setup',legal:Array.from({length:12},(_,vertex)=>({type:'placeSettlement',vertex}))};
+  await send(page,state({move_count:2,last_move_player_index:0,view:setupView}));
+  const destination=page.getByRole('button',{name:'Destination v_0',exact:true});
+  await expect(destination.locator('circle')).toHaveCount(2);
+  const portLabels=page.locator('svg text').filter({hasText:/^(3:1|2:1 [A-Z])$/});
+  await expect(portLabels).toHaveCount(9);
+  for(let index=0;index<9;index++){
+    const box=(await portLabels.nth(index).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(canvasBox.x);
+    expect(box.x+box.width).toBeLessThanOrEqual(canvasBox.x+canvasBox.width);
+  }
+  await destination.click();
+  await expect.poll(()=>moves(page)).toEqual([{type:'placeSettlement',vertex:0}]);
+  await page.screenshot({path:info.outputPath('catan-setup-layout.png'),fullPage:true});
+});
+
 test('scene labels keep their declared left edge in an Arabic document',async({page,request})=>{
   await mount(page,request,spec(`const gameUI={reduce(){return {scene:{labels:[{id:'arabic',x:24,y:24,text:'مرحبا بالعالم 123',font_size:20}]}}}};`));
   await page.evaluate(()=>{document.documentElement.dir='rtl';document.documentElement.lang='ar';});

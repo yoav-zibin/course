@@ -9,7 +9,7 @@ export type Board = {
   links?: { from: string; to: string }[];
 };
 export type PieceType = {
-  shape: 'circle' | 'rect' | 'card' | 'dice' | 'image' | 'text'; width?: number; height?: number;
+  shape: 'circle' | 'hex' | 'rect' | 'card' | 'dice' | 'image' | 'text'; width?: number; height?: number;
   color?: string; border_color?: string; text_color?: string; font_size?: number;
   asset?: string; back_asset?: string; action_outline?: 'rect' | 'ellipse' | 'none';
 };

@@ -38,7 +38,12 @@ export function hitPiece(spec: GameSpec, scene: Scene, at: Point): Piece | undef
     const angle = -(piece.rotation || 0) * Math.PI / 180, scale = piece.scale || 1;
     const dx = (at.x-center.x) / scale, dy = (at.y-center.y) / scale;
     const local = {x:dx*Math.cos(angle)-dy*Math.sin(angle), y:dx*Math.sin(angle)+dy*Math.cos(angle)};
-    if (spec.piece_types[piece.type].shape === 'circle') return (local.x/(size.width/2))**2 + (local.y/(size.height/2))**2 <= 1;
+    const shape = spec.piece_types[piece.type].shape;
+    if (shape === 'circle') return (local.x/(size.width/2))**2 + (local.y/(size.height/2))**2 <= 1;
+    if (shape === 'hex') {
+      const x = Math.abs(local.x) / (size.width / 2), y = Math.abs(local.y) / (size.height / 2);
+      return y <= Math.sqrt(3) / 2 && x + y / Math.sqrt(3) <= 1;
+    }
     return Math.abs(local.x) <= size.width / 2 && Math.abs(local.y) <= size.height / 2;
   });
 }
