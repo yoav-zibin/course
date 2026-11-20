@@ -65,6 +65,15 @@ when the board fills, a side is eliminated, neither side can move, or after 300
 moves, with the piece majority winning. Select it for publication with
 `--kinds ataxx`. See the [Ataxx rules reference](https://playabstractgames.com/en/ataxx/rules/).
 
+Catan is a three- to four-player game on a 19-hex island: settlements and
+cities sit on vertex anchors, roads on edge anchors, and the hex board carries
+the terrain and number tokens. Players roll dice, collect resources, trade
+with the bank, ports or each other, move the robber and play development
+cards; the first player to 3 victory points wins. Resource and
+development-card hands are hidden information — only hand counts are public —
+so the package declares `all_state_public: false`. Select it for publication
+with `--kinds catan`.
+
 Whist is a four-player partnership game played as one thirteen-trick hand.
 Scopa is a two-player, single-deal variant using a 40-card deck; the final
 score includes sweeps, cards, diamonds, the seven of diamonds and primiera.
