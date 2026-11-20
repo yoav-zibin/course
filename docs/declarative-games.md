@@ -75,6 +75,19 @@ development-card hands are hidden information — only hand counts are public �
 so the package declares `all_state_public: false`. Select it for publication
 with `--kinds catan`.
 
+Oware is a two-player mancala game in the Abapa rules, distinct from the
+existing Kalah game: twelve pits in a ring, four seeds each, sown
+counterclockwise with the starting pit skipped on a lapping sow. A last seed
+that makes an opponent pit hold exactly two or three captures it, chaining
+backwards through matching pits — but a capture that would take every seed
+the opponent has left is a grand slam and captures nothing, and a player
+whose opponent's side is empty must sow into it if possible. The game ends
+when a captured store passes 24, when the player to move cannot feed an
+empty opponent side, or when at most six seeds remain on the board; in the
+last two endings the remaining seeds go to neither store. All state is
+public, so the package declares `all_state_public: true`. Select it for
+publication with `--kinds oware`.
+
 Whist is a four-player partnership game played as one thirteen-trick hand.
 Scopa is a two-player, single-deal variant using a 40-card deck; the final
 score includes sweeps, cards, diamonds, the seven of diamonds and primiera.

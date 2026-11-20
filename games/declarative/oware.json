@@ -1,0 +1,2332 @@
+{
+ "all_state_public": true,
+ "name": "Oware (Declarative)",
+ "description": "Oware in the Abapa rules for two players: sow seeds counterclockwise around a ring of 12 pits and capture an opponent pit your last seed makes hold exactly two or three seeds, chaining backwards. Unlike the Kalah game listed as Mancala, there are no board stores and no extra turn, captures are not from an opposite pit, a capture that would take every opponent seed is forbidden, and an empty opponent side must be fed if it can be.",
+ "game_addition_request_id_and_secret": "example-only-declarative-oware-replace-before-publishing",
+ "allowed_player_counts": [
+  2
+ ],
+ "server_code": "// Oware (Abapa) for two players. Twelve pits in a ring, indices 0-11:\n// seat 0 owns pits 0-5, seat 1 owns pits 6-11, four seeds per pit (48 total).\n// Captured seeds go to a store off the board (state.stores). Sowing is\n// counterclockwise: increasing pit index, wrapping from 11 to 0, starting at\n// the pit after the chosen one; a sowing that laps the board skips the\n// starting pit. A capture takes an opponent pit the last seed makes exactly\n// 2 or 3, and keeps going backwards while the same holds -- unless that\n// would capture every seed the opponent has left (grand slam), in which\n// case nothing is captured. If the opponent side is empty at the start of a\n// turn, only moves that sow into it are legal; a player who cannot feed an\n// empty opponent side ends the game. The game also ends as soon as a store\n// passes 24, or when at most 6 seeds remain on the board. In every ending\n// except the over-24 one the stores alone decide, and seeds still on the\n// board are awarded to nobody.\nfunction owCopy(s) { return JSON.parse(JSON.stringify(s)); }\nfunction owIsOpp(pit, seat) { return seat === 0 ? pit >= 6 : pit < 6; }\nfunction owSideEmpty(s, seat) {\n  var lo = seat === 0 ? 0 : 6;\n  for (var i = lo; i < lo + 6; i++) if (s.pits[i] > 0) return false;\n  return true;\n}\nfunction owBoardTotal(s) { var t = 0; for (var i = 0; i < 12; i++) t += s.pits[i]; return t; }\n// Simulate sowing from pit on a scratch copy; how many seeds land on the\n// opponent side? Used by the feeding rule and the computer player.\nfunction owSownIntoOpp(pits, seat, pit) {\n  var b = pits.slice(), seeds = b[pit], pos = pit, left = seeds, fed = 0;\n  b[pit] = 0;\n  while (left > 0) {\n    pos = (pos + 1) % 12;\n    if (pos === pit) continue;\n    b[pos]++; left--;\n    if (owIsOpp(pos, seat)) fed++;\n  }\n  return fed;\n}\n// Sow and capture on a state-like {pits, stores}; returns seeds captured.\nfunction owSow(s, seat, pit) {\n  var seeds = s.pits[pit], pos = pit, left = seeds, last = pit;\n  s.pits[pit] = 0;\n  while (left > 0) {\n    pos = (pos + 1) % 12;\n    if (pos === pit) continue;  // a lapping sowing skips the starting pit\n    s.pits[pos]++; left--; last = pos;\n  }\n  var captured = 0;\n  if (owIsOpp(last, seat) && (s.pits[last] === 2 || s.pits[last] === 3)) {\n    var chain = [], p = last;\n    while (owIsOpp(p, seat) && (s.pits[p] === 2 || s.pits[p] === 3)) {\n      chain.push(p); p = (p + 11) % 12;\n    }\n    var oppLeft = 0;\n    for (var i = 0; i < 12; i++) if (owIsOpp(i, seat) && chain.indexOf(i) < 0) oppLeft += s.pits[i];\n    if (oppLeft > 0) {  // grand-slam rule: capturing everything captures nothing\n      for (var j = 0; j < chain.length; j++) { captured += s.pits[chain[j]]; s.stores[seat] += s.pits[chain[j]]; s.pits[chain[j]] = 0; }\n    }\n  }\n  return captured;\n}\nfunction owLegalFor(s, seat) {\n  if (s.over) return [];\n  var oppEmpty = owSideEmpty(s, 1 - seat), out = [], lo = seat === 0 ? 0 : 6;\n  for (var pit = lo; pit < lo + 6; pit++) {\n    if (s.pits[pit] <= 0) continue;\n    if (oppEmpty && owSownIntoOpp(s.pits, seat, pit) === 0) continue;  // feeding rule\n    out.push({type: 'sow', pit: pit});\n  }\n  return out;\n}\nfunction owLegal(s) { return owLegalFor(s, s.turn); }\nfunction owFinish(s) {\n  s.over = true;\n  s.winner = s.stores[0] === s.stores[1] ? -1 : (s.stores[0] > s.stores[1] ? 0 : 1);\n}\nfunction owPayouts(s, ctx) {\n  var pot = ctx.pot || 0;\n  if (!pot) return {};\n  var humans = ctx.players.filter(function (p) { return p.kind === 'human' && p.active !== false; });\n  if (!humans.length) return {};\n  var recipients = humans;\n  if (s.winner >= 0) {\n    var w = ctx.players[s.winner];\n    if (w && w.kind === 'human' && w.active !== false) recipients = [w];\n  }\n  var out = {}, share = Math.floor(pot / recipients.length), rest = pot - share * recipients.length;\n  recipients.forEach(function (p, i) { out[p.id] = share + (i < rest ? 1 : 0); });\n  return out;\n}\nfunction owFresh() {\n  return {pits: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], stores: [0, 0], turn: 0, winner: -1, turns: 0, over: false};\n}\nconst game = {\n  newMatch(ctx) { return {state: owFresh(), turn: [ctx.players[0].id]}; },\n  applyMove(state, id, move, ctx) {\n    if (!state || state.over || !move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('Illegal move');\n    var seat = -1;\n    for (var i = 0; i < ctx.players.length; i++) if (ctx.players[i].id === id) seat = i;\n    if (seat !== state.turn) throw new InvalidMove('Illegal move');\n    var options = owLegal(state), keys = Object.keys(move);\n    var ok = options.some(function (m) {\n      return Object.keys(m).length === keys.length &&\n        keys.every(function (k) { return Object.prototype.hasOwnProperty.call(m, k) && m[k] === move[k]; });\n    });\n    if (!ok) throw new InvalidMove('Illegal move');\n    var s = owCopy(state);\n    s.turns++;\n    owSow(s, seat, move.pit);\n    // Endings, checked after every move: a store over 24 wins at once;\n    // at most 6 seeds left on the board ends the game; and if the player\n    // to move has no legal move -- above all because they cannot feed the\n    // mover's now-empty side -- the game ends too. Board seeds left over\n    // are awarded to nobody; the stores alone decide.\n    if (s.stores[0] > 24 || s.stores[1] > 24 || owBoardTotal(s) <= 6 || owLegalFor(s, 1 - seat).length === 0) {\n      owFinish(s);\n    } else {\n      s.turn = 1 - seat;\n    }\n    return s.over ? {state: s, turn: null, payouts: owPayouts(s, ctx)} : {state: s, turn: [ctx.players[s.turn].id]};\n  },\n  viewFor(state, id, ctx) {\n    var s = owCopy(state);\n    s.legal = (!state.over && ctx.players[state.turn] && ctx.players[state.turn].id === id) ? owLegal(state) : [];\n    return s;\n  },\n  randomMove(s, id, ctx) {\n    var options = owLegal(s);\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n  computerMove(s, id, ctx) {\n    // Prefer the biggest capture, then the move that sows the most seeds\n    // into the opponent side (which also feeds when feeding is required);\n    // ties go to the lowest pit, so the choice is deterministic.\n    var options = owLegal(s), best = null, bestScore = -1;\n    for (var i = 0; i < options.length; i++) {\n      var trial = {pits: s.pits.slice(), stores: s.stores.slice()};\n      var captured = owSow(trial, s.turn, options[i].pit);\n      var score = captured * 100 + owSownIntoOpp(s.pits, s.turn, options[i].pit);\n      if (score > bestScore) { bestScore = score; best = options[i]; }\n    }\n    return best;\n  }\n};\n",
+ "declarative_ui": {
+  "format": "buildplay-ui",
+  "version": 1,
+  "viewport": {
+   "width": 600,
+   "height": 460
+  },
+  "boards": [
+   {
+    "id": "main",
+    "kind": "graph",
+    "x": 20,
+    "y": 104,
+    "width": 560,
+    "height": 216,
+    "color": "#302318",
+    "line_color": "#ae8c54",
+    "cells": [
+     {
+      "id": "0",
+      "x": 48,
+      "y": 140
+     },
+     {
+      "id": "1",
+      "x": 141,
+      "y": 140
+     },
+     {
+      "id": "2",
+      "x": 234,
+      "y": 140
+     },
+     {
+      "id": "3",
+      "x": 327,
+      "y": 140
+     },
+     {
+      "id": "4",
+      "x": 420,
+      "y": 140
+     },
+     {
+      "id": "5",
+      "x": 513,
+      "y": 140
+     },
+     {
+      "id": "6",
+      "x": 513,
+      "y": 48
+     },
+     {
+      "id": "7",
+      "x": 420,
+      "y": 48
+     },
+     {
+      "id": "8",
+      "x": 327,
+      "y": 48
+     },
+     {
+      "id": "9",
+      "x": 234,
+      "y": 48
+     },
+     {
+      "id": "10",
+      "x": 141,
+      "y": 48
+     },
+     {
+      "id": "11",
+      "x": 48,
+      "y": 48
+     }
+    ],
+    "links": [
+     {
+      "from": "0",
+      "to": "1"
+     },
+     {
+      "from": "1",
+      "to": "2"
+     },
+     {
+      "from": "2",
+      "to": "3"
+     },
+     {
+      "from": "3",
+      "to": "4"
+     },
+     {
+      "from": "4",
+      "to": "5"
+     },
+     {
+      "from": "5",
+      "to": "6"
+     },
+     {
+      "from": "6",
+      "to": "7"
+     },
+     {
+      "from": "7",
+      "to": "8"
+     },
+     {
+      "from": "8",
+      "to": "9"
+     },
+     {
+      "from": "9",
+      "to": "10"
+     },
+     {
+      "from": "10",
+      "to": "11"
+     },
+     {
+      "from": "11",
+      "to": "0"
+     }
+    ]
+   },
+   {
+    "id": "tray",
+    "kind": "free",
+    "x": 20,
+    "y": 336,
+    "width": 560,
+    "height": 96,
+    "color": "#172743",
+    "line_color": "#5c7190"
+   }
+  ],
+  "piece_types": {
+   "p0": {
+    "shape": "circle",
+    "width": 66,
+    "height": 66,
+    "color": "#a7f070",
+    "text_color": "#102039"
+   },
+   "p1": {
+    "shape": "circle",
+    "width": 66,
+    "height": 66,
+    "color": "#ff9dca",
+    "text_color": "#102039"
+   },
+   "store": {
+    "shape": "rect",
+    "width": 180,
+    "height": 48,
+    "color": "#ad7a3d",
+    "text_color": "#ffffff"
+   }
+  },
+  "strings": {
+   "title": "Oware",
+   "turn": "Player {n} to move",
+   "finished": "Finished",
+   "sow": "Sow pit {n}",
+   "score": "Captured {a} : {b}",
+   "store": "Player {n} store",
+   "server_invalid": "Illegal move"
+  },
+  "ui_code": "const SOURCE_STRINGS={\"title\": \"Oware\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"sow\": \"Sow pit {n}\", \"score\": \"Captured {a} : {b}\", \"store\": \"Player {n} store\", \"server_invalid\": \"Illegal move\"};\n// Oware presentation: a graph board whose 12 cells are the pits in ring\n// order (seat 0 along the bottom left to right, seat 1 back along the top),\n// plus a tray board holding the two captured-seed stores. Only the acting\n// viewer receives targets; spectators and the waiting player receive none.\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state;\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args = {}) => (strings[key] || key).replace(/\\{(\\w+)\\}/g, (_, k) => String(args[k] === undefined ? '' : args[k]));\n    const active = m.status === 'ongoing' && !m.replay && m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const legal = active ? (s.legal || []) : [];\n    const pieces = [], targets = [], controls = [];\n    const labels = [\n      {id: 'title', text: t('title'), x: 24, y: 18, font_size: 26},\n      {id: 'turn', text: m.status === 'over' || s.over ? t('finished') : t('turn', {n: s.turn + 1}), x: 24, y: 54, font_size: 18},\n      {id: 'score', text: t('score', {a: s.stores[0], b: s.stores[1]}), x: 380, y: 54, font_size: 18},\n      {id: 'store_label_0', text: t('store', {n: 1}), x: 84, y: 344, font_size: 14},\n      {id: 'store_label_1', text: t('store', {n: 2}), x: 384, y: 344, font_size: 14}\n    ];\n    const keyOf = move => Object.keys(move).map(k => k + '_' + move[k]).join('_');\n    s.pits.forEach((n, pit) => pieces.push({\n      id: 'pit_' + pit, type: pit < 6 ? 'p0' : 'p1', board: 'main',\n      position: {cell: String(pit)}, text: String(n),\n      actions: []\n    }));\n    pieces.push({id: 'store_0', type: 'store', board: 'tray', position: {x: 60, y: 26}, text: String(s.stores[0]), actions: []});\n    pieces.push({id: 'store_1', type: 'store', board: 'tray', position: {x: 360, y: 26}, text: String(s.stores[1]), actions: []});\n    legal.forEach(move => targets.push({id: keyOf(move), board: 'main', position: {cell: String(move.pit)}, label: t('sow', {n: move.pit + 1})}));\n    const scene = {pieces, targets, controls, labels};\n    const out = {scene, local_state: {}};\n    if (message.type === 'ui_event' && active && message.event.type === 'tap') {\n      let id = message.event.id;\n      if (id && id.startsWith('pit_')) id = 'type_sow_pit_' + id.slice(4);\n      const move = legal.find(option => keyOf(option) === id);\n      if (move) out.make_move = move;\n    }\n    return out;\n  }\n};\n"
+ },
+ "rules": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+ "ui_instructions": "Tap one of your highlighted pits to sow its seeds counterclockwise around the ring. The two stores below the board show the captured counts, and the heading shows whose turn it is. Only the player to move sees targets; spectators and the waiting player see the board with no targets or controls.",
+ "tutorial": {
+  "text": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+  "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><p>Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.</p>"
+ },
+ "images": [
+  {
+   "caption": "Cover",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" fill=\"#302318\"/><circle cx=\"22\" cy=\"24\" r=\"9\" fill=\"#ff9dca\"/><circle cx=\"45\" cy=\"24\" r=\"9\" fill=\"#ff9dca\"/><circle cx=\"68\" cy=\"24\" r=\"9\" fill=\"#ff9dca\"/><circle cx=\"91\" cy=\"24\" r=\"9\" fill=\"#ff9dca\"/><circle cx=\"114\" cy=\"24\" r=\"9\" fill=\"#ff9dca\"/><circle cx=\"137\" cy=\"24\" r=\"9\" fill=\"#ff9dca\"/><circle cx=\"22\" cy=\"66\" r=\"9\" fill=\"#a7f070\"/><circle cx=\"45\" cy=\"66\" r=\"9\" fill=\"#a7f070\"/><circle cx=\"68\" cy=\"66\" r=\"9\" fill=\"#a7f070\"/><circle cx=\"91\" cy=\"66\" r=\"9\" fill=\"#a7f070\"/><circle cx=\"114\" cy=\"66\" r=\"9\" fill=\"#a7f070\"/><circle cx=\"137\" cy=\"66\" r=\"9\" fill=\"#a7f070\"/><rect x=\"66\" y=\"38\" width=\"28\" height=\"14\" rx=\"4\" fill=\"#ad7a3d\"/></svg>"
+  },
+  {
+   "caption": "The starting ring: four seeds in every pit",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+  },
+  {
+   "caption": "Before: mover",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+  },
+  {
+   "caption": "After a capture of two or three",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">17</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">14</text></svg>"
+  },
+  {
+   "caption": "Final stores decide the winner",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">5</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">0</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">18</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">17</text></svg>"
+  }
+ ],
+ "unit_tests": {
+  "state_schema": {
+   "type": "object",
+   "required": [
+    "pits",
+    "stores",
+    "turn",
+    "winner",
+    "turns",
+    "over"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "pits": {
+     "type": "array",
+     "minItems": 12,
+     "maxItems": 12,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 48
+     }
+    },
+    "stores": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 2,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 48
+     }
+    },
+    "turn": {
+     "enum": [
+      0,
+      1
+     ]
+    },
+    "winner": {
+     "enum": [
+      -1,
+      0,
+      1
+     ]
+    },
+    "turns": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 10000
+    },
+    "over": {
+     "type": "boolean"
+    }
+   }
+  },
+  "view_schema": {
+   "type": "object",
+   "required": [
+    "pits",
+    "stores",
+    "turn",
+    "winner",
+    "turns",
+    "over",
+    "legal"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "pits": {
+     "type": "array",
+     "minItems": 12,
+     "maxItems": 12,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 48
+     }
+    },
+    "stores": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 2,
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 48
+     }
+    },
+    "turn": {
+     "enum": [
+      0,
+      1
+     ]
+    },
+    "winner": {
+     "enum": [
+      -1,
+      0,
+      1
+     ]
+    },
+    "turns": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 10000
+    },
+    "over": {
+     "type": "boolean"
+    },
+    "legal": {
+     "type": "array",
+     "maxItems": 6,
+     "items": {
+      "type": "object",
+      "required": [
+       "type",
+       "pit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "type": {
+        "enum": [
+         "sow"
+        ]
+       },
+       "pit": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 11
+       }
+      }
+     }
+    }
+   }
+  },
+  "move_schema": {
+   "type": "object",
+   "required": [
+    "type",
+    "pit"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "enum": [
+      "sow"
+     ]
+    },
+    "pit": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 11
+    }
+   }
+  },
+  "cases": [
+   {
+    "name": "Opening sow",
+    "description": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+    "kind": "initial",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "pits": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 0,
+     "over": false
+    },
+    "view_of_mover": {
+     "pits": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 0,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 0
+      },
+      {
+       "type": "sow",
+       "pit": 1
+      },
+      {
+       "type": "sow",
+       "pit": 2
+      },
+      {
+       "type": "sow",
+       "pit": 3
+      },
+      {
+       "type": "sow",
+       "pit": 4
+      },
+      {
+       "type": "sow",
+       "pit": 5
+      }
+     ]
+    },
+    "view_of_other": {
+     "pits": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 0,
+     "over": false,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "sow",
+     "pit": 2
+    },
+    "expected_state": {
+     "pits": [
+      4,
+      4,
+      0,
+      5,
+      5,
+      5,
+      5,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 1,
+     "over": false
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "pits": [
+      4,
+      4,
+      0,
+      5,
+      5,
+      5,
+      5,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 1,
+     "over": false,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "pits": [
+      4,
+      4,
+      0,
+      5,
+      5,
+      5,
+      5,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 1,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 6
+      },
+      {
+       "type": "sow",
+       "pit": 7
+      },
+      {
+       "type": "sow",
+       "pit": 8
+      },
+      {
+       "type": "sow",
+       "pit": 9
+      },
+      {
+       "type": "sow",
+       "pit": 10
+      },
+      {
+       "type": "sow",
+       "pit": 11
+      }
+     ]
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">5</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">5</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">5</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">5</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">5</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">5</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">5</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">5</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Sowing an opponent pit is illegal",
+    "description": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+    "kind": "initial",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 12
+    },
+    "state": {
+     "pits": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 0,
+     "over": false
+    },
+    "view_of_mover": {
+     "pits": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 0,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 0
+      },
+      {
+       "type": "sow",
+       "pit": 1
+      },
+      {
+       "type": "sow",
+       "pit": 2
+      },
+      {
+       "type": "sow",
+       "pit": 3
+      },
+      {
+       "type": "sow",
+       "pit": 4
+      },
+      {
+       "type": "sow",
+       "pit": 5
+      }
+     ]
+    },
+    "view_of_other": {
+     "pits": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 0,
+     "over": false,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "sow",
+     "pit": 7
+    },
+    "expected_state": {
+     "pits": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 0,
+     "over": false
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "turn": [
+     "u1"
+    ],
+    "expected_error": "InvalidMove",
+    "expected_view_of_mover": {
+     "pits": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 0,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 0
+      },
+      {
+       "type": "sow",
+       "pit": 1
+      },
+      {
+       "type": "sow",
+       "pit": 2
+      },
+      {
+       "type": "sow",
+       "pit": 3
+      },
+      {
+       "type": "sow",
+       "pit": 4
+      },
+      {
+       "type": "sow",
+       "pit": 5
+      }
+     ]
+    },
+    "expected_view_of_other": {
+     "pits": [
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      0,
+      0
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 0,
+     "over": false,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">0</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">0</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Chain capture of pits made two and three",
+    "description": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 20,
+     "seed": 21
+    },
+    "state": {
+     "pits": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      2,
+      1,
+      1,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      13,
+      14
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 20,
+     "over": false
+    },
+    "view_of_mover": {
+     "pits": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      2,
+      1,
+      1,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      13,
+      14
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 20,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 0
+      },
+      {
+       "type": "sow",
+       "pit": 5
+      }
+     ]
+    },
+    "view_of_other": {
+     "pits": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      2,
+      1,
+      1,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      13,
+      14
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 20,
+     "over": false,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "sow",
+     "pit": 5
+    },
+    "expected_state": {
+     "pits": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      17,
+      14
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 21,
+     "over": false
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "pits": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      17,
+      14
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 21,
+     "over": false,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "pits": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4,
+      4,
+      4,
+      4
+     ],
+     "stores": [
+      17,
+      14
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 21,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 8
+      },
+      {
+       "type": "sow",
+       "pit": 9
+      },
+      {
+       "type": "sow",
+       "pit": 10
+      },
+      {
+       "type": "sow",
+       "pit": 11
+      }
+     ]
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">2</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">13</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">14</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">2</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">13</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">14</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">17</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">14</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">17</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">14</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Grand slam captures nothing",
+    "description": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 30,
+     "seed": 22
+    },
+    "state": {
+     "pits": [
+      4,
+      4,
+      4,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "stores": [
+      17,
+      17
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 30,
+     "over": false
+    },
+    "view_of_mover": {
+     "pits": [
+      4,
+      4,
+      4,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "stores": [
+      17,
+      17
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 30,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 0
+      },
+      {
+       "type": "sow",
+       "pit": 1
+      },
+      {
+       "type": "sow",
+       "pit": 2
+      },
+      {
+       "type": "sow",
+       "pit": 5
+      }
+     ]
+    },
+    "view_of_other": {
+     "pits": [
+      4,
+      4,
+      4,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "stores": [
+      17,
+      17
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 30,
+     "over": false,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "sow",
+     "pit": 5
+    },
+    "expected_state": {
+     "pits": [
+      4,
+      4,
+      4,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "stores": [
+      17,
+      17
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 31,
+     "over": false
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "pits": [
+      4,
+      4,
+      4,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "stores": [
+      17,
+      17
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 31,
+     "over": false,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "pits": [
+      4,
+      4,
+      4,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "stores": [
+      17,
+      17
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 31,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 6
+      }
+     ]
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">0</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">17</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">17</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">0</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">17</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">17</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">0</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">17</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">17</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">0</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">17</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">17</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "A lapping sow skips the starting pit",
+    "description": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 16,
+     "seed": 23
+    },
+    "state": {
+     "pits": [
+      0,
+      0,
+      13,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "stores": [
+      14,
+      15
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 16,
+     "over": false
+    },
+    "view_of_mover": {
+     "pits": [
+      0,
+      0,
+      13,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "stores": [
+      14,
+      15
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 16,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 2
+      }
+     ]
+    },
+    "view_of_other": {
+     "pits": [
+      0,
+      0,
+      13,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "stores": [
+      14,
+      15
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 16,
+     "over": false,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "sow",
+     "pit": 2
+    },
+    "expected_state": {
+     "pits": [
+      1,
+      1,
+      0,
+      2,
+      2,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+     ],
+     "stores": [
+      14,
+      15
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 17,
+     "over": false
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "pits": [
+      1,
+      1,
+      0,
+      2,
+      2,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+     ],
+     "stores": [
+      14,
+      15
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 17,
+     "over": false,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "pits": [
+      1,
+      1,
+      0,
+      2,
+      2,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+     ],
+     "stores": [
+      14,
+      15
+     ],
+     "turn": 1,
+     "winner": -1,
+     "turns": 17,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 6
+      },
+      {
+       "type": "sow",
+       "pit": 7
+      },
+      {
+       "type": "sow",
+       "pit": 8
+      },
+      {
+       "type": "sow",
+       "pit": 9
+      },
+      {
+       "type": "sow",
+       "pit": 10
+      },
+      {
+       "type": "sow",
+       "pit": 11
+      }
+     ]
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">13</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">1</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">14</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">15</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">13</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">1</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">14</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">15</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">2</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">2</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">2</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">14</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">15</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">2</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">2</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">2</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">14</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">15</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Passing 24 captured seeds wins at once",
+    "description": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+    "kind": "terminal",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 20,
+     "move_count": 44,
+     "seed": 31
+    },
+    "state": {
+     "pits": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      3
+     ],
+     "stores": [
+      23,
+      10
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 44,
+     "over": false
+    },
+    "view_of_mover": {
+     "pits": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      3
+     ],
+     "stores": [
+      23,
+      10
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 44,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 0
+      },
+      {
+       "type": "sow",
+       "pit": 1
+      },
+      {
+       "type": "sow",
+       "pit": 5
+      }
+     ]
+    },
+    "view_of_other": {
+     "pits": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      3
+     ],
+     "stores": [
+      23,
+      10
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 44,
+     "over": false,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "sow",
+     "pit": 5
+    },
+    "expected_state": {
+     "pits": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      3
+     ],
+     "stores": [
+      25,
+      10
+     ],
+     "turn": 0,
+     "winner": 0,
+     "turns": 45,
+     "over": true
+    },
+    "expected_turn": null,
+    "expected_payouts": {
+     "u1": 20
+    },
+    "expected_view_of_mover": {
+     "pits": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      3
+     ],
+     "stores": [
+      25,
+      10
+     ],
+     "turn": 0,
+     "winner": 0,
+     "turns": 45,
+     "over": true,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "pits": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      3
+     ],
+     "stores": [
+      25,
+      10
+     ],
+     "turn": 0,
+     "winner": 0,
+     "turns": 45,
+     "over": true,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">3</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">23</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">10</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">3</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">23</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">10</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">3</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">25</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">10</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">3</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">25</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">10</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Six seeds left on the board ends the game",
+    "description": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+    "kind": "terminal",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 20,
+     "move_count": 50,
+     "seed": 32
+    },
+    "state": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4
+     ],
+     "stores": [
+      20,
+      22
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 50,
+     "over": false
+    },
+    "view_of_mover": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4
+     ],
+     "stores": [
+      20,
+      22
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 50,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 5
+      }
+     ]
+    },
+    "view_of_other": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      4
+     ],
+     "stores": [
+      20,
+      22
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 50,
+     "over": false,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "sow",
+     "pit": 5
+    },
+    "expected_state": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      4
+     ],
+     "stores": [
+      20,
+      22
+     ],
+     "turn": 0,
+     "winner": 1,
+     "turns": 51,
+     "over": true
+    },
+    "expected_turn": null,
+    "expected_payouts": {
+     "u2": 20
+    },
+    "expected_view_of_mover": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      4
+     ],
+     "stores": [
+      20,
+      22
+     ],
+     "turn": 0,
+     "winner": 1,
+     "turns": 51,
+     "over": true,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      4
+     ],
+     "stores": [
+      20,
+      22
+     ],
+     "turn": 0,
+     "winner": 1,
+     "turns": 51,
+     "over": true,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">2</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">20</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">22</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">2</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">20</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">22</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">20</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">22</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">4</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">20</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">22</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "An empty side that cannot be fed ends the game",
+    "description": "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.",
+    "kind": "terminal",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 20,
+     "move_count": 38,
+     "seed": 33
+    },
+    "state": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      4,
+      3,
+      0,
+      2,
+      1,
+      0
+     ],
+     "stores": [
+      18,
+      17
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 38,
+     "over": false
+    },
+    "view_of_mover": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      4,
+      3,
+      0,
+      2,
+      1,
+      0
+     ],
+     "stores": [
+      18,
+      17
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 38,
+     "over": false,
+     "legal": [
+      {
+       "type": "sow",
+       "pit": 5
+      }
+     ]
+    },
+    "view_of_other": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      4,
+      3,
+      0,
+      2,
+      1,
+      0
+     ],
+     "stores": [
+      18,
+      17
+     ],
+     "turn": 0,
+     "winner": -1,
+     "turns": 38,
+     "over": false,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "sow",
+     "pit": 5
+    },
+    "expected_state": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      5,
+      4,
+      1,
+      2,
+      1,
+      0
+     ],
+     "stores": [
+      18,
+      17
+     ],
+     "turn": 0,
+     "winner": 0,
+     "turns": 39,
+     "over": true
+    },
+    "expected_turn": null,
+    "expected_payouts": {
+     "u1": 20
+    },
+    "expected_view_of_mover": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      5,
+      4,
+      1,
+      2,
+      1,
+      0
+     ],
+     "stores": [
+      18,
+      17
+     ],
+     "turn": 0,
+     "winner": 0,
+     "turns": 39,
+     "over": true,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "pits": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      5,
+      4,
+      1,
+      2,
+      1,
+      0
+     ],
+     "stores": [
+      18,
+      17
+     ],
+     "turn": 0,
+     "winner": 0,
+     "turns": 39,
+     "over": true,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">3</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">3</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">0</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">18</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">17</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">3</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">3</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">0</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">18</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">17</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">5</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">0</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">18</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">17</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"25\" y=\"35\" fill=\"#ffffff\">Oware</text><circle cx=\"45\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"41\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"97\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"93\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"149\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"145\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"201\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"197\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"253\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"249\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"300\" r=\"22\" fill=\"#a7f070\"/><text x=\"301\" y=\"305\" fill=\"#102039\">0</text><circle cx=\"305\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"301\" y=\"115\" fill=\"#102039\">5</text><circle cx=\"253\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"249\" y=\"115\" fill=\"#102039\">4</text><circle cx=\"201\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"197\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"149\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"145\" y=\"115\" fill=\"#102039\">2</text><circle cx=\"97\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"93\" y=\"115\" fill=\"#102039\">1</text><circle cx=\"45\" cy=\"110\" r=\"22\" fill=\"#ff9dca\"/><text x=\"41\" y=\"115\" fill=\"#102039\">0</text><rect x=\"45\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"55\" y=\"365\" fill=\"#ffffff\">18</text><rect x=\"235\" y=\"345\" width=\"120\" height=\"30\" fill=\"#ad7a3d\"/><text x=\"245\" y=\"365\" fill=\"#ffffff\">17</text></svg>"
+     }
+    ]
+   }
+  ]
+ },
+ "translations": {
+  "es": {
+   "display_name": "Oware (Declarativo)",
+   "short_description": "Oware con las reglas Abapa para dos jugadores: siembra semillas en sentido antihorario alrededor de un anillo de 12 hoyos y captura un hoyo rival que tu última semilla deje con exactamente dos o tres semillas, encadenando hacia atrás. A diferencia del juego Kalah llamado Mancala, no hay almacenes en el tablero ni turno extra, las capturas no son del hoyo opuesto, una captura que tomaría todas las semillas rivales está prohibida, y un lado rival vacío debe ser alimentado si es posible.",
+   "game_logic_rules": "Oware (Abapa) para dos jugadores. Doce hoyos forman un anillo, numerados del 0 al 11: el Jugador 1 posee los hoyos 0 a 5 y el Jugador 2 los hoyos 6 a 11, y cada hoyo empieza con 4 semillas, 48 en total; las semillas capturadas van a un almacén fuera del tablero. Una jugada recoge todas las semillas de uno de tus hoyos no vacíos y las siembra de una en una en sentido antihorario, en número de hoyo creciente, volviendo del 11 al 0, empezando por el hoyo siguiente. Si el hoyo tenía 12 o más semillas, la siembra da la vuelta al tablero y el hoyo inicial se salta cada vez que la vuelta llega a él. Si la última semilla sembrada cae en un hoyo rival y lo deja con exactamente 2 o 3 semillas, esas semillas se capturan a tu almacén, y la misma comprobación continúa hacia atrás, contra la dirección de siembra, por cada hoyo rival precedente con exactamente 2 o 3 semillas, deteniéndose en el primer hoyo que no cumpla alguna de las dos condiciones. Regla del gran slam: una jugada cuya captura tomaría todas las semillas que le quedan al rival no captura nada, aunque la siembra se mantiene. Regla de alimentación: si todos los hoyos rivales están vacíos al inicio de tu turno, debes elegir una jugada que siembre al menos una semilla en el lado rival si alguna de tus jugadas puede hacerlo. El juego termina de inmediato cuando un almacén supera las 24 semillas, y ese jugador gana. También termina cuando el jugador al que le toca no puede alimentar un lado rival vacío, o cuando quedan 6 o menos semillas en el tablero; en esos finales las semillas que quedan en el tablero no se adjudican a nadie, y los almacenes por sí solos deciden el ganador. El almacén mayor gana y se lleva el bote; almacenes iguales son empate y el bote se reparte a partes iguales.",
+   "game_ui_rules": "Toca uno de tus hoyos resaltados para sembrar sus semillas en sentido antihorario alrededor del anillo. Los dos almacenes bajo el tablero muestran las cuentas capturadas, y el encabezado muestra de quién es el turno. Solo el jugador al que le toca ve destinos; los espectadores y el jugador en espera ven el tablero sin destinos ni controles.",
+   "tutorial_strings": {
+    "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.": "Oware (Abapa) para dos jugadores. Doce hoyos forman un anillo, numerados del 0 al 11: el Jugador 1 posee los hoyos 0 a 5 y el Jugador 2 los hoyos 6 a 11, y cada hoyo empieza con 4 semillas, 48 en total; las semillas capturadas van a un almacén fuera del tablero. Una jugada recoge todas las semillas de uno de tus hoyos no vacíos y las siembra de una en una en sentido antihorario, en número de hoyo creciente, volviendo del 11 al 0, empezando por el hoyo siguiente. Si el hoyo tenía 12 o más semillas, la siembra da la vuelta al tablero y el hoyo inicial se salta cada vez que la vuelta llega a él. Si la última semilla sembrada cae en un hoyo rival y lo deja con exactamente 2 o 3 semillas, esas semillas se capturan a tu almacén, y la misma comprobación continúa hacia atrás, contra la dirección de siembra, por cada hoyo rival precedente con exactamente 2 o 3 semillas, deteniéndose en el primer hoyo que no cumpla alguna de las dos condiciones. Regla del gran slam: una jugada cuya captura tomaría todas las semillas que le quedan al rival no captura nada, aunque la siembra se mantiene. Regla de alimentación: si todos los hoyos rivales están vacíos al inicio de tu turno, debes elegir una jugada que siembre al menos una semilla en el lado rival si alguna de tus jugadas puede hacerlo. El juego termina de inmediato cuando un almacén supera las 24 semillas, y ese jugador gana. También termina cuando el jugador al que le toca no puede alimentar un lado rival vacío, o cuando quedan 6 o menos semillas en el tablero; en esos finales las semillas que quedan en el tablero no se adjudican a nadie, y los almacenes por sí solos deciden el ganador. El almacén mayor gana y se lleva el bote; almacenes iguales son empate y el bote se reparte a partes iguales."
+   },
+   "client_strings": {
+    "title": "Oware",
+    "turn": "Turno del jugador {n}",
+    "finished": "Terminado",
+    "sow": "Sembrar hoyo {n}",
+    "score": "Capturadas {a} : {b}",
+    "store": "Almacén del jugador {n}",
+    "server_invalid": "Jugada ilegal"
+   }
+  },
+  "fr": {
+   "display_name": "Oware (Déclaratif)",
+   "short_description": "Oware selon les règles Abapa pour deux joueurs : semez des graines dans le sens antihoraire autour d'un anneau de 12 trous et capturez un trou adverse que votre dernière graine porte à exactement deux ou trois graines, en enchaînant vers l'arrière. Contrairement au jeu Kalah nommé Mancala, il n'y a ni grenier sur le plateau ni tour supplémentaire, les captures ne viennent pas du trou opposé, une capture qui prendrait toutes les graines adverses est interdite, et un côté adverse vide doit être nourri si c'est possible.",
+   "game_logic_rules": "Oware (Abapa) pour deux joueurs. Douze trous forment un anneau, numérotés de 0 à 11 : le Joueur 1 possède les trous 0 à 5 et le Joueur 2 les trous 6 à 11, et chaque trou commence avec 4 graines, 48 en tout ; les graines capturées vont dans un grenier hors du plateau. Un coup ramasse toutes les graines d'un de vos trous non vides et les sème une à une dans le sens antihoraire, par numéro de trou croissant, en revenant de 11 à 0, en commençant par le trou suivant. Si le trou contenait 12 graines ou plus, le semis fait le tour du plateau et le trou de départ est sauté chaque fois que le tour y revient. Si la dernière graine semée tombe dans un trou adverse et le porte à exactement 2 ou 3 graines, ces graines sont capturées dans votre grenier, et le même contrôle se poursuit vers l'arrière, contre le sens du semis, à travers chaque trou adverse précédent contenant exactement 2 ou 3 graines, en s'arrêtant au premier trou qui échoue à l'un des deux tests. Règle du grand chelem : un coup dont la capture prendrait toutes les graines restantes de l'adversaire ne capture rien du tout, bien que le semis reste valable. Règle d'alimentation : si tous les trous adverses sont vides au début de votre tour, vous devez choisir un coup qui sème au moins une graine du côté adverse si l'un de vos coups le peut. La partie se termine immédiatement lorsqu'un grenier dépasse 24 graines, et ce joueur gagne. Elle se termine aussi lorsque le joueur à jouer ne peut pas nourrir un côté adverse vide, ou lorsqu'il reste 6 graines ou moins sur le plateau ; dans ces fins, les graines encore sur le plateau ne sont attribuées à personne, et les greniers seuls décident du vainqueur. Le grenier le plus élevé gagne et prend le pot ; des greniers égaux font match nul et le pot est partagé à parts égales.",
+   "game_ui_rules": "Touchez l'un de vos trous en surbrillance pour semer ses graines dans le sens antihoraire autour de l'anneau. Les deux greniers sous le plateau montrent les comptes capturés, et l'en-tête indique à qui le tour. Seul le joueur à jouer voit des cibles ; les spectateurs et le joueur en attente voient le plateau sans cibles ni commandes.",
+   "tutorial_strings": {
+    "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.": "Oware (Abapa) pour deux joueurs. Douze trous forment un anneau, numérotés de 0 à 11 : le Joueur 1 possède les trous 0 à 5 et le Joueur 2 les trous 6 à 11, et chaque trou commence avec 4 graines, 48 en tout ; les graines capturées vont dans un grenier hors du plateau. Un coup ramasse toutes les graines d'un de vos trous non vides et les sème une à une dans le sens antihoraire, par numéro de trou croissant, en revenant de 11 à 0, en commençant par le trou suivant. Si le trou contenait 12 graines ou plus, le semis fait le tour du plateau et le trou de départ est sauté chaque fois que le tour y revient. Si la dernière graine semée tombe dans un trou adverse et le porte à exactement 2 ou 3 graines, ces graines sont capturées dans votre grenier, et le même contrôle se poursuit vers l'arrière, contre le sens du semis, à travers chaque trou adverse précédent contenant exactement 2 ou 3 graines, en s'arrêtant au premier trou qui échoue à l'un des deux tests. Règle du grand chelem : un coup dont la capture prendrait toutes les graines restantes de l'adversaire ne capture rien du tout, bien que le semis reste valable. Règle d'alimentation : si tous les trous adverses sont vides au début de votre tour, vous devez choisir un coup qui sème au moins une graine du côté adverse si l'un de vos coups le peut. La partie se termine immédiatement lorsqu'un grenier dépasse 24 graines, et ce joueur gagne. Elle se termine aussi lorsque le joueur à jouer ne peut pas nourrir un côté adverse vide, ou lorsqu'il reste 6 graines ou moins sur le plateau ; dans ces fins, les graines encore sur le plateau ne sont attribuées à personne, et les greniers seuls décident du vainqueur. Le grenier le plus élevé gagne et prend le pot ; des greniers égaux font match nul et le pot est partagé à parts égales."
+   },
+   "client_strings": {
+    "title": "Oware",
+    "turn": "Au joueur {n} de jouer",
+    "finished": "Terminé",
+    "sow": "Semer le trou {n}",
+    "score": "Captures {a} : {b}",
+    "store": "Grenier du joueur {n}",
+    "server_invalid": "Coup illégal"
+   }
+  },
+  "de": {
+   "display_name": "Oware (Deklarativ)",
+   "short_description": "Oware nach den Abapa-Regeln für zwei Spieler: Säe Samen gegen den Uhrzeigersinn um einen Ring aus 12 Gruben und fange eine gegnerische Grube, die dein letzter Same auf genau zwei oder drei Samen bringt, mit Rückwärtsverkettung. Anders als beim Kalah-Spiel namens Mancala gibt es keine Speicher auf dem Brett und keinen Extrazug, Gefangennahmen kommen nicht aus der gegenüberliegenden Grube, eine Gefangennahme, die alle gegnerischen Samen nehmen würde, ist verboten, und eine leere gegnerische Seite muss gefüttert werden, wenn es möglich ist.",
+   "game_logic_rules": "Oware (Abapa) für zwei Spieler. Zwölf Gruben bilden einen Ring, nummeriert von 0 bis 11: Spieler 1 besitzt die Gruben 0 bis 5 und Spieler 2 die Gruben 6 bis 11, und jede Grube beginnt mit 4 Samen, 48 insgesamt; gefangene Samen gehen in einen Speicher außerhalb des Bretts. Ein Zug nimmt alle Samen aus einer deiner eigenen nicht leeren Gruben und sät sie einzeln gegen den Uhrzeigersinn, in steigender Grubennummer, von 11 zurück zu 0, beginnend mit der nächsten Grube. Enthielt die Grube 12 oder mehr Samen, umrundet die Aussaat das Brett und die Startgrube wird jedes Mal übersprungen, wenn die Runde zu ihr zurückkommt. Landet der letzte gesäte Same in einer gegnerischen Grube und bringt sie auf genau 2 oder 3 Samen, werden diese Samen in deinen Speicher gefangen, und dieselbe Prüfung setzt sich rückwärts, gegen die Särichtung, durch jede vorherige gegnerische Grube mit genau 2 oder 3 Samen fort und stoppt an der ersten Grube, die eine der beiden Bedingungen nicht erfüllt. Grand-Slam-Regel: Ein Zug, dessen Gefangennahme jeden Samen nehmen würde, der dem Gegner noch bleibt, fängt überhaupt nichts, obwohl die Aussaat bestehen bleibt. Fütterungsregel: Sind zu Beginn deines Zuges alle gegnerischen Gruben leer, musst du einen Zug wählen, der mindestens einen Samen auf die gegnerische Seite sät, falls einer deiner Züge das kann. Das Spiel endet sofort, wenn ein Speicher 24 Samen überschreitet, und dieser Spieler gewinnt. Es endet auch, wenn der Spieler am Zug eine leere gegnerische Seite nicht füttern kann, oder wenn höchstens 6 Samen auf dem Brett verbleiben; bei diesen Enden werden die Samen, die noch auf dem Brett sind, niemandem zuerkannt, und die Speicher allein entscheiden den Gewinner. Der höhere Speicher gewinnt und nimmt den Pot; gleiche Speicher sind ein Unentschieden und der Pot wird gleich geteilt.",
+   "game_ui_rules": "Tippe auf eine deiner hervorgehobenen Gruben, um ihre Samen gegen den Uhrzeigersinn um den Ring zu säen. Die beiden Speicher unter dem Brett zeigen die gefangenen Zahlen, und die Überschrift zeigt, wer am Zug ist. Nur der Spieler am Zug sieht Ziele; Zuschauer und der wartende Spieler sehen das Brett ohne Ziele oder Steuerelemente.",
+   "tutorial_strings": {
+    "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.": "Oware (Abapa) für zwei Spieler. Zwölf Gruben bilden einen Ring, nummeriert von 0 bis 11: Spieler 1 besitzt die Gruben 0 bis 5 und Spieler 2 die Gruben 6 bis 11, und jede Grube beginnt mit 4 Samen, 48 insgesamt; gefangene Samen gehen in einen Speicher außerhalb des Bretts. Ein Zug nimmt alle Samen aus einer deiner eigenen nicht leeren Gruben und sät sie einzeln gegen den Uhrzeigersinn, in steigender Grubennummer, von 11 zurück zu 0, beginnend mit der nächsten Grube. Enthielt die Grube 12 oder mehr Samen, umrundet die Aussaat das Brett und die Startgrube wird jedes Mal übersprungen, wenn die Runde zu ihr zurückkommt. Landet der letzte gesäte Same in einer gegnerischen Grube und bringt sie auf genau 2 oder 3 Samen, werden diese Samen in deinen Speicher gefangen, und dieselbe Prüfung setzt sich rückwärts, gegen die Särichtung, durch jede vorherige gegnerische Grube mit genau 2 oder 3 Samen fort und stoppt an der ersten Grube, die eine der beiden Bedingungen nicht erfüllt. Grand-Slam-Regel: Ein Zug, dessen Gefangennahme jeden Samen nehmen würde, der dem Gegner noch bleibt, fängt überhaupt nichts, obwohl die Aussaat bestehen bleibt. Fütterungsregel: Sind zu Beginn deines Zuges alle gegnerischen Gruben leer, musst du einen Zug wählen, der mindestens einen Samen auf die gegnerische Seite sät, falls einer deiner Züge das kann. Das Spiel endet sofort, wenn ein Speicher 24 Samen überschreitet, und dieser Spieler gewinnt. Es endet auch, wenn der Spieler am Zug eine leere gegnerische Seite nicht füttern kann, oder wenn höchstens 6 Samen auf dem Brett verbleiben; bei diesen Enden werden die Samen, die noch auf dem Brett sind, niemandem zuerkannt, und die Speicher allein entscheiden den Gewinner. Der höhere Speicher gewinnt und nimmt den Pot; gleiche Speicher sind ein Unentschieden und der Pot wird gleich geteilt."
+   },
+   "client_strings": {
+    "title": "Oware",
+    "turn": "Spieler {n} ist am Zug",
+    "finished": "Beendet",
+    "sow": "Grube {n} säen",
+    "score": "Gefangen {a} : {b}",
+    "store": "Speicher von Spieler {n}",
+    "server_invalid": "Illegaler Zug"
+   }
+  },
+  "pt": {
+   "display_name": "Oware (Declarativo)",
+   "short_description": "Oware nas regras Abapa para dois jogadores: semeie sementes no sentido anti-horário ao redor de um anel de 12 covas e capture uma cova adversária que sua última semente deixe com exatamente duas ou três sementes, encadeando para trás. Ao contrário do jogo Kalah chamado Mancala, não há depósitos no tabuleiro nem turno extra, as capturas não vêm da cova oposta, uma captura que tomaria todas as sementes adversárias é proibida, e um lado adversário vazio deve ser alimentado se possível.",
+   "game_logic_rules": "Oware (Abapa) para dois jogadores. Doze covas formam um anel, numeradas de 0 a 11: o Jogador 1 possui as covas 0 a 5 e o Jogador 2 possui as covas 6 a 11, e cada cova começa com 4 sementes, 48 ao todo; as sementes capturadas vão para um depósito fora do tabuleiro. Uma jogada pega todas as sementes de uma de suas próprias covas não vazias e as semeia uma a uma no sentido anti-horário, em número de cova crescente, voltando de 11 para 0, começando pela cova seguinte. Se a cova tinha 12 ou mais sementes, a semeadura dá a volta no tabuleiro e a cova inicial é pulada cada vez que a volta chega a ela. Se a última semente semeada cair em uma cova adversária e a deixar com exatamente 2 ou 3 sementes, essas sementes são capturadas para o seu depósito, e a mesma verificação continua para trás, contra a direção da semeadura, por cada cova adversária anterior com exatamente 2 ou 3 sementes, parando na primeira cova que falhar em qualquer dos dois testes. Regra do grand slam: uma jogada cuja captura tomaria todas as sementes restantes do adversário não captura nada, embora a semeadura permaneça. Regra de alimentação: se todas as covas adversárias estiverem vazias no início do seu turno, você deve escolher uma jogada que semeie pelo menos uma semente no lado adversário, se alguma de suas jogadas puder fazê-lo. O jogo termina imediatamente quando um depósito passa de 24 sementes, e esse jogador vence. Também termina quando o jogador da vez não pode alimentar um lado adversário vazio, ou quando restam 6 ou menos sementes no tabuleiro; nesses finais, as sementes ainda no tabuleiro não são concedidas a ninguém, e os depósitos sozinhos decidem o vencedor. O depósito maior vence e leva o pote; depósitos iguais são empate e o pote é dividido igualmente.",
+   "game_ui_rules": "Toque em uma de suas covas destacadas para semear suas sementes no sentido anti-horário ao redor do anel. Os dois depósitos abaixo do tabuleiro mostram as contagens capturadas, e o cabeçalho mostra de quem é a vez. Somente o jogador da vez vê alvos; espectadores e o jogador em espera veem o tabuleiro sem alvos nem controles.",
+   "tutorial_strings": {
+    "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.": "Oware (Abapa) para dois jogadores. Doze covas formam um anel, numeradas de 0 a 11: o Jogador 1 possui as covas 0 a 5 e o Jogador 2 possui as covas 6 a 11, e cada cova começa com 4 sementes, 48 ao todo; as sementes capturadas vão para um depósito fora do tabuleiro. Uma jogada pega todas as sementes de uma de suas próprias covas não vazias e as semeia uma a uma no sentido anti-horário, em número de cova crescente, voltando de 11 para 0, começando pela cova seguinte. Se a cova tinha 12 ou mais sementes, a semeadura dá a volta no tabuleiro e a cova inicial é pulada cada vez que a volta chega a ela. Se a última semente semeada cair em uma cova adversária e a deixar com exatamente 2 ou 3 sementes, essas sementes são capturadas para o seu depósito, e a mesma verificação continua para trás, contra a direção da semeadura, por cada cova adversária anterior com exatamente 2 ou 3 sementes, parando na primeira cova que falhar em qualquer dos dois testes. Regra do grand slam: uma jogada cuja captura tomaria todas as sementes restantes do adversário não captura nada, embora a semeadura permaneça. Regra de alimentação: se todas as covas adversárias estiverem vazias no início do seu turno, você deve escolher uma jogada que semeie pelo menos uma semente no lado adversário, se alguma de suas jogadas puder fazê-lo. O jogo termina imediatamente quando um depósito passa de 24 sementes, e esse jogador vence. Também termina quando o jogador da vez não pode alimentar um lado adversário vazio, ou quando restam 6 ou menos sementes no tabuleiro; nesses finais, as sementes ainda no tabuleiro não são concedidas a ninguém, e os depósitos sozinhos decidem o vencedor. O depósito maior vence e leva o pote; depósitos iguais são empate e o pote é dividido igualmente."
+   },
+   "client_strings": {
+    "title": "Oware",
+    "turn": "Vez do jogador {n}",
+    "finished": "Terminado",
+    "sow": "Semear cova {n}",
+    "score": "Capturadas {a} : {b}",
+    "store": "Depósito do jogador {n}",
+    "server_invalid": "Jogada ilegal"
+   }
+  },
+  "zh": {
+   "display_name": "Oware（声明式）",
+   "short_description": "双人 Oware，采用 Abapa 规则：沿 12 个坑组成的环逆时针播种，并捕获被你最后一粒种子恰好播成两粒或三粒的对手坑，向后连环捕获。与名为 Mancala 的 Kalah 游戏不同，棋盘上没有仓库，也没有额外回合，捕获不来自对面的坑，会拿走对手全部剩余种子的捕获被禁止，且对手一侧为空时只要能喂就必须喂。",
+   "game_logic_rules": "双人 Oware（Abapa）。十二个坑组成一个环，编号 0 到 11：玩家 1 拥有 0 到 5 号坑，玩家 2 拥有 6 到 11 号坑，每个坑初始有 4 粒种子，共 48 粒；捕获的种子放入棋盘外的仓库。一手棋是拿起你自己一个非空坑中的全部种子，沿逆时针方向、按坑号递增、从 11 绕回 0，从下一个坑开始逐粒播下。如果该坑原有 12 粒或更多种子，播种会绕环一周，每次绕回到起始坑时都跳过它。如果最后一粒种子落入对手的坑并使该坑恰好有 2 粒或 3 粒种子，这些种子被捕获进你的仓库，同样的检查沿播种的反方向继续，逐个检查前面的每个恰好有 2 粒或 3 粒种子的对手坑，遇到第一个不满足任一条件的坑即停止。大满贯规则：如果一手棋的捕获会拿走对手剩下的全部种子，则什么都不捕获，但播种仍然有效。喂养规则：如果在你回合开始时对手的所有坑都为空，你必须选择一手能至少向对手一侧播下一粒种子的棋（如果你的任何一手能做到）。当某个仓库超过 24 粒种子时，游戏立即结束，该玩家获胜。当轮到行动的玩家无法喂养空着的对手一侧时，或棋盘上剩下 6 粒或更少种子时，游戏也结束；在这些结局中，棋盘上剩余的种子不判给任何人，仅由仓库决定胜者。仓库较高者获胜并赢得奖池；仓库相等为平局，奖池平分。",
+   "game_ui_rules": "点按你一个高亮的坑，将其种子沿环逆时针播下。棋盘下方的两个仓库显示捕获数量，标题显示轮到谁行动。只有轮到行动的玩家能看到目标；观众和等待的玩家看到的棋盘没有目标也没有控件。",
+   "tutorial_strings": {
+    "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.": "双人 Oware（Abapa）。十二个坑组成一个环，编号 0 到 11：玩家 1 拥有 0 到 5 号坑，玩家 2 拥有 6 到 11 号坑，每个坑初始有 4 粒种子，共 48 粒；捕获的种子放入棋盘外的仓库。一手棋是拿起你自己一个非空坑中的全部种子，沿逆时针方向、按坑号递增、从 11 绕回 0，从下一个坑开始逐粒播下。如果该坑原有 12 粒或更多种子，播种会绕环一周，每次绕回到起始坑时都跳过它。如果最后一粒种子落入对手的坑并使该坑恰好有 2 粒或 3 粒种子，这些种子被捕获进你的仓库，同样的检查沿播种的反方向继续，逐个检查前面的每个恰好有 2 粒或 3 粒种子的对手坑，遇到第一个不满足任一条件的坑即停止。大满贯规则：如果一手棋的捕获会拿走对手剩下的全部种子，则什么都不捕获，但播种仍然有效。喂养规则：如果在你回合开始时对手的所有坑都为空，你必须选择一手能至少向对手一侧播下一粒种子的棋（如果你的任何一手能做到）。当某个仓库超过 24 粒种子时，游戏立即结束，该玩家获胜。当轮到行动的玩家无法喂养空着的对手一侧时，或棋盘上剩下 6 粒或更少种子时，游戏也结束；在这些结局中，棋盘上剩余的种子不判给任何人，仅由仓库决定胜者。仓库较高者获胜并赢得奖池；仓库相等为平局，奖池平分。"
+   },
+   "client_strings": {
+    "title": "Oware",
+    "turn": "轮到玩家 {n}",
+    "finished": "已结束",
+    "sow": "播种第 {n} 坑",
+    "score": "捕获 {a} : {b}",
+    "store": "玩家 {n} 的仓库",
+    "server_invalid": "非法走法"
+   }
+  },
+  "hi": {
+   "display_name": "Oware (डिक्लेरेटिव)",
+   "short_description": "दो खिलाड़ियों के लिए Abapa नियमों में Oware: 12 गड्ढों के घेरे के चारों ओर वामावर्त बीज बोएं और उस प्रतिद्वंद्वी गड्ढे को पकड़ें जिसे आपका आखिरी बीज ठीक दो या तीन बीजों वाला बना दे, पीछे की ओर शृंखला बनाते हुए। Mancala नाम के Kalah खेल के विपरीत, बोर्ड पर कोई भंडार नहीं है और कोई अतिरिक्त बारी नहीं है, पकड़ सामने वाले गड्ढे से नहीं होती, वह पकड़ जो प्रतिद्वंद्वी के हर बचे बीज को ले ले, निषिद्ध है, और खाली प्रतिद्वंद्वी पक्ष को यदि संभव हो तो खिलाना ही होगा।",
+   "game_logic_rules": "दो खिलाड़ियों के लिए Oware (Abapa)। बारह गड्ढे एक घेरा बनाते हैं, 0 से 11 तक क्रमांकित: खिलाड़ी 1 के पास गड्ढे 0 से 5 हैं और खिलाड़ी 2 के पास गड्ढे 6 से 11 हैं, और हर गड्ढा 4 बीजों से शुरू होता है, कुल 48; पकड़े गए बीज बोर्ड के बाहर एक भंडार में जाते हैं। एक चाल आपके अपने किसी खाली न हुए गड्ढे के सारे बीज उठाती है और उन्हें एक-एक करके वामावर्त, बढ़ते गड्ढा क्रमांक में, 11 से 0 पर लिपटते हुए, अगले गड्ढे से शुरू करके बोती है। यदि गड्ढे में 12 या अधिक बीज थे, तो बुवाई बोर्ड का चक्कर लगाती है और शुरुआती गड्ढा हर बार छोड़ा जाता है जब चक्कर उस तक लौटता है। यदि आखिरी बोया गया बीज प्रतिद्वंद्वी के गड्ढे में गिरता है और उसे ठीक 2 या 3 बीजों वाला बना देता है, तो वे बीज आपके भंडार में पकड़े जाते हैं, और वही जाँच पीछे की ओर, बुवाई की दिशा के विरुद्ध, हर पिछले प्रतिद्वंद्वी गड्ढे के साथ जारी रहती है जिसमें ठीक 2 या 3 बीज हों, पहले उस गड्ढे पर रुकती है जो दोनों में से किसी भी शर्त पर खरा न उतरे। ग्रैंड स्लैम नियम: वह चाल जिसकी पकड़ प्रतिद्वंद्वी के हर बचे बीज को ले ले, कुछ भी नहीं पकड़ती, हालाँकि बुवाई बनी रहती है। खिलाने का नियम: यदि आपकी बारी की शुरुआत में प्रतिद्वंद्वी के सभी गड्ढे खाली हैं, तो आपको ऐसी चाल चुननी होगी जो प्रतिद्वंद्वी पक्ष में कम से कम एक बीज बोए, यदि आपकी कोई चाल ऐसा कर सकती है। खेल तुरंत समाप्त होता है जब कोई भंडार 24 बीजों से अधिक हो जाता है, और वह खिलाड़ी जीतता है। यह तब भी समाप्त होता है जब बारी वाला खिलाड़ी खाली प्रतिद्वंद्वी पक्ष को नहीं खिला सकता, या जब बोर्ड पर 6 या उससे कम बीज बचते हैं; इन अंतों में बोर्ड पर बचे बीज किसी को नहीं दिए जाते, और केवल भंडार ही विजेता तय करते हैं। अधिक भंडार जीतता है और पॉट लेता है; बराबर भंडार ड्रॉ हैं और पॉट बराबर बाँटा जाता है।",
+   "game_ui_rules": "अपने किसी हाइलाइट किए गड्ढे को टैप करें ताकि उसके बीज घेरे के चारों ओर वामावर्त बोए जाएं। बोर्ड के नीचे के दो भंडार पकड़ी गई संख्याएँ दिखाते हैं, और शीर्षक दिखाता है कि किसकी बारी है। केवल बारी वाला खिलाड़ी लक्ष्य देखता है; दर्शक और प्रतीक्षा कर रहा खिलाड़ी बोर्ड को बिना लक्ष्यों या नियंत्रणों के देखते हैं।",
+   "tutorial_strings": {
+    "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.": "दो खिलाड़ियों के लिए Oware (Abapa)। बारह गड्ढे एक घेरा बनाते हैं, 0 से 11 तक क्रमांकित: खिलाड़ी 1 के पास गड्ढे 0 से 5 हैं और खिलाड़ी 2 के पास गड्ढे 6 से 11 हैं, और हर गड्ढा 4 बीजों से शुरू होता है, कुल 48; पकड़े गए बीज बोर्ड के बाहर एक भंडार में जाते हैं। एक चाल आपके अपने किसी खाली न हुए गड्ढे के सारे बीज उठाती है और उन्हें एक-एक करके वामावर्त, बढ़ते गड्ढा क्रमांक में, 11 से 0 पर लिपटते हुए, अगले गड्ढे से शुरू करके बोती है। यदि गड्ढे में 12 या अधिक बीज थे, तो बुवाई बोर्ड का चक्कर लगाती है और शुरुआती गड्ढा हर बार छोड़ा जाता है जब चक्कर उस तक लौटता है। यदि आखिरी बोया गया बीज प्रतिद्वंद्वी के गड्ढे में गिरता है और उसे ठीक 2 या 3 बीजों वाला बना देता है, तो वे बीज आपके भंडार में पकड़े जाते हैं, और वही जाँच पीछे की ओर, बुवाई की दिशा के विरुद्ध, हर पिछले प्रतिद्वंद्वी गड्ढे के साथ जारी रहती है जिसमें ठीक 2 या 3 बीज हों, पहले उस गड्ढे पर रुकती है जो दोनों में से किसी भी शर्त पर खरा न उतरे। ग्रैंड स्लैम नियम: वह चाल जिसकी पकड़ प्रतिद्वंद्वी के हर बचे बीज को ले ले, कुछ भी नहीं पकड़ती, हालाँकि बुवाई बनी रहती है। खिलाने का नियम: यदि आपकी बारी की शुरुआत में प्रतिद्वंद्वी के सभी गड्ढे खाली हैं, तो आपको ऐसी चाल चुननी होगी जो प्रतिद्वंद्वी पक्ष में कम से कम एक बीज बोए, यदि आपकी कोई चाल ऐसा कर सकती है। खेल तुरंत समाप्त होता है जब कोई भंडार 24 बीजों से अधिक हो जाता है, और वह खिलाड़ी जीतता है। यह तब भी समाप्त होता है जब बारी वाला खिलाड़ी खाली प्रतिद्वंद्वी पक्ष को नहीं खिला सकता, या जब बोर्ड पर 6 या उससे कम बीज बचते हैं; इन अंतों में बोर्ड पर बचे बीज किसी को नहीं दिए जाते, और केवल भंडार ही विजेता तय करते हैं। अधिक भंडार जीतता है और पॉट लेता है; बराबर भंडार ड्रॉ हैं और पॉट बराबर बाँटा जाता है।"
+   },
+   "client_strings": {
+    "title": "Oware",
+    "turn": "खिलाड़ी {n} की बारी",
+    "finished": "समाप्त",
+    "sow": "गड्ढा {n} बोएं",
+    "score": "पकड़े {a} : {b}",
+    "store": "खिलाड़ी {n} का भंडार",
+    "server_invalid": "अवैध चाल"
+   }
+  },
+  "ar": {
+   "display_name": "Oware (التصريحي)",
+   "short_description": "لعبة Oware بقواعد Abapa للاعبين: ازرع البذور عكس اتجاه عقارب الساعة حول حلقة من 12 حفرة، والتقط حفرة للخصم تجعل بذرتك الأخيرة فيها تحمل بذرتين أو ثلاثًا بالضبط، متسلسلًا إلى الخلف. وعلى عكس لعبة Kalah المسماة Mancala، لا توجد مخازن على اللوحة ولا دور إضافي، ولا تأتي الالتقاطات من الحفرة المقابلة، والالتقاط الذي يأخذ كل بذور الخصم المتبقية ممنوع، ويجب إطعام جانب خصم فارغ إن أمكن.",
+   "game_logic_rules": "لعبة Oware (Abapa) للاعبين. تشكل اثنتا عشرة حفرة حلقة مرقمة من 0 إلى 11: يملك اللاعب 1 الحفر 0 إلى 5 ويملك اللاعب 2 الحفر 6 إلى 11، وتبدأ كل حفرة بأربع بذور، 48 في المجموع؛ وتذهب البذور الملتقطة إلى مخزن خارج اللوحة. تلتقط الحركة كل البذور من إحدى حفرك غير الفارغة وتزرعها واحدة تلو الأخرى عكس اتجاه عقارب الساعة، برقم حفرة متزايد، ملتفًا من 11 إلى 0، بدءًا من الحفرة التالية. إذا كانت الحفرة تحمل 12 بذرة أو أكثر، فإن الزرع يلف اللوحة ويتم تخطي حفرة البداية في كل مرة تعود فيها اللفة إليها. إذا سقطت آخر بذرة مزروعة في حفرة للخصم وجعلتها تحمل بذرتين أو ثلاثًا بالضبط، تُلتقط تلك البذور إلى مخزنك، ويستمر الفحص نفسه إلى الخلف، ضد اتجاه الزرع، عبر كل حفرة خصم سابقة تحمل بذرتين أو ثلاثًا بالضبط، متوقفًا عند أول حفرة تفشل في أي من الاختبارين. قاعدة الضربة الكبرى: الحركة التي كان التقاطها سيأخذ كل بذرة متبقية لدى الخصم لا تلتقط شيئًا على الإطلاق، رغم بقاء الزرع قائمًا. قاعدة الإطعام: إذا كانت كل حفر الخصم فارغة في بداية دورك، فيجب أن تختار حركة تزرع بذرة واحدة على الأقل في جانب الخصم إذا كانت أي من حركاتك تستطيع ذلك. تنتهي اللعبة فورًا عندما يتجاوز مخزن 24 بذرة، ويفوز ذلك اللاعب. وتنتهي أيضًا عندما لا يستطيع اللاعب صاحب الدور إطعام جانب خصم فارغ، أو عندما تبقى 6 بذور أو أقل على اللوحة؛ وفي هذه النهايات لا تُمنح البذور المتبقية على اللوحة لأحد، وتقرر المخازن وحدها الفائز. المخزن الأعلى يفوز ويأخذ الجائزة؛ والمخازن المتساوية تعادل وتُقسم الجائزة بالتساوي.",
+   "game_ui_rules": "انقر إحدى حفرك المميزة لزرع بذورها عكس اتجاه عقارب الساعة حول الحلقة. يُظهر المخزنان أسفل اللوحة الأعداد الملتقطة، ويُظهر العنوان دور من هو. لا يرى الأهداف إلا اللاعب صاحب الدور؛ ويرى المتفرجون واللاعب المنتظر اللوحة بلا أهداف ولا عناصر تحكم.",
+   "tutorial_strings": {
+    "Oware (Abapa) for two players. Twelve pits form a ring, numbered 0 to 11: Player 1 owns pits 0 to 5 and Player 2 owns pits 6 to 11, and each pit starts with 4 seeds, 48 in all; captured seeds go to a store off the board. A move picks up all the seeds in one of your own non-empty pits and sows them one by one counterclockwise, in increasing pit number, wrapping from 11 back to 0, starting with the next pit. If the pit held 12 or more seeds, the sowing laps the board and the starting pit is skipped each time the lap comes around to it. If the last seed sown lands in an opponent pit and makes it hold exactly 2 or 3 seeds, those seeds are captured into your store, and the same check continues backwards, against the sowing direction, through each preceding opponent pit holding exactly 2 or 3 seeds, stopping at the first pit that fails either test. Grand-slam rule: a move whose capture would take every seed the opponent has left captures nothing at all, though the sowing still stands. Feeding rule: if every opponent pit is empty at the start of your turn, you must choose a move that sows at least one seed into the opponent side if any of your moves can do so. The game ends at once when a store passes 24 seeds, and that player wins. It also ends when the player to move cannot feed an empty opponent side, or when 6 or fewer seeds remain on the board; in those endings the seeds still on the board are awarded to nobody, and the stores alone decide the winner. The higher store wins and takes the pot; equal stores are a draw and the pot is split equally.": "لعبة Oware (Abapa) للاعبين. تشكل اثنتا عشرة حفرة حلقة مرقمة من 0 إلى 11: يملك اللاعب 1 الحفر 0 إلى 5 ويملك اللاعب 2 الحفر 6 إلى 11، وتبدأ كل حفرة بأربع بذور، 48 في المجموع؛ وتذهب البذور الملتقطة إلى مخزن خارج اللوحة. تلتقط الحركة كل البذور من إحدى حفرك غير الفارغة وتزرعها واحدة تلو الأخرى عكس اتجاه عقارب الساعة، برقم حفرة متزايد، ملتفًا من 11 إلى 0، بدءًا من الحفرة التالية. إذا كانت الحفرة تحمل 12 بذرة أو أكثر، فإن الزرع يلف اللوحة ويتم تخطي حفرة البداية في كل مرة تعود فيها اللفة إليها. إذا سقطت آخر بذرة مزروعة في حفرة للخصم وجعلتها تحمل بذرتين أو ثلاثًا بالضبط، تُلتقط تلك البذور إلى مخزنك، ويستمر الفحص نفسه إلى الخلف، ضد اتجاه الزرع، عبر كل حفرة خصم سابقة تحمل بذرتين أو ثلاثًا بالضبط، متوقفًا عند أول حفرة تفشل في أي من الاختبارين. قاعدة الضربة الكبرى: الحركة التي كان التقاطها سيأخذ كل بذرة متبقية لدى الخصم لا تلتقط شيئًا على الإطلاق، رغم بقاء الزرع قائمًا. قاعدة الإطعام: إذا كانت كل حفر الخصم فارغة في بداية دورك، فيجب أن تختار حركة تزرع بذرة واحدة على الأقل في جانب الخصم إذا كانت أي من حركاتك تستطيع ذلك. تنتهي اللعبة فورًا عندما يتجاوز مخزن 24 بذرة، ويفوز ذلك اللاعب. وتنتهي أيضًا عندما لا يستطيع اللاعب صاحب الدور إطعام جانب خصم فارغ، أو عندما تبقى 6 بذور أو أقل على اللوحة؛ وفي هذه النهايات لا تُمنح البذور المتبقية على اللوحة لأحد، وتقرر المخازن وحدها الفائز. المخزن الأعلى يفوز ويأخذ الجائزة؛ والمخازن المتساوية تعادل وتُقسم الجائزة بالتساوي."
+   },
+   "client_strings": {
+    "title": "Oware",
+    "turn": "دور اللاعب {n}",
+    "finished": "انتهت",
+    "sow": "ازرع الحفرة {n}",
+    "score": "الأسر {a} : {b}",
+    "store": "مخزن اللاعب {n}",
+    "server_invalid": "حركة غير قانونية"
+   }
+  }
+ }
+}
