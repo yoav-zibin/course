@@ -8,7 +8,7 @@
   6,
   8
  ],
- "server_code": "\"use strict\";\nvar WORDS=[{\"w\": \"APPLE\", \"tags\": [\"FRUIT\", \"FOOD\", \"SWEET\", \"PLANT\"]}, {\"w\": \"BANANA\", \"tags\": [\"FRUIT\", \"FOOD\", \"SWEET\"]}, {\"w\": \"ORANGE\", \"tags\": [\"FRUIT\", \"FOOD\", \"COLD\"]}, {\"w\": \"GRAPE\", \"tags\": [\"FRUIT\", \"FOOD\", \"DRINK\"]}, {\"w\": \"LEMON\", \"tags\": [\"FRUIT\", \"FOOD\", \"SOUR\"]}, {\"w\": \"BREAD\", \"tags\": [\"FOOD\", \"FARM\", \"HOME\"]}, {\"w\": \"CHEESE\", \"tags\": [\"FOOD\", \"FARM\", \"ANIMAL\"]}, {\"w\": \"HONEY\", \"tags\": [\"FOOD\", \"SWEET\", \"ANIMAL\"]}, {\"w\": \"COFFEE\", \"tags\": [\"DRINK\", \"FOOD\", \"HEAT\"]}, {\"w\": \"TEA\", \"tags\": [\"DRINK\", \"FOOD\", \"HEAT\", \"PLANT\"]}, {\"w\": \"OCEAN\", \"tags\": [\"WATER\", \"NATURE\", \"SEA\", \"COLD\"]}, {\"w\": \"RIVER\", \"tags\": [\"WATER\", \"NATURE\", \"LAND\"]}, {\"w\": \"MOUNTAIN\", \"tags\": [\"LAND\", \"NATURE\", \"COLD\"]}, {\"w\": \"FOREST\", \"tags\": [\"LAND\", \"NATURE\", \"PLANT\"]}, {\"w\": \"DESERT\", \"tags\": [\"LAND\", \"NATURE\", \"HEAT\"]}, {\"w\": \"ISLAND\", \"tags\": [\"WATER\", \"LAND\", \"NATURE\"]}, {\"w\": \"BRIDGE\", \"tags\": [\"LAND\", \"TOOL\", \"WATER\"]}, {\"w\": \"CASTLE\", \"tags\": [\"ROYAL\", \"LAND\", \"SPELL\"]}, {\"w\": \"TOWER\", \"tags\": [\"ROYAL\", \"LAND\", \"TIME\"]}, {\"w\": \"TEMPLE\", \"tags\": [\"ROYAL\", \"SPELL\", \"TIME\"]}, {\"w\": \"DRAGON\", \"tags\": [\"SPELL\", \"ANIMAL\", \"FIRE\"]}, {\"w\": \"EAGLE\", \"tags\": [\"ANIMAL\", \"SKY\", \"WILD\"]}, {\"w\": \"HORSE\", \"tags\": [\"ANIMAL\", \"FARM\", \"SPORT\"]}, {\"w\": \"TIGER\", \"tags\": [\"ANIMAL\", \"WILD\", \"LAND\"]}, {\"w\": \"WHALE\", \"tags\": [\"ANIMAL\", \"WATER\", \"SEA\"]}, {\"w\": \"SHARK\", \"tags\": [\"ANIMAL\", \"WATER\", \"SEA\"]}, {\"w\": \"SNAKE\", \"tags\": [\"ANIMAL\", \"WILD\", \"LAND\"]}, {\"w\": \"SPIDER\", \"tags\": [\"ANIMAL\", \"WILD\", \"DARK\"]}, {\"w\": \"ROBOT\", \"tags\": [\"TOOL\", \"METAL\", \"FUTURE\"]}, {\"w\": \"ROCKET\", \"tags\": [\"TOOL\", \"SKY\", \"METAL\"]}, {\"w\": \"PLANET\", \"tags\": [\"SKY\", \"SPACE\", \"TIME\"]}, {\"w\": \"COMET\", \"tags\": [\"SKY\", \"SPACE\", \"LIGHT\"]}, {\"w\": \"GUITAR\", \"tags\": [\"MUSIC\", \"TOOL\", \"ART\"]}, {\"w\": \"PIANO\", \"tags\": [\"MUSIC\", \"ART\", \"HOME\"]}, {\"w\": \"DRUM\", \"tags\": [\"MUSIC\", \"SPORT\", \"ART\"]}, {\"w\": \"VIOLIN\", \"tags\": [\"MUSIC\", \"ART\", \"TIME\"]}, {\"w\": \"CIRCUS\", \"tags\": [\"ART\", \"SPELL\", \"SPORT\"]}, {\"w\": \"WIZARD\", \"tags\": [\"SPELL\", \"ART\", \"DARK\"]}, {\"w\": \"GHOST\", \"tags\": [\"SPELL\", \"DARK\", \"TIME\"]}, {\"w\": \"PIRATE\", \"tags\": [\"SEA\", \"WATER\", \"DARK\"]}, {\"w\": \"KNIGHT\", \"tags\": [\"ROYAL\", \"WAR\", \"METAL\"]}, {\"w\": \"QUEEN\", \"tags\": [\"ROYAL\", \"WAR\", \"TIME\"]}, {\"w\": \"KING\", \"tags\": [\"ROYAL\", \"WAR\", \"TIME\"]}, {\"w\": \"CROWN\", \"tags\": [\"ROYAL\", \"METAL\", \"TIME\"]}, {\"w\": \"SWORD\", \"tags\": [\"WAR\", \"METAL\", \"TOOL\"]}, {\"w\": \"SHIELD\", \"tags\": [\"WAR\", \"METAL\", \"TOOL\"]}, {\"w\": \"ANCHOR\", \"tags\": [\"SEA\", \"WATER\", \"METAL\"]}, {\"w\": \"COMPASS\", \"tags\": [\"TOOL\", \"SEA\", \"TIME\"]}, {\"w\": \"MAP\", \"tags\": [\"TOOL\", \"LAND\", \"TIME\"]}, {\"w\": \"KEY\", \"tags\": [\"TOOL\", \"HOME\", \"METAL\"]}, {\"w\": \"LOCK\", \"tags\": [\"TOOL\", \"HOME\", \"METAL\"]}, {\"w\": \"CANDLE\", \"tags\": [\"LIGHT\", \"HOME\", \"TIME\"]}, {\"w\": \"MIRROR\", \"tags\": [\"LIGHT\", \"HOME\", \"SPELL\"]}, {\"w\": \"CLOCK\", \"tags\": [\"TIME\", \"TOOL\", \"HOME\"]}, {\"w\": \"BOOK\", \"tags\": [\"ART\", \"TIME\", \"HOME\"]}, {\"w\": \"PEN\", \"tags\": [\"TOOL\", \"ART\", \"HOME\"]}, {\"w\": \"PAPER\", \"tags\": [\"TOOL\", \"ART\", \"HOME\"]}, {\"w\": \"SCISSORS\", \"tags\": [\"TOOL\", \"METAL\", \"HOME\"]}, {\"w\": \"BOTTLE\", \"tags\": [\"DRINK\", \"HOME\", \"TOOL\"]}, {\"w\": \"GLASS\", \"tags\": [\"DRINK\", \"HOME\", \"LIGHT\"]}, {\"w\": \"TABLE\", \"tags\": [\"HOME\", \"TOOL\", \"FOOD\"]}, {\"w\": \"CHAIR\", \"tags\": [\"HOME\", \"TOOL\", \"TIME\"]}, {\"w\": \"WINDOW\", \"tags\": [\"HOME\", \"LIGHT\", \"TIME\"]}, {\"w\": \"DOOR\", \"tags\": [\"HOME\", \"TOOL\", \"TIME\"]}, {\"w\": \"GARDEN\", \"tags\": [\"PLANT\", \"HOME\", \"NATURE\"]}, {\"w\": \"FLOWER\", \"tags\": [\"PLANT\", \"NATURE\", \"SWEET\"]}, {\"w\": \"TREE\", \"tags\": [\"PLANT\", \"NATURE\", \"LAND\"]}, {\"w\": \"LEAF\", \"tags\": [\"PLANT\", \"NATURE\", \"TIME\"]}, {\"w\": \"STONE\", \"tags\": [\"LAND\", \"NATURE\", \"TOOL\"]}, {\"w\": \"GOLD\", \"tags\": [\"METAL\", \"ROYAL\", \"TIME\"]}, {\"w\": \"SILVER\", \"tags\": [\"METAL\", \"ROYAL\", \"LIGHT\"]}, {\"w\": \"DIAMOND\", \"tags\": [\"METAL\", \"ROYAL\", \"LIGHT\"]}, {\"w\": \"PEARL\", \"tags\": [\"SEA\", \"WATER\", \"ROYAL\"]}, {\"w\": \"THUNDER\", \"tags\": [\"SKY\", \"NATURE\", \"LIGHT\"]}, {\"w\": \"LIGHTNING\", \"tags\": [\"SKY\", \"NATURE\", \"LIGHT\"]}, {\"w\": \"RAINBOW\", \"tags\": [\"SKY\", \"NATURE\", \"LIGHT\"]}, {\"w\": \"SNOW\", \"tags\": [\"COLD\", \"NATURE\", \"WATER\"]}, {\"w\": \"MOON\", \"tags\": [\"SKY\", \"SPACE\", \"TIME\"]}, {\"w\": \"STAR\", \"tags\": [\"SKY\", \"SPACE\", \"LIGHT\"]}, {\"w\": \"SUN\", \"tags\": [\"SKY\", \"SPACE\", \"HEAT\"]}];\nvar RED = 0, BLUE = 1;\n\nfunction hashStr(s) {\n  var h = 2166136261 >>> 0;\n  for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }\n  return h >>> 0;\n}\nfunction rngFrom(seed) {\n  var a = seed >>> 0;\n  return function () {\n    a |= 0; a = (a + 0x6D2B79F5) | 0;\n    var t = Math.imul(a ^ (a >>> 15), 1 | a);\n    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}\nfunction shuffle(arr, rand) {\n  for (var i = arr.length - 1; i > 0; i--) {\n    var j = Math.floor(rand() * (i + 1));\n    var t = arr[i]; arr[i] = arr[j]; arr[j] = t;\n  }\n  return arr;\n}\nfunction teamOf(seat, n) { return seat < Math.floor(n / 2) ? RED : BLUE; }\nfunction spySeat(team, n) { return team === RED ? 0 : Math.floor(n / 2); }\nfunction operatives(team, n) {\n  var half = Math.floor(n / 2), out = [];\n  var start = team === RED ? 1 : half + 1, end = team === RED ? half : n;\n  for (var s = start; s < end; s++) out.push(s);\n  return out;\n}\nfunction currentSeat(state, n) {\n  return state.phase === \"clue\" ? spySeat(state.team, n) : state.guesser;\n}\nfunction norm(w) {\n  var s = String(w).toLowerCase();\n  if (s.length > 3 && s.charAt(s.length - 1) === \"s\") s = s.slice(0, -1);\n  return s;\n}\nfunction tagsOf(word) {\n  for (var i = 0; i < WORDS.length; i++) if (WORDS[i].w === word) return WORDS[i].tags;\n  return [];\n}\nfunction clone(o) { return JSON.parse(JSON.stringify(o)); }\n\nfunction endPayouts(state, ctx) {\n  if (!ctx.pot) return {};\n  var humans = ctx.players.filter(function (p) { return p.kind === \"human\" && p.active !== false; });\n  if (!humans.length) return {};\n  var winners = humans.filter(function (p) {\n    return teamOf(ctx.players.findIndex(function (q) { return q.id === p.id; }), ctx.players.length) === state.winner;\n  });\n  var recipients = winners.length ? winners : humans;\n  var share = Math.floor(ctx.pot / recipients.length);\n  var rem = ctx.pot - share * recipients.length;\n  var out = {};\n  recipients.forEach(function (p, i) { out[p.id] = share + (i === 0 ? rem : 0); });\n  return out;\n}\nfunction finish(state, winnerTeam) { state.over = true; state.winner = winnerTeam; }\nfunction endTurn(state, n) {\n  state.team = 1 - state.team;\n  state.phase = \"clue\";\n  state.clue_word = null; state.clue_number = null;\n  state.guesses_left = 0; state.guesses_unlimited = false;\n  state.guesser = spySeat(state.team, n);\n}\nfunction advanceGuesser(state, n) {\n  var ops = operatives(state.team, n);\n  var idx = ops.indexOf(state.guesser);\n  var next = ops[(idx + 1) % ops.length];\n  state.next_guesser[state.team] = next;\n  state.guesser = next;\n}\nfunction legalMoves(state) {\n  if (state.over || state.phase !== \"guess\") return [];\n  var out = [];\n  for (var i = 0; i < 25; i++) if (!state.revealed[i]) out.push({ type: \"guess\", word: state.words[i] });\n  out.push({ type: \"pass\" });\n  return out;\n}\n\nvar game = {\n  newMatch: function (ctx) {\n    var n = ctx.players.length;\n    // The platform strips the seed from ctx before calling (the seed drives\n    // ctx.random instead), so a board hashed from the seed came out\n    // different on the server than in the unit-test case — and identical\n    // for every match of the same players+pot. Draw the board seed from\n    // ctx.random(): same match seed -> same board, fresh seed -> fresh board.\n    var rand = rngFrom(Math.floor(ctx.random() * 4294967296));\n    var words = shuffle(WORDS.map(function (e) { return e.w; }), rand).slice(0, 25);\n    var key = shuffle([\"R\",\"R\",\"R\",\"R\",\"R\",\"R\",\"R\",\"R\",\"R\",\"B\",\"B\",\"B\",\"B\",\"B\",\"B\",\"B\",\"B\",\"N\",\"N\",\"N\",\"N\",\"N\",\"N\",\"N\",\"A\"], rand);\n    var half = Math.floor(n / 2);\n    var state = {\n      words: words, key: key,\n      revealed: [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],\n      phase: \"clue\", team: RED, guesser: 0,\n      next_guesser: [1, half + 1],\n      clue_word: null, clue_number: null, guesses_left: 0, guesses_unlimited: false,\n      red_left: 9, blue_left: 8, winner: null, over: false, history: []\n    };\n    return { state: state, turn: [ctx.players[0].id] };\n  },\n\n  applyMove: function (state, playerId, move, ctx) {\n    var n = ctx.players.length;\n    if (state.over) throw new InvalidMove(\"the game is over\");\n    var seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (seat < 0 || seat !== currentSeat(state, n)) throw new InvalidMove(\"not your turn\");\n    if (!move || typeof move !== \"object\" || Array.isArray(move) || typeof move.type !== \"string\" ||\n        [\"clue\", \"guess\", \"pass\"].indexOf(move.type) < 0) {\n      throw new InvalidMove(\"send a clue, guess or pass move\");\n    }\n    var s = clone(state);\n    var teamLetter = s.team === RED ? \"R\" : \"B\";\n    var oppLetter = s.team === RED ? \"B\" : \"R\";\n    if (move.type === \"clue\") {\n      if (s.phase !== \"clue\") throw new InvalidMove(\"it is not the clue phase\");\n      if (typeof move.word !== \"string\" || !/^[A-Za-z]+$/.test(move.word.trim())) {\n        throw new InvalidMove(\"clue word must be one word of letters only\");\n      }\n      if (!Number.isInteger(move.number) || move.number < 0 || move.number > 9) {\n        throw new InvalidMove(\"clue number must be 0 to 9\");\n      }\n      var cw = move.word.trim().toUpperCase();\n      for (var i = 0; i < 25; i++) {\n        if (!s.revealed[i] && norm(cw) === norm(s.words[i])) {\n          throw new InvalidMove(\"clue word must not match a board word\");\n        }\n      }\n      s.clue_word = cw; s.clue_number = move.number;\n      s.guesses_unlimited = move.number === 0;\n      s.guesses_left = move.number === 0 ? -1 : move.number + 1;\n      s.phase = \"guess\";\n      s.guesser = s.next_guesser[s.team];\n      s.history.push({ kind: \"clue\", team: s.team, word: cw, number: move.number, result: null });\n      return { state: s, turn: [ctx.players[s.guesser].id] };\n    }\n    if (move.type === \"pass\") {\n      if (s.phase !== \"guess\") throw new InvalidMove(\"it is not the guess phase\");\n      s.history.push({ kind: \"pass\", team: s.team, word: null, number: null, result: null });\n      advanceGuesser(s, n);\n      endTurn(s, n);\n      return { state: s, turn: [ctx.players[currentSeat(s, n)].id] };\n    }\n    // guess\n    if (s.phase !== \"guess\") throw new InvalidMove(\"it is not the guess phase\");\n    if (typeof move.word !== \"string\") throw new InvalidMove(\"send a clue, guess or pass move\");\n    var gw = move.word.trim().toUpperCase();\n    var idx = -1;\n    for (var j = 0; j < 25; j++) if (s.words[j] === gw) { idx = j; break; }\n    if (idx < 0) throw new InvalidMove(\"that word is not on the board\");\n    if (s.revealed[idx]) throw new InvalidMove(\"that word is already revealed\");\n    s.revealed[idx] = true;\n    var k = s.key[idx];\n    if (k === teamLetter) {\n      if (s.team === RED) s.red_left--; else s.blue_left--;\n      s.history.push({ kind: \"guess\", team: s.team, word: gw, number: null, result: \"own\" });\n      var left = s.team === RED ? s.red_left : s.blue_left;\n      if (left === 0) {\n        finish(s, s.team);\n        return { state: s, turn: null, payouts: endPayouts(s, ctx) };\n      }\n      if (!s.guesses_unlimited) s.guesses_left--;\n      advanceGuesser(s, n);\n      if (!s.guesses_unlimited && s.guesses_left === 0) {\n        endTurn(s, n);\n        return { state: s, turn: [ctx.players[currentSeat(s, n)].id] };\n      }\n      return { state: s, turn: [ctx.players[s.guesser].id] };\n    }\n    if (k === oppLetter) {\n      if (s.team === RED) s.blue_left--; else s.red_left--;\n      s.history.push({ kind: \"guess\", team: s.team, word: gw, number: null, result: \"opponent\" });\n      var oppLeft = s.team === RED ? s.blue_left : s.red_left;\n      if (oppLeft === 0) {\n        finish(s, 1 - s.team);\n        return { state: s, turn: null, payouts: endPayouts(s, ctx) };\n      }\n      advanceGuesser(s, n);\n      endTurn(s, n);\n      return { state: s, turn: [ctx.players[currentSeat(s, n)].id] };\n    }\n    if (k === \"A\") {\n      s.history.push({ kind: \"guess\", team: s.team, word: gw, number: null, result: \"assassin\" });\n      finish(s, 1 - s.team);\n      return { state: s, turn: null, payouts: endPayouts(s, ctx) };\n    }\n    s.history.push({ kind: \"guess\", team: s.team, word: gw, number: null, result: \"bystander\" });\n    advanceGuesser(s, n);\n    endTurn(s, n);\n    return { state: s, turn: [ctx.players[currentSeat(s, n)].id] };\n  },\n\n  computerMove: function (state, playerId, ctx) {\n    var n = ctx.players.length;\n    var seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (state.over) return { type: \"pass\" };\n    var teamLetter = state.team === RED ? \"R\" : \"B\";\n    if (state.phase === \"clue\") {\n      var counts = {}, order = [];\n      for (var i = 0; i < 25; i++) {\n        if (state.revealed[i] || state.key[i] !== teamLetter) continue;\n        var tags = tagsOf(state.words[i]);\n        for (var t = 0; t < tags.length; t++) {\n          if (!(tags[t] in counts)) { counts[tags[t]] = 0; order.push(tags[t]); }\n          counts[tags[t]]++;\n        }\n      }\n      var best = null, bestCount = 0;\n      for (var o = 0; o < order.length; o++) {\n        if (counts[order[o]] > bestCount) { bestCount = counts[order[o]]; best = order[o]; }\n      }\n      if (!best) return { type: \"clue\", word: \"HINT\", number: 1 };\n      return { type: \"clue\", word: best, number: Math.min(bestCount, 3) };\n    }\n    var clue = state.clue_word || \"\";\n    for (var j = 0; j < 25; j++) {\n      if (state.revealed[j]) continue;\n      if (tagsOf(state.words[j]).indexOf(clue) >= 0) return { type: \"guess\", word: state.words[j] };\n    }\n    for (var m = 0; m < 25; m++) if (!state.revealed[m]) return { type: \"guess\", word: state.words[m] };\n    return { type: \"pass\" };\n  },\n\n  randomMove: function (state, playerId, ctx) {\n    if (state.over) return { type: \"pass\" };\n    var teamLetter = state.team === RED ? \"R\" : \"B\";\n    if (state.phase === \"clue\") {\n      var own = [];\n      for (var i = 0; i < 25; i++) if (!state.revealed[i] && state.key[i] === teamLetter) own.push(i);\n      if (!own.length) return { type: \"clue\", word: \"HINT\", number: 1 };\n      var pick = own[Math.floor(ctx.random() * own.length)];\n      var tags = tagsOf(state.words[pick]);\n      return { type: \"clue\", word: tags.length ? tags[0] : \"HINT\", number: 1 + Math.floor(ctx.random() * 3) };\n    }\n    if (ctx.random() < 0.1) return { type: \"pass\" };\n    var open = [];\n    for (var j = 0; j < 25; j++) if (!state.revealed[j]) open.push(j);\n    if (!open.length) return { type: \"pass\" };\n    return { type: \"guess\", word: state.words[open[Math.floor(ctx.random() * open.length)]] };\n  },\n\n  viewFor: function (state, playerId, ctx) {\n    var n = ctx.players.length;\n    var seat = playerId == null ? -1 : ctx.players.findIndex(function (p) { return p.id === playerId; });\n    var isSpy = seat === 0 || seat === Math.floor(n / 2);\n    var myTeam = seat < 0 ? null : teamOf(seat, n);\n    var myRole = seat < 0 ? \"spectator\" : (isSpy ? \"spymaster\" : \"operative\");\n    var colors = [];\n    for (var i = 0; i < 25; i++) {\n      colors.push(state.revealed[i] ? state.key[i] : (isSpy ? state.key[i] : \"\"));\n    }\n    var legal = [];\n    if (!state.over && seat === currentSeat(state, n)) legal = legalMoves(state);\n    return {\n      words: state.words, revealed: state.revealed, colors: colors,\n      phase: state.phase, team: state.team, turn_seat: currentSeat(state, n),\n      guesser: state.guesser, clue_word: state.clue_word, clue_number: state.clue_number,\n      guesses_left: state.guesses_left, guesses_unlimited: state.guesses_unlimited,\n      red_left: state.red_left, blue_left: state.blue_left,\n      winner: state.winner, over: state.over, history: state.history,\n      my_team: myTeam, my_role: myRole, is_spymaster: isSpy, legal: legal\n    };\n  }\n};\n",
+ "server_code": "\"use strict\";\nvar WORDS=[{\"w\": \"APPLE\", \"tags\": [\"FRUIT\", \"FOOD\", \"SWEET\", \"PLANT\"]}, {\"w\": \"BANANA\", \"tags\": [\"FRUIT\", \"FOOD\", \"SWEET\"]}, {\"w\": \"ORANGE\", \"tags\": [\"FRUIT\", \"FOOD\", \"COLD\"]}, {\"w\": \"GRAPE\", \"tags\": [\"FRUIT\", \"FOOD\", \"DRINK\"]}, {\"w\": \"LEMON\", \"tags\": [\"FRUIT\", \"FOOD\", \"SOUR\"]}, {\"w\": \"BREAD\", \"tags\": [\"FOOD\", \"FARM\", \"HOME\"]}, {\"w\": \"CHEESE\", \"tags\": [\"FOOD\", \"FARM\", \"ANIMAL\"]}, {\"w\": \"HONEY\", \"tags\": [\"FOOD\", \"SWEET\", \"ANIMAL\"]}, {\"w\": \"COFFEE\", \"tags\": [\"DRINK\", \"FOOD\", \"HEAT\"]}, {\"w\": \"TEA\", \"tags\": [\"DRINK\", \"FOOD\", \"HEAT\", \"PLANT\"]}, {\"w\": \"OCEAN\", \"tags\": [\"WATER\", \"NATURE\", \"SEA\", \"COLD\"]}, {\"w\": \"RIVER\", \"tags\": [\"WATER\", \"NATURE\", \"LAND\"]}, {\"w\": \"MOUNTAIN\", \"tags\": [\"LAND\", \"NATURE\", \"COLD\"]}, {\"w\": \"FOREST\", \"tags\": [\"LAND\", \"NATURE\", \"PLANT\"]}, {\"w\": \"DESERT\", \"tags\": [\"LAND\", \"NATURE\", \"HEAT\"]}, {\"w\": \"ISLAND\", \"tags\": [\"WATER\", \"LAND\", \"NATURE\"]}, {\"w\": \"BRIDGE\", \"tags\": [\"LAND\", \"TOOL\", \"WATER\"]}, {\"w\": \"CASTLE\", \"tags\": [\"ROYAL\", \"LAND\", \"SPELL\"]}, {\"w\": \"TOWER\", \"tags\": [\"ROYAL\", \"LAND\", \"TIME\"]}, {\"w\": \"TEMPLE\", \"tags\": [\"ROYAL\", \"SPELL\", \"TIME\"]}, {\"w\": \"DRAGON\", \"tags\": [\"SPELL\", \"ANIMAL\", \"FIRE\"]}, {\"w\": \"EAGLE\", \"tags\": [\"ANIMAL\", \"SKY\", \"WILD\"]}, {\"w\": \"HORSE\", \"tags\": [\"ANIMAL\", \"FARM\", \"SPORT\"]}, {\"w\": \"TIGER\", \"tags\": [\"ANIMAL\", \"WILD\", \"LAND\"]}, {\"w\": \"WHALE\", \"tags\": [\"ANIMAL\", \"WATER\", \"SEA\"]}, {\"w\": \"SHARK\", \"tags\": [\"ANIMAL\", \"WATER\", \"SEA\"]}, {\"w\": \"SNAKE\", \"tags\": [\"ANIMAL\", \"WILD\", \"LAND\"]}, {\"w\": \"SPIDER\", \"tags\": [\"ANIMAL\", \"WILD\", \"DARK\"]}, {\"w\": \"ROBOT\", \"tags\": [\"TOOL\", \"METAL\", \"FUTURE\"]}, {\"w\": \"ROCKET\", \"tags\": [\"TOOL\", \"SKY\", \"METAL\"]}, {\"w\": \"PLANET\", \"tags\": [\"SKY\", \"SPACE\", \"TIME\"]}, {\"w\": \"COMET\", \"tags\": [\"SKY\", \"SPACE\", \"LIGHT\"]}, {\"w\": \"GUITAR\", \"tags\": [\"MUSIC\", \"TOOL\", \"ART\"]}, {\"w\": \"PIANO\", \"tags\": [\"MUSIC\", \"ART\", \"HOME\"]}, {\"w\": \"DRUM\", \"tags\": [\"MUSIC\", \"SPORT\", \"ART\"]}, {\"w\": \"VIOLIN\", \"tags\": [\"MUSIC\", \"ART\", \"TIME\"]}, {\"w\": \"CIRCUS\", \"tags\": [\"ART\", \"SPELL\", \"SPORT\"]}, {\"w\": \"WIZARD\", \"tags\": [\"SPELL\", \"ART\", \"DARK\"]}, {\"w\": \"GHOST\", \"tags\": [\"SPELL\", \"DARK\", \"TIME\"]}, {\"w\": \"PIRATE\", \"tags\": [\"SEA\", \"WATER\", \"DARK\"]}, {\"w\": \"KNIGHT\", \"tags\": [\"ROYAL\", \"WAR\", \"METAL\"]}, {\"w\": \"QUEEN\", \"tags\": [\"ROYAL\", \"WAR\", \"TIME\"]}, {\"w\": \"KING\", \"tags\": [\"ROYAL\", \"WAR\", \"TIME\"]}, {\"w\": \"CROWN\", \"tags\": [\"ROYAL\", \"METAL\", \"TIME\"]}, {\"w\": \"SWORD\", \"tags\": [\"WAR\", \"METAL\", \"TOOL\"]}, {\"w\": \"SHIELD\", \"tags\": [\"WAR\", \"METAL\", \"TOOL\"]}, {\"w\": \"ANCHOR\", \"tags\": [\"SEA\", \"WATER\", \"METAL\"]}, {\"w\": \"COMPASS\", \"tags\": [\"TOOL\", \"SEA\", \"TIME\"]}, {\"w\": \"MAP\", \"tags\": [\"TOOL\", \"LAND\", \"TIME\"]}, {\"w\": \"KEY\", \"tags\": [\"TOOL\", \"HOME\", \"METAL\"]}, {\"w\": \"LOCK\", \"tags\": [\"TOOL\", \"HOME\", \"METAL\"]}, {\"w\": \"CANDLE\", \"tags\": [\"LIGHT\", \"HOME\", \"TIME\"]}, {\"w\": \"MIRROR\", \"tags\": [\"LIGHT\", \"HOME\", \"SPELL\"]}, {\"w\": \"CLOCK\", \"tags\": [\"TIME\", \"TOOL\", \"HOME\"]}, {\"w\": \"BOOK\", \"tags\": [\"ART\", \"TIME\", \"HOME\"]}, {\"w\": \"PEN\", \"tags\": [\"TOOL\", \"ART\", \"HOME\"]}, {\"w\": \"PAPER\", \"tags\": [\"TOOL\", \"ART\", \"HOME\"]}, {\"w\": \"SCISSORS\", \"tags\": [\"TOOL\", \"METAL\", \"HOME\"]}, {\"w\": \"BOTTLE\", \"tags\": [\"DRINK\", \"HOME\", \"TOOL\"]}, {\"w\": \"GLASS\", \"tags\": [\"DRINK\", \"HOME\", \"LIGHT\"]}, {\"w\": \"TABLE\", \"tags\": [\"HOME\", \"TOOL\", \"FOOD\"]}, {\"w\": \"CHAIR\", \"tags\": [\"HOME\", \"TOOL\", \"TIME\"]}, {\"w\": \"WINDOW\", \"tags\": [\"HOME\", \"LIGHT\", \"TIME\"]}, {\"w\": \"DOOR\", \"tags\": [\"HOME\", \"TOOL\", \"TIME\"]}, {\"w\": \"GARDEN\", \"tags\": [\"PLANT\", \"HOME\", \"NATURE\"]}, {\"w\": \"FLOWER\", \"tags\": [\"PLANT\", \"NATURE\", \"SWEET\"]}, {\"w\": \"TREE\", \"tags\": [\"PLANT\", \"NATURE\", \"LAND\"]}, {\"w\": \"LEAF\", \"tags\": [\"PLANT\", \"NATURE\", \"TIME\"]}, {\"w\": \"STONE\", \"tags\": [\"LAND\", \"NATURE\", \"TOOL\"]}, {\"w\": \"GOLD\", \"tags\": [\"METAL\", \"ROYAL\", \"TIME\"]}, {\"w\": \"SILVER\", \"tags\": [\"METAL\", \"ROYAL\", \"LIGHT\"]}, {\"w\": \"DIAMOND\", \"tags\": [\"METAL\", \"ROYAL\", \"LIGHT\"]}, {\"w\": \"PEARL\", \"tags\": [\"SEA\", \"WATER\", \"ROYAL\"]}, {\"w\": \"THUNDER\", \"tags\": [\"SKY\", \"NATURE\", \"LIGHT\"]}, {\"w\": \"LIGHTNING\", \"tags\": [\"SKY\", \"NATURE\", \"LIGHT\"]}, {\"w\": \"RAINBOW\", \"tags\": [\"SKY\", \"NATURE\", \"LIGHT\"]}, {\"w\": \"SNOW\", \"tags\": [\"COLD\", \"NATURE\", \"WATER\"]}, {\"w\": \"MOON\", \"tags\": [\"SKY\", \"SPACE\", \"TIME\"]}, {\"w\": \"STAR\", \"tags\": [\"SKY\", \"SPACE\", \"LIGHT\"]}, {\"w\": \"SUN\", \"tags\": [\"SKY\", \"SPACE\", \"HEAT\"]}];\nvar RED = 0, BLUE = 1;\n\nfunction hashStr(s) {\n  var h = 2166136261 >>> 0;\n  for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }\n  return h >>> 0;\n}\nfunction rngFrom(seed) {\n  var a = seed >>> 0;\n  return function () {\n    a |= 0; a = (a + 0x6D2B79F5) | 0;\n    var t = Math.imul(a ^ (a >>> 15), 1 | a);\n    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;\n  };\n}\nfunction shuffle(arr, rand) {\n  for (var i = arr.length - 1; i > 0; i--) {\n    var j = Math.floor(rand() * (i + 1));\n    var t = arr[i]; arr[i] = arr[j]; arr[j] = t;\n  }\n  return arr;\n}\nfunction teamOf(seat, n) { return seat < Math.floor(n / 2) ? RED : BLUE; }\nfunction spySeat(team, n) { return team === RED ? 0 : Math.floor(n / 2); }\nfunction operatives(team, n) {\n  var half = Math.floor(n / 2), out = [];\n  var start = team === RED ? 1 : half + 1, end = team === RED ? half : n;\n  for (var s = start; s < end; s++) out.push(s);\n  return out;\n}\nfunction currentSeat(state, n) {\n  return state.phase === \"clue\" ? spySeat(state.team, n) : state.guesser;\n}\nfunction norm(w) {\n  var s = String(w).toLowerCase();\n  if (s.length > 3 && s.charAt(s.length - 1) === \"s\") s = s.slice(0, -1);\n  return s;\n}\nfunction tagsOf(word) {\n  for (var i = 0; i < WORDS.length; i++) if (WORDS[i].w === word) return WORDS[i].tags;\n  return [];\n}\nfunction clone(o) { return JSON.parse(JSON.stringify(o)); }\n\nfunction endPayouts(state, ctx) {\n  if (!ctx.pot) return {};\n  var humans = ctx.players.filter(function (p) { return p.kind === \"human\" && p.active !== false; });\n  if (!humans.length) return {};\n  var winners = humans.filter(function (p) {\n    return teamOf(ctx.players.findIndex(function (q) { return q.id === p.id; }), ctx.players.length) === state.winner;\n  });\n  var recipients = winners.length ? winners : humans;\n  var share = Math.floor(ctx.pot / recipients.length);\n  var rem = ctx.pot - share * recipients.length;\n  var out = {};\n  recipients.forEach(function (p, i) { out[p.id] = share + (i === 0 ? rem : 0); });\n  return out;\n}\nfunction finish(state, winnerTeam) { state.over = true; state.winner = winnerTeam; }\nfunction endTurn(state, n) {\n  state.team = 1 - state.team;\n  state.phase = \"clue\";\n  state.clue_word = null; state.clue_number = null;\n  state.guesses_left = 0; state.guesses_unlimited = false;\n  state.guesser = spySeat(state.team, n);\n}\nfunction advanceGuesser(state, n) {\n  var ops = operatives(state.team, n);\n  var idx = ops.indexOf(state.guesser);\n  var next = ops[(idx + 1) % ops.length];\n  state.next_guesser[state.team] = next;\n  state.guesser = next;\n}\nfunction legalMoves(state) {\n  if (state.over || state.phase !== \"guess\") return [];\n  var out = [];\n  for (var i = 0; i < 25; i++) if (!state.revealed[i]) out.push({ type: \"guess\", word: state.words[i] });\n  out.push({ type: \"pass\" });\n  return out;\n}\n\nvar game = {\n  newMatch: function (ctx) {\n    var n = ctx.players.length;\n    // The platform strips the seed from ctx before calling (the seed drives\n    // ctx.random instead), so a board hashed from the seed came out\n    // different on the server than in the unit-test case — and identical\n    // for every match of the same players+pot. Draw the board seed from\n    // ctx.random(): same match seed -> same board, fresh seed -> fresh board.\n    var rand = rngFrom(Math.floor(ctx.random() * 4294967296));\n    var words = shuffle(WORDS.map(function (e) { return e.w; }), rand).slice(0, 25);\n    var key = shuffle([\"R\",\"R\",\"R\",\"R\",\"R\",\"R\",\"R\",\"R\",\"R\",\"B\",\"B\",\"B\",\"B\",\"B\",\"B\",\"B\",\"B\",\"N\",\"N\",\"N\",\"N\",\"N\",\"N\",\"N\",\"A\"], rand);\n    var half = Math.floor(n / 2);\n    var state = {\n      words: words, key: key,\n      revealed: [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],\n      phase: \"clue\", team: RED, guesser: 0,\n      next_guesser: [1, half + 1],\n      clue_word: null, clue_number: null, guesses_left: 0, guesses_unlimited: false,\n      red_left: 9, blue_left: 8, winner: null, over: false, history: [], last_move: null\n    };\n    return { state: state, turn: [ctx.players[0].id] };\n  },\n\n  applyMove: function (state, playerId, move, ctx) {\n    var n = ctx.players.length;\n    if (state.over) throw new InvalidMove(\"the game is over\");\n    var seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (seat < 0 || seat !== currentSeat(state, n)) throw new InvalidMove(\"not your turn\");\n    if (!move || typeof move !== \"object\" || Array.isArray(move) || typeof move.type !== \"string\" ||\n        [\"clue\", \"guess\", \"pass\"].indexOf(move.type) < 0) {\n      throw new InvalidMove(\"send a clue, guess or pass move\");\n    }\n    var s = clone(state);\n    var teamLetter = s.team === RED ? \"R\" : \"B\";\n    var oppLetter = s.team === RED ? \"B\" : \"R\";\n    if (move.type === \"clue\") {\n      if (s.phase !== \"clue\") throw new InvalidMove(\"it is not the clue phase\");\n      if (typeof move.word !== \"string\" || !/^[A-Za-z]+$/.test(move.word.trim())) {\n        throw new InvalidMove(\"clue word must be one word of letters only\");\n      }\n      if (!Number.isInteger(move.number) || move.number < 0 || move.number > 9) {\n        throw new InvalidMove(\"clue number must be 0 to 9\");\n      }\n      var cw = move.word.trim().toUpperCase();\n      for (var i = 0; i < 25; i++) {\n        if (!s.revealed[i] && norm(cw) === norm(s.words[i])) {\n          throw new InvalidMove(\"clue word must not match a board word\");\n        }\n      }\n      s.clue_word = cw; s.clue_number = move.number;\n      s.guesses_unlimited = move.number === 0;\n      s.guesses_left = move.number === 0 ? -1 : move.number + 1;\n      s.phase = \"guess\";\n      s.guesser = s.next_guesser[s.team];\n      s.history.push({ kind: \"clue\", team: s.team, word: cw, number: move.number, result: null });\n      s.last_move = { kind: \"clue\", word: cw, number: move.number };\n      return { state: s, turn: [ctx.players[s.guesser].id] };\n    }\n    if (move.type === \"pass\") {\n      if (s.phase !== \"guess\") throw new InvalidMove(\"it is not the guess phase\");\n      s.history.push({ kind: \"pass\", team: s.team, word: null, number: null, result: null });\n      s.last_move = { kind: \"pass\" };\n      advanceGuesser(s, n);\n      endTurn(s, n);\n      return { state: s, turn: [ctx.players[currentSeat(s, n)].id] };\n    }\n    // guess\n    if (s.phase !== \"guess\") throw new InvalidMove(\"it is not the guess phase\");\n    if (typeof move.word !== \"string\") throw new InvalidMove(\"send a clue, guess or pass move\");\n    var gw = move.word.trim().toUpperCase();\n    var idx = -1;\n    for (var j = 0; j < 25; j++) if (s.words[j] === gw) { idx = j; break; }\n    if (idx < 0) throw new InvalidMove(\"that word is not on the board\");\n    if (s.revealed[idx]) throw new InvalidMove(\"that word is already revealed\");\n    s.revealed[idx] = true;\n    s.last_move = { kind: \"reveal\", card_index: idx };\n    var k = s.key[idx];\n    if (k === teamLetter) {\n      if (s.team === RED) s.red_left--; else s.blue_left--;\n      s.history.push({ kind: \"guess\", team: s.team, word: gw, number: null, result: \"own\" });\n      var left = s.team === RED ? s.red_left : s.blue_left;\n      if (left === 0) {\n        finish(s, s.team);\n        return { state: s, turn: null, payouts: endPayouts(s, ctx) };\n      }\n      if (!s.guesses_unlimited) s.guesses_left--;\n      advanceGuesser(s, n);\n      if (!s.guesses_unlimited && s.guesses_left === 0) {\n        endTurn(s, n);\n        return { state: s, turn: [ctx.players[currentSeat(s, n)].id] };\n      }\n      return { state: s, turn: [ctx.players[s.guesser].id] };\n    }\n    if (k === oppLetter) {\n      if (s.team === RED) s.blue_left--; else s.red_left--;\n      s.history.push({ kind: \"guess\", team: s.team, word: gw, number: null, result: \"opponent\" });\n      var oppLeft = s.team === RED ? s.blue_left : s.red_left;\n      if (oppLeft === 0) {\n        finish(s, 1 - s.team);\n        return { state: s, turn: null, payouts: endPayouts(s, ctx) };\n      }\n      advanceGuesser(s, n);\n      endTurn(s, n);\n      return { state: s, turn: [ctx.players[currentSeat(s, n)].id] };\n    }\n    if (k === \"A\") {\n      s.history.push({ kind: \"guess\", team: s.team, word: gw, number: null, result: \"assassin\" });\n      finish(s, 1 - s.team);\n      return { state: s, turn: null, payouts: endPayouts(s, ctx) };\n    }\n    s.history.push({ kind: \"guess\", team: s.team, word: gw, number: null, result: \"bystander\" });\n    advanceGuesser(s, n);\n    endTurn(s, n);\n    return { state: s, turn: [ctx.players[currentSeat(s, n)].id] };\n  },\n\n  computerMove: function (state, playerId, ctx) {\n    var n = ctx.players.length;\n    var seat = ctx.players.findIndex(function (p) { return p.id === playerId; });\n    if (state.over) return { type: \"pass\" };\n    var teamLetter = state.team === RED ? \"R\" : \"B\";\n    if (state.phase === \"clue\") {\n      var counts = {}, order = [];\n      for (var i = 0; i < 25; i++) {\n        if (state.revealed[i] || state.key[i] !== teamLetter) continue;\n        var tags = tagsOf(state.words[i]);\n        for (var t = 0; t < tags.length; t++) {\n          if (!(tags[t] in counts)) { counts[tags[t]] = 0; order.push(tags[t]); }\n          counts[tags[t]]++;\n        }\n      }\n      var best = null, bestCount = 0;\n      for (var o = 0; o < order.length; o++) {\n        if (counts[order[o]] > bestCount) { bestCount = counts[order[o]]; best = order[o]; }\n      }\n      if (!best) return { type: \"clue\", word: \"HINT\", number: 1 };\n      return { type: \"clue\", word: best, number: Math.min(bestCount, 3) };\n    }\n    var clue = state.clue_word || \"\";\n    for (var j = 0; j < 25; j++) {\n      if (state.revealed[j]) continue;\n      if (tagsOf(state.words[j]).indexOf(clue) >= 0) return { type: \"guess\", word: state.words[j] };\n    }\n    for (var m = 0; m < 25; m++) if (!state.revealed[m]) return { type: \"guess\", word: state.words[m] };\n    return { type: \"pass\" };\n  },\n\n  randomMove: function (state, playerId, ctx) {\n    if (state.over) return { type: \"pass\" };\n    var teamLetter = state.team === RED ? \"R\" : \"B\";\n    if (state.phase === \"clue\") {\n      var own = [];\n      for (var i = 0; i < 25; i++) if (!state.revealed[i] && state.key[i] === teamLetter) own.push(i);\n      if (!own.length) return { type: \"clue\", word: \"HINT\", number: 1 };\n      var pick = own[Math.floor(ctx.random() * own.length)];\n      var tags = tagsOf(state.words[pick]);\n      return { type: \"clue\", word: tags.length ? tags[0] : \"HINT\", number: 1 + Math.floor(ctx.random() * 3) };\n    }\n    if (ctx.random() < 0.1) return { type: \"pass\" };\n    var open = [];\n    for (var j = 0; j < 25; j++) if (!state.revealed[j]) open.push(j);\n    if (!open.length) return { type: \"pass\" };\n    return { type: \"guess\", word: state.words[open[Math.floor(ctx.random() * open.length)]] };\n  },\n\n  viewFor: function (state, playerId, ctx) {\n    var n = ctx.players.length;\n    var seat = playerId == null ? -1 : ctx.players.findIndex(function (p) { return p.id === playerId; });\n    var isSpy = seat === 0 || seat === Math.floor(n / 2);\n    var myTeam = seat < 0 ? null : teamOf(seat, n);\n    var myRole = seat < 0 ? \"spectator\" : (isSpy ? \"spymaster\" : \"operative\");\n    var colors = [];\n    for (var i = 0; i < 25; i++) {\n      colors.push(state.revealed[i] ? state.key[i] : (isSpy ? state.key[i] : \"\"));\n    }\n    var legal = [];\n    if (!state.over && seat === currentSeat(state, n)) legal = legalMoves(state);\n    return {\n      words: state.words, revealed: state.revealed, colors: colors,\n      phase: state.phase, team: state.team, turn_seat: currentSeat(state, n),\n      guesser: state.guesser, clue_word: state.clue_word, clue_number: state.clue_number,\n      guesses_left: state.guesses_left, guesses_unlimited: state.guesses_unlimited,\n      red_left: state.red_left, blue_left: state.blue_left,\n      winner: state.winner, over: state.over, history: state.history,\n      last_move: state.last_move ? clone(state.last_move) : null,\n      my_team: myTeam, my_role: myRole, is_spymaster: isSpy, legal: legal\n    };\n  }\n};\n",
  "declarative_ui": {
   "format": "buildplay-ui",
   "version": 1,
@@ -175,7 +175,8 @@
     "blue_left",
     "winner",
     "over",
-    "history"
+    "history",
+    "last_move"
    ],
    "additionalProperties": false,
    "properties": {
@@ -334,6 +335,39 @@
        }
       }
      }
+    },
+    "last_move": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "clue",
+        "reveal",
+        "pass"
+       ]
+      },
+      "card_index": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "word": {
+       "type": "string"
+      },
+      "number": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 9
+      }
+     },
+     "required": [
+      "kind"
+     ]
     }
    }
   },
@@ -359,7 +393,8 @@
     "my_team",
     "my_role",
     "is_spymaster",
-    "legal"
+    "legal",
+    "last_move"
    ],
    "additionalProperties": false,
    "properties": {
@@ -564,6 +599,39 @@
        }
       }
      }
+    },
+    "last_move": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "clue",
+        "reveal",
+        "pass"
+       ]
+      },
+      "card_index": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "word": {
+       "type": "string"
+      },
+      "number": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 9
+      }
+     },
+     "required": [
+      "kind"
+     ]
     }
    }
   },
@@ -736,7 +804,8 @@
      "blue_left": 8,
      "winner": null,
      "over": false,
-     "history": []
+     "history": [],
+     "last_move": null
     },
     "view_of_mover": {
      "words": [
@@ -836,7 +905,8 @@
      "my_team": 0,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "view_of_other": {
      "words": [
@@ -936,7 +1006,8 @@
      "my_team": 0,
      "my_role": "operative",
      "is_spymaster": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1050,7 +1121,12 @@
        "number": 2,
        "result": null
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 2
+     }
     },
     "expected_turn": [
      "u2"
@@ -1161,7 +1237,12 @@
      "my_team": 0,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 2
+     }
     },
     "expected_view_of_other": {
      "words": [
@@ -1373,7 +1454,12 @@
       {
        "type": "pass"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 2
+     }
     },
     "images": [
      {
@@ -1542,7 +1628,12 @@
        "number": 2,
        "result": null
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 2
+     }
     },
     "view_of_mover": {
      "words": [
@@ -1750,7 +1841,12 @@
       {
        "type": "pass"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 2
+     }
     },
     "view_of_other": {
      "words": [
@@ -1858,7 +1954,12 @@
      "my_team": null,
      "my_role": "spectator",
      "is_spymaster": false,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 2
+     }
     },
     "player_id": "u2",
     "other_player_id": null,
@@ -1978,7 +2079,11 @@
        "number": null,
        "result": "own"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 5
+     }
     },
     "expected_turn": [
      "u2"
@@ -2192,7 +2297,11 @@
       {
        "type": "pass"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 5
+     }
     },
     "expected_view_of_other": {
      "words": [
@@ -2307,7 +2416,11 @@
      "my_team": null,
      "my_role": "spectator",
      "is_spymaster": false,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 5
+     }
     },
     "images": [
      {
@@ -2492,7 +2605,12 @@
        "number": 1,
        "result": null
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 1
+     }
     },
     "view_of_mover": {
      "words": [
@@ -2700,7 +2818,12 @@
       {
        "type": "pass"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 1
+     }
     },
     "view_of_other": {
      "words": [
@@ -2808,7 +2931,12 @@
      "my_team": 1,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 1
+     }
     },
     "player_id": "u3",
     "other_player_id": "u4",
@@ -2928,7 +3056,11 @@
        "number": null,
        "result": "opponent"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 1
+     }
     },
     "expected_turn": [
      "u4"
@@ -3046,7 +3178,11 @@
      "my_team": 0,
      "my_role": "operative",
      "is_spymaster": false,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 1
+     }
     },
     "expected_view_of_other": {
      "words": [
@@ -3161,7 +3297,11 @@
      "my_team": 1,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 1
+     }
     },
     "images": [
      {
@@ -3322,7 +3462,8 @@
      "blue_left": 8,
      "winner": null,
      "over": false,
-     "history": []
+     "history": [],
+     "last_move": null
     },
     "view_of_mover": {
      "words": [
@@ -3422,7 +3563,8 @@
      "my_team": 0,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "view_of_other": {
      "words": [
@@ -3522,7 +3664,8 @@
      "my_team": 0,
      "my_role": "operative",
      "is_spymaster": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -3629,7 +3772,8 @@
      "blue_left": 8,
      "winner": null,
      "over": false,
-     "history": []
+     "history": [],
+     "last_move": null
     },
     "turn": [
      "u1"
@@ -3735,7 +3879,8 @@
      "my_team": 0,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "expected_view_of_other": {
      "words": [
@@ -3835,7 +3980,8 @@
      "my_team": 0,
      "my_role": "operative",
      "is_spymaster": false,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "images": [
      {
@@ -4036,7 +4182,12 @@
        "number": 1,
        "result": null
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "WATER",
+      "number": 1
+     }
     },
     "view_of_mover": {
      "words": [
@@ -4240,7 +4391,12 @@
       {
        "type": "pass"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "WATER",
+      "number": 1
+     }
     },
     "view_of_other": {
      "words": [
@@ -4348,7 +4504,12 @@
      "my_team": 0,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "clue",
+      "word": "WATER",
+      "number": 1
+     }
     },
     "player_id": "u6",
     "other_player_id": "u1",
@@ -4468,7 +4629,11 @@
        "number": null,
        "result": "assassin"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 24
+     }
     },
     "expected_turn": null,
     "expected_payouts": {
@@ -4590,7 +4755,11 @@
      "my_team": 1,
      "my_role": "operative",
      "is_spymaster": false,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 24
+     }
     },
     "expected_view_of_other": {
      "words": [
@@ -4705,7 +4874,11 @@
      "my_team": 0,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 24
+     }
     },
     "images": [
      {
@@ -4874,7 +5047,12 @@
        "number": 1,
        "result": null
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 1
+     }
     },
     "view_of_mover": {
      "words": [
@@ -5054,7 +5232,12 @@
       {
        "type": "pass"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 1
+     }
     },
     "view_of_other": {
      "words": [
@@ -5162,7 +5345,12 @@
      "my_team": 1,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 1
+     }
     },
     "player_id": "u2",
     "other_player_id": "u3",
@@ -5282,7 +5470,11 @@
        "number": null,
        "result": "own"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 22
+     }
     },
     "expected_turn": null,
     "expected_payouts": {
@@ -5402,7 +5594,11 @@
      "my_team": 0,
      "my_role": "operative",
      "is_spymaster": false,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 22
+     }
     },
     "expected_view_of_other": {
      "words": [
@@ -5517,7 +5713,11 @@
      "my_team": 1,
      "my_role": "spymaster",
      "is_spymaster": true,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "reveal",
+      "card_index": 22
+     }
     },
     "images": [
      {
@@ -5535,6 +5735,867 @@
      {
       "caption": "After: spectator",
       "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"20\" y=\"34\" fill=\"#ffffff\" font-size=\"22\" font-family=\"sans-serif\">Codenames</text><text x=\"20\" y=\"58\" fill=\"#c9d4e3\" font-size=\"14\" font-family=\"sans-serif\">Last word wins the game</text><rect x=\"20\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"53\" y=\"105\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">APPLE</text><rect x=\"92\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#2471a3\"/><text x=\"125\" y=\"105\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">OCEAN</text><rect x=\"164\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"197\" y=\"105\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">DRAGON</text><rect x=\"236\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#d4c9a8\"/><text x=\"269\" y=\"105\" fill=\"#5d4a1f\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GUITAR</text><rect x=\"308\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#2471a3\"/><text x=\"341\" y=\"105\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CASTLE</text><rect x=\"20\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"53\" y=\"167\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">WHALE</text><rect x=\"92\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#2471a3\"/><text x=\"125\" y=\"167\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROBOT</text><rect x=\"164\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"197\" y=\"167\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIRATE</text><rect x=\"236\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#d4c9a8\"/><text x=\"269\" y=\"167\" fill=\"#5d4a1f\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MOON</text><rect x=\"308\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#2471a3\"/><text x=\"341\" y=\"167\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SWORD</text><rect x=\"20\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"53\" y=\"229\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BREAD</text><rect x=\"92\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#d4c9a8\"/><text x=\"125\" y=\"229\" fill=\"#5d4a1f\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TIGER</text><rect x=\"164\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#2471a3\"/><text x=\"197\" y=\"229\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROCKET</text><rect x=\"236\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"269\" y=\"229\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CROWN</text><rect x=\"308\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#d4c9a8\"/><text x=\"341\" y=\"229\" fill=\"#5d4a1f\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">FOREST</text><rect x=\"20\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#2471a3\"/><text x=\"53\" y=\"291\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SNAKE</text><rect x=\"92\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"125\" y=\"291\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIANO</text><rect x=\"164\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#d4c9a8\"/><text x=\"197\" y=\"291\" fill=\"#5d4a1f\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TEMPLE</text><rect x=\"236\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#2471a3\"/><text x=\"269\" y=\"291\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">EAGLE</text><rect x=\"308\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"341\" y=\"291\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GOLD</text><rect x=\"20\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#d4c9a8\"/><text x=\"53\" y=\"353\" fill=\"#5d4a1f\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GHOST</text><rect x=\"92\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#2471a3\"/><text x=\"125\" y=\"353\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BRIDGE</text><rect x=\"164\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"197\" y=\"353\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MAP</text><rect x=\"236\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#d4c9a8\"/><text x=\"269\" y=\"353\" fill=\"#5d4a1f\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CLOCK</text><rect x=\"308\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#1a1a1a\"/><text x=\"341\" y=\"353\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">STAR</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Pass ends the turn",
+    "description": "Red operative passes after the FRUIT 2 clue; no card is revealed, the turn passes to the Blue spymaster, and last_move is replaced by a bare pass record with no card data.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u3",
+       "kind": "human",
+       "display_name": "Carol",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u4",
+       "kind": "human",
+       "display_name": "Dave",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 3,
+     "seed": 11
+    },
+    "state": {
+     "words": [
+      "APPLE",
+      "OCEAN",
+      "DRAGON",
+      "GUITAR",
+      "CASTLE",
+      "WHALE",
+      "ROBOT",
+      "PIRATE",
+      "MOON",
+      "SWORD",
+      "BREAD",
+      "TIGER",
+      "ROCKET",
+      "CROWN",
+      "FOREST",
+      "SNAKE",
+      "PIANO",
+      "TEMPLE",
+      "EAGLE",
+      "GOLD",
+      "GHOST",
+      "BRIDGE",
+      "MAP",
+      "CLOCK",
+      "STAR"
+     ],
+     "key": [
+      "R",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "A"
+     ],
+     "revealed": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "phase": "guess",
+     "team": 0,
+     "guesser": 1,
+     "next_guesser": [
+      1,
+      3
+     ],
+     "clue_word": "FRUIT",
+     "clue_number": 2,
+     "guesses_left": 2,
+     "guesses_unlimited": false,
+     "red_left": 8,
+     "blue_left": 8,
+     "winner": null,
+     "over": false,
+     "history": [
+      {
+       "kind": "clue",
+       "team": 0,
+       "word": "FRUIT",
+       "number": 2,
+       "result": null
+      }
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 2
+     }
+    },
+    "view_of_mover": {
+     "words": [
+      "APPLE",
+      "OCEAN",
+      "DRAGON",
+      "GUITAR",
+      "CASTLE",
+      "WHALE",
+      "ROBOT",
+      "PIRATE",
+      "MOON",
+      "SWORD",
+      "BREAD",
+      "TIGER",
+      "ROCKET",
+      "CROWN",
+      "FOREST",
+      "SNAKE",
+      "PIANO",
+      "TEMPLE",
+      "EAGLE",
+      "GOLD",
+      "GHOST",
+      "BRIDGE",
+      "MAP",
+      "CLOCK",
+      "STAR"
+     ],
+     "revealed": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "colors": [
+      "R",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "phase": "guess",
+     "team": 0,
+     "turn_seat": 1,
+     "guesser": 1,
+     "clue_word": "FRUIT",
+     "clue_number": 2,
+     "guesses_left": 2,
+     "guesses_unlimited": false,
+     "red_left": 8,
+     "blue_left": 8,
+     "winner": null,
+     "over": false,
+     "history": [
+      {
+       "kind": "clue",
+       "team": 0,
+       "word": "FRUIT",
+       "number": 2,
+       "result": null
+      }
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 2
+     },
+     "my_team": 0,
+     "my_role": "operative",
+     "is_spymaster": false,
+     "legal": [
+      {
+       "type": "guess",
+       "word": "OCEAN"
+      },
+      {
+       "type": "guess",
+       "word": "DRAGON"
+      },
+      {
+       "type": "guess",
+       "word": "GUITAR"
+      },
+      {
+       "type": "guess",
+       "word": "CASTLE"
+      },
+      {
+       "type": "guess",
+       "word": "WHALE"
+      },
+      {
+       "type": "guess",
+       "word": "ROBOT"
+      },
+      {
+       "type": "guess",
+       "word": "PIRATE"
+      },
+      {
+       "type": "guess",
+       "word": "MOON"
+      },
+      {
+       "type": "guess",
+       "word": "SWORD"
+      },
+      {
+       "type": "guess",
+       "word": "BREAD"
+      },
+      {
+       "type": "guess",
+       "word": "TIGER"
+      },
+      {
+       "type": "guess",
+       "word": "ROCKET"
+      },
+      {
+       "type": "guess",
+       "word": "CROWN"
+      },
+      {
+       "type": "guess",
+       "word": "FOREST"
+      },
+      {
+       "type": "guess",
+       "word": "SNAKE"
+      },
+      {
+       "type": "guess",
+       "word": "PIANO"
+      },
+      {
+       "type": "guess",
+       "word": "TEMPLE"
+      },
+      {
+       "type": "guess",
+       "word": "EAGLE"
+      },
+      {
+       "type": "guess",
+       "word": "GOLD"
+      },
+      {
+       "type": "guess",
+       "word": "GHOST"
+      },
+      {
+       "type": "guess",
+       "word": "BRIDGE"
+      },
+      {
+       "type": "guess",
+       "word": "MAP"
+      },
+      {
+       "type": "guess",
+       "word": "CLOCK"
+      },
+      {
+       "type": "guess",
+       "word": "STAR"
+      },
+      {
+       "type": "pass"
+      }
+     ]
+    },
+    "view_of_other": {
+     "words": [
+      "APPLE",
+      "OCEAN",
+      "DRAGON",
+      "GUITAR",
+      "CASTLE",
+      "WHALE",
+      "ROBOT",
+      "PIRATE",
+      "MOON",
+      "SWORD",
+      "BREAD",
+      "TIGER",
+      "ROCKET",
+      "CROWN",
+      "FOREST",
+      "SNAKE",
+      "PIANO",
+      "TEMPLE",
+      "EAGLE",
+      "GOLD",
+      "GHOST",
+      "BRIDGE",
+      "MAP",
+      "CLOCK",
+      "STAR"
+     ],
+     "revealed": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "colors": [
+      "R",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "phase": "guess",
+     "team": 0,
+     "turn_seat": 1,
+     "guesser": 1,
+     "clue_word": "FRUIT",
+     "clue_number": 2,
+     "guesses_left": 2,
+     "guesses_unlimited": false,
+     "red_left": 8,
+     "blue_left": 8,
+     "winner": null,
+     "over": false,
+     "history": [
+      {
+       "kind": "clue",
+       "team": 0,
+       "word": "FRUIT",
+       "number": 2,
+       "result": null
+      }
+     ],
+     "last_move": {
+      "kind": "clue",
+      "word": "FRUIT",
+      "number": 2
+     },
+     "my_team": null,
+     "my_role": "spectator",
+     "is_spymaster": false,
+     "legal": []
+    },
+    "player_id": "u2",
+    "other_player_id": null,
+    "move": {
+     "type": "pass"
+    },
+    "expected_state": {
+     "words": [
+      "APPLE",
+      "OCEAN",
+      "DRAGON",
+      "GUITAR",
+      "CASTLE",
+      "WHALE",
+      "ROBOT",
+      "PIRATE",
+      "MOON",
+      "SWORD",
+      "BREAD",
+      "TIGER",
+      "ROCKET",
+      "CROWN",
+      "FOREST",
+      "SNAKE",
+      "PIANO",
+      "TEMPLE",
+      "EAGLE",
+      "GOLD",
+      "GHOST",
+      "BRIDGE",
+      "MAP",
+      "CLOCK",
+      "STAR"
+     ],
+     "key": [
+      "R",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "B",
+      "R",
+      "N",
+      "A"
+     ],
+     "revealed": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "phase": "clue",
+     "team": 1,
+     "guesser": 2,
+     "next_guesser": [
+      1,
+      3
+     ],
+     "clue_word": null,
+     "clue_number": null,
+     "guesses_left": 0,
+     "guesses_unlimited": false,
+     "red_left": 8,
+     "blue_left": 8,
+     "winner": null,
+     "over": false,
+     "history": [
+      {
+       "kind": "clue",
+       "team": 0,
+       "word": "FRUIT",
+       "number": 2,
+       "result": null
+      },
+      {
+       "kind": "pass",
+       "team": 0,
+       "word": null,
+       "number": null,
+       "result": null
+      }
+     ],
+     "last_move": {
+      "kind": "pass"
+     }
+    },
+    "expected_turn": [
+     "u3"
+    ],
+    "expected_view_of_mover": {
+     "words": [
+      "APPLE",
+      "OCEAN",
+      "DRAGON",
+      "GUITAR",
+      "CASTLE",
+      "WHALE",
+      "ROBOT",
+      "PIRATE",
+      "MOON",
+      "SWORD",
+      "BREAD",
+      "TIGER",
+      "ROCKET",
+      "CROWN",
+      "FOREST",
+      "SNAKE",
+      "PIANO",
+      "TEMPLE",
+      "EAGLE",
+      "GOLD",
+      "GHOST",
+      "BRIDGE",
+      "MAP",
+      "CLOCK",
+      "STAR"
+     ],
+     "revealed": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "colors": [
+      "R",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "phase": "clue",
+     "team": 1,
+     "turn_seat": 2,
+     "guesser": 2,
+     "clue_word": null,
+     "clue_number": null,
+     "guesses_left": 0,
+     "guesses_unlimited": false,
+     "red_left": 8,
+     "blue_left": 8,
+     "winner": null,
+     "over": false,
+     "history": [
+      {
+       "kind": "clue",
+       "team": 0,
+       "word": "FRUIT",
+       "number": 2,
+       "result": null
+      },
+      {
+       "kind": "pass",
+       "team": 0,
+       "word": null,
+       "number": null,
+       "result": null
+      }
+     ],
+     "last_move": {
+      "kind": "pass"
+     },
+     "my_team": 0,
+     "my_role": "operative",
+     "is_spymaster": false,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "words": [
+      "APPLE",
+      "OCEAN",
+      "DRAGON",
+      "GUITAR",
+      "CASTLE",
+      "WHALE",
+      "ROBOT",
+      "PIRATE",
+      "MOON",
+      "SWORD",
+      "BREAD",
+      "TIGER",
+      "ROCKET",
+      "CROWN",
+      "FOREST",
+      "SNAKE",
+      "PIANO",
+      "TEMPLE",
+      "EAGLE",
+      "GOLD",
+      "GHOST",
+      "BRIDGE",
+      "MAP",
+      "CLOCK",
+      "STAR"
+     ],
+     "revealed": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "colors": [
+      "R",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     "phase": "clue",
+     "team": 1,
+     "turn_seat": 2,
+     "guesser": 2,
+     "clue_word": null,
+     "clue_number": null,
+     "guesses_left": 0,
+     "guesses_unlimited": false,
+     "red_left": 8,
+     "blue_left": 8,
+     "winner": null,
+     "over": false,
+     "history": [
+      {
+       "kind": "clue",
+       "team": 0,
+       "word": "FRUIT",
+       "number": 2,
+       "result": null
+      },
+      {
+       "kind": "pass",
+       "team": 0,
+       "word": null,
+       "number": null,
+       "result": null
+      }
+     ],
+     "last_move": {
+      "kind": "pass"
+     },
+     "my_team": null,
+     "my_role": "spectator",
+     "is_spymaster": false,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"20\" y=\"34\" fill=\"#ffffff\" font-size=\"22\" font-family=\"sans-serif\">Codenames</text><text x=\"20\" y=\"58\" fill=\"#c9d4e3\" font-size=\"14\" font-family=\"sans-serif\">Pass ends the turn</text><rect x=\"20\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"53\" y=\"105\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">APPLE</text><rect x=\"92\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">OCEAN</text><rect x=\"164\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">DRAGON</text><rect x=\"236\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GUITAR</text><rect x=\"308\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CASTLE</text><rect x=\"20\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">WHALE</text><rect x=\"92\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROBOT</text><rect x=\"164\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIRATE</text><rect x=\"236\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MOON</text><rect x=\"308\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SWORD</text><rect x=\"20\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BREAD</text><rect x=\"92\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TIGER</text><rect x=\"164\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROCKET</text><rect x=\"236\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CROWN</text><rect x=\"308\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">FOREST</text><rect x=\"20\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SNAKE</text><rect x=\"92\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIANO</text><rect x=\"164\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TEMPLE</text><rect x=\"236\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">EAGLE</text><rect x=\"308\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GOLD</text><rect x=\"20\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GHOST</text><rect x=\"92\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BRIDGE</text><rect x=\"164\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MAP</text><rect x=\"236\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CLOCK</text><rect x=\"308\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">STAR</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"20\" y=\"34\" fill=\"#ffffff\" font-size=\"22\" font-family=\"sans-serif\">Codenames</text><text x=\"20\" y=\"58\" fill=\"#c9d4e3\" font-size=\"14\" font-family=\"sans-serif\">Pass ends the turn</text><rect x=\"20\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"53\" y=\"105\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">APPLE</text><rect x=\"92\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">OCEAN</text><rect x=\"164\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">DRAGON</text><rect x=\"236\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GUITAR</text><rect x=\"308\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CASTLE</text><rect x=\"20\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">WHALE</text><rect x=\"92\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROBOT</text><rect x=\"164\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIRATE</text><rect x=\"236\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MOON</text><rect x=\"308\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SWORD</text><rect x=\"20\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BREAD</text><rect x=\"92\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TIGER</text><rect x=\"164\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROCKET</text><rect x=\"236\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CROWN</text><rect x=\"308\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">FOREST</text><rect x=\"20\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SNAKE</text><rect x=\"92\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIANO</text><rect x=\"164\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TEMPLE</text><rect x=\"236\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">EAGLE</text><rect x=\"308\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GOLD</text><rect x=\"20\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GHOST</text><rect x=\"92\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BRIDGE</text><rect x=\"164\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MAP</text><rect x=\"236\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CLOCK</text><rect x=\"308\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">STAR</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"20\" y=\"34\" fill=\"#ffffff\" font-size=\"22\" font-family=\"sans-serif\">Codenames</text><text x=\"20\" y=\"58\" fill=\"#c9d4e3\" font-size=\"14\" font-family=\"sans-serif\">Pass ends the turn</text><rect x=\"20\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"53\" y=\"105\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">APPLE</text><rect x=\"92\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">OCEAN</text><rect x=\"164\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">DRAGON</text><rect x=\"236\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GUITAR</text><rect x=\"308\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CASTLE</text><rect x=\"20\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">WHALE</text><rect x=\"92\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROBOT</text><rect x=\"164\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIRATE</text><rect x=\"236\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MOON</text><rect x=\"308\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SWORD</text><rect x=\"20\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BREAD</text><rect x=\"92\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TIGER</text><rect x=\"164\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROCKET</text><rect x=\"236\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CROWN</text><rect x=\"308\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">FOREST</text><rect x=\"20\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SNAKE</text><rect x=\"92\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIANO</text><rect x=\"164\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TEMPLE</text><rect x=\"236\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">EAGLE</text><rect x=\"308\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GOLD</text><rect x=\"20\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GHOST</text><rect x=\"92\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BRIDGE</text><rect x=\"164\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MAP</text><rect x=\"236\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CLOCK</text><rect x=\"308\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">STAR</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#102039\"/><text x=\"20\" y=\"34\" fill=\"#ffffff\" font-size=\"22\" font-family=\"sans-serif\">Codenames</text><text x=\"20\" y=\"58\" fill=\"#c9d4e3\" font-size=\"14\" font-family=\"sans-serif\">Pass ends the turn</text><rect x=\"20\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#c0392b\"/><text x=\"53\" y=\"105\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">APPLE</text><rect x=\"92\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">OCEAN</text><rect x=\"164\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">DRAGON</text><rect x=\"236\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GUITAR</text><rect x=\"308\" y=\"72\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"105\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CASTLE</text><rect x=\"20\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">WHALE</text><rect x=\"92\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROBOT</text><rect x=\"164\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIRATE</text><rect x=\"236\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MOON</text><rect x=\"308\" y=\"134\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"167\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SWORD</text><rect x=\"20\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BREAD</text><rect x=\"92\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TIGER</text><rect x=\"164\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">ROCKET</text><rect x=\"236\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CROWN</text><rect x=\"308\" y=\"196\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"229\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">FOREST</text><rect x=\"20\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">SNAKE</text><rect x=\"92\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">PIANO</text><rect x=\"164\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">TEMPLE</text><rect x=\"236\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">EAGLE</text><rect x=\"308\" y=\"258\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"291\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GOLD</text><rect x=\"20\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"53\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">GHOST</text><rect x=\"92\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"125\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">BRIDGE</text><rect x=\"164\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"197\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">MAP</text><rect x=\"236\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"269\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">CLOCK</text><rect x=\"308\" y=\"320\" width=\"66\" height=\"56\" rx=\"6\" fill=\"#e8e2d0\"/><text x=\"341\" y=\"353\" fill=\"#1c2733\" font-size=\"11\" font-family=\"sans-serif\" text-anchor=\"middle\">STAR</text></svg>"
      }
     ]
    }
