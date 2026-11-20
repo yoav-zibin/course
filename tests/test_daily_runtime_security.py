@@ -22,7 +22,7 @@ def runtime(kind):
     return body, GameLogic(body.server_code, game_schemas=body.game_schemas()), ctx
 
 
-def test_battleship_setup_is_generated_privately_by_rules_not_the_presentation():
+def test_battleship_random_fleet_is_generated_privately_by_rules_not_the_presentation():
     body, logic, ctx = runtime("battleship")
     opening = logic.call("newMatch", ctx=ctx, seed=42)
     view = logic.call("viewFor", opening["state"], "p0", ctx=ctx, seed=44)
@@ -32,7 +32,7 @@ def test_battleship_setup_is_generated_privately_by_rules_not_the_presentation()
     ui = DeclarativeLogic(body.declarative_ui)
     frame = ui.reduce(message)
     control = next(item for item in frame["scene"]["controls"]
-                   if item["label"] == "Place fleet and start battle")
+                   if item["label"] == "Random fleet")
     emitted = ui.reduce({"type": "ui_event", "event": {"type": "tap", "id": control["id"]},
                          "state_changed": message}, frame.get("local_state"))["make_move"]
     assert emitted == {"type": "auto_place"}

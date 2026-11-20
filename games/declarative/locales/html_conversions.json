@@ -512,6 +512,123 @@
       "移至第 {r} 行第 {c} 列",
       "पंक्ति {r}, स्तंभ {c} पर चलें",
       "تحرك إلى الصف {r} والعمود {c}"
+    ],
+    "{ship} ({length})": [
+      "{ship} ({length} casillas)",
+      "{ship} ({length} cases)",
+      "{ship} ({length} Felder)",
+      "{ship} ({length} casas)",
+      "{ship}（{length}格）",
+      "{ship} ({length} खाने)",
+      "{ship} ({length} خانات)"
+    ],
+    "Carrier": [
+      "Portaaviones",
+      "Porte-avions",
+      "Flugzeugträger",
+      "Porta-aviões",
+      "航空母舰",
+      "विमानवाहक पोत",
+      "حاملة الطائرات"
+    ],
+    "Battleship": [
+      "Acorazado",
+      "Cuirassé",
+      "Schlachtschiff",
+      "Encouraçado",
+      "战列舰",
+      "युद्धपोत",
+      "بارجة"
+    ],
+    "Cruiser": [
+      "Crucero",
+      "Croiseur",
+      "Kreuzer",
+      "Cruzador",
+      "巡洋舰",
+      "क्रूज़र",
+      "طراد"
+    ],
+    "Submarine": [
+      "Submarino",
+      "Sous-marin",
+      "U-Boot",
+      "Submarino",
+      "潜艇",
+      "पनडुब्बी",
+      "غواصة"
+    ],
+    "Destroyer": [
+      "Destructor",
+      "Navire torpilleur",
+      "Zerstörer",
+      "Contratorpedeiro",
+      "驱逐舰",
+      "विध्वंसक",
+      "مدمرة"
+    ],
+    "Horizontal": [
+      "Orientación horizontal",
+      "Horizontale",
+      "Waagerecht",
+      "Orientação horizontal",
+      "水平",
+      "क्षैतिज दिशा",
+      "الاتجاه الأفقي"
+    ],
+    "Vertical": [
+      "Orientación vertical",
+      "Verticale",
+      "Senkrecht",
+      "Orientação vertical",
+      "垂直",
+      "ऊर्ध्वाधर दिशा",
+      "الاتجاه العمودي"
+    ],
+    "Undo last ship": [
+      "Deshacer último barco",
+      "Annuler le dernier navire",
+      "Letztes Schiff rückgängig",
+      "Desfazer último navio",
+      "撤销上一艘船",
+      "पिछला जहाज़ हटाएँ",
+      "تراجع عن السفينة الأخيرة"
+    ],
+    "Random fleet": [
+      "Flota aleatoria",
+      "Flotte aléatoire",
+      "Zufällige Flotte",
+      "Frota aleatória",
+      "随机舰队",
+      "यादृच्छिक बेड़ा",
+      "أسطول عشوائي"
+    ],
+    "Ships placed: {placed} of 5": [
+      "Barcos colocados: {placed} de 5",
+      "Navires placés : {placed} sur 5",
+      "Schiffe platziert: {placed} von 5",
+      "Navios posicionados: {placed} de 5",
+      "已放置舰船：{placed}/5",
+      "रखे गए जहाज़: {placed} में से 5",
+      "السفن الموضوعة: {placed} من 5"
+    ],
+    "Choose a ship and direction, then tap a highlighted square to place it. Ships cannot touch.": [
+      "Elige un barco y una dirección, luego toca una casilla resaltada para colocarlo. Los barcos no pueden tocarse.",
+      "Choisissez un navire et une direction, puis touchez une case en surbrillance pour le placer. Les navires ne peuvent pas se toucher.",
+      "Wähle ein Schiff und eine Richtung und tippe dann auf ein hervorgehobenes Feld. Schiffe dürfen sich nicht berühren.",
+      "Escolha um navio e uma direção e toque numa casa destacada para posicioná-lo. Os navios não podem se tocar.",
+      "选择舰船和方向，然后点击高亮方格放置。舰船之间不能相邻。",
+      "जहाज़ और दिशा चुनें, फिर उसे रखने के लिए हाइलाइट किए गए खाने पर टैप करें। जहाज़ एक-दूसरे को छू नहीं सकते।",
+      "اختر سفينة واتجاهاً، ثم اضغط على مربع مميز لوضعها. لا يجوز أن تتلامس السفن."
+    ],
+    "Place {ship} at row {row}, column {column}": [
+      "Colocar {ship} en la fila {row}, columna {column}",
+      "Placer {ship} à la ligne {row}, colonne {column}",
+      "{ship} in Zeile {row}, Spalte {column} platzieren",
+      "Posicionar {ship} na linha {row}, coluna {column}",
+      "将{ship}放在第{row}行、第{column}列",
+      "{row}वीं पंक्ति, {column}वें स्तंभ में {ship} रखें",
+      "ضع {ship} في الصف {row} والعمود {column}"
     ]
   },
   "games": {
@@ -526,13 +643,13 @@
         "ضع خمس سفن ثم تناوبوا إطلاق النار على المياه المخفية. تمنح الإصابة طلقة أخرى؛ أغرق أسطول الخصم لتفوز."
       ],
       "ui": [
-        "Coloca la flota válida ofrecida y toca una casilla enemiga sin probar. Tu flota y los disparos aparecen en tableros separados.",
-        "Placez la flotte valide proposée puis touchez une case adverse non essayée. Votre flotte et les tirs sont affichés sur deux plateaux.",
-        "Platziere die angebotene gültige Flotte und tippe auf ein unbeschossenes Zielfeld. Deine Flotte und Schüsse erscheinen auf getrennten Feldern.",
-        "Posicione a frota válida oferecida e toque numa casa inimiga ainda não tentada. Sua frota e os tiros aparecem em tabuleiros separados.",
-        "部署提供的合法舰队，然后点击尚未射击的目标格。您的舰队和射击记录显示在两个棋盘上。",
-        "प्रस्तावित मान्य बेड़ा रखें, फिर बिना आज़माए लक्ष्य खाने पर टैप करें। आपका बेड़ा और हमले अलग बोर्ड पर दिखते हैं।",
-        "ضع الأسطول الصالح المعروض ثم اضغط خلية هدف لم تجربها. يظهر أسطولك والطلقات على لوحتين منفصلتين."
+        "Elige cada barco y su dirección, y colócalo en una casilla resaltada. Puedes deshacer la última colocación o pedir al servidor una flota aleatoria. Toca una casilla objetivo sin probar para disparar.",
+        "Choisissez chaque navire et sa direction, puis placez-le sur une case en surbrillance. Vous pouvez annuler le dernier placement ou demander une flotte aléatoire au serveur. Touchez une case cible non essayée pour tirer.",
+        "Wähle für jedes Schiff eine Richtung und platziere es auf einem hervorgehobenen Feld. Du kannst die letzte Platzierung rückgängig machen oder den Server um eine zufällige Flotte bitten. Tippe zum Schießen auf ein unbeschossenes Zielfeld.",
+        "Escolha cada navio e sua direção, depois posicione-o numa casa destacada. Você pode desfazer o último posicionamento ou pedir uma frota aleatória ao servidor. Toque num alvo ainda não tentado para atirar.",
+        "选择每艘舰船及其方向，并将其放在高亮方格上。可以撤销上次放置，或让服务器生成随机舰队。点击尚未尝试的目标格开火。",
+        "हर जहाज़ और उसकी दिशा चुनकर उसे हाइलाइट किए गए खाने पर रखें। पिछली जगह को हटाएँ या सर्वर से यादृच्छिक बेड़ा माँगें। बिना आज़माए लक्ष्य खाने पर टैप करके गोली चलाएँ।",
+        "اختر كل سفينة واتجاهها، ثم ضعها على مربع مميز. يمكنك التراجع عن آخر وضع أو طلب أسطول عشوائي من الخادم. اضغط هدفاً لم تجربه لإطلاق النار."
       ]
     },
     "checkers": {

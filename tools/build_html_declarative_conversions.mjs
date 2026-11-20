@@ -17,7 +17,7 @@ const languages = ['es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar'];
 const entries = [
   {kind:'battleship', source:'Battleship', players:[2],
     rules:'Place a fleet of five ships, then take turns firing at hidden waters. A hit earns another shot; sink the opposing fleet to win.',
-    ui:'Place the offered valid fleet, then tap an untried target cell. Your fleet and shots remain visible on separate boards.'},
+    ui:'Choose each ship and its direction, then place it on a highlighted square. You can undo the last placement or ask the server for a random fleet. Tap an untried target square to fire.'},
   {kind:'checkers', source:'Checkers', players:[2],
     rules:'Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.',
     ui:'Select a highlighted piece, then tap its legal destination. Crowns, required captures, and continuing jumps are shown from the server view.'},
@@ -105,7 +105,8 @@ const TYPES = {
   card:{shape:'card',width:60,height:80,color:'#fffdf6',text_color:'#172033',border_color:'#667085'},
   played:{shape:'card',width:58,height:78,color:'#fffdf6',text_color:'#172033',border_color:'#667085'},
   mark_water:{shape:'circle',width:28,height:28,color:'#2770a8',text_color:'#ffffff'},
-  mark_ship:{shape:'rect',width:28,height:28,color:'#a9b5c4',text_color:'#1f2937'},
+  mark_ship:{shape:'rect',width:34,height:34,color:'#a9b5c4',text_color:'#1f2937'},
+  mark_revealed_ship:{shape:'rect',width:34,height:34,color:'#a9b5c4',text_color:'#7f1d1d',border_color:'#455468'},
   mark_hit:{shape:'circle',width:28,height:28,color:'#e45757',text_color:'#ffffff'},
   mark_miss:{shape:'circle',width:28,height:28,color:'#e2e8f0',text_color:'#334155'},
 };
@@ -162,7 +163,7 @@ function makeSpec(entry) {
     entry.kind === 'chess' ? ['white_piece','black_piece'] :
     entry.kind === 'four_player_chess' ? ['seat_0','seat_1','seat_2','seat_3','square_light','square_dark'] :
     entry.kind === 'quoridor' ? ['square','p0','p1'] :
-    entry.kind === 'battleship' ? ['mark_water','mark_ship','mark_hit','mark_miss'] :
+    entry.kind === 'battleship' ? ['mark_water','mark_ship','mark_revealed_ship','mark_hit','mark_miss'] :
     entry.kind === 'guess_who' ? [] : ['card','played'];
   const typeValues = {};
   for (const name of typeNames) typeValues[name] = TYPES[name];

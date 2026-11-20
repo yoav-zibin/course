@@ -27,6 +27,15 @@ game, follow the partial-update instructions below.
 4. Review scenes in `/static/declarative-test.html`; validate them with
    `POST /games/declarative/validate`. Include phone/tablet, spectators, covered
    pieces, available actions and complete matches in the review.
+   For the converted Battleship game, the Portal route is **Portal → Battleship
+   (Declarative) → Create match**. On your setup turn, select each ship and its
+   horizontal or vertical direction, then tap a highlighted starting square.
+   Placement previews show the full ship and block overlaps or touching ships;
+   the fifth valid placement submits the fleet and advances setup. Use **Undo
+   last ship** to correct the most recent placement or **Random fleet** to ask
+   the server to place it. Your own board should show every placed ship; a sunk
+   opponent ship should appear as a complete hull on the target board. If a
+   placement is rejected, undo it or choose a different highlighted square.
 5. Include rules, UI instructions, tutorial, supporting SVG illustrations and all
    translations. Record the complete REST test flow described in the
    [import guide](docs/agent-game-import.md). The trace endpoints retain their

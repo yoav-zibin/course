@@ -15,7 +15,9 @@ const gameUI = {
     const playerNames = (m.players || []).map((p, i) => p.name || text('Player {n}', {n:i + 1}));
     const mySeat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;
     const title = m.strings?.title || SOURCE_STRINGS.title || KIND;
-    const turnSeat = Number.isInteger(s.turnIdx) ? s.turnIdx :
+    const setupSeat = s.phase === 'SETUP' && Array.isArray(s.boards)
+      ? s.boards.findIndex(board => !board.ready) : -1;
+    const turnSeat = setupSeat >= 0 ? setupSeat : Number.isInteger(s.turnIdx) ? s.turnIdx :
       Number.isInteger(s.current) ? s.current : Number.isInteger(s.toMove) ? s.toMove : null;
     scene.labels.push({id: 'title', text: title, x: 22, y: 16, font_size: 26});
     if (turnSeat !== null) {
@@ -51,6 +53,67 @@ const gameUI = {
     const cardPos = index => ({x: 34 + (index % 8) * 66, y: 120 + Math.floor(index / 8) * 92});
     const eventId = message.type === 'ui_event' && message.event?.type === 'tap' ? String(message.event.id || '') : '';
     const intentMatch = /^intent_(\d+)$/.exec(eventId);
+    const battleshipFleet = [
+      {key:'carrier',name:'Carrier',size:5}, {key:'battleship',name:'Battleship',size:4},
+      {key:'cruiser',name:'Cruiser',size:3}, {key:'submarine',name:'Submarine',size:3},
+      {key:'destroyer',name:'Destroyer',size:2}
+    ];
+    const fleetSetup = KIND === 'battleship' && s.phase === 'SETUP';
+    const retainedFleet = fleetSetup && localState?.move_count === m.move_count &&
+      localState?.viewer === mySeat && localState?.phase === 'SETUP' && Array.isArray(localState.fleetDraft)
+      ? localState.fleetDraft : [];
+    let fleetDraft = [];
+    for (const placement of retainedFleet) {
+      const ship = battleshipFleet.find(item => item.key === placement?.key);
+      if (!ship || fleetDraft.some(item => item.key === ship.key) ||
+          !Array.isArray(placement.cells) || placement.cells.length !== ship.size ||
+          !placement.cells.every(cell => Array.isArray(cell) && cell.length === 2 &&
+            Number.isInteger(cell[0]) && Number.isInteger(cell[1]) &&
+            cell[0] >= 0 && cell[0] < 10 && cell[1] >= 0 && cell[1] < 10)) continue;
+      fleetDraft.push({key:ship.key,cells:placement.cells.map(cell => [cell[0],cell[1]])});
+    }
+    let placedFleetKeys = new Set(fleetDraft.map(placement => placement.key));
+    let availableFleet = battleshipFleet.filter(ship => !placedFleetKeys.has(ship.key));
+    let selectedShip = availableFleet.some(ship => ship.key === localState?.selectedShip)
+      ? localState.selectedShip : availableFleet[0]?.key || null;
+    let fleetOrientation = localState?.move_count === m.move_count && localState?.viewer === mySeat &&
+      localState?.phase === 'SETUP' && localState?.orientation === 'vertical' ? 'vertical' : 'horizontal';
+    let placementMove = null;
+    const setupTap = message.type === 'ui_event' && active && fleetSetup && message.event?.type === 'tap';
+    if (setupTap) {
+      const selected = /^fleet_ship_(carrier|battleship|cruiser|submarine|destroyer)$/.exec(eventId);
+      if (selected && availableFleet.some(ship => ship.key === selected[1])) selectedShip = selected[1];
+      if (eventId === 'fleet_direction_horizontal') fleetOrientation = 'horizontal';
+      if (eventId === 'fleet_direction_vertical') fleetOrientation = 'vertical';
+      if (eventId === 'fleet_undo' && fleetDraft.length) {
+        const removed = fleetDraft.pop();
+        selectedShip = removed.key;
+      }
+      const cellTarget = /^fleet_place_(\d+)_(\d+)$/.exec(eventId);
+      const ship = battleshipFleet.find(item => item.key === selectedShip);
+      if (cellTarget && ship && !placedFleetKeys.has(ship.key)) {
+        const row = Number(cellTarget[1]), column = Number(cellTarget[2]);
+        const cells = Array.from({length:ship.size}, (_,index) => fleetOrientation === 'horizontal'
+          ? [column + index,row] : [column,row + index]);
+        const occupied = new Set(fleetDraft.flatMap(item => item.cells.map(cell => `${cell[0]},${cell[1]}`)));
+        const fits = cells.every(([x,y]) => x >= 0 && x < 10 && y >= 0 && y < 10 && !occupied.has(`${x},${y}`) &&
+          !Array.from({length:3}, (_,dy) => dy - 1).some(dy =>
+            Array.from({length:3}, (_,dx) => dx - 1).some(dx => occupied.has(`${x+dx},${y+dy}`))));
+        if (fits) {
+          fleetDraft.push({key:ship.key,cells});
+          const nextShip = battleshipFleet.find(item => !fleetDraft.some(placement => placement.key === item.key));
+          selectedShip = nextShip?.key || null;
+          if (fleetDraft.length === battleshipFleet.length) {
+            placementMove = {type:'place',ships:battleshipFleet.map(item => ({
+              name:item.name,cells:fleetDraft.find(placement => placement.key === item.key).cells
+            }))};
+          }
+        }
+      }
+      placedFleetKeys = new Set(fleetDraft.map(placement => placement.key));
+      availableFleet = battleshipFleet.filter(item => !placedFleetKeys.has(item.key));
+      if (!availableFleet.some(item => item.key === selectedShip)) selectedShip = availableFleet[0]?.key || null;
+    }
     const selectFrom = (moves, from, position) => {
       const origins = new Map(moves.map(move => {const cell=from(move);return [`${cell.r}_${cell.c}`,cell];}));
       const requested = /^select_(\d+_\d+)$/.exec(eventId)?.[1];
@@ -68,6 +131,10 @@ const gameUI = {
       const ownShips = (s.boards && s.boards[me] && s.boards[me].ships) || [];
       const ownCells = new Set();
       for (const ship of ownShips) for (const c of ship.cells || []) ownCells.add(`${c[0]},${c[1]}`);
+      for (const ship of fleetDraft) for (const c of ship.cells) ownCells.add(`${c[0]},${c[1]}`);
+      const revealedShips = (s.boards && s.boards[opponent] && s.boards[opponent].ships) || [];
+      const revealedCells = new Set();
+      for (const ship of revealedShips) for (const c of ship.cells || []) revealedCells.add(`${c[0]},${c[1]}`);
       for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {
         const pos = {cell: String(r * 10 + c)};
         const ownAttack = s.attacks && s.attacks[me] ? s.attacks[me][r][c] : 0;
@@ -76,17 +143,47 @@ const gameUI = {
         const ownType = ownAttack === 2 ? 'mark_hit' : ownAttack === 1 ? 'mark_miss' :
           ownCells.has(`${c},${r}`) ? 'mark_ship' : 'mark_water';
         staticPiece(`own_${r}_${c}`, ownType, 'own', pos, {text: ownMark});
-        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : '';
+        const revealedShip = revealedCells.has(`${c},${r}`);
+        const targetMark = enemyAttack === 2 ? '✹' : enemyAttack === 1 ? '·' : revealedShip ? '■' : '';
         if (active && s.phase === 'BATTLE' && enemyAttack === 0) {
           intent({type: 'fire', x: c, y: r}, '•', 'target', pos, 'target');
         } else {
-          staticPiece(`target_${r}_${c}`, enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water',
+          const targetType = revealedShip ? 'mark_revealed_ship' :
+            enemyAttack === 2 ? 'mark_hit' : enemyAttack === 1 ? 'mark_miss' : 'mark_water';
+          staticPiece(`target_${r}_${c}`, targetType,
             'target', pos, {text: targetMark});
         }
       }
-      if (active && s.phase === 'SETUP') {
-        intent({type: 'auto_place'}, text('Place fleet and start battle'), null, null, 'control');
-        label('setup-help', text('Places a valid fleet with clear water between ships.'), 22, 594, 14);
+      if (active && fleetSetup) {
+        for (const ship of availableFleet) {
+          const selectedMark = ship.key === selectedShip ? '▶ ' : '';
+          scene.controls.push({id:`fleet_ship_${ship.key}`,kind:'button',
+            label:selectedMark + text('{ship} ({length})',{ship:text(ship.name),length:ship.size})});
+        }
+        scene.controls.push({id:'fleet_direction_horizontal',kind:'button',
+          label:(fleetOrientation === 'horizontal' ? '✓ ' : '') + text('Horizontal')});
+        scene.controls.push({id:'fleet_direction_vertical',kind:'button',
+          label:(fleetOrientation === 'vertical' ? '✓ ' : '') + text('Vertical')});
+        if (fleetDraft.length) scene.controls.push({id:'fleet_undo',kind:'button',label:text('Undo last ship')});
+        const ship = battleshipFleet.find(item => item.key === selectedShip);
+        if (ship) {
+          for (let row = 0; row < 10; row++) for (let column = 0; column < 10; column++) {
+            const cells = Array.from({length:ship.size}, (_,index) => fleetOrientation === 'horizontal'
+              ? [column + index,row] : [column,row + index]);
+            const occupied = new Set(fleetDraft.flatMap(item => item.cells.map(cell => `${cell[0]},${cell[1]}`)));
+            const fits = cells.every(([x,y]) => x >= 0 && x < 10 && y >= 0 && y < 10 && !occupied.has(`${x},${y}`) &&
+              !Array.from({length:3}, (_,dy) => dy - 1).some(dy =>
+                Array.from({length:3}, (_,dx) => dx - 1).some(dx => occupied.has(`${x+dx},${y+dy}`))));
+            if (!fits) continue;
+            const preview = cells.map(([x,y]) => ({position:{cell:String(y * 10 + x)},color:'#a9b5c4aa'}));
+            scene.targets.push({id:`fleet_place_${row}_${column}`,board:'own',position:{cell:String(row * 10 + column)},
+              label:'•',aria_label:text('Place {ship} at row {row}, column {column}',
+                {ship:text(ship.name),row:row+1,column:column+1}),preview});
+          }
+        }
+        label('setup-progress', text('Ships placed: {placed} of 5',{placed:fleetDraft.length}), 22, 534, 15);
+        label('setup-help', text('Choose a ship and direction, then tap a highlighted square to place it. Ships cannot touch.'), 22, 558, 14);
+        intent({type:'auto_place'}, text('Random fleet'), null, null, 'control');
       }
     } else if (KIND === 'checkers') {
       const board = s.board || [];
@@ -262,12 +359,16 @@ const gameUI = {
     }
 
     const emitted = intentMatch && legal ? offers[Number(intentMatch[1])] : undefined;
+    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};
+    if (KIND === 'battleship' && fleetSetup) Object.assign(nextLocal,{
+      phase:'SETUP',fleetDraft,selectedShip,orientation:fleetOrientation
+    });
+    if (message.type === 'ui_event' && active && placementMove)
+      return {scene,local_state:nextLocal,make_move:placementMove};
     if (message.type === 'ui_event' && active && emitted !== undefined) {
-      const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};
       if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});
       return {scene, local_state: nextLocal, make_move: emitted};
     }
-    const nextLocal = {intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move})),selectedFrom,move_count:m.move_count,viewer:mySeat};
     if (KIND === 'quoridor') Object.assign(nextLocal,{mode:selectedMode,move_count:m.move_count});
     return {scene, local_state: nextLocal};
   }
