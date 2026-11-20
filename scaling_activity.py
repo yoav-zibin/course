@@ -96,13 +96,16 @@ def generate(store, *, run_id, users, games, matches, max_writes):
     base = dt.datetime(2026, 9, 1, tzinfo=dt.timezone.utc)
     for i in range(prior.get("done", 0), matches):
         rng = random.Random(f"{run_id}:{i}")
+        # Allocation retries need distinct four-letter candidates. Keep their
+        # stream separate so collisions do not change the replayed game moves.
+        invite_rng = random.Random(f"invites:{run_id}:{i}")
         now = [base + dt.timedelta(seconds=rng.randrange(30 * 86400))]
         mid = f"synthetic-{prefix}-played-{i}"
         platform = ScalablePlatform(
             store=store,
             clock=lambda: now[0],
             new_id=lambda: mid,
-            new_invite_token=lambda: mid + "-invite",
+            new_invite_token=lambda: "".join(invite_rng.choices("abcdefghijklmnopqrstuvwxyz", k=4)),
         )
         people = rng.sample(range(users), rng.randint(1, 4))
         # A complete service operation and checkpoint are one commit, so a
