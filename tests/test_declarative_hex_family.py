@@ -3,7 +3,10 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from game_platform.agent_import import GameImport
+from game_platform.declarative_ui import DeclarativeLogic
 from game_platform.game_logic import GameLogic
 
 PACKAGES = Path(__file__).resolve().parents[1] / "games" / "declarative"
@@ -23,6 +26,33 @@ def context(count):
     return {"players": [{"id": f"p{i}", "kind": "human", "display_name": f"P{i+1}",
                          "picture_url": "", "max_loss": 0, "active": True} for i in range(count)],
             "pot": 0, "move_count": 0}
+
+
+@pytest.mark.parametrize("kind", ["chinese_checkers", "abalone", "havannah"])
+def test_newly_occupied_hex_cells_use_a_stable_host_pulse(kind):
+    body = package(kind)
+    case = body.unit_tests["cases"][0]
+    before, after = case["view_of_mover"], case["expected_view_of_mover"]
+    ui = DeclarativeLogic(body.declarative_ui)
+
+    def message(view, move_count):
+        return {"type": "state_changed", "state": view, "view": view,
+                "status": "ongoing", "my_player_index": 0,
+                "acting_for_player_index": 0, "move_count": move_count,
+                "strings": body.declarative_ui["strings"]}
+
+    first = ui.reduce(message(before, 0))
+    placed = ui.reduce(message(after, 1), first["local_state"])
+    added = [cell for cell, value in enumerate(after["board"])
+             if value >= 0 and before["board"][cell] == -1]
+    assert added
+    for cell in added:
+        piece = next(piece for piece in placed["scene"]["pieces"]
+                     if piece["position"].get("cell") == str(cell))
+        assert piece["animation"]["kind"] == "pulse"
+        repeated = ui.reduce(message(after, 1), placed["local_state"])
+        same_piece = next(item for item in repeated["scene"]["pieces"] if item["id"] == piece["id"])
+        assert same_piece["animation"]["key"] == piece["animation"]["key"]
 
 
 def test_chinese_checkers_has_full_star_and_supports_a_chain_hop():

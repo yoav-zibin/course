@@ -11,6 +11,22 @@ const gameUI={reduce(message,localState){
   const snapshot=KIND==='catan'?{
     settlements:(s.settlements||[]).slice(),cities:(s.cities||[]).slice(),roads:(s.roads||[]).slice()
   }:{board:Array.isArray(s.board)?s.board.slice():null};
+  const pulseMove=Number.isSafeInteger(m.move_count)?m.move_count:Number.isSafeInteger(s.turns)?s.turns:0;
+  let pulseKeys=localState&&localState.pulse&&localState.pulse.move_count===pulseMove
+    ?Object.assign({},localState.pulse.keys||{}):{};
+  if(!(localState&&localState.pulse&&localState.pulse.move_count===pulseMove)&&previousSnapshot){
+    if(KIND==='catan'){
+      for(let node=0;node<(s.settlements||[]).length;node++){
+        const owner=s.settlements[node],priorOwner=previousSnapshot.settlements&&previousSnapshot.settlements[node];
+        const cityChanged=Boolean(s.cities[node]&&!(previousSnapshot.cities&&previousSnapshot.cities[node]));
+        if(owner>=0&&(priorOwner!==owner||cityChanged))pulseKeys['settlement_'+node]=`catan-${pulseMove}-${node}`;
+      }
+    }else if(Array.isArray(previousSnapshot.board)&&Array.isArray(snapshot.board)){
+      snapshot.board.forEach((value,cell)=>{
+        if(value>=0&&previousSnapshot.board[cell]===-1)pulseKeys['piece_'+cell]=`${KIND}-${pulseMove}-${cell}`;
+      });
+    }
+  }
   let local=localState&&localState.move_count===m.move_count?localState:{};
   let selected=Array.isArray(local.selected)?local.selected.slice():[];
   const addTarget=(move,board,position,label,size)=>targets.push({id:moveKey(move),board,position,label:label||'',hit_area:{x:-size/2,y:-size/2,width:size,height:size}});
@@ -30,7 +46,7 @@ const gameUI={reduce(message,localState){
     const tileBoard=GEOMETRY.tile_cells;
     const board=GEOMETRY.board;
     (s.roads||[]).forEach((owner,edge)=>{if(owner<0)return;const [a,b]=GEOMETRY.edges[edge],na=GEOMETRY.nodes[a],nb=GEOMETRY.nodes[b];paths.push({id:'road_'+edge,points:[{x:board.x+na.x,y:board.y+na.y},{x:board.x+nb.x,y:board.y+nb.y}],color:GEOMETRY.player_colors[owner],width:8});});
-    (s.settlements||[]).forEach((owner,node)=>{if(owner<0)return;const p=GEOMETRY.nodes[node];const priorOwner=previousSnapshot&&previousSnapshot.settlements&&previousSnapshot.settlements[node];const priorCity=previousSnapshot&&previousSnapshot.cities&&previousSnapshot.cities[node];const popIn=Boolean(previousSnapshot&&((priorOwner!==owner)||(!priorCity&&s.cities[node])));piece('settlement_'+node,s.cities[node]?'city':'settlement','island',{x:p.x,y:p.y},{text:s.cities[node]?'C':'',aria_label:s.cities[node]?'City':'Settlement',...(popIn?{animation:{kind:'pulse',key:`catan-${m.move_count}-${node}-${s.cities[node]?'city':'settlement'}`}}:{})});});
+    (s.settlements||[]).forEach((owner,node)=>{if(owner<0)return;const p=GEOMETRY.nodes[node],animationKey=pulseKeys['settlement_'+node];piece('settlement_'+node,s.cities[node]?'city':'settlement','island',{x:p.x,y:p.y},{text:s.cities[node]?'C':'',aria_label:s.cities[node]?'City':'Settlement',...(animationKey?{animation:{kind:'pulse',key:animationKey}}:{})});});
     (s.tileData||[]).forEach((tile,index)=>{if(index===s.robber)piece('robber','robber','island',{cell:String(index)},{text:'R',actions:[]});});
     for(const move of legal){
       if(move.action==='settle'){
@@ -49,8 +65,8 @@ const gameUI={reduce(message,localState){
     const legalFrom=move=>Array.isArray(move.from)?move.from:[move.from];
     for(let cell=0;cell<s.board.length;cell++)if(s.board[cell]>=0){
       const fromLegal=legal.some(move=>legalFrom(move).includes(cell));
-      const popIn=Boolean(previousSnapshot&&previousSnapshot.board&&previousSnapshot.board[cell]===-1);
-      piece('piece_'+cell,'p'+s.board[cell],'main',{cell:String(cell)},{selected:selected.includes(cell),actions:active&&s.board[cell]===s.turn&&fromLegal?['tap']:[],aria_label:t('marble',{n:s.board[cell]+1,cell:cell+1}),...(popIn?{animation:{kind:'pulse',key:`${KIND}-${m.move_count}-${cell}`}}:{})});
+      const animationKey=pulseKeys['piece_'+cell];
+      piece('piece_'+cell,'p'+s.board[cell],'main',{cell:String(cell)},{selected:selected.includes(cell),actions:active&&s.board[cell]===s.turn&&fromLegal?['tap']:[],aria_label:t('marble',{n:s.board[cell]+1,cell:cell+1}),...(animationKey?{animation:{kind:'pulse',key:animationKey}}:{})});
     }
     if(selected.length){
       const matches=legal.filter(move=>{
@@ -64,7 +80,7 @@ const gameUI={reduce(message,localState){
     }
     if(KIND==='chinese_checkers')for(const move of legal)if(move.action==='pass')controls.push({id:moveKey(move),kind:'button',label:t('pass_turn')});
   }else if(KIND==='havannah'){
-    for(let cell=0;cell<s.board.length;cell++)if(s.board[cell]>=0){const popIn=Boolean(previousSnapshot&&previousSnapshot.board&&previousSnapshot.board[cell]===-1);piece('piece_'+cell,'p'+s.board[cell],'main',{cell:String(cell)},{aria_label:t('stone',{n:s.board[cell]+1}),...(popIn?{animation:{kind:'pulse',key:`${KIND}-${m.move_count}-${cell}`}}:{})});}
+    for(let cell=0;cell<s.board.length;cell++)if(s.board[cell]>=0){const animationKey=pulseKeys['piece_'+cell];piece('piece_'+cell,'p'+s.board[cell],'main',{cell:String(cell)},{aria_label:t('stone',{n:s.board[cell]+1}),...(animationKey?{animation:{kind:'pulse',key:animationKey}}:{})});}
     for(const move of legal)addTarget(move,'main',{cell:String(move.cell)},'',42);
   }
 
@@ -79,7 +95,8 @@ const gameUI={reduce(message,localState){
     return move.action||t('move');
   }
   function catanPoints(seat){return (s.settlements||[]).reduce((sum,owner,node)=>sum+(owner===seat?(s.cities[node]?2:1):0),0);}
-  let output={scene:{pieces,targets,controls,labels,paths},local_state:{selected,move_count:m.move_count,board_snapshot:snapshot}};
+  const nextLocal={selected,move_count:m.move_count,board_snapshot:snapshot,pulse:{move_count:pulseMove,keys:pulseKeys}};
+  let output={scene:{pieces,targets,controls,labels,paths},local_state:nextLocal};
   if(message.type==='ui_event'&&active){
     const event=message.event||{};
     if(event.type==='tap'){
@@ -89,7 +106,7 @@ const gameUI={reduce(message,localState){
         if(KIND==='chinese_checkers')selected=[cell];
         else if(selected.includes(cell))selected=selected.filter(v=>v!==cell);
         else if(selected.length<3)selected.push(cell);
-        output={scene:null,local_state:{selected,move_count:m.move_count,board_snapshot:snapshot}};
+        output={scene:null,local_state:nextLocal};
       }else{
         const move=legal.find(option=>moveKey(option)===id);
         if(move)output.make_move=move;
@@ -98,7 +115,7 @@ const gameUI={reduce(message,localState){
   }
   if(!output.scene){
     // Rebuild once with the new selection; there is no rule or state mutation here.
-    const next=gameUI.reduce(m,{selected,move_count:m.move_count,board_snapshot:snapshot});
+    const next=gameUI.reduce(m,nextLocal);
     output.scene=next.scene;
   }
   return output;
