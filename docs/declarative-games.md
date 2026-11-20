@@ -88,6 +88,18 @@ last two endings the remaining seeds go to neither store. All state is
 public, so the package declares `all_state_public: true`. Select it for
 publication with `--kinds oware`.
 
+Quarto is a two-player game on a 4-by-4 board with sixteen unique pieces:
+every combination of tall/short, light/dark, round/square and solid/hollow
+(piece id 0–15 is the 4-bit attribute vector: bit0 tall, bit1 dark, bit2
+square, bit3 hollow). Its signature rule is that you never choose your own
+piece: seat 0 opens by handing a pool piece to seat 1, and each turn is one
+combined move that places the piece in hand on an empty cell and then hands
+an unplayed pool piece to the opponent. Any row, column or main diagonal
+whose four pieces share at least one attribute value wins immediately for
+the player who placed; a full board with no winning line is a draw with the
+pot split. All state is public, so the package declares
+`all_state_public: true`. Select it for publication with `--kinds quarto`.
+
 Whist is a four-player partnership game played as one thirteen-trick hand.
 Scopa is a two-player, single-deal variant using a 40-card deck; the final
 score includes sweeps, cards, diamonds, the seven of diamonds and primiera.
