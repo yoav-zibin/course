@@ -63,7 +63,7 @@ def test_sim_crossing_diagonals_get_distinct_targets():
     spots = {(round(target['position']['x']), round(target['position']['y'])) for target in scene['targets']}
     assert len(spots) == 15
     # The three long diagonals cross at the hexagon centre, yet each keeps its own marker.
-    centre = [target for target in scene['targets'] if target['label'] in ('Line 1–4', 'Line 2–5', 'Line 3–6')]
+    centre = [target for target in scene['targets'] if target['aria_label'] in ('Line 1–4', 'Line 2–5', 'Line 3–6')]
     assert len(centre) == 3 and len({(round(t['position']['x']), round(t['position']['y'])) for t in centre}) == 3
 
 
@@ -207,7 +207,7 @@ def test_dots_boxes_closing_a_box_claims_it_and_keeps_the_turn():
     result = play(game, result['state'], 'b', {'edge': 21})
     assert result['state']['boxes'][0] == 1 and result['state']['turn'] == 1 and result['turn'] == ['b']
     scene = frame(game, ui, result['state'], 'b')[0]['scene']
-    assert len(scene['targets']) == 36 and any(piece['id'] == 'box_0' for piece in scene['pieces'])
+    assert len(scene['targets']) == 36 and all('label' not in target for target in scene['targets']) and any(piece['id'] == 'box_0' for piece in scene['pieces'])
     with pytest.raises(InvalidMoveError):
         play(game, result['state'], 'b', {'edge': 21})
     with pytest.raises(InvalidMoveError):

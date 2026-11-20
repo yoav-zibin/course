@@ -16,11 +16,13 @@ const gameUI = {
       {id: 'turn', text: m.status === 'over' || s.over ? t('finished') : t(KIND === 'hackenbush' ? (s.turn ? 'red_turn' : 'blue_turn') : 'turn', {n: s.turn + 1}), x: 24, y: 46, font_size: 17}];
     if (s.over && s.winner >= 0) labels.push({id: 'winner', text: t('winner', {n: s.winner + 1}), x: 24, y: 70, font_size: 15});
     else if (s.over) labels.push({id: 'winner', text: t('draw'), x: 24, y: 70, font_size: 15});
-    labels.push({id: 'hint', text: t(KIND + '_hint'), x: 24, y: s.over ? 90 : 70, font_size: 13});
     const boards = {};
     let local = {};
+    // Available moves are small markers tinted with the mover's colour. Their text is only the
+    // accessible name; the rules live in the portal's How to play panel, not on the board.
+    const tint = (KIND === 'hackenbush' ? ['#4f8cffcc', '#ff5d5dcc'] : [COLORS[0] + 'cc', COLORS[1] + 'cc'])[s.turn] || '#ffe27acc';
     const target = (id, board, position, label, extra = {}) =>
-      targets.push(Object.assign({id, board, position, label, hit_area: {x: -18, y: -18, width: 36, height: 36}}, extra));
+      targets.push(Object.assign({id, board, position, aria_label: label, color: tint, hit_area: {x: -14, y: -14, width: 28, height: 28}}, extra));
 
     if (KIND === 'sim') {
       const ox = 20, oy = 100, R = 170, cx = 210, cy = 210;
@@ -32,7 +34,7 @@ const gameUI = {
         paths.push({id: 'line_' + edge, points: [{x: ox + pos[a][0], y: oy + pos[a][1]}, {x: ox + pos[b][0], y: oy + pos[b][1]}],
           color: owner === -1 ? '#51607a' : COLORS[owner], width: owner === -1 ? 2 : 7});
       });
-      pos.forEach(([x, y], i) => pieces.push({id: 'dot_' + i, type: 'dot', board: 'main', position: {x, y}, text: String(i + 1)}));
+      pos.forEach(([x, y], i) => pieces.push({id: 'dot_' + i, type: 'dot', board: 'main', position: {x, y}}));
       // Crossing diagonals share a midpoint, so each edge's target sits a third of the way along it.
       legal.forEach(move => {
         const [a, b] = pairs[move.edge];
@@ -52,7 +54,7 @@ const gameUI = {
       s.boxes.forEach((owner, box) => {
         if (owner < 0) return;
         const [x, y] = dot(Math.floor(box / 4), box % 4);
-        pieces.push({id: 'box_' + box, type: 'box' + owner, board: 'main', position: {x: x + gap / 2, y: y + gap / 2}, text: String(owner + 1)});
+        pieces.push({id: 'box_' + box, type: 'box' + owner, board: 'main', position: {x: x + gap / 2, y: y + gap / 2}});
       });
       for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) { const [x, y] = dot(r, c); pieces.push({id: 'dot_' + (r * 5 + c), type: 'dot', board: 'main', position: {x, y}}); }
       labels.push({id: 'score', text: t('score', {a: s.boxes.filter(v => v === 0).length, b: s.boxes.filter(v => v === 1).length}), x: 300, y: 46, font_size: 17});
@@ -120,7 +122,7 @@ const gameUI = {
         legal.filter(move => move.rot === rot).forEach(move => {
           const r = Math.floor(move.cell / 7), c = move.cell % 7;
           target(keyOf(move), 'mine', {cell: String(move.cell)}, t('place_at', {row: r + 1, col: c + 1}), {
-            hit_area: {x: -22, y: -22, width: 44, height: 44},
+            hit_area: {x: -20, y: -20, width: 40, height: 40},
             preview: variantOf(GEO.shapes[card[1]], rot).map(([dr, dc]) => ({position: {cell: String((r + dr) * 7 + c + dc)}, color: GEO.colors[card[0]]}))});
         });
       }
