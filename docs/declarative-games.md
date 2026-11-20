@@ -482,7 +482,7 @@ for initial mounting, history or reduced-motion settings. This metadata neither
 changes the final die value nor grants an action, changes the board camera, or
 controls authoritative randomness. It carries no executable code.
 
-Packages may set `motion:{move_ms,roll_ms,roll_settle_ms,turn_pause_ms,animate_own,easing}`.
+Packages may set `motion:{move_ms,roll_ms,roll_settle_ms,turn_pause_ms,animate_own,scene_transitions,easing}`.
 Each timing is an integer from 0 to 5000 milliseconds; `easing` is `ease-out` or
 `ease-in-out-quad`. Omitted timings retain host defaults. `animate_own` remains
 accepted for compatibility and is ignored during live play: moves made on this
@@ -492,7 +492,9 @@ turn change. Reduced motion and initial/reconnect snapshots bypass these delays.
 Hosts preserve each viewer-filtered accepted action when a computer finishes
 several steps between updates, and wait for its animations before drawing the
 next. Per-piece `kind:"move"` duration/delay can stagger a capture or shorten
-bearing off. These options never change server move legality or randomness.
+bearing off. `scene_transitions:true` also fades visible pieces entering,
+changing or leaving during inferred opponent moves; it is off by default.
+These options never change server move legality or randomness.
 
 Pieces and destinations can supply `aria_label` independently of their visible
 `text` or `label`. Use a descriptive localized name containing the owner and

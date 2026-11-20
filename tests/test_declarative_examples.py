@@ -318,7 +318,8 @@ def test_thirty_one_direct_pile_and_card_actions_and_revealed_hands():
     for card in discard['view']['hand']:
         assert scene_event(ui, discard, frame, {'action':'discard','card':card})['make_move'] == {
             'action':'discard','card':card}
-    assert {p['type'] for p in frame['scene']['pieces'] if p['id'].startswith('hand_')} == {
+    assert {p['type'] for p in frame['scene']['pieces'] if p['id'] in
+            {f'card_{card}' for card in discard['view']['hand']}} == {
         'red_card','black_card'}
 
     final_turn = {**m, 'view':{**view, 'phase':'final_draw'}}
@@ -331,7 +332,7 @@ def test_thirty_one_direct_pile_and_card_actions_and_revealed_hands():
              'view':{**view, 'phase':'over', 'hand':[], 'hands':[['AH','KH','QH'],['7D','7H','7C']],
                      'scores':[31,30.5], 'winner':0}}
     frame = ui.reduce(final)
-    assert len([p for p in frame['scene']['pieces'] if p['id'].startswith('hand_')]) == 6
+    assert len([p for p in frame['scene']['pieces'] if p['id'].startswith('card_')]) == 6
     assert any(label['text'] == 'Winner: A' for label in frame['scene']['labels'])
     assert {label['text'] for label in frame['scene']['labels']} >= {'A · 31', 'B · 30.5'}
     assert not frame['scene']['targets'] and not frame['scene']['controls']
@@ -386,12 +387,84 @@ def test_kisolo_pit_targets_preserve_visible_seed_counts():
          'acting_for_player_index':0, 'my_player_index':0, 'move_count':0}
     frame = ui.reduce(m)
     assert len([p for p in frame['scene']['pieces'] if p['id'].startswith('pit_')]) == 28
+    assert all('text' not in p for p in frame['scene']['pieces'] if p['id'].startswith('pit_'))
+    for r, row in enumerate(view['rows']):
+        for c, count in enumerate(row):
+            assert next(p for p in frame['scene']['pieces'] if p['id'] == f'pit_{r*7+c}')['type'] == f'pit_{count}'
     assert len(frame['scene']['targets']) == len(view['legal_pits'])
     assert all(target.get('color') == '#00000000' and not target.get('label')
                for target in frame['scene']['targets'])
     for pit in view['legal_pits']:
         assert scene_event(ui, m, frame, {'pit':pit})['make_move'] == {'pit':pit}
     assert not ui.reduce({**m, 'acting_for_player_index':None})['scene']['targets']
+
+    crowded = [row[:] for row in view['rows']]
+    crowded[0][0] = 8
+    crowded_frame = ui.reduce({**m, 'view':{**view, 'rows':crowded}})
+    assert next(p for p in crowded_frame['scene']['pieces'] if p['id'] == 'pit_0')['text'] == '8'
+
+
+@pytest.mark.parametrize('kind', ['gobblet', 'six_mens_morris', 'ataxx'])
+def test_board_piece_identity_follows_an_unambiguous_move(kind):
+    body = load(kind)
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = copy.deepcopy(body.unit_tests['cases'][0]['view_of_mover'])
+    if kind == 'gobblet':
+        view['board'] = [[[2,0]]] + [[] for _ in range(15)]
+        next_board = [[] for _ in range(16)]
+        next_board[5] = [[2,0]]
+    elif kind == 'six_mens_morris':
+        view['board'] = [0] + [-1] * 15
+        next_board = [-1] * 16
+        next_board[5] = 0
+    else:
+        view['board'] = [0] + [-1] * 48
+        next_board = [-1] * 49
+        next_board[16] = 0
+    message = {'type':'state_changed','view':view,'status':'ongoing',
+               'acting_for_player_index':None,'my_player_index':0,'move_count':1}
+    before = ui.reduce(message)
+    after = ui.reduce({**message,'move_count':2,'view':{**view,'board':next_board}},
+                      before['local_state'])
+    piece_type = {'gobblet':'goblet_2_0','six_mens_morris':'stone_0','ataxx':'p0'}[kind]
+    first = next(p for p in before['scene']['pieces'] if p['type'] == piece_type)
+    second = next(p for p in after['scene']['pieces'] if p['type'] == piece_type)
+    assert first['id'] == second['id']
+    assert first['position'] != second['position']
+    backwards = ui.reduce(message, after['local_state'])
+    assert next(p for p in backwards['scene']['pieces'] if p['type'] == piece_type)['id'] == first['id']
+    other_viewer = ui.reduce({**message,'my_player_index':1,'move_count':2,
+                              'view':{**view,'board':next_board}}, before['local_state'])
+    assert next(p for p in other_viewer['scene']['pieces'] if p['type'] == piece_type)['id'] != first['id']
+
+
+@pytest.mark.parametrize('kind', ['gobblet', 'six_mens_morris', 'ataxx'])
+def test_ambiguous_board_changes_do_not_invent_piece_paths(kind):
+    body = load(kind)
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = copy.deepcopy(body.unit_tests['cases'][0]['view_of_mover'])
+    if kind == 'gobblet':
+        board = [[[2,0]], [[2,0]]] + [[] for _ in range(14)]
+        next_board = [[] for _ in range(16)]
+        next_board[5] = next_board[6] = [[2,0]]
+        piece_type = 'goblet_2_0'
+    else:
+        size = 16 if kind == 'six_mens_morris' else 49
+        board = [0, 0] + [-1] * (size - 2)
+        next_board = [-1] * size
+        next_board[5] = next_board[6] = 0
+        piece_type = 'stone_0' if kind == 'six_mens_morris' else 'p0'
+    message = {'type':'state_changed','view':{**view,'board':board},'status':'ongoing',
+               'acting_for_player_index':None,'my_player_index':0,'move_count':1}
+    before = ui.reduce(message)
+    after = ui.reduce({**message,'move_count':2,'view':{**view,'board':next_board}},
+                      before['local_state'])
+    before_ids = {p['id'] for p in before['scene']['pieces']
+                  if p['type'] == piece_type and (kind != 'gobblet' or p['id'].startswith('stack_'))}
+    after_ids = {p['id'] for p in after['scene']['pieces']
+                 if p['type'] == piece_type and (kind != 'gobblet' or p['id'].startswith('stack_'))}
+    assert len(before_ids) == len(after_ids) == 2
+    assert before_ids.isdisjoint(after_ids)
 
 
 def test_mau_mau_cards_jack_suits_and_restricted_turns():

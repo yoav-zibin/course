@@ -156,6 +156,8 @@ def specification(kind):
     spec={'format':'buildplay-ui','version':1,'viewport':viewport,'boards':[board],
           'piece_types':types,'assets':{'card_back':{'uri':'data:image/svg+xml;base64,'+base64.b64encode(svg.encode()).decode(),'media_type':'image/svg+xml'}},
           'strings':strings(kind),'ui_code':f'const KIND={json.dumps(kind)};\nconst SOURCE_STRINGS={json.dumps(strings(kind),ensure_ascii=False)};\n'+(DEST/'presentation.js').read_text()}
+    if kind in ('connect6', 'ataxx'):
+        spec['motion'] = {'scene_transitions':True, 'easing':'ease-in-out-quad'}
     if kind=='connect6':
         tile='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#ecd3a9"/><path d="M0 20H40 M20 0V40" stroke="#624825" stroke-width="1.5"/></svg>'
         spec['assets']['connect6_cell']={'uri':'data:image/svg+xml;base64,'+base64.b64encode(tile.encode()).decode(),'media_type':'image/svg+xml'}

@@ -114,6 +114,7 @@ def build():
         if 'payouts' in result: case['expected_payouts'] = result['payouts']
         cases.append(case)
     ui = {'format':'buildplay-ui','version':1,'viewport':{'width':640,'height':590},
+          'motion':{'scene_transitions':True,'easing':'ease-in-out-quad'},
           'boards':[{'id':'table','kind':'free','x':0,'y':0,'width':640,'height':590,
                      'color':'#316f68','line_color':'#e9dcb7'}],
           'piece_types':{key:{'shape':'image','asset':'card_face_soft','width':76,'height':96,

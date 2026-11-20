@@ -63,6 +63,30 @@ const gameUI = {
       return String(card ?? '');
     };
     const boardCell = (i, columns) => ({cell:String(i)});
+    let motionPieces = null, motionSerial = localState?.motionSerial || 0;
+    const identifyPieces = (items, prefix) => {
+      const adjacent = localState && localState.viewer === seat &&
+        Number.isInteger(m.move_count) && Number.isInteger(localState.move_count) &&
+        Math.abs(m.move_count - localState.move_count) <= 1;
+      const old = adjacent && Array.isArray(localState.motionPieces) ? localState.motionPieces.slice() : [];
+      const assigned = new Array(items.length);
+      items.forEach((item, index) => {
+        const found = old.findIndex(previous => previous.key === item.key && previous.location === item.location);
+        if (found >= 0) assigned[index] = old.splice(found, 1)[0].id;
+      });
+      const unmatched = items.filter((item, index) => !assigned[index]);
+      items.forEach((item, index) => {
+        if (assigned[index]) return;
+        const candidates = old.filter(previous => previous.key === item.key);
+        const destinations = unmatched.filter(next => next.key === item.key);
+        if (candidates.length === 1 && destinations.length === 1) {
+          assigned[index] = candidates[0].id;
+          old.splice(old.indexOf(candidates[0]), 1);
+        } else assigned[index] = adjacent ? `${prefix}_motion_${motionSerial++}` : `${prefix}_${item.location}`;
+      });
+      motionPieces = items.map((item, index) => ({...item,id:assigned[index]}));
+      return assigned;
+    };
     if (KIND !== 'six_mens_morris' && KIND !== 'thirty_one' && KIND !== 'kisolo' && KIND !== 'mau_mau' && KIND !== 'dos')
       label('title', title, KIND === 'gobblet' ? Math.max(22, 300 - title.length * 6.4) : 22, 16, 25);
     if (Number.isInteger(s.to_move) || Number.isInteger(s.toMove) ||
@@ -136,7 +160,7 @@ const gameUI = {
       label('title', 'Mau-Mau', 260, 12, 27);
       staticPiece('stock', 'deck', 'table', {x:245,y:180}, {text:'◆'});
       if (s.discard_top)
-        staticPiece('discard', cardType(s.discard_top), 'table', {x:395,y:180},
+        staticPiece(`card_${s.discard_top}`, cardType(s.discard_top), 'table', {x:395,y:180},
           {text:cardText(s.discard_top)});
       label('stock-count', String(s.stock_count ?? 0), 237, 245, 15);
       label('suit', suits[s.top_suit] || '', 385, 245, 22);
@@ -148,7 +172,7 @@ const gameUI = {
       hand.slice(handPage * 14, handPage * 14 + 14).forEach((card, slot) => {
         const i = handPage * 14 + slot, value = cardText(card);
         const position = {x:80 + (slot % 7) * 80,y:390 + Math.floor(slot / 7) * 105};
-        staticPiece(`hand_${i}`, cardType(card), 'table', position,
+        staticPiece(`card_${card}`, cardType(card), 'table', position,
           {text:value,scale:selectedJack === card ? 1.08 : 1});
         if (active && playable.has(card)) {
           if (/^J/.test(card))
@@ -349,7 +373,8 @@ const gameUI = {
         color:'#654229',width:4});
       for (let r = 0; r < 4; r++) for (let c = 0; c < 7; c++) {
         const i = r * 7 + c, value = rows[r]?.[c] ?? 0;
-        staticPiece(`pit_${i}`, 'pit', 'main', boardCell(i,7), {text:String(value),
+        staticPiece(`pit_${i}`, value <= 7 ? `pit_${value}` : 'pit', 'main', boardCell(i,7), {
+          ...(value > 7 ? {text:String(value)} : {}),
           aria_label:text('Pit row {r}, column {c} · {n} seeds', {r:r + 1,c:c + 1,n:value})});
       }
       for (const pit of s.legal_pits || []) {
@@ -369,7 +394,7 @@ const gameUI = {
       if (s.phase !== 'over') {
         staticPiece('stock', 'deck', 'table', {x:245,y:230}, {text:'◆'});
         if (s.discard_top)
-          staticPiece('discard', cardType(s.discard_top), 'table', {x:395,y:230},
+          staticPiece(`card_${s.discard_top}`, cardType(s.discard_top), 'table', {x:395,y:230},
             {text:cardText(s.discard_top)});
         label('stock-count', String(s.stock_count ?? 0), 237, 310, 16);
       }
@@ -396,7 +421,7 @@ const gameUI = {
         cards.forEach((card, i) => {
           const position = {x:320 + (i - (cards.length - 1) / 2) * 112,
             y:s.phase === 'over' ? 250 + row * 180 : 460};
-          staticPiece(`hand_${row}_${i}`, cardType(card), 'table', position, {text:cardText(card)});
+          staticPiece(`card_${card}`, cardType(card), 'table', position, {text:cardText(card)});
           if (active && discardPhase)
             offer({action:'discard',card}, '', 'table', position, 'hit',
               text('Play {card}', {card:cardText(card)}));
@@ -410,8 +435,13 @@ const gameUI = {
     } else if (KIND === 'gobblet') {
       const moves = s.legal_moves || [];
       const board = s.board || [];
+      const objects = [];
+      board.forEach((stack, cell) => (stack || []).forEach((goblet, level) =>
+        objects.push({key:`${goblet[0]}_${goblet[1]}`,location:`${cell}_${level}`})));
+      const ids = identifyPieces(objects, 'stack');
+      let objectIndex = 0;
       board.forEach((stack, cell) => {
-        (stack || []).forEach((goblet, level) => staticPiece(`stack_${cell}_${level}`,
+        (stack || []).forEach((goblet, level) => staticPiece(ids[objectIndex++],
           `goblet_${goblet[0]}_${goblet[1]}`, 'main', boardCell(cell,4),
           {z:level,scale:selectedFrom === cell && level === stack.length - 1 ? 1.1 : 1,
             aria_label:text('{name} · size {n}', {name:playerName(goblet[1]),n:goblet[0]})}));
@@ -549,9 +579,13 @@ const gameUI = {
         color:'#60452e',width:5}));
       const moves = s.moves || [];
       points.forEach(([x,y],i) => staticPiece(`point_${i}`, 'point', 'main', {x,y}));
+      const objects = (s.board || []).flatMap((owner, point) =>
+        owner < 0 ? [] : [{key:String(owner),location:String(point)}]);
+      const ids = identifyPieces(objects, 'stone');
+      let objectIndex = 0;
       (s.board || []).forEach((owner,point) => {
         if (owner < 0) return;
-        staticPiece(`stone_${point}`, `stone_${owner}`, 'main',
+        staticPiece(ids[objectIndex++], `stone_${owner}`, 'main',
           {x:points[point][0],y:points[point][1]},
           {text:owner === 0 ? '●' : '◆',aria_label:playerName(owner)});
         if (active && moves.some(move => move.from === point))
@@ -602,7 +636,8 @@ const gameUI = {
     const match = /^intent_(\d+)$/.exec(click);
     const move = match && active ? offers[Number(match[1])] : undefined;
     const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,selectedTo,selectedJack,handPage,
-      dosPlacements,dosBonus,dosSelected,dosEdit,dosBonusMode,centerPage};
+      dosPlacements,dosBonus,dosSelected,dosEdit,dosBonusMode,centerPage,
+      ...(motionPieces ? {motionPieces,motionSerial} : {})};
     if (message.type === 'ui_event' && move !== undefined)
       return {scene,local_state:nextLocal,make_move:move};
     return {scene,local_state:nextLocal};

@@ -134,7 +134,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     if (changed || animate && animations?.length) {
       const before=sceneRef.current;
       sceneRef.current=next;
-      const replay=animate&&animations===null&&Boolean(latest.current?.replay);
+      const replay=animate&&animations===null&&(Boolean(latest.current?.replay)||spec.motion?.scene_transitions===true);
       const moves=animations===null?undefined:moveTracks(spec,animations);
       const started=Date.now();
       setDisplay(old=>({scene:next,previous:before,animate,serial:old.serial+1,replay,ghosts:replay?historyChanges(before,next).removed:[],moves,started}));

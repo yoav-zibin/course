@@ -24,6 +24,7 @@ const gameUI = {
     const active=m.status==='ongoing'&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined;
     const legal=active?(s.legal||[]):[];
     const pieces=[],targets=[],controls=[],paths=[];
+    let ataxxMotion={};
     const playerName=seat=>m.players?.[seat]?.name||t('turn',{n:seat+1});
     const shortName=seat=>{const chars=Array.from(playerName(seat));return chars.length>14?chars.slice(0,13).join('')+'…':chars.join('');};
     const result=(KIND==='connect6'||KIND==='ataxx')&&(m.status==='over'||s.over)
@@ -60,8 +61,26 @@ const gameUI = {
       s.board.forEach((n,cell)=>pieces.push({id:'stonepit_'+cell,type:cell===6||cell===13?'store':'p0',board:'main',position:{cell:String(cell)},text:String(n),actions:legal.some(move=>move.pit===cell)?['tap']:[]}));
       legal.forEach(move=>targets.push({id:keyOf(move),board:'main',position:{cell:String(move.pit)},label:t('sow',{n:move.pit+1})}));
     }else if(KIND==='ataxx'){
+      const adjacent=localState&&localState.viewer===m.my_player_index&&Array.isArray(localState.motionBoard)
+        &&Number.isInteger(localState.move_count)&&Number.isInteger(m.move_count)
+        &&Math.abs(m.move_count-localState.move_count)<=1;
+      const previous=adjacent?localState.motionBoard:[];
+      const oldIds=adjacent?localState.motionIds:{};
+      let serial=adjacent?localState.motionSerial:0;
+      const ids={};
       s.board.forEach((value,cell)=>{
-        if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},
+        if(value!==-1&&previous[cell]!==undefined&&previous[cell]!==-1)ids[cell]=oldIds[cell];
+      });
+      const removed=previous.flatMap((value,cell)=>value!==-1&&s.board[cell]===-1?[cell]:[]);
+      const added=s.board.flatMap((value,cell)=>value!==-1&&previous[cell]===-1?[cell]:[]);
+      if(removed.length===1&&added.length===1&&previous[removed[0]]===s.board[added[0]])
+        ids[added[0]]=oldIds[removed[0]];
+      s.board.forEach((value,cell)=>{
+        if(value!==-1&&!ids[cell])ids[cell]=adjacent?'piece_motion_'+serial++:'piece_'+cell;
+      });
+      ataxxMotion={motionBoard:s.board.slice(),motionIds:ids,motionSerial:serial};
+      s.board.forEach((value,cell)=>{
+        if(value!==-1)pieces.push({id:ids[cell],type:'p'+value,board:'main',position:{cell:String(cell)},
           text:value===0?'○':'◆',aria_label:t('piece_at',{name:playerName(value),r:Math.floor(cell/7)+1,c:cell%7+1}),
           scale:selectedFrom===cell?1.12:1,actions:[]});
         if(active&&legal.some(move=>move.from===cell))
@@ -88,7 +107,7 @@ const gameUI = {
     // stay passive; legal destinations and enabled buttons supply their hints.
     for(const piece of pieces)if(!piece.actions)piece.actions=[];
     const scene={pieces,targets,controls,labels,paths};
-    const out={scene,local_state:KIND==='ataxx'?{move_count:m.move_count,viewer:m.my_player_index,selectedFrom}:{}};
+    const out={scene,local_state:KIND==='ataxx'?{move_count:m.move_count,viewer:m.my_player_index,selectedFrom,...ataxxMotion}:{}};
     if(message.type==='ui_event'&&active&&['tap','drop'].includes(message.event.type)){
       const e=message.event;
       let id=e.type==='drop'?e.target_id:e.id;

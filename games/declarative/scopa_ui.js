@@ -67,14 +67,14 @@ const gameUI = {
       const row = Math.floor(i/7);
       const count = Math.min(7,s.table.length-row*7);
       const position = {x:320-(count-1)*40+(i%7)*80,y:205+row*105};
-      piece(`table_${i}`,card,position,taken.includes(card) ? 1.08 : 1);
+      piece(`card_${card}`,card,position,taken.includes(card) ? 1.08 : 1);
       if (active && selected && legal.some(move => move.card === selected &&
           move.capture.includes(card) && taken.every(value => move.capture.includes(value))))
         target(`take_${card}`,position,text('capture',{card:cardText(card)}));
     });
     (s.hand || []).forEach((card,i) => {
       const position = {x:320-(s.hand.length-1)*60+i*120,y:500+shift};
-      piece(`card_${i}`,card,position,selected === card ? 1.08 : 1);
+      piece(`card_${card}`,card,position,selected === card ? 1.08 : 1);
       if (active && legal.some(move => move.card === card))
         target(`hand_${card}`,position,text('play',{card:cardText(card)}));
     });

@@ -69,6 +69,10 @@
           "type": "boolean",
           "description": "Accepted for compatibility only; ignored during live play. The viewer's own moves always update immediately."
         },
+        "scene_transitions": {
+          "type": "boolean",
+          "description": "Animate visible pieces entering, changing or leaving on opponent moves."
+        },
         "easing": {
           "enum": [
             "ease-out",

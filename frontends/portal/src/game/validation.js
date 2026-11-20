@@ -34,9 +34,10 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     finiteJSON(spec);
     if(!spec || spec.format!=="buildplay-ui" || spec.version!==1)throw new Error(t("ui.declarative.error.unsupported_declarative_ui_format", {}, "Unsupported declarative UI format"));
     if(spec.motion!==undefined){
-      knownObject(spec.motion,["move_ms","roll_ms","roll_settle_ms","turn_pause_ms","animate_own","easing"]);
+      knownObject(spec.motion,["move_ms","roll_ms","roll_settle_ms","turn_pause_ms","animate_own","scene_transitions","easing"]);
       for(const key of ["move_ms","roll_ms","roll_settle_ms","turn_pause_ms"])if(key in spec.motion&&(!Number.isInteger(spec.motion[key])||spec.motion[key]<0||spec.motion[key]>5000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
       if("animate_own" in spec.motion&&typeof spec.motion.animate_own!=="boolean")throw new Error(t("ui.declarative.error.invalid_ui_flag", {}, "Invalid UI flag"));
+      if("scene_transitions" in spec.motion&&typeof spec.motion.scene_transitions!=="boolean")throw new Error(t("ui.declarative.error.invalid_ui_flag", {}, "Invalid UI flag"));
       if("easing" in spec.motion&&!["ease-out","ease-in-out-quad"].includes(spec.motion.easing))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
     }
     if(!spec.viewport || !(spec.viewport.width>0) || !(spec.viewport.height>0))throw new Error(t("ui.declarative.error.invalid_viewport", {}, "Invalid viewport"));

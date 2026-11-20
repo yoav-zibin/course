@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url);
 let COMPACT_UI;
 function compactUi() {
   if (COMPACT_UI === undefined)
-    COMPACT_UI = require('esbuild').transformSync(UI, {minifyWhitespace:true, target:'es2020'}).code;
+    COMPACT_UI = require('esbuild').transformSync(UI, {minify:true, target:'es2020'}).code;
   return COMPACT_UI;
 }
 const COPY = JSON.parse(fs.readFileSync(path.join(OUT, 'locales', 'html_conversions.json'), 'utf8'));
@@ -57,8 +57,7 @@ const EXTRA_STRINGS = {
   'Last spin: {n} · {from} → {to}':['Último giro: {n} · {from} → {to}','Dernier tour : {n} · {from} → {to}','Letzte Drehung: {n} · {from} → {to}','Último giro: {n} · {from} → {to}','上次转出：{n} · {from} → {to}','पिछला स्पिन: {n} · {from} → {to}','آخر تدوير: {n} · {from} → {to}']
 };
 const ALL_STRINGS={...COPY.strings,...EXTRA_STRINGS};
-const STRING_KEYS = Object.fromEntries(Object.keys(ALL_STRINGS).map((text,index) => [text,`text_${index}`]));
-const ENGLISH = Object.fromEntries(Object.entries(STRING_KEYS).map(([text,key]) => [key,text]));
+const DEFAULT_STRING_KEYS = Object.fromEntries(Object.keys(ALL_STRINGS).map((text,index) => [text,`text_${index}`]));
 const ENTRIES = [
   {kind:'mau_mau', title:'Mau-Mau', players:[2], board:'table'},
   {kind:'dos', title:'Dos', players:[2], board:'table'},
@@ -342,7 +341,10 @@ function typesFor(kind) {
       types[`dos_${key}`] = {shape:'image',asset:`dos_${key}`,width:76,height:96,text_color:text};
     types.deck = {shape:'image',asset:'dos_deck',width:76,height:96,text_color:'#ffffff'};
   }
-  if (kind === 'kisolo') types.pit = {shape:'circle',width:66,height:54,color:'#70452b',text_color:'#fff3d4',border_color:'#4d2e1d'};
+  if (kind === 'kisolo') {
+    types.pit = {shape:'circle',width:66,height:54,color:'#70452b',text_color:'#fff3d4',border_color:'#4d2e1d'};
+    for (let n=0;n<=7;n++) types[`pit_${n}`] = {shape:'image',asset:`kisolo_pit_${n}`,width:66,height:54};
+  }
   if (kind === 'gobblet') for (let size=1;size<=4;size++) for (let owner=0;owner<2;owner++)
     types[`goblet_${size}_${owner}`] = {shape:'image',asset:`goblet_${owner}`,
       width:38 + size * 13,height:38 + size * 13};
@@ -371,6 +373,22 @@ function softCardAssets() {
     media_type:'image/svg+xml',
     uri:`data:image/svg+xml;base64,${fs.readFileSync(path.join(OUT,`${key}.svg`)).toString('base64')}`
   }]));
+}
+
+function kisoloAssets() {
+  const layouts = [
+    [], [[0,0]], [[-7,0],[7,0]], [[-10,0],[0,0],[10,0]],
+    [[-7,-7],[7,-7],[-7,7],[7,7]],
+    [[-10,-7],[10,-7],[0,0],[-10,7],[10,7]],
+    [[-10,-7],[0,-7],[10,-7],[-10,7],[0,7],[10,7]],
+    [[-10,-10],[0,-10],[10,-10],[0,0],[-10,10],[0,10],[10,10]]
+  ];
+  return Object.fromEntries(layouts.map((points,n) => {
+    const seeds = points.map(([x,y]) =>
+      `<circle cx="${33+x}" cy="${27+y}" r="5" fill="#f9e4ad" stroke="#d4a967" stroke-width="1"/>`).join('');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 66 54"><ellipse cx="33" cy="27" rx="32" ry="26" fill="#70452b" stroke="#4d2e1d" stroke-width="2"/>${seeds}</svg>`;
+    return [`kisolo_pit_${n}`,{media_type:'image/svg+xml',uri:`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`}];
+  }));
 }
 
 function gobbletAssets() {
@@ -531,20 +549,20 @@ function serverStrings(kind) {
   return ARCHIVE_SERVER[kind] || CUSTOM_SERVER[kind];
 }
 
-function translatedStrings(locale,title,kind) {
+function translatedStrings(locale,title,kind,keys) {
   const index=LOCALES.indexOf(locale);
-  const strings=Object.fromEntries(Object.entries(ALL_STRINGS).map(([text,values])=>[STRING_KEYS[text],values[index]]));
+  const strings=Object.fromEntries(Object.entries(keys).map(([text,key])=>[key,ALL_STRINGS[text][index]]));
   strings.title=title;
   Object.assign(strings,serverStrings(kind).locales[locale]);
   return strings;
 }
 
-function makeMissingTranslation(entry,locale) {
+function makeMissingTranslation(entry,locale,keys) {
   const index=LOCALES.indexOf(locale);
   const values=CUSTOM[entry.kind].locales[locale];
   const [name,description,rules,ui,how] = values;
   const displayName=`${name} (${COPY.strings.Declarative[index]})`;
-  const client=translatedStrings(locale,displayName,entry.kind);
+  const client=translatedStrings(locale,displayName,entry.kind,keys);
   return {display_name:displayName,short_description:description,game_logic_rules:rules,game_ui_rules:ui,
     tutorial_strings:{'How to play':how,[CUSTOM[entry.kind].rules]:rules,[CUSTOM[entry.kind].ui]:ui},
     client_strings:client};
@@ -553,6 +571,9 @@ function makeMissingTranslation(entry,locale) {
 function build(entry) {
   const filename=path.join(OUT,`${entry.kind}.json`);
   const source=JSON.parse(fs.readFileSync(filename,'utf8'));
+  const existing = Object.entries(source.declarative_ui?.strings || {})
+    .filter(([key,text]) => /^text_\d+$/.test(key) && ALL_STRINGS[text]);
+  const keys = existing.length ? Object.fromEntries(existing.map(([key,text]) => [text,key])) : DEFAULT_STRING_KEYS;
   const {code,tests}=addHints(entry.kind,source);
   const sourceTranslation=source.translations || {};
   const custom=CUSTOM[entry.kind];
@@ -569,7 +590,7 @@ function build(entry) {
   for(const locale of LOCALES) {
     const old=sourceTranslation[locale];
     if(custom && !old) {
-      translations[locale]=makeMissingTranslation(entry,locale);
+      translations[locale]=makeMissingTranslation(entry,locale,keys);
       continue;
     }
     if(!old) throw new Error(`${entry.kind}: missing ${locale} source translation`);
@@ -585,16 +606,20 @@ function build(entry) {
       ...(entry.kind === 'kisolo' ? {game_ui_rules:KISOLO_UI[LOCALES.indexOf(locale)+1]} : {}),
       ...(entry.kind === 'mau_mau' ? {game_ui_rules:MAU_MAU_UI[LOCALES.indexOf(locale)+1]} : {}),
       ...(entry.kind === 'dos' ? {game_ui_rules:DOS_UI[LOCALES.indexOf(locale)+1]} : {}),
-      client_strings:translatedStrings(locale,displayName,entry.kind)};
+      client_strings:{...old.client_strings,...translatedStrings(locale,displayName,entry.kind,keys)}};
   }
-  const strings={...ENGLISH,title,...serverStrings(entry.kind).english};
+  const strings={...source.declarative_ui?.strings,
+    ...Object.fromEntries(Object.entries(keys).map(([text,key]) => [key,text])),
+    title,...serverStrings(entry.kind).english};
   const layout=board(['thirty_one','mau_mau','dos'].includes(entry.kind) ? entry.kind : entry.board);
-  const spec={format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
+  const spec={format:'buildplay-ui',version:1,viewport:layout.viewport,
+    motion:{scene_transitions:true,easing:'ease-in-out-quad'},boards:layout.boards,
     piece_types:typesFor(entry.kind),strings,
-    ...(entry.kind === 'dos' ? {assets:dosAssets()} :
+    ...(entry.kind === 'kisolo' ? {assets:kisoloAssets()} :
+      entry.kind === 'dos' ? {assets:dosAssets()} :
       entry.kind === 'gobblet' ? {assets:gobbletAssets()} :
         ['thirty_one','mau_mau'].includes(entry.kind) ? {assets:softCardAssets()} : {}),
-    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n`+(entry.kind === 'kisolo' ? compactUi() : UI)};
+    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title})};\nconst SOURCE_KEYS=${JSON.stringify(keys)};\n`+(entry.kind === 'kisolo' ? compactUi() : UI)};
   const tutorial=custom ? {text:rules,html:`<meta name="viewport" content="width=device-width,initial-scale=1"><main><h1>How to play</h1><p>${rules}</p><p>${ui}</p></main>`} : source.tutorial;
   if(custom) {
     for(const locale of LOCALES) {

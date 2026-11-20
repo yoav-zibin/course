@@ -21,6 +21,29 @@ async function mount(page:Page,request:APIRequestContext,pkg=spec(),initial=stat
 async function send(page:Page,message:Record<string,unknown>){await page.evaluate(value=>window.postMessage(value,'*'),message);}
 async function moves(page:Page){return page.evaluate(()=>(window as any).__moves);}
 
+test('opt-in live scene transitions respect actor and reduced motion',async({page,request})=>{
+  const pkg={...spec(`const gameUI={reduce(message){const m=message.type==='ui_event'?message.state_changed:message;return {scene:{pieces:m.view.show?[{id:'token',type:'token',board:'board',position:{cell:'0'},aria_label:'Visible token',actions:[]}]:[]}}}};`),
+    motion:{move_ms:1000,scene_transitions:true}};
+  await mount(page,request,pkg,state({move_count:0,view:{show:true}}));
+  await expect(page.getByLabel('Visible token')).toBeVisible();
+  await send(page,state({move_count:1,last_move_player_index:0,view:{show:false}}));
+  await expect(page.getByLabel('Visible token')).toHaveCount(0);
+  await expect(page.getByTestId('history-ghost')).toHaveCount(0);
+  await send(page,state({move_count:2,last_move_player_index:0,view:{show:true}}));
+  await expect(page.getByLabel('Visible token')).toBeVisible();
+  await send(page,state({move_count:3,last_move_player_index:1,view:{show:false}}));
+  const ghost=page.getByTestId('history-ghost');
+  await expect(ghost).toHaveCount(1);await expect(ghost).toHaveAttribute('aria-hidden','true');
+  await expect(ghost).toHaveCount(0,{timeout:5000});
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await send(page,state({move_count:4,last_move_player_index:1,view:{show:true}}));
+  await expect(page.getByLabel('Visible token')).toHaveAttribute('opacity','1');
+  await send(page,state({move_count:5,last_move_player_index:1,view:{show:false}}));
+  await expect(page.getByLabel('Visible token')).toHaveCount(0);
+  await expect(ghost).toHaveCount(0);
+  expect(await moves(page)).toEqual([]);
+});
+
 test('a coalesced computer batch paints its intermediate accepted boards in order',async({page,request})=>{
   const pkg={...spec(`const gameUI={reduce(message){const m=message.type==='ui_event'?message.state_changed:message;return {scene:{pieces:[{id:'token',type:'token',board:'board',position:{cell:String(m.view.n%12)},aria_label:'Batch token',actions:[]}],labels:[{id:'step',x:8,y:285,text:'Accepted step '+m.view.n}]}}}};`),motion:{move_ms:120}};
   await mount(page,request,pkg,state({move_count:0,view:{n:0},last_move_player_index:null}));

@@ -30,7 +30,7 @@ const gameUI = {
     const played = s.trick.length ? s.trick : s.last_trick;
     played.forEach((play, i) => {
       const position = {x:140 + i * 120,y:205};
-      scene.pieces.push({id:`played_${i}`,type:cardType(play.card),board:'table',position,
+      scene.pieces.push({id:`card_${play.card}`,type:cardType(play.card),board:'table',position,
         text:cardText(play.card),actions:[]});
       const name = m.players?.[play.seat]?.name || text('player',{n:play.seat + 1});
       label(`name_${i}`,shortName(name,8),position.x - 25,270,15);
@@ -40,7 +40,7 @@ const gameUI = {
       const row = Math.floor(i / 7);
       const count = Math.min(7, s.hand.length - row * 7);
       const position = {x:320 - (count - 1) * 40 + (i % 7) * 80,y:395 + row * 105};
-      scene.pieces.push({id:`hand_${i}`,type:cardType(card),board:'table',position,
+      scene.pieces.push({id:`card_${card}`,type:cardType(card),board:'table',position,
         text:cardText(card),actions:[]});
       if (legal.has(card)) scene.targets.push({id:`play_${card}`,board:'table',position,
         color:'#00000000',hit_area:{x:-37,y:-48,width:74,height:96},

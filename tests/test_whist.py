@@ -52,7 +52,7 @@ def test_whist_centers_each_hand_row():
     message = {'type':'state_changed','view':view,'status':'ongoing',
                'acting_for_player_index':0,'my_player_index':0,'move_count':0}
     pieces = [piece for piece in ui.reduce(message)['scene']['pieces']
-              if piece['id'].startswith('hand_')]
+              if piece['id'].startswith('card_') and piece['position']['y'] >= 395]
     for y in (395, 500):
         x = [piece['position']['x'] for piece in pieces if piece['position']['y'] == y]
         assert (min(x) + max(x)) / 2 == 320

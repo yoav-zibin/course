@@ -15,7 +15,7 @@ export type PieceType = {
 };
 export type Motion = {
   move_ms?: number; roll_ms?: number; roll_settle_ms?: number; turn_pause_ms?: number;
-  animate_own?: boolean; easing?: 'ease-out' | 'ease-in-out-quad';
+  animate_own?: boolean; scene_transitions?: boolean; easing?: 'ease-out' | 'ease-in-out-quad';
 };
 export type GameSpec = {
   format: 'buildplay-ui'; version: 1; viewport: { width: number; height: number; camera_enabled?: boolean; camera_controls?: boolean };
