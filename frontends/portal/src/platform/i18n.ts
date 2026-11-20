@@ -11,14 +11,25 @@ let localeRequest = 0;
 let locales: any[] = [{ code: 'en', name: 'English', direction: 'ltr' }, { code: 'es', name: 'Español', direction: 'ltr' }, { code: 'fr', name: 'Français', direction: 'ltr' }, { code: 'de', name: 'Deutsch', direction: 'ltr' }, { code: 'pt', name: 'Português', direction: 'ltr' }, { code: 'zh', name: '中文', direction: 'ltr' }, { code: 'hi', name: 'हिन्दी', direction: 'ltr' }, { code: 'ar', name: 'العربية', direction: 'rtl' }];
 const listeners = new Set<() => void>();
 const copyCatalog = sharedCopy as Record<string, Record<string, string>>;
+// Renderer terminology can survive in older game packages and cached catalogs.
+// Clean only displayed copy; source packages, identifiers and move values stay intact.
+export function playerText(source: string): string {
+  if (!/declarative/i.test(source)) return source;
+  return source.replace(/[\[(]\s*declarative\s*[\])]/gi, '')
+    .replace(/declarative/gi, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+([.,;:!?])/g, '$1')
+    .replace(/^[ \t]*[-–—:|]+[ \t]*|[ \t]*[-–—:|]+[ \t]*$/g, '')
+    .trim();
+}
 // Explicitly authored interface copy only. Game text and account names enter
 // through parameters and are never used as translation keys.
 export function copyText(source: string, params: Record<string, any> = {}): string {
   const value = locale === 'en' ? source : copyCatalog[source]?.[locale] ?? source;
-  return value.replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(params, name) ? String(params[name]) : match);
+  return playerText(value.replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(params, name) ? String(params[name]) : match));
 }
 export function t(key: string, params: Record<string, any> = {}, fallback = key): string {
-  return (messages[key] ?? copyText(fallback)).replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(params, name) ? String(params[name]) : match);
+  return playerText((messages[key] ?? copyText(fallback)).replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(params, name) ? String(params[name]) : match));
 }
 export function plural(key: string, count: number, params: Record<string, any> = {}, fallbacks: Record<string, string> = {}): string {
   const form = new Intl.PluralRules(locale).select(count); return t(`${key}_${form}`, { count, ...params }, fallbacks[form] ?? fallbacks.many ?? key);
@@ -41,10 +52,11 @@ export function localizeGame<T extends { id: string; version: number; name: stri
     tutorial_text:original('tutorial_text',game.tutorial_text??game.tutorial?.text)};
   const texts=gameTexts(game),authored=locale==='en'?null:game.translations?.[locale];
   const translated=(value:unknown)=>typeof value==='string'&&value.trim()?value:undefined;
-  return {...game,_sourceText:source,name:translated(texts?.name)||translated(texts?.display_name)||source.name,description:translated(texts?.description)||translated(texts?.short_description)||source.description,
-    game_logic_rules:translated(authored?.game_logic_rules)||source.game_logic_rules,
-    game_ui_rules:translated(authored?.game_ui_rules)||source.game_ui_rules,
-    tutorial_text:translateTutorial(source.tutorial_text,authored?.tutorial_strings)};
+  const display=(value:any)=>typeof value==='string'?playerText(value):value;
+  return {...game,_sourceText:source,name:display(translated(texts?.name)||translated(texts?.display_name)||source.name),description:display(translated(texts?.description)||translated(texts?.short_description)||source.description),
+    game_logic_rules:display(translated(authored?.game_logic_rules)||source.game_logic_rules),
+    game_ui_rules:display(translated(authored?.game_ui_rules)||source.game_ui_rules),
+    tutorial_text:display(translateTutorial(source.tutorial_text,authored?.tutorial_strings))};
 }
 function translateTutorial(source:unknown,table:unknown):unknown {
   if(typeof source!=='string'||!table||typeof table!=='object')return source;

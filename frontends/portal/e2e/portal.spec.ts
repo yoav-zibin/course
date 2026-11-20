@@ -47,7 +47,7 @@ test('short screens keep the full native board width and can scroll to its last 
   for(const viewport of [{width:320,height:480},{width:480,height:320},{width:844,height:390}]){
     await page.setViewportSize(viewport);await page.goto('/portal#local');
     await page.getByRole('button',{name:'Pass and play',exact:true}).click();
-    const board=page.getByLabel('Game board. Use pieces and highlighted destinations. Zoom controls are above the board.');
+    const board=page.getByLabel('Game board. Use pieces and highlighted destinations.');
     await expect(page.getByRole('button',{name:'Cell 9',exact:true})).toBeAttached();
     const geometry=await board.boundingBox();expect(geometry!.width).toBeCloseTo(viewport.width,0);
     // The bundled package declares 600x560, including its instruction margins.
@@ -67,7 +67,8 @@ test('short screens keep the full native board width and can scroll to its last 
     }
     await expect.poll(async()=>{const box=await cell.boundingBox();return !!box&&box.x>=0&&box.x+box.width<=viewport.width+1&&box.y>=0&&box.y+box.height<=viewport.height+1;}).toBe(true);
     expect(await cell.evaluate(node=>{const rect=node.getBoundingClientRect();return node.contains(document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2));})).toBe(true);
-    await expect(page.getByRole('button',{name:'Reset board view'})).toHaveText('100%');
+    await expect(board.locator('svg').first()).toHaveAttribute('viewBox','0 0 600 560');
+    await expect(page.getByRole('button',{name:/^(Zoom in|Zoom out|Reset board view)$/})).toHaveCount(0);
     await page.screenshot({path:info.outputPath(`last-rank-${viewport.width}.png`)});
     await cell.click();await expect(cell).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
@@ -77,7 +78,7 @@ test('short screens keep the full native board width and can scroll to its last 
 test('empty fitted board space permits native touch scrolling and retains real piece taps',async({page,isMobile})=>{
   test.skip(!isMobile,'Uses the mobile project’s native touch input');
   await page.setViewportSize({width:480,height:320});await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
-  const board=page.getByLabel('Game board. Use pieces and highlighted destinations. Zoom controls are above the board.');
+  const board=page.getByLabel('Game board. Use pieces and highlighted destinations.');
   await expect(page.getByRole('button',{name:'Cell 9',exact:true})).toBeAttached();await board.scrollIntoViewIfNeeded();
   const port=await board.evaluateHandle(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)if(/auto|scroll/.test(getComputedStyle(parent).overflowY))return parent;throw new Error('Missing native containing scroll view');});
   const before=await port.evaluate(node=>node.scrollTop),bounds=await port.evaluate(node=>{const r=node.getBoundingClientRect();return {top:r.top,bottom:r.bottom};});

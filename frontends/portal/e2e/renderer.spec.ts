@@ -109,15 +109,15 @@ test('Connect Four SVG discs stay centered in their rack holes with native neste
   // shift every disc half its size, while explicit parent transforms stay put.
   await page.locator('svg svg').evaluateAll(nodes=>nodes.forEach(node=>{node.removeAttribute('x');node.removeAttribute('y');}));
   await assertCenters();
-  await page.getByRole('button',{name:'Zoom in',exact:true}).click();
-  await assertCenters();
+  await page.setViewportSize({width:480,height:640});
+  await expect(assertCenters).toPass({timeout:5000});
   await page.screenshot({path:info.outputPath('connect4-native-svg-centers.png'),fullPage:true});
 });
 
 test('fitted native scenes retain instructions inside the complete declared viewport',async({page,request})=>{
   const pkg={...spec(`const gameUI={reduce(){return {scene:{labels:[{id:'instruction',x:20,y:440,text:'Keep this complete instruction visible',font_size:18}]}}}};`),viewport:{width:400,height:500},boards:[{id:'board',kind:'zone',x:20,y:20,width:180,height:180}]};
   await mount(page,request,pkg);const label=page.getByText('Keep this complete instruction visible',{exact:true});await expect(label).toBeVisible();
-  const board=page.getByLabel('Game board. Use pieces and highlighted destinations. Zoom controls are above the board.');
+  const board=page.getByLabel('Game board. Use pieces and highlighted destinations.');
   await label.scrollIntoViewIfNeeded();const caption=(await label.boundingBox())!,canvas=(await board.boundingBox())!;
   expect(caption.y).toBeGreaterThanOrEqual(canvas.y);expect(caption.y+caption.height).toBeLessThanOrEqual(canvas.y+canvas.height+1);
   await expect(label).toBeInViewport();
@@ -175,30 +175,50 @@ test('piece selection exposes rotate/flip/resize and a legal destination submits
   expect((await moves(page))[1]).toEqual({event:{type:'drop',id:'token',piece_id:'token',target_id:'destination'}});
 });
 
-test('Escape from an outside camera control cancels a held selection without disabling direct placements',async({page,request})=>{
+test('Escape from an outside piece control cancels a held selection without disabling direct placements',async({page,request})=>{
   await mount(page,request);await page.getByRole('button',{name:/Green token/}).click();
   await expect(page.getByRole('button',{name:'Rotate clockwise',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Zoom in',exact:true}).focus();await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Rotate clockwise',exact:true}).focus();await page.keyboard.press('Escape');
   await expect(page.getByRole('button',{name:'Rotate clockwise',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Place here',exact:true}).click();
   await expect.poll(()=>moves(page)).toEqual([{event:{type:'tap',id:'destination'}}]);
 });
 
-test('board zoom and keyboard/pointer gestures never emit a move and fixed-camera games stay fitted',async({page,request,isMobile})=>{
+test('boards omit zoom controls, retain camera gestures and keep fixed-camera games fitted',async({page,request,isMobile})=>{
   await mount(page,request);
-  await expect(page.getByRole('button',{name:'Reset board view'})).toHaveText('100%');
-  await page.getByRole('button',{name:'Zoom in',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Reset board view'})).toHaveText('125%');
-  await page.getByRole('button',{name:'Reset board view'}).click();
+  const board=page.getByLabel('Game board. Use pieces and highlighted destinations.');
+  const canvas=board.locator('svg').first();
+  await expect(canvas).toHaveAttribute('viewBox','0 0 400 300');
+  await expect(page.getByRole('button',{name:/^(Zoom in|Zoom out|Reset board view)$/})).toHaveCount(0);
   if(!isMobile){
-    await page.getByLabel('Game board. Use pieces and highlighted destinations. Zoom controls are above the board.').focus();
-    await page.keyboard.press('+');await expect(page.getByRole('button',{name:'Reset board view'})).toHaveText('125%');
-    await page.keyboard.press('0');
+    await board.focus();await page.keyboard.press('+');
+    await expect(canvas).not.toHaveAttribute('viewBox','0 0 400 300');
+    await page.keyboard.press('0');await expect(canvas).toHaveAttribute('viewBox','0 0 400 300');
   }
   expect(await moves(page)).toEqual([]);
   const fixed={...spec(),viewport:{width:400,height:300,camera_enabled:false}};
   await mount(page,request,fixed);await expect(page.getByRole('button',{name:'Roll dice',exact:true})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Zoom in',exact:true})).toHaveCount(0);
+  if(!isMobile){await board.focus();await page.keyboard.press('+');}
+  await expect(canvas).toHaveAttribute('viewBox','0 0 400 300');
+  await expect(page.getByRole('button',{name:/^(Zoom in|Zoom out|Reset board view)$/})).toHaveCount(0);
+});
+
+test('scene copy hides internal terminology without changing move identifiers or option values',async({page,request})=>{
+  const pkg=spec(`const gameUI={reduce(message){return {scene:{
+    pieces:[{id:'declarative_piece',type:'token',board:'board',position:{cell:'0'},text:'Token (Declarative)',aria_label:'Token (Declarative)',actions:['move'],move_targets:['declarative_target']}],
+    targets:[{id:'declarative_target',board:'board',position:{cell:'2'},label:'Destination (Declarative)'}],
+    labels:[{id:'title',x:10,y:240,text:'Table (Declarative)'}],
+    controls:[{id:'declarative_choice',kind:'choice',label:'Theme (Declarative)',value:false,options:[{label:'Classic (Declarative)',value:'declarative_value'}]}]
+  },...(message.type==='ui_event'?{make_move:message.event}:{})};}};`);
+  await mount(page,request,pkg);
+  await expect(page.getByText('Table',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Token: Move',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Destination',exact:true})).toBeVisible();
+  await expect(page.getByText('Theme',{exact:true})).toBeVisible();
+  expect(await page.locator('body').innerText()).not.toMatch(/declarative/i);
+  expect(await page.locator('[aria-label]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('aria-label')).join(' '))).not.toMatch(/declarative/i);
+  await page.getByRole('radio',{name:'Classic',exact:true}).click();
+  await expect.poll(()=>moves(page)).toEqual([{type:'change',id:'declarative_choice',value:'declarative_value'}]);
 });
 
 test('a reducer cannot access credentials or make network requests and an infinite loop is terminated',async({page,request})=>{
@@ -233,6 +253,8 @@ test('pinching cancels a held piece, zooms the board and leaves the move queue u
   test.skip(browserName!=='chromium','Chromium CDP supplies reproducible multi-touch input');
   await mount(page,request);
   const token=page.getByRole('button',{name:/Green token/}).locator('ellipse');await expect(token).toBeVisible();
+  const canvas=page.getByLabel('Game board. Use pieces and highlighted destinations.').locator('svg').first();
+  const fitted=await canvas.getAttribute('viewBox');
   const box=(await token.boundingBox())!,center={x:box.x+box.width/2,y:box.y+box.height/2};
   const cdp=await page.context().newCDPSession(page);
   await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true});
@@ -240,7 +262,7 @@ test('pinching cancels a held piece, zooms the board and leaves the move queue u
   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...center,id:1},{x:center.x+80,y:center.y+100,id:2}]});
   for(let step=1;step<=6;step++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:center.x,y:center.y,id:1},{x:center.x+80+step*9,y:center.y+100+step*9,id:2}]});
   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  await expect(page.getByRole('button',{name:'Reset board view'})).not.toHaveText('100%');
+  await expect(canvas).not.toHaveAttribute('viewBox',fitted!);
   expect(await moves(page)).toEqual([]);
 });
 

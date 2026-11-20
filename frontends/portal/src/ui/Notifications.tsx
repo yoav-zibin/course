@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {Pressable, Switch, View} from 'react-native';
-import {copyText} from '../platform/i18n';
+import {copyText,playerText} from '../platform/i18n';
 import type {InAppNotification} from '../core/types';
 import {Button, Card, Copy, Dialog, Empty, Notice, Row, Title, colors} from './components';
 import {useApp} from './context';
@@ -29,7 +29,7 @@ export function NotificationInbox({visible, onClose, onOpen}: {visible:boolean; 
 
 export function NotificationItem({item,onOpen}: {item:InAppNotification;onOpen:(notification:InAppNotification)=>Promise<void>}) {
   const [opening,setOpening]=useState(false),[error,setError]=useState('');
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${item.title}. ${item.body}`} accessibilityState={{disabled:opening,busy:opening}} disabled={opening} testID={`notification-${item.id}`}
+  return <Pressable accessibilityRole="button" accessibilityLabel={playerText(`${item.title}. ${item.body}`)} accessibilityState={{disabled:opening,busy:opening}} disabled={opening} testID={`notification-${item.id}`}
     onPress={async()=>{if(opening)return;setOpening(true);setError('');try{await onOpen(item);}catch(reason){setError(reason instanceof Error?reason.message:String(reason));}finally{setOpening(false);}}}
     style={({pressed,focused}:any)=>[opening&&{opacity:.5},pressed&&{opacity:.8},focused&&{outlineColor:colors.blue,outlineStyle:'solid',outlineWidth:2,borderRadius:14}]}>
     <Card style={{padding:16,borderColor:colors.accent}}>

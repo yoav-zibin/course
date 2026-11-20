@@ -1,4 +1,4 @@
-import {copyText} from '../platform/i18n';
+import {copyText,playerText} from '../platform/i18n';
 import React, {useEffect, useState} from 'react';
 import {Image, Pressable, ScrollView, StyleSheet, View} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -14,7 +14,7 @@ function GameCard({game}: {game: Game}) {
   const {p,openGame,run} = useApp();
   const saved = p.savedGames.some(item=>item.id===game.id);
   return <Card style={s.gameCard}><Pressable accessibilityRole="link" accessibilityLabel={copyText("Play {v0}",{v0:game.name})} onPress={()=>run(()=>openGame(game.id))} style={{gap:12}}>
-    {game.cover_url ? <Image source={{uri:new URL(game.cover_url,p.baseUrl).href}} style={s.cover} resizeMode="contain" accessibilityLabel={game.name}/> : <View style={[s.cover,{alignItems:'center',justifyContent:'center'}]}><Copy style={{fontSize:44,color:colors.blue}}>◇</Copy></View>}
+    {game.cover_url ? <Image source={{uri:new URL(game.cover_url,p.baseUrl).href}} style={s.cover} resizeMode="contain" accessibilityLabel={playerText(game.name)}/> : <View style={[s.cover,{alignItems:'center',justifyContent:'center'}]}><Copy style={{fontSize:44,color:colors.blue}}>◇</Copy></View>}
     <Title small>{game.name}</Title><Copy small muted numberOfLines={3}>{game.description}</Copy>
     <Copy small style={{color:colors.blue}}>{game.allowed_player_counts?.join(', ')} {copyText("players")}</Copy>
   </Pressable><Row><Button compact onPress={()=>run(()=>openGame(game.id))}>{copyText("Play")}</Button>{p.account && <Button compact secondary label={`${saved?copyText("Unsave"):copyText("Save")} ${game.name}`} onPress={()=>run(()=>p.actions.saveGame(game.id,!saved))}>{saved?copyText("★ Saved"):copyText("☆ Save")}</Button>}</Row></Card>;

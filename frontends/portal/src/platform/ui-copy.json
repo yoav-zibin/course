@@ -2177,14 +2177,14 @@
     "hi": "गेम लोड हो रहा है…",
     "ar": "جارٍ تحميل اللعبة…"
   },
-  "Game board. Use pieces and highlighted destinations. Zoom controls are above the board.": {
-    "es": "Tablero. Usa las piezas y los destinos resaltados. Los controles de zoom están arriba.",
-    "fr": "Plateau de jeu. Utilisez les pièces et les destinations en surbrillance. Les commandes de zoom sont au-dessus.",
-    "de": "Spielbrett. Verwende Figuren und markierte Ziele. Die Zoomsteuerung ist oberhalb des Bretts.",
-    "pt": "Tabuleiro. Use as peças e os destinos destacados. Os controles de zoom ficam acima.",
-    "zh": "游戏棋盘。使用棋子和高亮目标。缩放控件位于棋盘上方。",
-    "hi": "खेल बोर्ड। मोहरों और उभरे हुए गंतव्यों का उपयोग करें। ज़ूम नियंत्रण बोर्ड के ऊपर हैं।",
-    "ar": "لوحة اللعبة. استخدم القطع والوجهات المظللة. توجد أدوات التكبير فوق اللوحة."
+  "Game board. Use pieces and highlighted destinations.": {
+    "es": "Tablero. Usa las piezas y los destinos resaltados.",
+    "fr": "Plateau de jeu. Utilisez les pièces et les destinations en surbrillance.",
+    "de": "Spielbrett. Verwende Figuren und markierte Ziele.",
+    "pt": "Tabuleiro. Use as peças e os destinos destacados.",
+    "zh": "游戏棋盘。使用棋子和高亮目标。",
+    "hi": "खेल बोर्ड। मोहरों और उभरे हुए गंतव्यों का उपयोग करें।",
+    "ar": "لوحة اللعبة. استخدم القطع والوجهات المظللة."
   },
   " · choose a highlighted destination": {
     "es": "Elige un destino resaltado",

@@ -3,7 +3,7 @@ import {Image,Platform,Pressable,StyleSheet,Text,View} from 'react-native';
 import Svg,{Circle,Path} from 'react-native-svg';
 import type {Account} from '../core/types';
 import {recordDiagnosticEvent} from '../core/diagnostics';
-import {copyText} from '../platform/i18n';
+import {copyText,playerText} from '../platform/i18n';
 import {colors} from './components';
 
 function HeaderGlyph({kind}:{kind:'bell'|'account'|'focus'}){
@@ -14,6 +14,7 @@ function HeaderGlyph({kind}:{kind:'bell'|'account'|'focus'}){
 
 function HeaderButton({label,hint,disabled,onPress,children,testID,narrow}:{label:string;hint?:string;disabled?:boolean;onPress:()=>void;children:ReactNode;testID:string;narrow:boolean}){
   const description=useId();
+  label=playerText(label);hint=hint===undefined?undefined:playerText(hint);
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint} {...(Platform.OS==='web'&&hint?{'aria-describedby':description}:{})} accessibilityState={{disabled:Boolean(disabled)}} disabled={disabled} testID={testID}
     onPress={()=>{recordDiagnosticEvent('press',{label});onPress();}}
     style={({pressed,focused}:any)=>[s.button,narrow&&{width:34},disabled&&{opacity:.5},pressed&&{opacity:.8},focused&&{outlineColor:colors.blue,outlineStyle:'solid',outlineWidth:2}]}>{children}{Platform.OS==='web'&&hint&&<Text nativeID={description} style={s.description}>{hint}</Text>}</Pressable>;

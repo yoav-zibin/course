@@ -1,5 +1,5 @@
 import {recordDiagnosticLog,recordDiagnosticEvent} from '../core/diagnostics';
-import {copyText} from '../platform/i18n';
+import {copyText,playerText} from '../platform/i18n';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgXml, Text as SvgText } from 'react-native-svg';
@@ -35,7 +35,7 @@ export function GameRenderer(props: GameRendererProps) {
     catch (error) { return {error: errorOf(error)}; }
   }, [serialized]);
   useEffect(()=>{if(checked.error)recordDiagnosticLog('error','visible_game_error',checked.error);},[checked.error]);
-  if (!checked.spec) return <Text accessibilityRole="alert" style={styles.error}>{checked.error?.message || copyText("Invalid game package")}</Text>;
+  if (!checked.spec) return <Text accessibilityRole="alert" style={styles.error}>{playerText(checked.error?.message || copyText("Invalid game package"))}</Text>;
   return <Renderer {...props} key={`${props.contextKey || ''}:${serialized}:viewer:${props.message.my_player_index??'spectator'}`} spec={checked.spec} />;
 }
 
@@ -102,7 +102,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
 
   useEffect(()=>{
     if(Platform.OS!=='web')return;
-    // Camera controls and account dialogs live outside the SVG canvas. Escape
+    // Piece controls and account dialogs live outside the SVG canvas. Escape
     // must cancel a held piece there too, without taking over the dialog key.
     const cancel=(event:KeyboardEvent)=>{if(event.key==='Escape'){gesture.current=null;setDrag(null);select(null);showPreview(null);}};
     window.addEventListener('keydown',cancel,true);
@@ -352,17 +352,12 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   return <View style={styles.container}>
     <View style={styles.toolbar}>
       <Text style={styles.status} accessibilityLiveRegion="polite">{message.replay?copyText("Reviewing match"):busy?copyText("Sending move…"):message.status!=='ongoing'?copyText("Game finished"):active?copyText("Your turn"):copyText("Waiting for a move")}</Text>
-      {spec.viewport.camera_enabled!==false&&<View style={styles.row}>
-        <Tool label={copyText("Zoom out")} text="−" onPress={()=>zoomTo(camera.zoom/1.25)} />
-        <Tool label={copyText("Reset board view")} text={`${Math.round(camera.zoom*100)}%`} onPress={()=>setCamera({zoom:1,x:0,y:0})} />
-        <Tool label={copyText("Zoom in")} text="+" onPress={()=>zoomTo(camera.zoom*1.25)} />
-      </View>}
     </View>
     {!ready&&<ActivityIndicator accessibilityLabel={copyText("Loading game board")} color="#91d7c4" style={styles.loading}/>}
-    {!!error&&<Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+    {!!error&&<Text accessibilityRole="alert" style={styles.error}>{playerText(error)}</Text>}
     <View ref={canvas} collapsable={false} focusable style={[styles.canvas,{height}]} {...webProps} {...responders.panHandlers}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);measureOrigin();}}
-      accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations. Zoom controls are above the board.")}>
+      accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
       <Svg width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
         {spec.boards.map(board=><BoardGraphic key={board.id} board={board} spec={spec}/>)}
         {display.scene.paths?.map(path=><Polyline key={path.id} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>)}
@@ -375,32 +370,32 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
           return <G key={`preview-${index}`} transform={`translate(${point.x} ${point.y}) rotate(${cell.rotation||0})`} opacity={.7} pointerEvents="none">
             <Rect x={-size.width/2+1} y={-size.height/2+1} width={size.width-2} height={size.height-2} fill={cell.color||previewTarget.color||'#b8ef5b'} rx={4}/>
             <Asset spec={spec} id={cell.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
-            {!!cell.text&&<SvgText textAnchor="middle" alignmentBaseline="central" fontSize={Math.min(size.width,size.height)*.42} fill="#102330">{cell.text}</SvgText>}
+            {!!cell.text&&<SvgText textAnchor="middle" alignmentBaseline="central" fontSize={Math.min(size.width,size.height)*.42} fill="#102330">{playerText(cell.text)}</SvgText>}
           </G>;
         })}
         {display.scene.targets?.map(target=><TargetGraphic key={target.id} target={target} spec={spec}
           enabled={active&&(!selectedPiece?.move_targets?.length||selectedPiece.move_targets.includes(target.id))}
           selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>) }
         {drag&&display.scene.pieces?.filter(piece=>piece.id===drag.id).map(piece=><PieceGraphic key={`drag-${piece.id}`} piece={{...piece,position:{x:drag.at.x-(spec.boards.find(b=>b.id===piece.board)?.x||0),y:drag.at.y-(spec.boards.find(b=>b.id===piece.board)?.y||0)}}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true}/>) }
-        {display.scene.labels?.map(label=><SvgText key={label.id} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{label.text}</SvgText>)}
+        {display.scene.labels?.map(label=><SvgText key={label.id} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>)}
       </Svg>
     </View>
     <View style={styles.tools}>
-      {selectedPiece&&<Text style={styles.selectedLabel} accessibilityLiveRegion="polite">{pieceName(selectedPiece)}{selectedPiece.move_targets?.length?copyText(" · choose a highlighted destination"):''}</Text>}
+      {selectedPiece&&<Text style={styles.selectedLabel} accessibilityLiveRegion="polite">{playerText(pieceName(selectedPiece))}{selectedPiece.move_targets?.length?copyText(" · choose a highlighted destination"):''}</Text>}
       <View style={styles.row}>
         {selectedActions.includes('rotate')&&<><Tool label={copyText("Rotate counterclockwise")} text="↺" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:-90})}/><Tool label={copyText("Rotate clockwise")} text="↻" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:90})}/></>}
         {selectedActions.includes('flip')&&<Tool label={copyText("Flip piece")} text="⇋" disabled={!active} onPress={()=>transform({type:'flip',id:''})}/>}
         {selectedActions.includes('scale')&&<><Tool label={copyText("Make piece smaller")} text="↙" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1/1.1})}/><Tool label={copyText("Make piece larger")} text="↗" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1.1})}/></>}
         {selectedPiece&&<Tool label={copyText("Cancel selection")} text={copyText("Cancel")} onPress={()=>{select(null);showPreview(null);setDrag(null);}}/>}
       </View>
-      {previewTarget?.preview?.length? <Text accessibilityLiveRegion="polite" style={styles.preview}>{copyText("Preview:")} {previewTarget.aria_label||previewTarget.label||copyText('placement')}{copyText(". Tap the destination again to confirm.")}</Text>:null}
+      {previewTarget?.preview?.length? <Text accessibilityLiveRegion="polite" style={styles.preview}>{copyText("Preview:")} {playerText(previewTarget.aria_label||previewTarget.label||copyText('placement'))}{copyText(". Tap the destination again to confirm.")}</Text>:null}
     </View>
     <View style={styles.controls}>{display.scene.controls?.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>
   </View>;
 }
 
 function Tool({label,text,onPress,disabled=false}:{label:string;text:string;onPress:()=>void;disabled?:boolean}) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.tool,disabled&&styles.disabled,pressed&&styles.pressed]}><Text style={styles.toolText}>{text}</Text></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={playerText(label)} accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.tool,disabled&&styles.disabled,pressed&&styles.pressed]}><Text style={styles.toolText}>{playerText(text)}</Text></Pressable>;
 }
 
 const Asset = memo(function Asset({spec,id,x,y,width,height}:{spec:GameSpec;id?:string;x:number;y:number;width:number;height:number}) {
@@ -432,7 +427,7 @@ const BoardGraphic=memo(function BoardGraphic({board,spec}:{board:Board;spec:Gam
       const radius=Math.min(board.width/Math.max(2,board.columns||7),board.height/Math.max(2,board.rows||7))*.48;
       return <G key={cell.id}>
         {board.kind==='hex'?<Polygon points={Array.from({length:6},(_,i)=>`${cell.x+Math.cos((i*60+30)*Math.PI/180)*radius},${cell.y+Math.sin((i*60+30)*Math.PI/180)*radius}`).join(' ')} fill={cell.color||board.color||'#264d53'} stroke={board.line_color||'#829e9c'}/>:<Circle cx={cell.x} cy={cell.y} r={12} fill={cell.color||'#476474'} stroke={board.line_color||'#91a7b7'}/>}
-        {!!cell.label&&<SvgText x={cell.x} y={cell.y} textAnchor="middle" alignmentBaseline="central" fill="#ffffff" stroke="#102330" strokeWidth={.3} fontSize={12}>{cell.label}</SvgText>}
+        {!!cell.label&&<SvgText x={cell.x} y={cell.y} textAnchor="middle" alignmentBaseline="central" fill="#ffffff" stroke="#102330" strokeWidth={.3} fontSize={12}>{playerText(cell.label)}</SvgText>}
       </G>;
     })}
   </G>;
@@ -460,13 +455,13 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const roll=animate&&newEffect&&piece.animation?.kind==='roll'?(1-p)*360:0;
   const notice=piece.animation?.kind==='notice'?(animate&&newEffect&&p>.02&&p<.96?1:0):1;
   const fade=effect==='enter'?p:effect==='change'?.25+.75*p:effect==='exit'?(p<.65?1-p/.65*.2:.8*(1-(p-.65)/.35)):1;
-  const accessibleName=`${pieceName(piece)}${enabled&&actions.length?`: ${actions.map(a=>copyText(labels[a])).join(', ')}`:''}`;
+  const accessibleName=`${playerText(pieceName(piece))}${enabled&&actions.length?`: ${actions.map(a=>copyText(labels[a])).join(', ')}`:''}`;
   const accessibility:Record<string,unknown>=effect==='exit'?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:'history-ghost',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
     accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length?onPress:undefined};
   return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale})`} opacity={(piece.opacity??1)*notice*fade} {...accessibility}>
     {type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:((type.shape!=='text'&&type.shape!=='image')||piece.face==='back')?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={type.shape==='card'?7:4} fill={piece.face==='back'?'#324a88':type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
     <Asset spec={spec} id={piece.face==='back'?type.back_asset:piece.asset||type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
-    {(piece.face==='back'||piece.text!==undefined)&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{piece.face==='back'?'◆':piece.text}</SvgText>}
+    {(piece.face==='back'||piece.text!==undefined)&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{piece.face==='back'?'◆':playerText(piece.text||'')}</SvgText>}
     {type.action_outline!=='none'&&(type.action_outline==='ellipse'?<Ellipse rx={size.width/2+4} ry={size.height/2+4} fill="none" stroke={outline} strokeWidth={selected?4:2}/>:<Rect x={-size.width/2-4} y={-size.height/2-4} width={size.width+8} height={size.height+8} rx={8} fill="none" stroke={outline} strokeWidth={selected?4:2}/>)}
     {enabled&&actions.length>0&&<G transform={`translate(${-size.width/2} ${-size.height/2-13})`} pointerEvents="none">{actions.map((action,index)=><G key={action} transform={`translate(${index*22} 0)`}><Rect x={0} y={-9} width={20} height={18} rx={5} fill="#122b3a" stroke="#75ceee"/><SvgText x={10} y={0} textAnchor="middle" alignmentBaseline="central" fill="#ffffff" fontSize={14}>{signs[action]}</SvgText></G>)}</G>}
   </G>;
@@ -478,11 +473,11 @@ const TargetGraphic=memo(function TargetGraphic({target,spec,enabled,selected,on
   // virtual-node bounds misplace a translated group under a scaled viewBox;
   // its reported Cell 1 rectangle can otherwise physically hit Cell 4.
   return <G opacity={enabled?selected?1:.72:.18}
-    accessible accessibilityRole="button" accessibilityLabel={target.aria_label||target.label||copyText("Destination {v0}",{v0:target.id})} accessibilityState={{disabled:!enabled,selected}}
+    accessible accessibilityRole="button" accessibilityLabel={playerText(target.aria_label||target.label||copyText("Destination {v0}",{v0:target.id}))} accessibilityState={{disabled:!enabled,selected}}
     onPress={enabled?onPress:undefined}>
     <Rect x={box.x} y={box.y} width={box.width} height={box.height} rx={5} fill={art?'transparent':target.color||'#b8ef5b'} stroke={selected?'#ffffff':'#c9ff63'} strokeWidth={selected?4:2}/>
     <Asset spec={spec} id={target.asset} x={box.x} y={box.y} width={box.width} height={box.height}/>
-    {!!target.label&&!art&&<SvgText x={point.x} y={point.y} textAnchor="middle" alignmentBaseline="central" fill="#102330" fontSize={14}>{target.label}</SvgText>}
+    {!!target.label&&!art&&<SvgText x={point.x} y={point.y} textAnchor="middle" alignmentBaseline="central" fill="#102330" fontSize={14}>{playerText(target.label)}</SvgText>}
   </G>;
 });
 
@@ -496,10 +491,10 @@ function SceneControl({control,enabled,dispatch}:{control:Control;enabled:boolea
   };
   if(control.kind==='button')return <Tool label={control.label} text={control.label} disabled={!enabled} onPress={()=>dispatch({type:'tap',id:control.id})}/>;
   return <View style={styles.field}>
-    <Text style={styles.fieldLabel}>{control.label}</Text>
+    <Text style={styles.fieldLabel}>{playerText(control.label)}</Text>
     {control.kind==='choice'?<ScrollView horizontal contentContainerStyle={styles.row}>{control.options?.map((option,index)=><Pressable key={index} accessibilityRole="radio" accessibilityState={{checked:Object.is(option.value,control.value),disabled:!enabled}} disabled={!enabled}
-      onPress={()=>dispatch({type:'change',id:control.id,value:option.value})} style={[styles.tool,Object.is(option.value,control.value)&&styles.chosen,!enabled&&styles.disabled]}><Text style={styles.toolText}>{option.label}</Text></Pressable>)}</ScrollView>:
-      <TextInput accessibilityLabel={control.label} editable={enabled} value={draft} maxLength={2000} keyboardType={control.kind==='number'?'numeric':'default'} onChangeText={setDraft} onEndEditing={submit} onSubmitEditing={submit} style={[styles.input,!enabled&&styles.disabled]}/>}
+      onPress={()=>dispatch({type:'change',id:control.id,value:option.value})} style={[styles.tool,Object.is(option.value,control.value)&&styles.chosen,!enabled&&styles.disabled]}><Text style={styles.toolText}>{playerText(option.label)}</Text></Pressable>)}</ScrollView>:
+      <TextInput accessibilityLabel={playerText(control.label)} editable={enabled} value={draft} maxLength={2000} keyboardType={control.kind==='number'?'numeric':'default'} onChangeText={setDraft} onEndEditing={submit} onSubmitEditing={submit} style={[styles.input,!enabled&&styles.disabled]}/>}
   </View>;
 }
 

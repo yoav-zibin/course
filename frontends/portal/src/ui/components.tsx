@@ -1,7 +1,7 @@
 import {registerNativeDialog,useNativeBugReport} from './bugModal';
 import {recordDiagnosticLog,recordDiagnosticEvent} from '../core/diagnostics';
 import {BugButton} from './BugButton';
-import {copyText} from '../platform/i18n';
+import {copyText,playerText} from '../platform/i18n';
 import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 
@@ -11,12 +11,16 @@ export const colors = {
   purple: '#bda8ff', pink: '#ff85b7', error: '#ffaaaa', success: '#c6f432',
 };
 
+function playerCopy(children: ReactNode): ReactNode {
+  return React.Children.map(children, child => typeof child === 'string' ? playerText(child) : child);
+}
+
 export function Copy({children, muted, small, style, ...props}: {children?: ReactNode; muted?: boolean; small?: boolean; style?: any; selectable?: boolean; numberOfLines?: number; accessibilityRole?: 'header' | 'text'; testID?: string}) {
-  return <Text {...props} style={[styles.copy, muted && styles.muted, small && styles.small, style]}>{children}</Text>;
+  return <Text {...props} style={[styles.copy, muted && styles.muted, small && styles.small, style]}>{playerCopy(children)}</Text>;
 }
 
 export function Title({children, small = false}: {children: ReactNode; small?: boolean}) {
-  return <Text accessibilityRole="header" style={[styles.title, small && {fontSize: 21}]}>{children}</Text>;
+  return <Text accessibilityRole="header" style={[styles.title, small && {fontSize: 21}]}>{playerCopy(children)}</Text>;
 }
 
 export function Button({children, onPress, secondary, danger, disabled, busy, label, testID, compact, selected}: {
@@ -24,17 +28,17 @@ export function Button({children, onPress, secondary, danger, disabled, busy, la
 }) {
   const [working, setWorking] = useState(false);
   const pending = busy || working;
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{disabled: Boolean(disabled || pending), selected}} {...(Platform.OS==='web'&&selected!==undefined?{'aria-pressed':selected}:{})} testID={testID}
+  return <Pressable accessibilityRole="button" accessibilityLabel={label===undefined?undefined:playerText(label)} accessibilityState={{disabled: Boolean(disabled || pending), selected}} {...(Platform.OS==='web'&&selected!==undefined?{'aria-pressed':selected}:{})} testID={testID}
     disabled={disabled || pending} onPress={async () => {if (!onPress || working) return; recordDiagnosticEvent('press',{label:label||textContent(children)}); setWorking(true); try { await onPress(); } finally { setWorking(false); }}}
     style={({pressed, focused}: any) => [styles.button, secondary && styles.secondary, danger && styles.danger, selected && styles.selected, compact && {paddingVertical: 8, paddingHorizontal: 12, minHeight: 40}, (disabled || pending) && {opacity: 0.5}, pressed && {opacity: 0.8}, focused && {outlineColor: colors.blue, outlineStyle: 'solid', outlineWidth: 2}]}>
     {pending && <ActivityIndicator color={secondary ? colors.accent : colors.ink} size="small" />}
-    <Text style={[styles.buttonText, secondary && {color: colors.text}, danger && {color: colors.error}, selected && {color: colors.accent}]}>{children}</Text>
+    <Text style={[styles.buttonText, secondary && {color: colors.text}, danger && {color: colors.error}, selected && {color: colors.accent}]}>{playerCopy(children)}</Text>
   </Pressable>;
 }
 
 export function Field({label, hint, ...props}: TextInputProps & {label: string; hint?: string}) {
   return <View style={styles.fieldGroup}><Copy small style={{fontWeight: '600'}}>{label}</Copy>
-    <TextInput {...props} accessibilityLabel={label} placeholderTextColor={colors.muted} selectionColor={colors.accent} style={[styles.field, props.multiline && {minHeight: 96, textAlignVertical: 'top'}, props.style]} />
+    <TextInput {...props} accessibilityLabel={playerText(label)} placeholderTextColor={colors.muted} selectionColor={colors.accent} style={[styles.field, props.multiline && {minHeight: 96, textAlignVertical: 'top'}, props.style]} />
     {hint && <Copy small muted>{hint}</Copy>}
   </View>;
 }

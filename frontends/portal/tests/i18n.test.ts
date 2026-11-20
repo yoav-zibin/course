@@ -10,7 +10,7 @@ import portuguese from '../../../locales/pt.json';
 import chinese from '../../../locales/zh.json';
 import hindi from '../../../locales/hi.json';
 import arabic from '../../../locales/ar.json';
-import {configureI18n,copyText,gameTexts,getDirection,t,localizeGame} from '../src/platform/i18n';
+import {configureI18n,copyText,gameTexts,getDirection,t,localizeGame,playerText} from '../src/platform/i18n';
 
 const codes=['es','fr','de','pt','zh','hi','ar'];
 const catalogs:Record<string,typeof english>={es:spanish,fr:french,de:german,pt:portuguese,zh:chinese,hi:hindi,ar:arabic};
@@ -65,4 +65,32 @@ test('authored rules and tutorial translate literally and restore source fields 
     assert.equal(sparse.game_logic_rules,'ar full rules');await configureI18n('','en',true);
     assert.equal(localizeGame(sparse).game_logic_rules,undefined);assert.equal(localizeGame(sparse).game_ui_rules,undefined);
   }finally{globalThis.fetch=original;await configureI18n('','en',true);}
+});
+
+test('player copy removes internal renderer names and markers without changing ordinary copy',()=>{
+  for(const name of ['Chess (Declarative)','Chess [DECLARATIVE]','Chess — declarative','Declarative: Chess'])assert.equal(playerText(name),'Chess');
+  assert.equal(playerText('Unsupported declarative UI format'),'Unsupported UI format');
+  assert.equal(playerText('A declarative game.\nUse highlighted destinations.'),'A game.\nUse highlighted destinations.');
+  assert.equal(playerText('  {name} ·\n'), '  {name} ·\n');
+});
+
+test('cached catalogs and pinned game translations hide renderer terminology while source packages stay intact',async()=>{
+  const values=new Map<string,string>();
+  values.set('game-platform.i18n-bundle.v1:es',JSON.stringify({data:{messages:{'test.error':'Cannot open Declarative game {name}.'},games:{'internal-name':{version:2,name:'Ajedrez (Declarative)',description:'Juego declarative.'}}}}));
+  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>values.set(key,value)}});
+  const game={id:'internal-name',version:2,name:'Chess (Declarative)',description:'A declarative game.',game_logic_rules:'Declarative: take turns.',game_ui_rules:'Use the declarative board.',tutorial_text:'Play declarative chess.',server_code:'const engine="declarative";',renderer_type:'declarative',declarative_ui:{strings:{title:'Declarative Chess'}},translations:{es:{display_name:'Ajedrez [Declarative]',short_description:'Juego declarative.',game_logic_rules:'Declarative: turnos.',game_ui_rules:'Tablero declarative.',tutorial_strings:{'Play declarative chess.':'Juega declarative ajedrez.'}}}};
+  const original=JSON.stringify(game);
+  try{
+    await configureI18n('','es',true);
+    const localized=localizeGame(game);
+    assert.equal(localized.name,'Ajedrez');assert.equal(localized.description,'Juego.');
+    assert.equal(t('test.error',{name:'Chess (Declarative)'},'Unavailable'),'Cannot open game Chess.');
+    assert.equal(copyText('Play {v0}',{v0:'Chess (Declarative)'}),'Jugar a Chess');
+    for(const key of ['name','description','game_logic_rules','game_ui_rules','tutorial_text'] as const)assert.doesNotMatch(localized[key],/declarative/i);
+    const pinned=localizeGame({...game,version:1});assert.equal(pinned.name,'Ajedrez');
+    await configureI18n('','en',true);
+    const restored=localizeGame(localized);assert.equal(restored.name,'Chess');assert.equal(restored.description,'A game.');
+    assert.equal(Reflect.get(restored,'_sourceText').name,game.name);assert.equal(restored.server_code,game.server_code);assert.equal(restored.renderer_type,'declarative');assert.deepEqual(restored.declarative_ui,game.declarative_ui);
+    assert.equal(JSON.stringify(game),original);
+  }finally{await configureI18n('','en',true);}
 });
