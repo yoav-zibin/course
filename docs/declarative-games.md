@@ -158,6 +158,20 @@ hand, public discards and token counts — so the package declares
 `all_state_public: false`. Select it for publication with
 `--kinds love_letter`.
 
+Mastermind is a two-player, single-round code-breaking game: seat 0 is the
+codemaker, who sets a secret code of four pegs chosen from six colors (repeats
+allowed), and seat 1 is the codebreaker, who has up to ten guesses to crack
+it. After each guess the server returns public feedback — black pegs for the
+right color in the right place, then white pegs for the right color in the
+wrong place, counted from the remaining color multisets so duplicates never
+score twice. The codebreaker wins by scoring four blacks within ten guesses;
+if the guesses run out, the codemaker wins, and the winner takes the pot.
+There is no role swap or multi-round scoring in this edition. The secret code
+is hidden information — only hand-filtered views that omit it reach the
+codebreaker and spectators until the match ends and it is revealed — so the
+package declares `all_state_public: false`. Select it for publication with
+`--kinds mastermind`.
+
 Quarto is a two-player game on a 4-by-4 board with sixteen unique pieces:
 every combination of tall/short, light/dark, round/square and solid/hollow
 (piece id 0–15 is the 4-bit attribute vector: bit0 tall, bit1 dark, bit2
