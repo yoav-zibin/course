@@ -102,6 +102,15 @@ last two endings the remaining seeds go to neither store. All state is
 public, so the package declares `all_state_public: true`. Select it for
 publication with `--kinds oware`.
 
+Pentago is a two-player game on a 6×6 board made of four 3×3 quadrants.
+Each turn is one move: place a marble on an empty cell, then rotate one
+quadrant a quarter turn clockwise or counterclockwise — the rotation is
+mandatory. Five marbles in a row (across, down or diagonally) wins, checked
+after the placement and again after the rotation: a placement five wins for
+the mover regardless of the rotation, and after the rotation the mover wins
+when both players have five. A full board with no five is a draw. Select it
+for publication with `--kinds pentago`.
+
 Quarto is a two-player game on a 4-by-4 board with sixteen unique pieces:
 every combination of tall/short, light/dark, round/square and solid/hollow
 (piece id 0–15 is the 4-bit attribute vector: bit0 tall, bit1 dark, bit2
