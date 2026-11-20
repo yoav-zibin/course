@@ -1,0 +1,2636 @@
+{
+  "all_state_public": false,
+  "name": "Old Maid (Declarative)",
+  "description": "Old Maid, the classic two-player pairing game. Draw cards from your opponent's hand, discard pairs as they form, and make sure you are not the one left holding the lone queen.",
+  "allowed_player_counts": [
+    2
+  ],
+  "allows_leave_mid_match": false,
+  "allows_join_mid_match": false,
+  "server_code": "\"use strict\";\n// Old Maid - two-player pairing game. Server code: owns all rules and state.\n// A card is {rank: 2..14 (11=J, 12=Q, 13=K, 14=A), suit: 0..3 (0 spades, 1 hearts,\n// 2 diamonds, 3 clubs)}. The pack has 49 cards: a standard deck with the queens\n// of hearts, diamonds and clubs removed, so the queen of spades is the only\n// queen - the Old Maid. Hands are always pair-free between moves: any pair of\n// equal rank is discarded the moment it forms, and state.pairs counts them.\n\n// Remove pairs of equal rank from a hand, keeping the first card of a rank\n// that appears an odd number of times. Returns the kept cards (in their\n// original order) and how many pairs were shed.\nfunction discardPairs(hand) {\n  const counts = new Map();\n  for (const c of hand) counts.set(c.rank, (counts.get(c.rank) || 0) + 1);\n  const seen = new Set();\n  const kept = [];\n  let pairs = 0;\n  for (const c of hand) {\n    const n = counts.get(c.rank);\n    if (n % 2 === 1 && !seen.has(c.rank)) { kept.push(c); seen.add(c.rank); }\n  }\n  for (const n of counts.values()) pairs += Math.floor(n / 2);\n  return { hand: kept, pairs };\n}\n\n// The seat holding the lone queen (rank 12), or null if nobody does.\nfunction maidHolder(state) {\n  for (let seat = 0; seat < 2; seat++) {\n    if (state.hands[seat].some((c) => c.rank === 12)) return seat;\n  }\n  return null;\n}\n\n// Deterministic rearrangement of the opponent's remaining hand after a draw:\n// rotate it by an amount derived from the drawn card, so a position a player\n// remembers never keeps pointing at the same card. No randomness involved,\n// so applyMove stays deterministic across repeated calls.\nfunction rearrange(hand, drawn) {\n  if (hand.length <= 1) return hand;\n  const k = (drawn.rank + drawn.suit) % hand.length;\n  return hand.slice(k).concat(hand.slice(0, k));\n}\n\n// Terminal payouts: a human winner takes the whole pot; if a computer won or\n// the match is drawn, the pot is split among the humans (remainder to the\n// earliest). At pot 0 there is nothing to distribute.\nfunction payoutsFor(ctx, winnerSeat) {\n  if (ctx.pot === 0) return {};\n  const humans = ctx.players.filter((p) => p.kind === \"human\");\n  if (winnerSeat !== null && ctx.players[winnerSeat].kind === \"human\") {\n    return { [ctx.players[winnerSeat].id]: ctx.pot };\n  }\n  const out = {};\n  const base = Math.floor(ctx.pot / humans.length);\n  let rem = ctx.pot - base * humans.length;\n  for (const p of humans) { out[p.id] = base + (rem > 0 ? 1 : 0); if (rem > 0) rem--; }\n  return out;\n}\n\nconst game = {\n  newMatch(ctx) {\n    // Deterministic shuffle seeded from the player ids and the pot.\n    // (No ctx.random() here, so unit-test initial cases verify exactly.)\n    let h = 2166136261 >>> 0;\n    const s = ctx.players.map((p) => p.id).join(\"|\") + \"|\" + ctx.pot;\n    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }\n    let seed = h >>> 0;\n    if (seed === 0) seed = 123456789;\n    const rnd = () => {\n      seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; seed >>>= 0;\n      return seed / 4294967296;\n    };\n    const deck = [];\n    for (let suit = 0; suit < 4; suit++) {\n      for (let rank = 2; rank <= 14; rank++) {\n        if (rank === 12 && suit !== 0) continue; // only the queen of spades stays\n        deck.push({ rank, suit });\n      }\n    }\n    for (let i = deck.length - 1; i > 0; i--) {\n      const j = Math.floor(rnd() * (i + 1));\n      const tmp = deck[i]; deck[i] = deck[j]; deck[j] = tmp;\n    }\n    const dealt = [[], []];\n    for (let i = 0; i < deck.length; i++) dealt[i % 2].push(deck[i]); // 25 and 24\n    const d0 = discardPairs(dealt[0]);\n    const d1 = discardPairs(dealt[1]);\n    return {\n      state: {\n        hands: [d0.hand, d1.hand],\n        pairs: d0.pairs + d1.pairs,\n        turnSeat: 0, winner: null, draw: false, capped: false, lastAction: null,\n      },\n      turn: [ctx.players[0].id],\n    };\n  },\n\n  applyMove(state, playerId, move, ctx) {\n    if (!move || typeof move !== \"object\" || !Number.isInteger(move.draw)) {\n      throw new InvalidMove(\"send a draw move\");\n    }\n    if (state.winner !== null || state.draw) throw new InvalidMove(\"the game is over\");\n    const seat = ctx.players.findIndex((p) => p.id === playerId);\n    if (seat !== state.turnSeat) throw new InvalidMove(\"not your turn\");\n    const opp = 1 - seat;\n    if (move.draw < 0 || move.draw >= state.hands[opp].length) {\n      throw new InvalidMove(\"that position is not in the opponent's hand\");\n    }\n\n    const next = JSON.parse(JSON.stringify(state));\n    const finish = (winnerSeat, isDraw, capped) => {\n      next.winner = isDraw ? null : winnerSeat;\n      next.draw = isDraw;\n      next.capped = capped;\n      return { state: next, turn: null, payouts: payoutsFor(ctx, isDraw ? null : winnerSeat) };\n    };\n\n    // Draw the chosen card out of the opponent's hand, rearrange what is\n    // left of it, and put the drawn card into the mover's hand.\n    const drawn = next.hands[opp][move.draw];\n    next.hands[opp].splice(move.draw, 1);\n    next.hands[opp] = rearrange(next.hands[opp], drawn);\n    next.hands[seat].push(drawn);\n\n    // The mover's hand was pair-free, so the drawn card can form at most one\n    // new pair; if it does, both cards are discarded at once.\n    let pair = null;\n    const mateIdx = next.hands[seat].findIndex(\n      (c, i) => i < next.hands[seat].length - 1 && c.rank === drawn.rank\n    );\n    if (mateIdx >= 0) {\n      const mate = next.hands[seat][mateIdx];\n      next.hands[seat].splice(mateIdx, 1);\n      next.hands[seat].pop(); // the drawn card, still last after the splice\n      pair = [drawn, mate];\n      next.pairs += 1;\n    }\n    next.lastAction = { seat, pair };\n\n    // An emptied hand is safe: the other player is left holding the cards\n    // (the Maid among them) and loses.\n    if (next.hands[0].length === 0) return finish(0, false, false);\n    if (next.hands[1].length === 0) return finish(1, false, false);\n\n    // Backstop: the 300th move ends the match on card count - fewer cards\n    // wins; equal counts go to the player not holding the Old Maid; if\n    // neither holds her it is a draw.\n    if (ctx.move_count + 1 >= 300) {\n      const c0 = next.hands[0].length, c1 = next.hands[1].length;\n      if (c0 !== c1) return finish(c0 < c1 ? 0 : 1, false, true);\n      const holder = maidHolder(next);\n      if (holder === null) return finish(null, true, true);\n      return finish(1 - holder, false, true);\n    }\n\n    next.turnSeat = opp;\n    return { state: next, turn: [ctx.players[opp].id] };\n  },\n\n  computerMove(state, playerId, ctx) {\n    // The mover sees only card backs, so any position is as good as any\n    // other; pick one at random (ctx.random is seeded per call).\n    const seat = ctx.players.findIndex((p) => p.id === playerId);\n    const n = state.hands[1 - seat].length;\n    return { draw: Math.floor(ctx.random() * n) };\n  },\n\n  randomMove(state, playerId, ctx) {\n    const seat = ctx.players.findIndex((p) => p.id === playerId);\n    const n = state.hands[1 - seat].length;\n    return { draw: Math.floor(ctx.random() * n) };\n  },\n\n  viewFor(state, playerId, ctx) {\n    const seat = playerId === null ? null : ctx.players.findIndex((p) => p.id === playerId);\n    const over = state.winner !== null || state.draw;\n    const a = state.lastAction;\n    return {\n      hand: seat === null ? null : state.hands[seat].map((c) => ({ rank: c.rank, suit: c.suit })),\n      counts: [state.hands[0].length, state.hands[1].length],\n      pairs: state.pairs,\n      winner: state.winner,\n      draw: state.draw,\n      capped: state.capped,\n      lastAction: a === null ? null : {\n        seat: a.seat,\n        pair: a.pair === null ? null : [{ ...a.pair[0] }, { ...a.pair[1] }],\n      },\n      you: seat,\n      turnSeat: over ? null : state.turnSeat,\n    };\n  },\n};\n",
+  "rules": "Old Maid is a two-player game played with a 49-card pack: a standard deck with three of the four queens removed, so a single queen remains — the Old Maid. All 49 cards are dealt, 25 to the first player and 24 to the second. Any pair of equal rank in a starting hand is discarded immediately, and a pair is discarded automatically whenever one forms later. On your turn, draw one card from your opponent's hand by choosing a position in it: you see only the backs of their cards, never the faces. The opponent's remaining cards are rearranged after every draw, so positions do not stay fixed. If the card you drew matches the rank of a card already in your hand, that pair is discarded. A player whose hand becomes empty is safe and out. The game ends when only one player still holds cards: that player is holding the Old Maid and loses, and the other player wins the pot. Backstop: if the 300th move is reached, the game ends at once — the player holding fewer cards wins; if the counts are equal, the player not holding the Old Maid wins; if neither player holds it, the game is a draw.",
+  "ui_instructions": "A card table. Across the top, the opponent's hand is a row of face-down card backs beside their name and card count; on your turn you click one back to draw that card. Your own hand runs along the bottom, face-up, and the single queen is outlined in gold when you hold her. The middle of the table shows how many pairs have been discarded so far. A status line narrates the last draw (and any pair it made), whose turn it is, and the final result, including who was left holding the Old Maid.",
+  "tutorial": {
+    "html": "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><h1>How to play</h1><p>On your turn, click one of the face-down cards in your opponent's hand to draw it. If it matches the rank of a card in your hand, the pair is discarded at once.</p><p>Empty your hand to be safe. The player left holding cards at the end holds the single queen — the Old Maid — and loses.</p>",
+    "text": "Draw from your opponent's hand, discard your pairs, and don't get stuck with the lone queen."
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1600 900\"><rect width=\"1600\" height=\"900\" fill=\"#123524\"/><rect x=\"370\" y=\"300\" width=\"260\" height=\"360\" rx=\"24\" fill=\"#fdfdf8\"/><rect x=\"970\" y=\"300\" width=\"260\" height=\"360\" rx=\"24\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"6\"/><circle cx=\"500\" cy=\"480\" r=\"62\" fill=\"#f5b301\"/></svg>"
+    },
+    {
+      "caption": "The lone queen",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">Q♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+    },
+    {
+      "caption": "Draw from the backs",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+    },
+    {
+      "caption": "A pair is discarded",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#b03a2e\">5♥</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"295\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">5♣</text></svg>"
+    }
+  ],
+  "unit_tests": {
+    "cases": [
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "From the dealt opening (starting pairs already discarded), the first player draws the card at position 0 of the opponent's hand.",
+        "expected_state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 6,
+                "suit": 2
+              },
+              {
+                "rank": 2,
+                "suit": 0
+              },
+              {
+                "rank": 13,
+                "suit": 1
+              },
+              {
+                "rank": 9,
+                "suit": 0
+              }
+            ],
+            [
+              {
+                "rank": 9,
+                "suit": 3
+              },
+              {
+                "rank": 2,
+                "suit": 2
+              },
+              {
+                "rank": 6,
+                "suit": 1
+              },
+              {
+                "rank": 12,
+                "suit": 0
+              },
+              {
+                "rank": 13,
+                "suit": 3
+              }
+            ]
+          ],
+          "lastAction": {
+            "pair": [
+              {
+                "rank": 3,
+                "suit": 1
+              },
+              {
+                "rank": 3,
+                "suit": 3
+              }
+            ],
+            "seat": 0
+          },
+          "pairs": 20,
+          "turnSeat": 1,
+          "winner": null
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            {
+              "rank": 6,
+              "suit": 2
+            },
+            {
+              "rank": 2,
+              "suit": 0
+            },
+            {
+              "rank": 13,
+              "suit": 1
+            },
+            {
+              "rank": 9,
+              "suit": 0
+            }
+          ],
+          "counts": [
+            4,
+            5
+          ],
+          "pairs": 20,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 0,
+            "pair": [
+              {
+                "rank": 3,
+                "suit": 1
+              },
+              {
+                "rank": 3,
+                "suit": 3
+              }
+            ]
+          },
+          "you": 0,
+          "turnSeat": 1
+        },
+        "expected_view_of_other": {
+          "hand": [
+            {
+              "rank": 9,
+              "suit": 3
+            },
+            {
+              "rank": 2,
+              "suit": 2
+            },
+            {
+              "rank": 6,
+              "suit": 1
+            },
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 13,
+              "suit": 3
+            }
+          ],
+          "counts": [
+            4,
+            5
+          ],
+          "pairs": 20,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 0,
+            "pair": [
+              {
+                "rank": 3,
+                "suit": 1
+              },
+              {
+                "rank": 3,
+                "suit": 3
+              }
+            ]
+          },
+          "you": 1,
+          "turnSeat": 1
+        },
+        "images": [
+          {
+            "caption": "Before: Alice to draw",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "Before: Bob waits",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: Alice drew",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: Bob's view",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          }
+        ],
+        "kind": "initial",
+        "move": {
+          "draw": 0
+        },
+        "name": "Initial draw",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 3,
+                "suit": 3
+              },
+              {
+                "rank": 6,
+                "suit": 2
+              },
+              {
+                "rank": 2,
+                "suit": 0
+              },
+              {
+                "rank": 13,
+                "suit": 1
+              },
+              {
+                "rank": 9,
+                "suit": 0
+              }
+            ],
+            [
+              {
+                "rank": 3,
+                "suit": 1
+              },
+              {
+                "rank": 2,
+                "suit": 2
+              },
+              {
+                "rank": 6,
+                "suit": 1
+              },
+              {
+                "rank": 12,
+                "suit": 0
+              },
+              {
+                "rank": 13,
+                "suit": 3
+              },
+              {
+                "rank": 9,
+                "suit": 3
+              }
+            ]
+          ],
+          "lastAction": null,
+          "pairs": 19,
+          "turnSeat": 0,
+          "winner": null
+        },
+        "view_of_mover": {
+          "hand": [
+            {
+              "rank": 3,
+              "suit": 3
+            },
+            {
+              "rank": 6,
+              "suit": 2
+            },
+            {
+              "rank": 2,
+              "suit": 0
+            },
+            {
+              "rank": 13,
+              "suit": 1
+            },
+            {
+              "rank": 9,
+              "suit": 0
+            }
+          ],
+          "counts": [
+            5,
+            6
+          ],
+          "pairs": 19,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 0,
+          "turnSeat": 0
+        },
+        "view_of_other": {
+          "hand": [
+            {
+              "rank": 3,
+              "suit": 1
+            },
+            {
+              "rank": 2,
+              "suit": 2
+            },
+            {
+              "rank": 6,
+              "suit": 1
+            },
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 13,
+              "suit": 3
+            },
+            {
+              "rank": 9,
+              "suit": 3
+            }
+          ],
+          "counts": [
+            5,
+            6
+          ],
+          "pairs": 19,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 1,
+          "turnSeat": 0
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Alice draws the 5 of diamonds, which pairs with her 5 of spades: both are discarded, her hand shrinks, and the turn passes.",
+        "expected_state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 9,
+                "suit": 1
+              }
+            ],
+            [
+              {
+                "rank": 3,
+                "suit": 3
+              }
+            ]
+          ],
+          "lastAction": {
+            "pair": [
+              {
+                "rank": 5,
+                "suit": 2
+              },
+              {
+                "rank": 5,
+                "suit": 0
+              }
+            ],
+            "seat": 0
+          },
+          "pairs": 1,
+          "turnSeat": 1,
+          "winner": null
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            {
+              "rank": 9,
+              "suit": 1
+            }
+          ],
+          "counts": [
+            1,
+            1
+          ],
+          "pairs": 1,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 0,
+            "pair": [
+              {
+                "rank": 5,
+                "suit": 2
+              },
+              {
+                "rank": 5,
+                "suit": 0
+              }
+            ]
+          },
+          "you": 0,
+          "turnSeat": 1
+        },
+        "expected_view_of_other": {
+          "hand": [
+            {
+              "rank": 3,
+              "suit": 3
+            }
+          ],
+          "counts": [
+            1,
+            1
+          ],
+          "pairs": 1,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 0,
+            "pair": [
+              {
+                "rank": 5,
+                "suit": 2
+              },
+              {
+                "rank": 5,
+                "suit": 0
+              }
+            ]
+          },
+          "you": 1,
+          "turnSeat": 1
+        },
+        "images": [
+          {
+            "caption": "Before: Alice holds a 5",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">5♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "Before: Bob's backs",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: the pair is gone",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#b03a2e\">5♦</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"295\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">5♠</text></svg>"
+          },
+          {
+            "caption": "After: Bob to draw",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          }
+        ],
+        "kind": "intermediate",
+        "move": {
+          "draw": 0
+        },
+        "name": "A drawn card completes a pair",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 5,
+                "suit": 0
+              },
+              {
+                "rank": 9,
+                "suit": 1
+              }
+            ],
+            [
+              {
+                "rank": 5,
+                "suit": 2
+              },
+              {
+                "rank": 3,
+                "suit": 3
+              }
+            ]
+          ],
+          "lastAction": {
+            "pair": null,
+            "seat": 1
+          },
+          "pairs": 0,
+          "turnSeat": 0,
+          "winner": null
+        },
+        "view_of_mover": {
+          "hand": [
+            {
+              "rank": 5,
+              "suit": 0
+            },
+            {
+              "rank": 9,
+              "suit": 1
+            }
+          ],
+          "counts": [
+            2,
+            2
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 1,
+            "pair": null
+          },
+          "you": 0,
+          "turnSeat": 0
+        },
+        "view_of_other": {
+          "hand": [
+            {
+              "rank": 5,
+              "suit": 2
+            },
+            {
+              "rank": 3,
+              "suit": 3
+            }
+          ],
+          "counts": [
+            2,
+            2
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 1,
+            "pair": null
+          },
+          "you": 1,
+          "turnSeat": 0
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Alice draws the jack of spades (position 3); no pair forms, and Bob's remaining three cards rotate by (11 + 0) mod 3 = 2 positions.",
+        "expected_state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 7,
+                "suit": 0
+              },
+              {
+                "rank": 11,
+                "suit": 0
+              }
+            ],
+            [
+              {
+                "rank": 9,
+                "suit": 3
+              },
+              {
+                "rank": 2,
+                "suit": 1
+              },
+              {
+                "rank": 4,
+                "suit": 2
+              }
+            ]
+          ],
+          "lastAction": {
+            "pair": null,
+            "seat": 0
+          },
+          "pairs": 3,
+          "turnSeat": 1,
+          "winner": null
+        },
+        "expected_turn": [
+          "u2"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            {
+              "rank": 7,
+              "suit": 0
+            },
+            {
+              "rank": 11,
+              "suit": 0
+            }
+          ],
+          "counts": [
+            2,
+            3
+          ],
+          "pairs": 3,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 0,
+            "pair": null
+          },
+          "you": 0,
+          "turnSeat": 1
+        },
+        "expected_view_of_other": {
+          "hand": [
+            {
+              "rank": 9,
+              "suit": 3
+            },
+            {
+              "rank": 2,
+              "suit": 1
+            },
+            {
+              "rank": 4,
+              "suit": 2
+            }
+          ],
+          "counts": [
+            2,
+            3
+          ],
+          "pairs": 3,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 0,
+            "pair": null
+          },
+          "you": 1,
+          "turnSeat": 1
+        },
+        "images": [
+          {
+            "caption": "Before: Alice holds one card",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">7♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "Before: four backs",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: Alice keeps the jack",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">J♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: Bob rearranged",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          }
+        ],
+        "kind": "intermediate",
+        "move": {
+          "draw": 3
+        },
+        "name": "A draw with no pair rearranges the hand",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 7,
+                "suit": 0
+              }
+            ],
+            [
+              {
+                "rank": 2,
+                "suit": 1
+              },
+              {
+                "rank": 4,
+                "suit": 2
+              },
+              {
+                "rank": 9,
+                "suit": 3
+              },
+              {
+                "rank": 11,
+                "suit": 0
+              }
+            ]
+          ],
+          "lastAction": null,
+          "pairs": 3,
+          "turnSeat": 0,
+          "winner": null
+        },
+        "view_of_mover": {
+          "hand": [
+            {
+              "rank": 7,
+              "suit": 0
+            }
+          ],
+          "counts": [
+            1,
+            4
+          ],
+          "pairs": 3,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 0,
+          "turnSeat": 0
+        },
+        "view_of_other": {
+          "hand": [
+            {
+              "rank": 2,
+              "suit": 1
+            },
+            {
+              "rank": 4,
+              "suit": 2
+            },
+            {
+              "rank": 9,
+              "suit": 3
+            },
+            {
+              "rank": 11,
+              "suit": 0
+            }
+          ],
+          "counts": [
+            1,
+            4
+          ],
+          "pairs": 3,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 1,
+          "turnSeat": 0
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 10,
+          "seed": 1
+        },
+        "description": "Alice, holding the queen of spades, draws Bob's last card. Bob is safe and out, Alice is left holding the Old Maid, and Bob takes the pot of 10.",
+        "expected_payouts": {
+          "u2": 10
+        },
+        "expected_state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 12,
+                "suit": 0
+              },
+              {
+                "rank": 3,
+                "suit": 1
+              },
+              {
+                "rank": 6,
+                "suit": 2
+              }
+            ],
+            []
+          ],
+          "lastAction": {
+            "pair": null,
+            "seat": 0
+          },
+          "pairs": 20,
+          "turnSeat": 0,
+          "winner": 1
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "hand": [
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 3,
+              "suit": 1
+            },
+            {
+              "rank": 6,
+              "suit": 2
+            }
+          ],
+          "counts": [
+            3,
+            0
+          ],
+          "pairs": 20,
+          "winner": 1,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 0,
+            "pair": null
+          },
+          "you": 0,
+          "turnSeat": null
+        },
+        "expected_view_of_other": {
+          "hand": [],
+          "counts": [
+            3,
+            0
+          ],
+          "pairs": 20,
+          "winner": 1,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 0,
+            "pair": null
+          },
+          "you": 1,
+          "turnSeat": null
+        },
+        "images": [
+          {
+            "caption": "Before: Alice holds the queen",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">Q♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "Before: Bob's last card",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#b03a2e\">6♦</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: Bob is safe",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"295\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">Q♠</text></svg>"
+          },
+          {
+            "caption": "After: Alice is stuck",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">Q♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          }
+        ],
+        "kind": "terminal",
+        "move": {
+          "draw": 0
+        },
+        "name": "Drawing the last card leaves the Maid behind",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 12,
+                "suit": 0
+              },
+              {
+                "rank": 3,
+                "suit": 1
+              }
+            ],
+            [
+              {
+                "rank": 6,
+                "suit": 2
+              }
+            ]
+          ],
+          "lastAction": {
+            "pair": [
+              {
+                "rank": 8,
+                "suit": 1
+              },
+              {
+                "rank": 8,
+                "suit": 3
+              }
+            ],
+            "seat": 1
+          },
+          "pairs": 20,
+          "turnSeat": 0,
+          "winner": null
+        },
+        "view_of_mover": {
+          "hand": [
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 3,
+              "suit": 1
+            }
+          ],
+          "counts": [
+            2,
+            1
+          ],
+          "pairs": 20,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 1,
+            "pair": [
+              {
+                "rank": 8,
+                "suit": 1
+              },
+              {
+                "rank": 8,
+                "suit": 3
+              }
+            ]
+          },
+          "you": 0,
+          "turnSeat": 0
+        },
+        "view_of_other": {
+          "hand": [
+            {
+              "rank": 6,
+              "suit": 2
+            }
+          ],
+          "counts": [
+            2,
+            1
+          ],
+          "pairs": 20,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": {
+            "seat": 1,
+            "pair": [
+              {
+                "rank": 8,
+                "suit": 1
+              },
+              {
+                "rank": 8,
+                "suit": 3
+              }
+            ]
+          },
+          "you": 1,
+          "turnSeat": 0
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 299,
+          "players": [
+            {
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 6,
+          "seed": 1
+        },
+        "description": "On move 300 Alice draws and ends with four cards to Bob's one: the backstop awards the match to Bob, who takes the pot of 6.",
+        "expected_payouts": {
+          "u2": 6
+        },
+        "expected_state": {
+          "capped": true,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 12,
+                "suit": 0
+              },
+              {
+                "rank": 4,
+                "suit": 1
+              },
+              {
+                "rank": 8,
+                "suit": 2
+              },
+              {
+                "rank": 2,
+                "suit": 3
+              }
+            ],
+            [
+              {
+                "rank": 5,
+                "suit": 0
+              }
+            ]
+          ],
+          "lastAction": {
+            "pair": null,
+            "seat": 0
+          },
+          "pairs": 10,
+          "turnSeat": 0,
+          "winner": 1
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "hand": [
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 4,
+              "suit": 1
+            },
+            {
+              "rank": 8,
+              "suit": 2
+            },
+            {
+              "rank": 2,
+              "suit": 3
+            }
+          ],
+          "counts": [
+            4,
+            1
+          ],
+          "pairs": 10,
+          "winner": 1,
+          "draw": false,
+          "capped": true,
+          "lastAction": {
+            "seat": 0,
+            "pair": null
+          },
+          "you": 0,
+          "turnSeat": null
+        },
+        "expected_view_of_other": {
+          "hand": [
+            {
+              "rank": 5,
+              "suit": 0
+            }
+          ],
+          "counts": [
+            4,
+            1
+          ],
+          "pairs": 10,
+          "winner": 1,
+          "draw": false,
+          "capped": true,
+          "lastAction": {
+            "seat": 0,
+            "pair": null
+          },
+          "you": 1,
+          "turnSeat": null
+        },
+        "images": [
+          {
+            "caption": "Before: move 300",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">Q♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "Before: Bob holds two",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: count decides",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: Bob wins",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          }
+        ],
+        "kind": "terminal",
+        "move": {
+          "draw": 0
+        },
+        "name": "The 300th move ends it on card count",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 12,
+                "suit": 0
+              },
+              {
+                "rank": 4,
+                "suit": 1
+              },
+              {
+                "rank": 8,
+                "suit": 2
+              }
+            ],
+            [
+              {
+                "rank": 2,
+                "suit": 3
+              },
+              {
+                "rank": 5,
+                "suit": 0
+              }
+            ]
+          ],
+          "lastAction": null,
+          "pairs": 10,
+          "turnSeat": 0,
+          "winner": null
+        },
+        "view_of_mover": {
+          "hand": [
+            {
+              "rank": 12,
+              "suit": 0
+            },
+            {
+              "rank": 4,
+              "suit": 1
+            },
+            {
+              "rank": 8,
+              "suit": 2
+            }
+          ],
+          "counts": [
+            3,
+            2
+          ],
+          "pairs": 10,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 0,
+          "turnSeat": 0
+        },
+        "view_of_other": {
+          "hand": [
+            {
+              "rank": 2,
+              "suit": 3
+            },
+            {
+              "rank": 5,
+              "suit": 0
+            }
+          ],
+          "counts": [
+            3,
+            2
+          ],
+          "pairs": 10,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 1,
+          "turnSeat": 0
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "It is Alice's turn, so Bob's draw is rejected as not his turn and nothing changes.",
+        "expected_error": "InvalidMove",
+        "expected_state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 7,
+                "suit": 0
+              },
+              {
+                "rank": 9,
+                "suit": 2
+              }
+            ],
+            [
+              {
+                "rank": 3,
+                "suit": 1
+              }
+            ]
+          ],
+          "lastAction": null,
+          "pairs": 0,
+          "turnSeat": 0,
+          "winner": null
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            {
+              "rank": 3,
+              "suit": 1
+            }
+          ],
+          "counts": [
+            2,
+            1
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 1,
+          "turnSeat": 0
+        },
+        "expected_view_of_other": {
+          "hand": [
+            {
+              "rank": 7,
+              "suit": 0
+            },
+            {
+              "rank": 9,
+              "suit": 2
+            }
+          ],
+          "counts": [
+            2,
+            1
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 0,
+          "turnSeat": 0
+        },
+        "images": [
+          {
+            "caption": "Before: Bob tries early",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "Before: Alice's view",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">7♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: unchanged for Bob",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: unchanged for Alice",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">7♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          }
+        ],
+        "kind": "intermediate",
+        "move": {
+          "draw": 0
+        },
+        "name": "Drawing out of turn is rejected",
+        "other_player_id": "u1",
+        "player_id": "u2",
+        "state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 7,
+                "suit": 0
+              },
+              {
+                "rank": 9,
+                "suit": 2
+              }
+            ],
+            [
+              {
+                "rank": 3,
+                "suit": 1
+              }
+            ]
+          ],
+          "lastAction": null,
+          "pairs": 0,
+          "turnSeat": 0,
+          "winner": null
+        },
+        "turn": [
+          "u1"
+        ],
+        "view_of_mover": {
+          "hand": [
+            {
+              "rank": 3,
+              "suit": 1
+            }
+          ],
+          "counts": [
+            2,
+            1
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 1,
+          "turnSeat": 0
+        },
+        "view_of_other": {
+          "hand": [
+            {
+              "rank": 7,
+              "suit": 0
+            },
+            {
+              "rank": 9,
+              "suit": 2
+            }
+          ],
+          "counts": [
+            2,
+            1
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 0,
+          "turnSeat": 0
+        }
+      },
+      {
+        "ctx": {
+          "move_count": 0,
+          "players": [
+            {
+              "display_name": "Alice",
+              "id": "u1",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            },
+            {
+              "display_name": "Bob",
+              "id": "u2",
+              "kind": "human",
+              "max_loss": 0,
+              "picture_url": ""
+            }
+          ],
+          "pot": 0,
+          "seed": 1
+        },
+        "description": "Bob holds two cards, so Alice's draw at position 5 passes the move schema but is rejected by the rules; nothing changes.",
+        "expected_error": "InvalidMove",
+        "expected_state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 7,
+                "suit": 0
+              }
+            ],
+            [
+              {
+                "rank": 3,
+                "suit": 1
+              },
+              {
+                "rank": 9,
+                "suit": 2
+              }
+            ]
+          ],
+          "lastAction": null,
+          "pairs": 0,
+          "turnSeat": 0,
+          "winner": null
+        },
+        "expected_turn": [
+          "u1"
+        ],
+        "expected_view_of_mover": {
+          "hand": [
+            {
+              "rank": 7,
+              "suit": 0
+            }
+          ],
+          "counts": [
+            1,
+            2
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 0,
+          "turnSeat": 0
+        },
+        "expected_view_of_other": {
+          "hand": [
+            {
+              "rank": 3,
+              "suit": 1
+            },
+            {
+              "rank": 9,
+              "suit": 2
+            }
+          ],
+          "counts": [
+            1,
+            2
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 1,
+          "turnSeat": 0
+        },
+        "images": [
+          {
+            "caption": "Before: Alice reaches too far",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">7♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "Before: Bob holds two",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: unchanged for Alice",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#fdfdf8\" stroke=\"#0a0a0a\" stroke-width=\"2\"/><text x=\"105\" y=\"133\" font-size=\"30\" font-weight=\"bold\" text-anchor=\"middle\" fill=\"#191919\">7♠</text><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          },
+          {
+            "caption": "After: unchanged for Bob",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 260\"><rect x=\"60\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/><rect x=\"250\" y=\"60\" width=\"90\" height=\"126\" rx=\"8\" fill=\"#1d5c38\" stroke=\"#9fc5ab\" stroke-width=\"2\"/></svg>"
+          }
+        ],
+        "kind": "intermediate",
+        "move": {
+          "draw": 5
+        },
+        "name": "A position beyond the hand is rejected",
+        "other_player_id": "u2",
+        "player_id": "u1",
+        "state": {
+          "capped": false,
+          "draw": false,
+          "hands": [
+            [
+              {
+                "rank": 7,
+                "suit": 0
+              }
+            ],
+            [
+              {
+                "rank": 3,
+                "suit": 1
+              },
+              {
+                "rank": 9,
+                "suit": 2
+              }
+            ]
+          ],
+          "lastAction": null,
+          "pairs": 0,
+          "turnSeat": 0,
+          "winner": null
+        },
+        "turn": [
+          "u1"
+        ],
+        "view_of_mover": {
+          "hand": [
+            {
+              "rank": 7,
+              "suit": 0
+            }
+          ],
+          "counts": [
+            1,
+            2
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 0,
+          "turnSeat": 0
+        },
+        "view_of_other": {
+          "hand": [
+            {
+              "rank": 3,
+              "suit": 1
+            },
+            {
+              "rank": 9,
+              "suit": 2
+            }
+          ],
+          "counts": [
+            1,
+            2
+          ],
+          "pairs": 0,
+          "winner": null,
+          "draw": false,
+          "capped": false,
+          "lastAction": null,
+          "you": 1,
+          "turnSeat": 0
+        }
+      }
+    ],
+    "move_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "draw": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "state_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "capped": {
+          "type": "boolean"
+        },
+        "draw": {
+          "type": "boolean"
+        },
+        "hands": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "rank": {
+                  "maximum": 14,
+                  "minimum": 2,
+                  "type": "integer"
+                },
+                "suit": {
+                  "maximum": 3,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "rank",
+                "suit"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "lastAction": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "pair": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "rank": {
+                            "maximum": 14,
+                            "minimum": 2,
+                            "type": "integer"
+                          },
+                          "suit": {
+                            "maximum": 3,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "rank",
+                          "suit"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "type": "array"
+                    }
+                  ]
+                },
+                "seat": {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "seat",
+                "pair"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "pairs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "turnSeat": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "winner": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "hands",
+        "pairs",
+        "turnSeat",
+        "winner",
+        "draw",
+        "capped",
+        "lastAction"
+      ],
+      "type": "object"
+    },
+    "view_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "capped": {
+          "type": "boolean"
+        },
+        "counts": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "draw": {
+          "type": "boolean"
+        },
+        "hand": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "rank": {
+                    "maximum": 14,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "suit": {
+                    "maximum": 3,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "rank",
+                  "suit"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "lastAction": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "pair": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "rank": {
+                            "maximum": 14,
+                            "minimum": 2,
+                            "type": "integer"
+                          },
+                          "suit": {
+                            "maximum": 3,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "rank",
+                          "suit"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "type": "array"
+                    }
+                  ]
+                },
+                "seat": {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "seat",
+                "pair"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "pairs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "turnSeat": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "winner": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "you": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "hand",
+        "counts",
+        "pairs",
+        "winner",
+        "draw",
+        "capped",
+        "lastAction",
+        "you",
+        "turnSeat"
+      ],
+      "type": "object"
+    }
+  },
+  "translations": {
+    "es": {
+      "display_name": "La Solterona (Declarativo)",
+      "short_description": "Old Maid, el clásico juego de parejas para dos jugadores. Roba cartas de la mano de tu oponente, descarta las parejas en cuanto se formen y asegúrate de no ser quien se quede con la única dama.",
+      "game_logic_rules": "Old Maid es un juego para dos jugadores con una baraja de 49 cartas: una baraja estándar sin tres de las cuatro damas, de modo que solo queda una dama: la Old Maid. Se reparten las 49 cartas, 25 al primer jugador y 24 al segundo. Toda pareja del mismo valor en una mano inicial se descarta de inmediato, y cada pareja que se forme después se descarta automáticamente. En tu turno, roba una carta de la mano de tu oponente eligiendo una posición: solo ves el dorso de sus cartas, nunca las caras. Las cartas restantes del oponente se reordenan tras cada robo, así que las posiciones no se quedan fijas. Si la carta que robaste coincide en valor con una carta de tu mano, esa pareja se descarta. Un jugador cuya mano queda vacía está a salvo y sale del juego. La partida termina cuando solo un jugador conserva cartas: ese jugador tiene la Old Maid y pierde, y el otro gana el bote. Salvaguarda: si se alcanza la jugada 300, la partida termina al instante: gana el jugador con menos cartas; si hay igualdad de cartas, gana quien no tenga la Old Maid; si ninguno la tiene, es un empate.",
+      "game_ui_rules": "Una mesa de cartas. En la parte superior, la mano del oponente es una fila de dorsos de cartas junto a su nombre y su número de cartas; en tu turno, haces clic en un dorso para robar esa carta. Tu propia mano se extiende en la parte inferior, boca arriba, y la única dama aparece bordeada en dorado cuando la tienes tú. El centro de la mesa muestra cuántas parejas se han descartado. Una línea de estado narra el último robo (y la pareja que haya formado), de quién es el turno y el resultado final, incluido quién se quedó con la Old Maid.",
+      "tutorial_strings": {
+        "Empty your hand to be safe. The player left holding cards at the end holds the single queen — the Old Maid — and loses.": "Vacía tu mano para estar a salvo. El jugador que se quede con cartas al final tiene la única dama —la Old Maid— y pierde.",
+        "How to play": "Cómo jugar",
+        "On your turn, click one of the face-down cards in your opponent's hand to draw it. If it matches the rank of a card in your hand, the pair is discarded at once.": "En tu turno, haz clic en una de las cartas boca abajo de la mano de tu oponente para robarla. Si coincide en valor con una carta de tu mano, la pareja se descarta al instante."
+      },
+      "client_strings": {
+        "text_0": "Declarativo",
+        "text_1": "Jugador {n}",
+        "text_2": "Tu turno · {name}",
+        "text_3": "Turno de {name}",
+        "text_4": "Fin de la partida",
+        "text_5": "Ganador: {name}",
+        "text_6": "Tu flota",
+        "text_7": "Aguas enemigas",
+        "text_8": "Colocar flota e iniciar batalla",
+        "text_9": "Coloca una flota válida con agua libre entre barcos.",
+        "text_10": "Continúa la captura con la ficha resaltada.",
+        "text_11": "Debes capturar.",
+        "text_12": "Mueve en diagonal; las damas se mueven en ambas direcciones.",
+        "text_13": "reina",
+        "text_14": "torre",
+        "text_15": "alfil",
+        "text_16": "caballo",
+        "text_17": "Promocionar en {square} a {piece}",
+        "text_18": "Eliminar este ejército",
+        "text_19": "Pasar (sin jugada legal)",
+        "text_20": "Rendirse",
+        "text_21": "Mover peón",
+        "text_22": "Colocar muro",
+        "text_23": "Muros restantes · {counts}",
+        "text_24": "Carta superior {card} · palo {suit} · {n} cartas por robar",
+        "text_25": "Jugar {card} como {suit}",
+        "text_26": "Jugar {card}",
+        "text_27": "Robar carta (quedan {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Robar cartas",
+        "text_30": "Pasar",
+        "text_31": "{name} · grupos {ranks}",
+        "text_32": "Recoger baza",
+        "text_33": "Tu personaje: {name}",
+        "text_34": "Tu personaje es privado",
+        "text_35": "Preguntar: {question}",
+        "text_36": "Sí",
+        "text_37": "No",
+        "text_38": "{name}: adivinó {character} · {result}",
+        "text_39": "correcto",
+        "text_40": "incorrecto",
+        "text_41": "¿Lleva gafas?",
+        "text_42": "¿Lleva sombrero?",
+        "text_43": "¿Tiene vello facial?",
+        "text_44": "¿Se le ven las orejas?",
+        "text_45": "¿Tiene pelo rubio?",
+        "text_46": "¿Tiene pelo castaño?",
+        "text_47": "¿Tiene pelo negro?",
+        "text_48": "¿Tiene pelo rojo?",
+        "text_49": "¿Tiene pelo gris?",
+        "text_50": "¿Tiene pelo largo?",
+        "text_51": "¿Tiene pelo corto?",
+        "text_52": "¿Tiene ojos azules?",
+        "text_53": "¿Tiene ojos marrones?",
+        "text_54": "¿Tiene ojos verdes?",
+        "text_55": "Seleccionar pieza en fila {r}, columna {c}",
+        "text_56": "Mover a fila {r}, columna {c}",
+        "text_57": "Girar",
+        "text_58": "Colocar piedra",
+        "text_59": "Reclamar tablas",
+        "text_60": "Continuar",
+        "text_61": "Retirar {n}",
+        "text_62": "Reiniciar intento",
+        "title": "La Solterona (Declarativo)",
+        "server_send_a_draw_move": "envía una jugada de robar",
+        "server_the_game_is_over": "la partida terminó",
+        "server_not_your_turn": "no es tu turno",
+        "server_that_position_is_not_in_the_opponents_hand": "esa posición no está en la mano del oponente"
+      }
+    },
+    "fr": {
+      "display_name": "Le Pouilleux (Déclaratif)",
+      "short_description": "Old Maid, le classique jeu de paires pour deux joueurs. Tire des cartes dans la main de ton adversaire, défausse les paires dès qu'elles se forment et fais en sorte de ne pas rester avec la dame unique.",
+      "game_logic_rules": "Old Maid est un jeu pour deux joueurs avec un paquet de 49 cartes : un jeu standard dont on a retiré trois des quatre dames, de sorte qu'il ne reste qu'une seule dame — la Old Maid. Les 49 cartes sont distribuées, 25 au premier joueur et 24 au second. Toute paire de même valeur dans une main de départ est défaussée immédiatement, et toute paire formée ensuite est défaussée automatiquement. À ton tour, tire une carte de la main de ton adversaire en choisissant une position : tu ne vois que le dos de ses cartes, jamais leur face. Les cartes restantes de l'adversaire sont réarrangées après chaque tirage, donc les positions ne restent pas fixes. Si la carte tirée a la même valeur qu'une carte de ta main, la paire est défaussée. Un joueur dont la main devient vide est sauf et sort du jeu. La partie se termine quand un seul joueur a encore des cartes : ce joueur détient la Old Maid et perd, et l'autre gagne le pot. Filet de sécurité : si le 300e coup est atteint, la partie se termine aussitôt — le joueur avec le moins de cartes gagne ; à égalité, le joueur qui n'a pas la Old Maid gagne ; si aucun ne l'a, c'est un match nul.",
+      "game_ui_rules": "Une table de cartes. En haut, la main de l'adversaire est une rangée de dos de cartes à côté de son nom et de son nombre de cartes ; à ton tour, tu cliques sur un dos pour tirer cette carte. Ta propre main s'étale en bas, face visible, et la dame unique est entourée d'or quand tu la tiens. Le centre de la table montre combien de paires ont été défaussées. Une ligne de statut raconte le dernier tirage (et la paire qu'il a formée), à qui c'est le tour et le résultat final, y compris qui est resté avec la Old Maid.",
+      "tutorial_strings": {
+        "Empty your hand to be safe. The player left holding cards at the end holds the single queen — the Old Maid — and loses.": "Vide ta main pour être sauf. Le joueur qui a encore des cartes à la fin détient la dame unique — la Old Maid — et perd.",
+        "How to play": "Comment jouer",
+        "On your turn, click one of the face-down cards in your opponent's hand to draw it. If it matches the rank of a card in your hand, the pair is discarded at once.": "À ton tour, clique sur l'une des cartes face cachée dans la main de ton adversaire pour la tirer. Si sa valeur correspond à celle d'une carte de ta main, la paire est défaussée aussitôt."
+      },
+      "client_strings": {
+        "text_0": "Déclaratif",
+        "text_1": "Joueur {n}",
+        "text_2": "À vous · {name}",
+        "text_3": "À {name} de jouer",
+        "text_4": "Partie terminée",
+        "text_5": "Gagnant : {name}",
+        "text_6": "Votre flotte",
+        "text_7": "Eaux adverses",
+        "text_8": "Placer la flotte et commencer",
+        "text_9": "Place une flotte valide avec de l’eau entre les navires.",
+        "text_10": "Continuez la prise avec le pion surligné.",
+        "text_11": "Une prise est obligatoire.",
+        "text_12": "Déplacez-vous en diagonale ; les dames vont dans les deux sens.",
+        "text_13": "dame",
+        "text_14": "tour",
+        "text_15": "fou",
+        "text_16": "cavalier",
+        "text_17": "Promouvoir en {square} en {piece}",
+        "text_18": "Éliminer cette armée",
+        "text_19": "Passer (aucun coup légal)",
+        "text_20": "Abandonner",
+        "text_21": "Déplacer le pion",
+        "text_22": "Placer un mur",
+        "text_23": "Murs restants · {counts}",
+        "text_24": "Carte du dessus {card} · couleur {suit} · {n} cartes à piocher",
+        "text_25": "Jouer {card} en {suit}",
+        "text_26": "Jouer {card}",
+        "text_27": "Piocher une carte ({n} restantes)",
+        "text_28": "Demander des {rank} à {name}",
+        "text_29": "Piocher des cartes",
+        "text_30": "Passer",
+        "text_31": "{name} · carrés {ranks}",
+        "text_32": "Ramasser le pli",
+        "text_33": "Votre personnage : {name}",
+        "text_34": "Votre personnage est privé",
+        "text_35": "Demander : {question}",
+        "text_36": "Oui",
+        "text_37": "Non",
+        "text_38": "{name} : a proposé {character} · {result}",
+        "text_39": "correct",
+        "text_40": "incorrect",
+        "text_41": "Porte-t-il des lunettes ?",
+        "text_42": "Porte-t-il un chapeau ?",
+        "text_43": "A-t-il des poils au visage ?",
+        "text_44": "Voit-on ses oreilles ?",
+        "text_45": "A-t-il les cheveux blonds ?",
+        "text_46": "A-t-il les cheveux bruns ?",
+        "text_47": "A-t-il les cheveux noirs ?",
+        "text_48": "A-t-il les cheveux roux ?",
+        "text_49": "A-t-il les cheveux gris ?",
+        "text_50": "A-t-il les cheveux longs ?",
+        "text_51": "A-t-il les cheveux courts ?",
+        "text_52": "A-t-il les yeux bleus ?",
+        "text_53": "A-t-il les yeux bruns ?",
+        "text_54": "A-t-il les yeux verts ?",
+        "text_55": "Choisir la pièce en ligne {r}, colonne {c}",
+        "text_56": "Aller en ligne {r}, colonne {c}",
+        "text_57": "Tourner",
+        "text_58": "Placer un pion",
+        "text_59": "Réclamer la nulle",
+        "text_60": "Continuer",
+        "text_61": "Prendre {n}",
+        "text_62": "Réinitialiser la proposition",
+        "title": "Le Pouilleux (Déclaratif)",
+        "server_send_a_draw_move": "envoie un coup de tirage",
+        "server_the_game_is_over": "la partie est terminée",
+        "server_not_your_turn": "ce n'est pas ton tour",
+        "server_that_position_is_not_in_the_opponents_hand": "cette position n'est pas dans la main de l'adversaire"
+      }
+    },
+    "de": {
+      "display_name": "Schwarzer Peter (Deklarativ)",
+      "short_description": "Old Maid, das klassische Paarspiel für zwei Spieler. Ziehe Karten aus der Hand deines Gegners, lege Paare ab, sobald sie entstehen, und sorge dafür, dass nicht du die einzige Dame behältst.",
+      "game_logic_rules": "Old Maid ist ein Spiel für zwei Spieler mit einem Blatt aus 49 Karten: ein Standardblatt, aus dem drei der vier Damen entfernt wurden, sodass nur eine Dame übrig ist — die Old Maid. Alle 49 Karten werden ausgeteilt, 25 an den ersten und 24 an den zweiten Spieler. Jedes Paar gleichen Rangs in einer Starthand wird sofort abgelegt, und jedes später entstehende Paar wird automatisch abgelegt. In deinem Zug ziehst du eine Karte aus der Hand deines Gegners, indem du eine Position wählst: Du siehst nur die Rückseiten seiner Karten, nie die Vorderseiten. Die restlichen Karten des Gegners werden nach jedem Zug neu angeordnet, sodass die Positionen nicht fest bleiben. Passt die gezogene Karte im Rang zu einer Karte in deiner Hand, wird das Paar abgelegt. Ein Spieler, dessen Hand leer wird, ist sicher und aus dem Spiel. Das Spiel endet, wenn nur noch ein Spieler Karten hält: Dieser Spieler hält die Old Maid und verliert, der andere gewinnt den Pot. Absicherung: Wird der 300. Zug erreicht, endet das Spiel sofort — der Spieler mit weniger Karten gewinnt; bei Gleichstand gewinnt, wer die Old Maid nicht hält; hält sie keiner, ist es ein Unentschieden.",
+      "game_ui_rules": "Ein Kartentisch. Oben liegt die Hand des Gegners als Reihe verdeckter Kartenrücken neben seinem Namen und seiner Kartenanzahl; in deinem Zug klickst du auf einen Rücken, um diese Karte zu ziehen. Deine eigene Hand liegt unten offen, und die einzige Dame ist golden umrandet, wenn du sie hältst. Die Tischmitte zeigt, wie viele Paare schon abgelegt wurden. Eine Statuszeile erzählt den letzten Zug (und ein Paar, das er gebildet hat), wer am Zug ist, und das Endergebnis, einschließlich der Frage, wer die Old Maid behalten hat.",
+      "tutorial_strings": {
+        "Empty your hand to be safe. The player left holding cards at the end holds the single queen — the Old Maid — and loses.": "Leere deine Hand, um sicher zu sein. Wer am Ende noch Karten hält, hält die einzige Dame — die Old Maid — und verliert.",
+        "How to play": "So wird gespielt",
+        "On your turn, click one of the face-down cards in your opponent's hand to draw it. If it matches the rank of a card in your hand, the pair is discarded at once.": "Klicke in deinem Zug auf eine der verdeckten Karten in der Hand deines Gegners, um sie zu ziehen. Passt sie im Rang zu einer Karte in deiner Hand, wird das Paar sofort abgelegt."
+      },
+      "client_strings": {
+        "text_0": "Deklarativ",
+        "text_1": "Spieler {n}",
+        "text_2": "Dein Zug · {name}",
+        "text_3": "{name} ist am Zug",
+        "text_4": "Spiel beendet",
+        "text_5": "Gewinner: {name}",
+        "text_6": "Deine Flotte",
+        "text_7": "Zielgewässer",
+        "text_8": "Flotte platzieren und starten",
+        "text_9": "Platziert eine gültige Flotte mit Abstand zwischen den Schiffen.",
+        "text_10": "Setze den Schlagzug mit dem markierten Stein fort.",
+        "text_11": "Schlagen ist Pflicht.",
+        "text_12": "Ziehe diagonal; Damen ziehen in beide Richtungen.",
+        "text_13": "Dame",
+        "text_14": "Turm",
+        "text_15": "Läufer",
+        "text_16": "Springer",
+        "text_17": "Auf {square} in {piece} umwandeln",
+        "text_18": "Diese Armee entfernen",
+        "text_19": "Passen (kein gültiger Zug)",
+        "text_20": "Aufgeben",
+        "text_21": "Bauern ziehen",
+        "text_22": "Wand platzieren",
+        "text_23": "Verbleibende Wände · {counts}",
+        "text_24": "Oberste Karte {card} · Farbe {suit} · {n} Karten im Stapel",
+        "text_25": "{card} als {suit} spielen",
+        "text_26": "{card} spielen",
+        "text_27": "Karte ziehen ({n} übrig)",
+        "text_28": "{name} nach {rank} fragen",
+        "text_29": "Karten ziehen",
+        "text_30": "Passen",
+        "text_31": "{name} · Quartette {ranks}",
+        "text_32": "Stich einsammeln",
+        "text_33": "Deine Figur: {name}",
+        "text_34": "Deine Figur ist geheim",
+        "text_35": "Fragen: {question}",
+        "text_36": "Ja",
+        "text_37": "Nein",
+        "text_38": "{name}: hat {character} geraten · {result}",
+        "text_39": "richtig",
+        "text_40": "falsch",
+        "text_41": "Trägt die Person eine Brille?",
+        "text_42": "Trägt die Person einen Hut?",
+        "text_43": "Hat die Person einen Bart?",
+        "text_44": "Sind die Ohren sichtbar?",
+        "text_45": "Hat die Person blonde Haare?",
+        "text_46": "Hat die Person braune Haare?",
+        "text_47": "Hat die Person schwarze Haare?",
+        "text_48": "Hat die Person rote Haare?",
+        "text_49": "Hat die Person graue Haare?",
+        "text_50": "Hat die Person lange Haare?",
+        "text_51": "Hat die Person kurze Haare?",
+        "text_52": "Hat die Person blaue Augen?",
+        "text_53": "Hat die Person braune Augen?",
+        "text_54": "Hat die Person grüne Augen?",
+        "text_55": "Figur in Zeile {r}, Spalte {c} wählen",
+        "text_56": "Nach Zeile {r}, Spalte {c} ziehen",
+        "text_57": "Drehen",
+        "text_58": "Stein setzen",
+        "text_59": "Remis beanspruchen",
+        "text_60": "Fortsetzen",
+        "text_61": "Stein {n} schlagen",
+        "text_62": "Tipp zurücksetzen",
+        "title": "Schwarzer Peter (Deklarativ)",
+        "server_send_a_draw_move": "sende einen Zug zum Ziehen",
+        "server_the_game_is_over": "das Spiel ist vorbei",
+        "server_not_your_turn": "du bist nicht am Zug",
+        "server_that_position_is_not_in_the_opponents_hand": "diese Position ist nicht in der Hand des Gegners"
+      }
+    },
+    "pt": {
+      "display_name": "Mico (Declarativo)",
+      "short_description": "Old Maid, o clássico jogo de pares para dois jogadores. Compre cartas da mão do seu oponente, descarte os pares assim que se formarem e garanta que não seja você quem fica com a única dama.",
+      "game_logic_rules": "Old Maid é um jogo para dois jogadores com um baralho de 49 cartas: um baralho comum do qual três das quatro damas foram removidas, restando uma única dama — a Old Maid. Todas as 49 cartas são distribuídas, 25 para o primeiro jogador e 24 para o segundo. Qualquer par do mesmo valor numa mão inicial é descartado de imediato, e qualquer par formado depois é descartado automaticamente. Na sua vez, compre uma carta da mão do seu oponente escolhendo uma posição: você só vê o verso das cartas dele, nunca a face. As cartas restantes do oponente são rearranjadas após cada compra, então as posições não ficam fixas. Se a carta comprada tiver o mesmo valor de uma carta na sua mão, o par é descartado. Um jogador cuja mão fica vazia está seguro e fora do jogo. O jogo termina quando só um jogador ainda tem cartas: esse jogador está com a Old Maid e perde, e o outro ganha o pote. Proteção: se a jogada 300 for alcançada, o jogo termina na hora — quem tiver menos cartas vence; em empate de cartas, vence quem não estiver com a Old Maid; se ninguém estiver com ela, é empate.",
+      "game_ui_rules": "Uma mesa de cartas. No topo, a mão do oponente é uma fileira de versos de cartas ao lado do nome e da contagem de cartas dele; na sua vez, você clica num verso para comprar aquela carta. A sua mão fica embaixo, virada para cima, e a dama única aparece com contorno dourado quando está com você. O centro da mesa mostra quantos pares já foram descartados. Uma linha de status narra a última compra (e o par que ela formou), de quem é a vez e o resultado final, incluindo quem ficou com a Old Maid.",
+      "tutorial_strings": {
+        "Empty your hand to be safe. The player left holding cards at the end holds the single queen — the Old Maid — and loses.": "Esvazie a sua mão para ficar seguro. Quem ainda tiver cartas no final está com a única dama — a Old Maid — e perde.",
+        "How to play": "Como jogar",
+        "On your turn, click one of the face-down cards in your opponent's hand to draw it. If it matches the rank of a card in your hand, the pair is discarded at once.": "Na sua vez, clique numa das cartas viradas para baixo na mão do seu oponente para comprá-la. Se ela tiver o mesmo valor de uma carta na sua mão, o par é descartado na hora."
+      },
+      "client_strings": {
+        "text_0": "Declarativo",
+        "text_1": "Jogador {n}",
+        "text_2": "Sua vez · {name}",
+        "text_3": "Vez de {name}",
+        "text_4": "Partida encerrada",
+        "text_5": "Vencedor: {name}",
+        "text_6": "Sua frota",
+        "text_7": "Águas inimigas",
+        "text_8": "Posicionar frota e iniciar batalha",
+        "text_9": "Posiciona uma frota válida com água livre entre os navios.",
+        "text_10": "Continue a captura com a peça destacada.",
+        "text_11": "É obrigatório capturar.",
+        "text_12": "Mova na diagonal; damas movem nos dois sentidos.",
+        "text_13": "rainha",
+        "text_14": "torre",
+        "text_15": "bispo",
+        "text_16": "cavalo",
+        "text_17": "Promover em {square} para {piece}",
+        "text_18": "Eliminar este exército",
+        "text_19": "Passar (sem jogada válida)",
+        "text_20": "Desistir",
+        "text_21": "Mover peão",
+        "text_22": "Colocar parede",
+        "text_23": "Paredes restantes · {counts}",
+        "text_24": "Carta do topo {card} · naipe {suit} · {n} cartas para comprar",
+        "text_25": "Jogar {card} como {suit}",
+        "text_26": "Jogar {card}",
+        "text_27": "Comprar carta (restam {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Comprar cartas",
+        "text_30": "Passar",
+        "text_31": "{name} · conjuntos {ranks}",
+        "text_32": "Recolher vaza",
+        "text_33": "Seu personagem: {name}",
+        "text_34": "Seu personagem é privado",
+        "text_35": "Perguntar: {question}",
+        "text_36": "Sim",
+        "text_37": "Não",
+        "text_38": "{name}: adivinhou {character} · {result}",
+        "text_39": "correto",
+        "text_40": "incorreto",
+        "text_41": "Usa óculos?",
+        "text_42": "Usa chapéu?",
+        "text_43": "Tem pelos no rosto?",
+        "text_44": "As orelhas estão visíveis?",
+        "text_45": "Tem cabelo loiro?",
+        "text_46": "Tem cabelo castanho?",
+        "text_47": "Tem cabelo preto?",
+        "text_48": "Tem cabelo ruivo?",
+        "text_49": "Tem cabelo grisalho?",
+        "text_50": "Tem cabelo comprido?",
+        "text_51": "Tem cabelo curto?",
+        "text_52": "Tem olhos azuis?",
+        "text_53": "Tem olhos castanhos?",
+        "text_54": "Tem olhos verdes?",
+        "text_55": "Selecionar peça na linha {r}, coluna {c}",
+        "text_56": "Mover para linha {r}, coluna {c}",
+        "text_57": "Girar",
+        "text_58": "Colocar pedra",
+        "text_59": "Reivindicar empate",
+        "text_60": "Continuar",
+        "text_61": "Capturar {n}",
+        "text_62": "Reiniciar palpite",
+        "title": "Mico (Declarativo)",
+        "server_send_a_draw_move": "envie uma jogada de compra",
+        "server_the_game_is_over": "a partida acabou",
+        "server_not_your_turn": "não é a sua vez",
+        "server_that_position_is_not_in_the_opponents_hand": "essa posição não está na mão do oponente"
+      }
+    },
+    "zh": {
+      "display_name": "抽鬼牌 (声明式)",
+      "short_description": "抽鬼牌，经典的双人配对游戏。从对手手里抽牌，凑成对子就立刻打出，并确保最后那张唯一的Q不是留在你手里。",
+      "game_logic_rules": "抽鬼牌是双人游戏，使用一副49张的牌：从标准牌中去掉四张Q中的三张，只留下一张Q——也就是鬼牌。49张牌全部发完，先手25张，后手24张。起始手牌中任何同点数的一对立即打出，之后形成的对子也会自动打出。轮到你时，从对手手牌中选一个位置抽一张牌：你只能看到牌背，看不到牌面。每次抽牌后，对手剩下的牌都会重新排列，所以位置不会固定。如果你抽到的牌与手中某张牌点数相同，这一对就会被打出。手牌变空的玩家安全出局。当只剩一名玩家还持有手牌时游戏结束：该玩家持有鬼牌并落败，另一名玩家赢得奖池。兜底规则：若达到第300步，游戏立即结束——手牌较少者获胜；若数量相同，未持有鬼牌的玩家获胜；若双方都未持有，则为平局。",
+      "game_ui_rules": "一张牌桌。对手的手牌在上方显示为一排牌背，旁边是其名字和牌数；轮到你时，点击一张牌背即可抽走那张牌。你自己的手牌在下方正面朝上显示，当你持有那张唯一的Q时，它会被金边标出。牌桌中央显示已打出的对子数量。状态栏会讲述上一次抽牌（以及它形成的对子）、当前轮到谁，以及最终结果，包括谁最后留下了鬼牌。",
+      "tutorial_strings": {
+        "Empty your hand to be safe. The player left holding cards at the end holds the single queen — the Old Maid — and loses.": "清空手牌即可安全。最后还持有手牌的玩家持有那张唯一的Q——鬼牌——并落败。",
+        "How to play": "玩法",
+        "On your turn, click one of the face-down cards in your opponent's hand to draw it. If it matches the rank of a card in your hand, the pair is discarded at once.": "轮到你时，点击对手手牌中一张牌背来抽牌。如果它与你手中的某张牌点数相同，这一对会立即被打出。"
+      },
+      "client_strings": {
+        "text_0": "声明式",
+        "text_1": "玩家 {n}",
+        "text_2": "轮到您 · {name}",
+        "text_3": "轮到 {name}",
+        "text_4": "游戏结束",
+        "text_5": "获胜者：{name}",
+        "text_6": "您的舰队",
+        "text_7": "目标海域",
+        "text_8": "部署舰队并开始战斗",
+        "text_9": "部署合法舰队，舰船之间留有空隙。",
+        "text_10": "使用高亮棋子继续连跳。",
+        "text_11": "必须吃子。",
+        "text_12": "沿斜线移动；王棋可以双向移动。",
+        "text_13": "后",
+        "text_14": "车",
+        "text_15": "象",
+        "text_16": "马",
+        "text_17": "在 {square} 升变为{piece}",
+        "text_18": "淘汰此军队",
+        "text_19": "跳过（无合法走法）",
+        "text_20": "认输",
+        "text_21": "移动兵",
+        "text_22": "放置墙",
+        "text_23": "剩余墙数 · {counts}",
+        "text_24": "顶牌 {card} · 花色 {suit} · 余牌 {n} 张",
+        "text_25": "打出 {card}，指定花色 {suit}",
+        "text_26": "打出 {card}",
+        "text_27": "抽一张牌（剩余 {n} 张）",
+        "text_28": "向 {name} 要 {rank}",
+        "text_29": "抽牌",
+        "text_30": "跳过",
+        "text_31": "{name} · 成套牌 {ranks}",
+        "text_32": "收取此墩",
+        "text_33": "您的角色：{name}",
+        "text_34": "您的角色是保密的",
+        "text_35": "提问：{question}",
+        "text_36": "是",
+        "text_37": "否",
+        "text_38": "{name}：猜测 {character} · {result}",
+        "text_39": "正确",
+        "text_40": "错误",
+        "text_41": "戴眼镜吗？",
+        "text_42": "戴帽子吗？",
+        "text_43": "有胡须吗？",
+        "text_44": "耳朵露出来了吗？",
+        "text_45": "是金发吗？",
+        "text_46": "是棕发吗？",
+        "text_47": "是黑发吗？",
+        "text_48": "是红发吗？",
+        "text_49": "是灰发吗？",
+        "text_50": "是长发吗？",
+        "text_51": "是短发吗？",
+        "text_52": "是蓝眼睛吗？",
+        "text_53": "是棕眼睛吗？",
+        "text_54": "是绿眼睛吗？",
+        "text_55": "选择第 {r} 行第 {c} 列的棋子",
+        "text_56": "移至第 {r} 行第 {c} 列",
+        "text_57": "转动",
+        "text_58": "放置棋子",
+        "text_59": "申请和棋",
+        "text_60": "继续",
+        "text_61": "移除 {n}",
+        "text_62": "重置猜测",
+        "title": "抽鬼牌 (声明式)",
+        "server_send_a_draw_move": "发送一个抽牌动作",
+        "server_the_game_is_over": "对局已经结束",
+        "server_not_your_turn": "还没轮到你",
+        "server_that_position_is_not_in_the_opponents_hand": "该位置不在对手的手牌中"
+      }
+    },
+    "hi": {
+      "display_name": "ओल्ड मेड (घोषणात्मक)",
+      "short_description": "ओल्ड मेड, दो खिलाड़ियों का क्लासिक जोड़ी वाला खेल। अपने प्रतिद्वंद्वी के हाथ से कार्ड निकालें, जोड़ियाँ बनते ही उन्हें हटाएँ, और यह सुनिश्चित करें कि इकलौती रानी आपके पास न रह जाए।",
+      "game_logic_rules": "ओल्ड मेड दो खिलाड़ियों का खेल है जो 49 कार्डों के पैक से खेला जाता है: एक मानक डेक जिसमें चार रानियों में से तीन हटा दी गई हैं, ताकि केवल एक रानी बचे — ओल्ड मेड। सभी 49 कार्ड बाँटे जाते हैं, पहले खिलाड़ी को 25 और दूसरे को 24। शुरुआती हाथ में समान रैंक की कोई भी जोड़ी तुरंत हटा दी जाती है, और बाद में बनने वाली हर जोड़ी अपने आप हट जाती है। अपनी बारी में, अपने प्रतिद्वंद्वी के हाथ से एक स्थान चुनकर एक कार्ड निकालें: आपको केवल उनके कार्डों की पीठ दिखती है, चेहरे कभी नहीं। हर बार निकालने के बाद प्रतिद्वंद्वी के बचे हुए कार्ड फिर से व्यवस्थित हो जाते हैं, इसलिए स्थान स्थिर नहीं रहते। यदि निकाला गया कार्ड आपके हाथ के किसी कार्ड के रैंक से मेल खाता है, तो वह जोड़ी हटा दी जाती है। जिस खिलाड़ी का हाथ खाली हो जाता है, वह सुरक्षित है और बाहर है। खेल तब समाप्त होता है जब केवल एक खिलाड़ी के पास कार्ड बचते हैं: उस खिलाड़ी के पास ओल्ड मेड है और वह हारता है, और दूसरा खिलाड़ी पॉट जीतता है। सुरक्षा नियम: यदि 300वीं चाल आ जाती है, तो खेल तुरंत समाप्त हो जाता है — कम कार्ड वाला खिलाड़ी जीतता है; कार्ड बराबर होने पर, जिसके पास ओल्ड मेड नहीं है वह जीतता है; यदि किसी के पास भी वह नहीं है, तो यह ड्रॉ है।",
+      "game_ui_rules": "एक कार्ड टेबल। ऊपर, प्रतिद्वंद्वी का हाथ उनके नाम और कार्डों की संख्या के पास उल्टे कार्डों की एक पंक्ति के रूप में दिखता है; आपकी बारी में, आप किसी पीठ पर क्लिक करके वह कार्ड निकालते हैं। आपका अपना हाथ नीचे, सामने की ओर खुला रहता है, और जब इकलौती रानी आपके पास होती है तो उस पर सुनहरी किनारी दिखती है। टेबल के बीच में दिखता है कि अब तक कितनी जोड़ियाँ हटाई जा चुकी हैं। एक स्थिति पंक्ति अंतिम निकासी (और उससे बनी किसी जोड़ी), किसकी बारी है, और अंतिम परिणाम बताती है, जिसमें यह भी शामिल है कि ओल्ड मेड किसके पास रह गई।",
+      "tutorial_strings": {
+        "Empty your hand to be safe. The player left holding cards at the end holds the single queen — the Old Maid — and loses.": "सुरक्षित रहने के लिए अपना हाथ खाली करें। अंत में जिसके पास कार्ड बचते हैं, उसके पास इकलौती रानी — ओल्ड मेड — होती है और वह हारता है।",
+        "How to play": "कैसे खेलें",
+        "On your turn, click one of the face-down cards in your opponent's hand to draw it. If it matches the rank of a card in your hand, the pair is discarded at once.": "अपनी बारी में, अपने प्रतिद्वंद्वी के हाथ के उल्टे कार्डों में से एक पर क्लिक करके उसे निकालें। यदि वह आपके हाथ के किसी कार्ड के रैंक से मेल खाता है, तो जोड़ी तुरंत हटा दी जाती है।"
+      },
+      "client_strings": {
+        "text_0": "घोषणात्मक",
+        "text_1": "खिलाड़ी {n}",
+        "text_2": "आपकी बारी · {name}",
+        "text_3": "{name} की बारी",
+        "text_4": "खेल समाप्त",
+        "text_5": "विजेता: {name}",
+        "text_6": "आपका बेड़ा",
+        "text_7": "लक्ष्य जलक्षेत्र",
+        "text_8": "बेड़ा रखें और युद्ध शुरू करें",
+        "text_9": "जहाज़ों के बीच खाली पानी छोड़कर मान्य बेड़ा रखता है।",
+        "text_10": "चिह्नित गोटी से अगली मार जारी रखें।",
+        "text_11": "मारना अनिवार्य है।",
+        "text_12": "तिरछा चलें; राजा दोनों दिशाओं में चल सकता है।",
+        "text_13": "वज़ीर",
+        "text_14": "हाथी",
+        "text_15": "ऊँट",
+        "text_16": "घोड़ा",
+        "text_17": "{square} पर {piece} में पदोन्नत करें",
+        "text_18": "इस सेना को हटाएँ",
+        "text_19": "पास करें (कोई वैध चाल नहीं)",
+        "text_20": "हार मानें",
+        "text_21": "प्यादा चलें",
+        "text_22": "दीवार रखें",
+        "text_23": "बची दीवारें · {counts}",
+        "text_24": "ऊपर का पत्ता {card} · रंग {suit} · खींचने के लिए {n} पत्ते",
+        "text_25": "{card} को {suit} के रूप में खेलें",
+        "text_26": "{card} खेलें",
+        "text_27": "एक पत्ता खींचें ({n} बचे)",
+        "text_28": "{name} से {rank} माँगें",
+        "text_29": "पत्ते खींचें",
+        "text_30": "पास करें",
+        "text_31": "{name} · पूरे समूह {ranks}",
+        "text_32": "हाथ समेटें",
+        "text_33": "आपका पात्र: {name}",
+        "text_34": "आपका पात्र गोपनीय है",
+        "text_35": "पूछें: {question}",
+        "text_36": "हाँ",
+        "text_37": "नहीं",
+        "text_38": "{name}: {character} का अनुमान · {result}",
+        "text_39": "सही",
+        "text_40": "गलत",
+        "text_41": "क्या चश्मा पहने हैं?",
+        "text_42": "क्या टोपी पहने हैं?",
+        "text_43": "क्या चेहरे पर दाढ़ी या मूँछ है?",
+        "text_44": "क्या कान दिखाई दे रहे हैं?",
+        "text_45": "क्या बाल सुनहरे हैं?",
+        "text_46": "क्या बाल भूरे हैं?",
+        "text_47": "क्या बाल काले हैं?",
+        "text_48": "क्या बाल लाल हैं?",
+        "text_49": "क्या बाल सफ़ेद या स्लेटी हैं?",
+        "text_50": "क्या बाल लंबे हैं?",
+        "text_51": "क्या बाल छोटे हैं?",
+        "text_52": "क्या आँखें नीली हैं?",
+        "text_53": "क्या आँखें भूरी हैं?",
+        "text_54": "क्या आँखें हरी हैं?",
+        "text_55": "पंक्ति {r}, स्तंभ {c} की गोटी चुनें",
+        "text_56": "पंक्ति {r}, स्तंभ {c} पर चलें",
+        "text_57": "घुमाएँ",
+        "text_58": "पत्थर रखें",
+        "text_59": "ड्रॉ का दावा करें",
+        "text_60": "जारी रखें",
+        "text_61": "{n} को हटाएँ",
+        "text_62": "अनुमान रीसेट करें",
+        "title": "ओल्ड मेड (घोषणात्मक)",
+        "server_send_a_draw_move": "कार्ड निकालने की चाल भेजें",
+        "server_the_game_is_over": "मैच समाप्त हो गया है",
+        "server_not_your_turn": "आपकी बारी नहीं है",
+        "server_that_position_is_not_in_the_opponents_hand": "वह स्थान प्रतिद्वंद्वी के हाथ में नहीं है"
+      }
+    },
+    "ar": {
+      "display_name": "العجوز (تصريحي)",
+      "short_description": "العجوز، لعبة الأزواج الكلاسيكية لشخصين. اسحب بطاقات من يد خصمك، وتخلص من الأزواج فور تشكلها، واحرص على ألا تكون أنت من يبقى مع الملكة الوحيدة.",
+      "game_logic_rules": "العجوز لعبة لشخصين تُلعب بمجموعة من 49 بطاقة: مجموعة عادية أُزيلت منها ثلاث من الملكات الأربع، فتبقى ملكة واحدة فقط — العجوز. تُوزع البطاقات الـ49 كلها، 25 للاعب الأول و24 للثاني. أي زوج من نفس القيمة في يد البداية يُتخلص منه فوراً، وأي زوج يتشكل لاحقاً يُتخلص منه تلقائياً. في دورك، اسحب بطاقة واحدة من يد خصمك باختيار موضع فيها: لا ترى سوى ظهور بطاقاته، ولا ترى وجوهها أبداً. تُعاد ترتيب بطاقات الخصم المتبقية بعد كل سحب، فلا تبقى المواضع ثابتة. إذا طابقت البطاقة المسحوبة قيمة بطاقة في يدك، يُتخلص من ذلك الزوج. اللاعب الذي تفرغ يده يصبح آمناً ويخرج من اللعبة. تنتهي اللعبة عندما يبقى لاعب واحد فقط ممسكاً ببطاقات: ذلك اللاعب يحمل العجوز ويخسر، والآخر يفوز بالوعاء. قاعدة احتياطية: إذا تم الوصول إلى الحركة 300، تنتهي اللعبة فوراً — يفوز اللاعب صاحب البطاقات الأقل؛ وإذا تساوى العدد، يفوز من لا يحمل العجوز؛ وإذا لم يحملها أي منهما، تكون النتيجة تعادلاً.",
+      "game_ui_rules": "طاولة بطاقات. في الأعلى، تظهر يد الخصم كصف من ظهور البطاقات بجانب اسمه وعدد بطاقاته؛ وفي دورك تنقر على ظهر بطاقة لسحب تلك البطاقة. يدك أنت تمتد في الأسفل مكشوفة الوجه، وتظهر الملكة الوحيدة محاطة بإطار ذهبي عندما تكون بحوزتك. يعرض وسط الطاولة عدد الأزواج التي تم التخلص منها حتى الآن. ويروي سطر الحالة آخر سحب (وأي زوج شكّله) ودور من الآن والنتيجة النهائية، بما في ذلك من بقيت العجوز معه.",
+      "tutorial_strings": {
+        "Empty your hand to be safe. The player left holding cards at the end holds the single queen — the Old Maid — and loses.": "فرّغ يدك لتصبح آمناً. اللاعب الذي يبقى ممسكاً ببطاقات في النهاية يحمل الملكة الوحيدة — العجوز — ويخسر.",
+        "How to play": "طريقة اللعب",
+        "On your turn, click one of the face-down cards in your opponent's hand to draw it. If it matches the rank of a card in your hand, the pair is discarded at once.": "في دورك، انقر على إحدى البطاقات المقلوبة في يد خصمك لسحبها. إذا طابقت قيمة بطاقة في يدك، يُتخلص من الزوج فوراً."
+      },
+      "client_strings": {
+        "text_0": "تصريحي",
+        "text_1": "اللاعب {n}",
+        "text_2": "دورك · {name}",
+        "text_3": "دور {name}",
+        "text_4": "انتهت اللعبة",
+        "text_5": "الفائز: {name}",
+        "text_6": "أسطولك",
+        "text_7": "مياه الهدف",
+        "text_8": "وضع الأسطول وبدء المعركة",
+        "text_9": "يضع أسطولًا صالحًا مع مياه فاصلة بين السفن.",
+        "text_10": "تابع الأسر بالقطعة المظللة.",
+        "text_11": "الأسر إجباري.",
+        "text_12": "تحرك قطريًا؛ تتحرك الملوك في الاتجاهين.",
+        "text_13": "وزير",
+        "text_14": "رخ",
+        "text_15": "فيل",
+        "text_16": "حصان",
+        "text_17": "ترقية في {square} إلى {piece}",
+        "text_18": "إقصاء هذا الجيش",
+        "text_19": "تمرير (لا حركة قانونية)",
+        "text_20": "استسلام",
+        "text_21": "تحريك البيدق",
+        "text_22": "وضع جدار",
+        "text_23": "الجدران المتبقية · {counts}",
+        "text_24": "الورقة العليا {card} · النوع {suit} · {n} أوراق للسحب",
+        "text_25": "العب {card} بنوع {suit}",
+        "text_26": "العب {card}",
+        "text_27": "اسحب ورقة (متبقي {n})",
+        "text_28": "اطلب {rank} من {name}",
+        "text_29": "سحب أوراق",
+        "text_30": "تمرير",
+        "text_31": "{name} · المجموعات {ranks}",
+        "text_32": "جمع اللمة",
+        "text_33": "شخصيتك: {name}",
+        "text_34": "شخصيتك سرية",
+        "text_35": "اسأل: {question}",
+        "text_36": "نعم",
+        "text_37": "لا",
+        "text_38": "{name}: خمن {character} · {result}",
+        "text_39": "صحيح",
+        "text_40": "غير صحيح",
+        "text_41": "هل ترتدي نظارة؟",
+        "text_42": "هل ترتدي قبعة؟",
+        "text_43": "هل لديها شعر في الوجه؟",
+        "text_44": "هل أذناها ظاهرتان؟",
+        "text_45": "هل شعرها أشقر؟",
+        "text_46": "هل شعرها بني؟",
+        "text_47": "هل شعرها أسود؟",
+        "text_48": "هل شعرها أحمر؟",
+        "text_49": "هل شعرها رمادي؟",
+        "text_50": "هل شعرها طويل؟",
+        "text_51": "هل شعرها قصير؟",
+        "text_52": "هل عيناها زرقاوان؟",
+        "text_53": "هل عيناها بنيتان؟",
+        "text_54": "هل عيناها خضراوان؟",
+        "text_55": "اختر قطعة الصف {r} والعمود {c}",
+        "text_56": "تحرك إلى الصف {r} والعمود {c}",
+        "text_57": "تدوير",
+        "text_58": "ضع حجرًا",
+        "text_59": "المطالبة بالتعادل",
+        "text_60": "متابعة",
+        "text_61": "خذ {n}",
+        "text_62": "إعادة تعيين التخمين",
+        "title": "العجوز (تصريحي)",
+        "server_send_a_draw_move": "أرسل حركة سحب",
+        "server_the_game_is_over": "انتهت المباراة",
+        "server_not_your_turn": "ليس دورك",
+        "server_that_position_is_not_in_the_opponents_hand": "هذا الموضع ليس في يد الخصم"
+      }
+    }
+  },
+  "game_addition_request_id_and_secret": "example-only-archive-html-old_maid-replace-before-publishing",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 640,
+      "height": 720
+    },
+    "boards": [
+      {
+        "id": "table",
+        "kind": "free",
+        "x": 0,
+        "y": 0,
+        "width": 640,
+        "height": 740,
+        "color": "#145b4e",
+        "line_color": "#6ee7b7"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 60,
+        "height": 82,
+        "color": "#fffdf6",
+        "text_color": "#172033",
+        "border_color": "#667085"
+      },
+      "played": {
+        "shape": "card",
+        "width": 58,
+        "height": 78,
+        "color": "#f8fafc",
+        "text_color": "#172033",
+        "border_color": "#667085"
+      }
+    },
+    "strings": {
+      "text_0": "Declarative",
+      "text_1": "Player {n}",
+      "text_2": "Your turn · {name}",
+      "text_3": "{name} to play",
+      "text_4": "Game over",
+      "text_5": "Winner: {name}",
+      "text_6": "Your fleet",
+      "text_7": "Target waters",
+      "text_8": "Place fleet and start battle",
+      "text_9": "Places a valid fleet with clear water between ships.",
+      "text_10": "Continue the capture with the highlighted checker.",
+      "text_11": "A capture is required.",
+      "text_12": "Move diagonally; kings move either direction.",
+      "text_13": "queen",
+      "text_14": "rook",
+      "text_15": "bishop",
+      "text_16": "knight",
+      "text_17": "Promote at {square} to {piece}",
+      "text_18": "Eliminate this army",
+      "text_19": "Pass (no legal move)",
+      "text_20": "Resign",
+      "text_21": "Move pawn",
+      "text_22": "Place wall",
+      "text_23": "Walls remaining · {counts}",
+      "text_24": "Top card {card} · suit {suit} · {n} cards to draw",
+      "text_25": "Play {card} as {suit}",
+      "text_26": "Play {card}",
+      "text_27": "Draw a card ({n} left)",
+      "text_28": "Ask {name} for {rank}",
+      "text_29": "Draw cards",
+      "text_30": "Pass",
+      "text_31": "{name} · books {ranks}",
+      "text_32": "Collect trick",
+      "text_33": "Your character: {name}",
+      "text_34": "Your character is private",
+      "text_35": "Ask: {question}",
+      "text_36": "Yes",
+      "text_37": "No",
+      "text_38": "{name}: guessed {character} · {result}",
+      "text_39": "correct",
+      "text_40": "incorrect",
+      "text_41": "Are they wearing glasses?",
+      "text_42": "Are they wearing a hat?",
+      "text_43": "Do they have facial hair?",
+      "text_44": "Are their ears showing?",
+      "text_45": "Do they have blonde hair?",
+      "text_46": "Do they have brown hair?",
+      "text_47": "Do they have black hair?",
+      "text_48": "Do they have red hair?",
+      "text_49": "Do they have gray hair?",
+      "text_50": "Do they have long hair?",
+      "text_51": "Do they have short hair?",
+      "text_52": "Do they have blue eyes?",
+      "text_53": "Do they have brown eyes?",
+      "text_54": "Do they have green eyes?",
+      "text_55": "Select piece at row {r}, column {c}",
+      "text_56": "Move to row {r}, column {c}",
+      "text_57": "Spin",
+      "text_58": "Place stone",
+      "text_59": "Claim draw",
+      "text_60": "Continue",
+      "text_61": "Take {n}",
+      "text_62": "Reset guess",
+      "title": "Old Maid (Declarative)",
+      "server_send_a_draw_move": "send a draw move",
+      "server_the_game_is_over": "the game is over",
+      "server_not_your_turn": "not your turn",
+      "server_that_position_is_not_in_the_opponents_hand": "that position is not in the opponent's hand"
+    },
+    "ui_code": "const KIND=\"old_maid\";\nconst SOURCE_STRINGS={\"title\":\"Old Maid (Declarative)\"};\nconst SOURCE_KEYS={\"Declarative\":\"text_0\",\"Player {n}\":\"text_1\",\"Your turn · {name}\":\"text_2\",\"{name} to play\":\"text_3\",\"Game over\":\"text_4\",\"Winner: {name}\":\"text_5\",\"Your fleet\":\"text_6\",\"Target waters\":\"text_7\",\"Place fleet and start battle\":\"text_8\",\"Places a valid fleet with clear water between ships.\":\"text_9\",\"Continue the capture with the highlighted checker.\":\"text_10\",\"A capture is required.\":\"text_11\",\"Move diagonally; kings move either direction.\":\"text_12\",\"queen\":\"text_13\",\"rook\":\"text_14\",\"bishop\":\"text_15\",\"knight\":\"text_16\",\"Promote at {square} to {piece}\":\"text_17\",\"Eliminate this army\":\"text_18\",\"Pass (no legal move)\":\"text_19\",\"Resign\":\"text_20\",\"Move pawn\":\"text_21\",\"Place wall\":\"text_22\",\"Walls remaining · {counts}\":\"text_23\",\"Top card {card} · suit {suit} · {n} cards to draw\":\"text_24\",\"Play {card} as {suit}\":\"text_25\",\"Play {card}\":\"text_26\",\"Draw a card ({n} left)\":\"text_27\",\"Ask {name} for {rank}\":\"text_28\",\"Draw cards\":\"text_29\",\"Pass\":\"text_30\",\"{name} · books {ranks}\":\"text_31\",\"Collect trick\":\"text_32\",\"Your character: {name}\":\"text_33\",\"Your character is private\":\"text_34\",\"Ask: {question}\":\"text_35\",\"Yes\":\"text_36\",\"No\":\"text_37\",\"{name}: guessed {character} · {result}\":\"text_38\",\"correct\":\"text_39\",\"incorrect\":\"text_40\",\"Are they wearing glasses?\":\"text_41\",\"Are they wearing a hat?\":\"text_42\",\"Do they have facial hair?\":\"text_43\",\"Are their ears showing?\":\"text_44\",\"Do they have blonde hair?\":\"text_45\",\"Do they have brown hair?\":\"text_46\",\"Do they have black hair?\":\"text_47\",\"Do they have red hair?\":\"text_48\",\"Do they have gray hair?\":\"text_49\",\"Do they have long hair?\":\"text_50\",\"Do they have short hair?\":\"text_51\",\"Do they have blue eyes?\":\"text_52\",\"Do they have brown eyes?\":\"text_53\",\"Do they have green eyes?\":\"text_54\",\"Select piece at row {r}, column {c}\":\"text_55\",\"Move to row {r}, column {c}\":\"text_56\",\"Spin\":\"text_57\",\"Place stone\":\"text_58\",\"Claim draw\":\"text_59\",\"Continue\":\"text_60\",\"Take {n}\":\"text_61\",\"Reset guess\":\"text_62\"};\n// Presentation for ten archived HTML games converted to the portable scene UI.\r\nconst gameUI = {\r\n  reduce(message, localState) {\r\n    const m = message.type === 'ui_event' ? message.state_changed : message;\r\n    const s = m.view || m.state || {};\r\n    const active = m.status === 'ongoing' && !m.replay &&\r\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\r\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\r\n    const offers = [];\r\n    const seat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\r\n    const click = message.type === 'ui_event' && message.event?.type === 'tap'\r\n      ? String(message.event.id || '') : '';\r\n    const localValid = localState && localState.move_count === m.move_count &&\r\n      localState.viewer === seat;\r\n    const text = (source, values = {}) =>\r\n      String(m.strings?.[SOURCE_KEYS[source]] ?? source).replace(/\\{(\\w+)\\}/g,\r\n        (match, key) => values[key] == null ? match : String(values[key]));\r\n    const names = (m.players || []).map((p, i) => p.name || text('Player {n}', {n:i + 1}));\r\n    const title = m.strings?.title || SOURCE_STRINGS.title || KIND;\r\n    const playerName = i => names[i] || text('Player {n}', {n:i + 1});\r\n    const label = (id, value, x, y, font_size = 14) =>\r\n      scene.labels.push({id, text:String(value), x, y, font_size});\r\n    const staticPiece = (id, type, board, position, extra = {}) =>\r\n      scene.pieces.push(Object.assign({id, type, board, position, actions:[]}, extra));\r\n    const offer = (move, value, board, position, mode = 'control', aria_label) => {\r\n      if (!active) return null;\r\n      const id = `intent_${offers.length}`;\r\n      offers.push(move);\r\n      if (mode === 'target') {\r\n        scene.targets.push({id, board, position, label:String(value || '•'),\r\n          ...(aria_label ? {aria_label} : {})});\r\n      } else if (mode === 'piece') {\r\n        scene.pieces.push({id, type:'card', board, position, text:String(value),\r\n          actions:['tap'], ...(aria_label ? {aria_label} : {})});\r\n      } else {\r\n        scene.controls.push({id, kind:'button', label:String(value)});\r\n      }\r\n      return id;\r\n    };\r\n    const cardText = card => {\r\n      if (typeof card === 'string') return card.replace(/S$/, '♠').replace(/H$/, '♥')\r\n        .replace(/D$/, '♦').replace(/C$/, '♣');\r\n      if (card && typeof card === 'object') {\r\n        const ranks = {11:'J',12:'Q',13:'K',14:'A'};\r\n        const suits = ['♠','♥','♦','♣'];\r\n        return `${ranks[card.rank] || card.rank}${suits[card.suit] || ''}`;\r\n      }\r\n      return String(card ?? '');\r\n    };\r\n    const cardPos = i => ({x:36 + (i % 8) * 67,y:125 + Math.floor(i / 8) * 94});\r\n    const boardCell = (i, columns) => ({cell:String(i)});\r\n    const handLabel = hand => Array.isArray(hand) ? hand.map(cardText).join(' ') : '';\r\n    label('title', title, 22, 16, 25);\r\n    if (Number.isInteger(s.to_move) || Number.isInteger(s.toMove) ||\r\n        Number.isInteger(s.turn) || Number.isInteger(s.turnSeat)) {\r\n      const turn = Number.isInteger(s.to_move) ? s.to_move :\r\n        Number.isInteger(s.toMove) ? s.toMove :\r\n          Number.isInteger(s.turn) ? s.turn : s.turnSeat;\r\n      label('status', m.status === 'over' ? text('Game over') :\r\n        (active ? text('Your turn · {name}', {name:playerName(turn)}) :\r\n          text('{name} to play', {name:playerName(turn)})), 22, 52, 16);\r\n    }\r\n\r\n    let selectedSize = localValid ? localState.selectedSize : null;\r\n    let selectedFrom = localValid ? localState.selectedFrom : null;\r\n    let draft = localValid && Array.isArray(localState.draft) ? localState.draft.slice() : null;\r\n    let dosPlacements = localValid && Array.isArray(localState.dosPlacements)\r\n      ? localState.dosPlacements.slice() : [];\r\n    let dosBonus = localValid && Array.isArray(localState.dosBonus) ? localState.dosBonus.slice() : [];\r\n    if (KIND === 'gobblet') {\r\n      const reserve = /^reserve_(\\d+)$/.exec(click);\r\n      const source = /^source_(\\d+)$/.exec(click);\r\n      if (reserve) { selectedSize = Number(reserve[1]); selectedFrom = null; }\r\n      if (source) { selectedFrom = Number(source[1]); selectedSize = null; }\r\n    }\r\n    if (KIND === 'six_mens_morris') {\r\n      if (click === 'reserve_place') selectedFrom = -1;\r\n      const source = /^source_(\\d+)$/.exec(click);\r\n      if (source) selectedFrom = Number(source[1]);\r\n    }\r\n    if (KIND === 'mastermind') {\r\n      const peg = /^peg_(\\d+)_(\\d+)$/.exec(click);\r\n      if (peg) {\r\n        draft = Array.isArray(draft) ? draft : [-1,-1,-1,-1];\r\n        const slot = Number(peg[1]);\r\n        if (slot === draft.indexOf(-1)) draft[slot] = Number(peg[2]);\r\n      }\r\n      if (click === 'reset_draft') draft = [-1,-1,-1,-1];\r\n    }\r\n    if (KIND === 'dos') {\r\n      const selected = /^dos_pick_(\\d+)_/.exec(click);\r\n      if (selected) {\r\n        const placement = s.legal_placements?.[Number(selected[1])];\r\n        const usedPiles = new Set(dosPlacements.map(item => item.pile));\r\n        const usedCards = new Set(dosPlacements.flatMap(item => (item.cards || []).map(card => card.i)));\r\n        if (placement && !usedPiles.has(placement.pile) &&\r\n            !(placement.cards || []).some(card => usedCards.has(card.i))) {\r\n          dosPlacements.push(placement);\r\n          const nowUsed = new Set(dosPlacements.flatMap(item => (item.cards || []).map(card => card.i)));\r\n          dosBonus = dosBonus.filter(index => !nowUsed.has(index));\r\n        }\r\n      }\r\n      const bonus = /^dos_bonus_(\\d+)$/.exec(click);\r\n      if (bonus) {\r\n        const index = Number(bonus[1]);\r\n        dosBonus = dosBonus.includes(index) ? dosBonus.filter(item => item !== index) : [...dosBonus,index];\r\n      }\r\n    }\r\n\r\n    if (KIND === 'mau_mau') {\r\n      const hand = Array.isArray(s.hand) ? s.hand : [];\r\n      const playable = new Set(s.legal_plays || []);\r\n      label('discard', text('Top card {card} · suit {suit} · {n} cards to draw',\r\n        {card:cardText(s.discard_top), suit:s.top_suit || '', n:s.stock_count || 0}), 22, 92, 15);\r\n      hand.forEach((card, i) => {\r\n        const value = cardText(card);\r\n        if (playable.has(card)) {\r\n          if (/^J/.test(card)) {\r\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text:value});\r\n            for (const suit of ['S','H','D','C'])\r\n              offer({type:'play',card,suit}, text('Play {card} as {suit}',\r\n                {card:value,suit:{S:'♠',H:'♥',D:'♦',C:'♣'}[suit]}));\r\n          } else offer({type:'play',card}, text('Play {card}', {card:value}),\r\n            'table', cardPos(i), 'piece');\r\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text:value});\r\n      });\r\n      if (active && s.drew == null && s.stock_count > 0)\r\n        offer({type:'draw'}, text('Draw a card ({n} left)', {n:s.stock_count}));\r\n      if (active && s.drew != null) offer({type:'pass'}, text('Pass'));\r\n      label('hand-counts', (s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),\r\n        22, 470, 14);\r\n    } else if (KIND === 'dos') {\r\n      const hand = Array.isArray(s.hand) ? s.hand : [];\r\n      (s.center || []).forEach((card, i) =>\r\n        staticPiece(`center_${i}`, 'played', 'table', {x:250 + i * 70,y:100},\r\n          {text:cardText(card.id || card)}));\r\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i),\r\n        {text:cardText(card)}));\r\n      const placements = s.legal_placements || [];\r\n      const usedPiles = new Set(dosPlacements.map(item => item.pile));\r\n      const usedCards = new Set(dosPlacements.flatMap(item => (item.cards || []).map(card => card.i)));\r\n      const selectable = placements.map((placement,index) => ({placement,index})).filter(({placement}) =>\r\n        !usedPiles.has(placement.pile) &&\r\n        !(placement.cards || []).some(card => usedCards.has(card.i)));\r\n      const colorMatches = dosPlacements.filter(placement => placement.colorMatch).length;\r\n      const bonusChoices = hand.map((card,index) => ({card,index})).filter(item =>\r\n        !usedCards.has(item.index));\r\n      if (active) selectable.forEach(({placement,index}) => {\r\n        const selected = (placement.cards || []).map(ref => cardText(hand[ref.i])).join(' + ');\r\n        const value = `${selected} → ${placement.pile + 1}`;\r\n        scene.controls.push({id:`dos_pick_${index}_${placement.pile}_${(placement.cards || []).map(card => card.i).join('_')}`,\r\n          kind:'button',label:text('Play {card}',{card:value})});\r\n      });\r\n      if (active && dosPlacements.length) {\r\n        const bonusRefs = dosBonus.map(index => {\r\n          const card = String(hand[index] || '');\r\n          return card.endsWith('#') ? {i:index,num:1} : card === 'WD' ? {i:index,color:'R'} : {i:index};\r\n        });\r\n        const movePlacements = dosPlacements.map(placement => ({pile:placement.pile,cards:placement.cards,\r\n          ...(placement.centerNum !== undefined ? {centerNum:placement.centerNum} : {}),\r\n          ...(placement.centerColor !== undefined ? {centerColor:placement.centerColor} : {})}));\r\n        offer({type:'match',placements:movePlacements,bonus:bonusRefs},text('Continue'));\r\n        if (colorMatches) bonusChoices.forEach(({card,index}) => {\r\n          if (dosBonus.includes(index) || dosBonus.length < colorMatches)\r\n            scene.controls.push({id:`dos_bonus_${index}`,kind:'button',\r\n              label:text('Play {card}',{card:`${dosBonus.includes(index) ? '✓ ' : ''}${cardText(card)}`})});\r\n        });\r\n        label('match-selection',`Matches · ${dosPlacements.length}   Bonus discards · ${dosBonus.length}/${Math.min(colorMatches,bonusChoices.length)}`,\r\n          22,500,14);\r\n      }\r\n      if (active && s.phase === 'play')\r\n        offer({type:'draw'}, text('Draw a card ({n} left)', {n:s.deck_count || 0}));\r\n      if (active && s.phase === 'after_draw') offer({type:'pass'}, text('Pass'));\r\n      if (active && s.phase === 'add_center') hand.forEach((card, i) =>\r\n        offer({type:'add_center',card:{i}}, text('Play {card}', {card:cardText(card)})));\r\n      label('counts', (s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),\r\n        22, 470, 14);\r\n    } else if (KIND === 'kisolo') {\r\n      const rows = s.rows || [];\r\n      for (let r = 0; r < 4; r++) for (let c = 0; c < 7; c++) {\r\n        const i = r * 7 + c, value = rows[r]?.[c] ?? 0;\r\n        staticPiece(`pit_${i}`, 'pit', 'main', boardCell(i,7), {text:String(value)});\r\n      }\r\n      for (const pit of s.legal_pits || []) {\r\n        const r = Math.floor(pit / 7), c = pit % 7;\r\n        offer({pit}, text('Move to row {r}, column {c}', {r:r + 1,c:c + 1}),\r\n          'main', boardCell(pit,7), 'target');\r\n      }\r\n      label('pit-guide', `P1: ${handLabel(rows[0] || [])}  ·  P2: ${handLabel(rows[3] || [])}`,\r\n        22, 420, 13);\r\n    } else if (KIND === 'thirty_one') {\r\n      const hand = Array.isArray(s.hand) ? s.hand : [];\r\n      hand.forEach((card, i) => {\r\n        if (active && (s.phase === 'discard' || s.phase === 'final_discard'))\r\n          offer({action:'discard',card}, text('Play {card}', {card:cardText(card)}),\r\n            'table', cardPos(i), 'piece');\r\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text:cardText(card)});\r\n      });\r\n      if (active && (s.phase === 'draw' || s.phase === 'final_draw')) {\r\n        if (s.stock_count > 0) offer({action:'draw',source:'stock'},\r\n          text('Draw a card ({n} left)', {n:s.stock_count}));\r\n        if (s.discard_top) offer({action:'draw',source:'discard'},\r\n          text('Play {card}', {card:cardText(s.discard_top)}));\r\n        if (s.phase === 'draw') offer({action:'knock'}, text('Pass'));\r\n        if (s.phase === 'final_draw') offer({action:'stand'}, text('Pass'));\r\n      }\r\n      label('scores', (s.scores || []).map((score,i) => score == null ? '' :\r\n        `${playerName(i)} · ${score}`).filter(Boolean).join('   '), 22, 465, 14);\r\n    } else if (KIND === 'gobblet') {\r\n      const moves = s.legal_moves || [];\r\n      const board = s.board || [];\r\n      board.forEach((stack, cell) => {\r\n        (stack || []).forEach((goblet, level) => staticPiece(`stack_${cell}_${level}`,\r\n          `goblet_${goblet[0]}_${goblet[1]}`, 'main', boardCell(cell,4),\r\n          {text:String(goblet[0]),z:level}));\r\n      });\r\n      if (active) {\r\n        for (let size = 1; size <= 4; size++) if ((s.reserves?.[seat]?.[size - 1] || 0) > 0)\r\n          scene.controls.push({id:`reserve_${size}`,kind:'button',\r\n            label:text('Play {card}',{card:`${size} · ${s.reserves[seat][size - 1]}`})});\r\n        for (let cell = 0; cell < 16; cell++) {\r\n          const top = (board[cell] || []).slice(-1)[0];\r\n          if (top && top[1] === seat && moves.some(move => move.move?.from === cell))\r\n            scene.targets.push({id:`source_${cell}`,board:'main',position:boardCell(cell,4),\r\n              label:'◇',aria_label:text('Select piece at row {r}, column {c}',\r\n                {r:Math.floor(cell / 4) + 1,c:cell % 4 + 1})});\r\n        }\r\n        moves.forEach(move => {\r\n          if (move.place && selectedSize === move.place.size)\r\n            offer(move, String(move.place.size), 'main', boardCell(move.place.cell,4), 'target');\r\n          if (move.move && selectedFrom === move.move.from)\r\n            offer(move, '•', 'main', boardCell(move.move.to,4), 'target');\r\n        });\r\n      }\r\n      label('reserves', (s.reserves || []).map((counts,i) =>\r\n        `${playerName(i)} · ${counts.join('/')}`).join('   '), 22, 505, 14);\r\n    } else if (KIND === 'chutes_ladders') {\r\n      const position = value => {\r\n        const row = Math.floor((value - 1) / 10), offset = (value - 1) % 10;\r\n        return {r:9 - row,c:row % 2 === 0 ? offset : 9 - offset};\r\n      };\r\n      for (let value = 1; value <= 100; value++) {\r\n        const p = position(value), cell = p.r * 10 + p.c;\r\n        staticPiece(`square_${value}`, 'square', 'main', boardCell(cell,10),\r\n          {text:String(value)});\r\n      }\r\n      const links = [[1,38],[4,14],[9,31],[21,42],[28,84],[36,44],[51,67],[71,91],[80,100],\r\n        [16,6],[47,26],[49,11],[56,53],[62,19],[64,60],[87,24],[93,73],[95,75],[98,78]];\r\n      for (const [from,to] of links) {\r\n        const a = position(from), b = position(to);\r\n        const center = p => ({x:48 + p.c * 56,y:126 + p.r * 56});\r\n        const start = center(a), end = center(b);\r\n        scene.paths.push({id:`link_${from}`,points:[start,end],\r\n          color:to > from ? '#22c55e' : '#f97316',width:5});\r\n      }\r\n      (s.positions || []).forEach((value,i) => {\r\n        if (value > 0) {\r\n          const p = position(value);\r\n          staticPiece(`token_${i}`, `token_${i % 4}`, 'main',\r\n            {cell:String(p.r * 10 + p.c)}, {text:String((s.pieces || {})[i] || i + 1),z:5+i});\r\n        }\r\n      });\r\n      if (active && s.phase === 'select') {\r\n        const used = new Set(Object.values(s.pieces || {}));\r\n        ['👑','🎩','🚢','🐶','🎒','🚗'].filter(piece => !used.has(piece)).forEach(piece =>\r\n          offer({kind:'select',emoji:piece}, piece));\r\n      } else if (active) offer({kind:'spin'}, `↻ ${text('Spin')}`);\r\n      const last = (s.log || []).slice(-3);\r\n      last.forEach((entry,i) => label(`log_${i}`,entry,22,710 + i * 18,12));\r\n    } else if (KIND === 'dots_boxes') {\r\n      const xy = (r,c) => ({x:100 + c * 120,y:135 + r * 120});\r\n      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {\r\n        const box = r * 3 + c, owner = s.boxes?.[box];\r\n        if (owner !== null && owner !== undefined)\r\n          staticPiece(`box_${box}`, `box_${owner}`, 'main',\r\n            {x:160 + c * 120,y:195 + r * 120},{text:playerName(owner).slice(0,1)});\r\n      }\r\n      for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++)\r\n        staticPiece(`dot_${r}_${c}`, 'dot', 'main', xy(r,c));\r\n      (s.edges || []).forEach((owner,edge) => {\r\n        if (owner === null || owner === undefined) return;\r\n        const horizontal = edge < 12;\r\n        const r = horizontal ? Math.floor(edge / 3) : Math.floor((edge - 12) / 4);\r\n        const c = horizontal ? edge % 3 : (edge - 12) % 4;\r\n        const a = horizontal ? xy(r,c) : xy(r,c);\r\n        const b = horizontal ? xy(r,c + 1) : xy(r + 1,c);\r\n        scene.paths.push({id:`edge_${edge}`,points:[a,b],\r\n          color:owner === 0 ? '#4aa3ff' : '#fb7185',width:7});\r\n      });\r\n      (s.legal_edges || []).forEach(edge => {\r\n        const horizontal = edge < 12;\r\n        const r = horizontal ? Math.floor(edge / 3) : Math.floor((edge - 12) / 4);\r\n        const c = horizontal ? edge % 3 : (edge - 12) % 4;\r\n        const a = xy(r,c), b = horizontal ? xy(r,c + 1) : xy(r + 1,c);\r\n        offer({edge}, '•', 'main', {x:(a.x + b.x) / 2,y:(a.y + b.y) / 2}, 'target');\r\n      });\r\n      const counts = [0,1].map(i => (s.boxes || []).filter(owner => owner === i).length);\r\n      label('scores', `${playerName(0)} · ${counts[0]}    ${playerName(1)} · ${counts[1]}`,\r\n        100, 635, 15);\r\n    } else if (KIND === 'mastermind') {\r\n      const colors = s.hexes || ['#e53935','#1e88e5','#43a047','#fdd835','#fb8c00','#8e24aa'];\r\n      draft = Array.isArray(draft) ? draft : [-1,-1,-1,-1];\r\n      draft.forEach((color,slot) => {\r\n        if (color >= 0)\r\n          staticPiece(`draft_${slot}`, `peg_${color}`, 'main',\r\n            {x:110 + slot * 90,y:150},{text:String(slot + 1),z:2});\r\n      });\r\n      const nextSlot = draft.indexOf(-1);\r\n      if (active && nextSlot >= 0) {\r\n        for (let option = 0; option < Math.min(6,colors.length); option++)\r\n          scene.pieces.push({id:`peg_${nextSlot}_${option}`,type:`peg_${option}`,board:'main',\r\n            position:{x:110 + nextSlot * 90,y:230 + option * 47},text:String(option + 1),\r\n            actions:['tap'],aria_label:`${nextSlot + 1}: ${colors[option]}`});\r\n      }\r\n      if (active) {\r\n        if (nextSlot < 0) {\r\n          const move = s.phase === 'set' ? {secret:draft} : {guess:draft};\r\n          offer(move, text('Play {card}', {card:draft.map(x => x + 1).join(' · ')}));\r\n        }\r\n        if (draft.some(color => color >= 0))\r\n          scene.controls.push({id:'reset_draft',kind:'button',label:text('Reset guess')});\r\n      }\r\n      (s.guesses || []).forEach((guess,i) => {\r\n        const y = 535 + i * 25;\r\n        (guess.code || []).forEach((color,slot) => staticPiece(`guess_${i}_${slot}`,\r\n          `peg_${color}`, 'main', {x:110 + slot * 52,y}));\r\n        label(`feedback_${i}`, `${guess.black} ●  ${guess.white} ○`, 355, y + 5, 13);\r\n      });\r\n      label('remaining', `Guesses · ${s.guesses_left ?? 0}`, 22, 105, 15);\r\n    } else if (KIND === 'old_maid') {\r\n      const hand = Array.isArray(s.hand) ? s.hand : [];\r\n      hand.forEach((card,i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i),\r\n        {text:cardText(card)}));\r\n      const opponent = 1 - seat, count = s.counts?.[opponent] || 0;\r\n      if (active) for (let i = 0; i < count; i++)\r\n        offer({draw:i}, text('Draw a card ({n} left)', {n:count}));\r\n      label('pairs', `Pairs · ${s.pairs ?? 0}`, 22, 470, 15);\r\n      label('opponent-count', `${playerName(opponent)} · ${count}`, 22, 495, 14);\r\n    } else if (KIND === 'six_mens_morris') {\r\n      const points = [\r\n        [70,70],[300,70],[530,70],[530,300],[530,530],[300,530],[70,530],[70,300],\r\n        [170,170],[300,170],[430,170],[430,300],[430,430],[300,430],[170,430],[170,300]\r\n      ];\r\n      const edges = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,0],\r\n        [8,9],[9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[15,8],\r\n        [1,9],[3,11],[5,13],[7,15]];\r\n      edges.forEach(([a,b],i) => scene.paths.push({id:`line_${i}`,\r\n        points:[{x:points[a][0],y:points[a][1]},{x:points[b][0],y:points[b][1]}],\r\n        color:'#64748b',width:5}));\r\n      const moves = s.moves || [];\r\n      (s.board || []).forEach((owner,point) => {\r\n        if (owner < 0) return;\r\n        staticPiece(`stone_${point}`, `stone_${owner}`, 'main',\r\n          {x:points[point][0],y:points[point][1]}, {text:String(point + 1)});\r\n        if (active && moves.some(move => move.from === point))\r\n          scene.targets.push({id:`source_${point}`,board:'main',\r\n            position:{x:points[point][0],y:points[point][1]},label:'◇',\r\n            aria_label:text('Select piece at row {r}, column {c}',\r\n              {r:point + 1,c:1})});\r\n      });\r\n      if (active && moves.some(move => move.from === -1))\r\n        scene.controls.push({id:'reserve_place',kind:'button',label:text('Place stone')});\r\n      const selectedMoves = moves.filter(move => move.from === selectedFrom);\r\n      const groups = new Map();\r\n      selectedMoves.filter(move => move.type === 'place' || move.type === 'slide').forEach(move => {\r\n        const key = String(move.to);\r\n        if (!groups.has(key)) groups.set(key,[]);\r\n        groups.get(key).push(move);\r\n      });\r\n      for (const [destination, group] of groups) {\r\n        if (group.length === 1) {\r\n          const move = group[0], p = points[move.to];\r\n          offer(move, move.take >= 0 ? '×' : '•', 'main', {x:p[0],y:p[1]}, 'target');\r\n        } else {\r\n          group.forEach(move => offer(move, text('Take {n}',{n:move.take + 1})));\r\n        }\r\n      }\r\n      moves.filter(move => move.type === 'claim_draw' || move.type === 'continue')\r\n        .forEach(move => offer(move, text(move.type === 'claim_draw' ? 'Claim draw' : 'Continue')));\r\n      label('counts', (s.counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),\r\n        22, 590, 14);\r\n    }\r\n\r\n    const match = /^intent_(\\d+)$/.exec(click);\r\n    const move = match && active ? offers[Number(match[1])] : undefined;\r\n    const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,draft,\r\n      dosPlacements,dosBonus};\r\n    if (message.type === 'ui_event' && move !== undefined)\r\n      return {scene,local_state:nextLocal,make_move:move};\r\n    return {scene,local_state:nextLocal};\r\n  }\r\n};\r\n"
+  }
+}

@@ -1,0 +1,1961 @@
+{
+  "all_state_public": true,
+  "name": "Chutes & Ladders (Declarative)",
+  "description": "A turn-based race for 2 to 4 players. Spin to move along the numbered board, climb ladders, and slide down chutes.",
+  "allowed_player_counts": [
+    2,
+    3,
+    4
+  ],
+  "allows_leave_mid_match": false,
+  "allows_join_mid_match": false,
+  "server_code": "const game = {\n  LADDERS: {1:38,4:14,9:31,21:42,28:84,36:44,51:67,71:91,80:100},\n  CHUTES: {16:6,47:26,49:11,56:53,62:19,64:60,87:24,93:73,95:75,98:78},\n  LAD_MSG: {1:\"shared toys!\",4:\"shared your snack!\",9:\"said please & thank you!\",21:\"helped a friend up!\",28:\"brushed teeth!\",36:\"read a book!\",51:\"set the table!\",71:\"told the truth!\",80:\"helped everyone!\"},\n  CHU_MSG: {16:\"ran inside!\",47:\"didn't look both ways!\",49:\"grabbed a toy!\",56:\"forgot to wash hands!\",62:\"left a mess!\",64:\"stayed up too late!\",87:\"didn't hold railing!\",93:\"teased a friend!\",95:\"forgot umbrella!\",98:\"rushed too fast!\"},\n  PIECES: [\"\\uD83D\\uDC51\",\"\\uD83C\\uDFA9\",\"\\uD83D\\uDEA2\",\"\\uD83D\\uDC36\",\"\\uD83C\\uDF92\",\"\\uD83D\\uDE97\"],\n  idxOf: function(ctx, playerId) { return ctx.players.findIndex(function(p){ return p.id === playerId; }); },\n  nameOf: function(ctx, i) { return (ctx.players[i] && ctx.players[i].display_name) || (\"P\" + (i+1)); },\n  fullOrder: function(state, n) {\n    var order = (state.turnOrder || []).filter(function(x){ return x>=0 && x<n; });\n    for (var i=0;i<n;i++) if (order.indexOf(i)<0) order.push(i);\n    return order;\n  },\n  payoutsFor: function(ctx, winnerIdx) {\n    var pot = ctx.pot || 0;\n    var out = {};\n    var humans = ctx.players.filter(function(p){ return p.kind !== \"computer\"; });\n    if (pot <= 0 || humans.length === 0) return out;\n    var w = ctx.players[winnerIdx];\n    if (w && w.kind !== \"computer\") { out[w.id] = pot; return out; }\n    var base = Math.floor(pot / humans.length);\n    var rem = pot;\n    humans.forEach(function(h, k) {\n      var v = (k === humans.length - 1) ? rem : base;\n      out[h.id] = v; rem -= v;\n    });\n    return out;\n  },\n  newMatch: function(ctx) {\n    var n = ctx.players.length;\n    var positions = []; for (var i=0;i<n;i++) positions.push(0);\n    var state = { positions: positions, phase: \"rolloff\", pieces: {}, selectTurn: null, selectOrder: null, selectIdx: 0, rolloffSpins: {}, rolloffTurn: 0, turnOrder: null, turnPos: 0, lastSpin: null, lastAngle: null, lastEvent: null, lastFrom: null, lastTo: null, winner: null, log: [\"Roll-off to see who goes first! Highest spin wins!\"] };\n    return { state: state, turn: [ctx.players[0].id] };\n  },\n  applyMove: function(state, playerId, move, ctx) {\n    var n = ctx.players.length;\n    var me = this.idxOf(ctx, playerId);\n    if (me < 0) throw new InvalidMove(\"not seated\");\n    if (state.winner != null) throw new InvalidMove(\"game over\");\n    move = move || {};\n    var i, k;\n    if (state.phase === \"rolloff\") {\n      if (move.kind !== \"spin\") throw new InvalidMove(\"spin to roll off\");\n      if (Number(state.rolloffTurn) !== me) throw new InvalidMove(\"not your roll-off turn\");\n      if (state.rolloffSpins && (state.rolloffSpins[me] != null || state.rolloffSpins[String(me)] != null)) throw new InvalidMove(\"already rolled\");\n      var spin = 1 + Math.floor(ctx.random() * 6);\n      var jit = ctx.random() * 44 - 22;\n      var ang = ((spin - 1) * 60 + jit + 360) % 360;\n      var rolls = Object.assign({}, state.rolloffSpins || {});\n      rolls[me] = spin;\n      var log = (state.log || []).slice(-20);\n      log.push(this.nameOf(ctx, me) + \" rolled \" + spin + \" for first turn\");\n      var unrolled = [];\n      for (i=0;i<n;i++) if (rolls[i] == null && rolls[String(i)] == null) unrolled.push(i);\n      if (unrolled.length > 0) {\n        var ns1 = { positions: state.positions.slice(), phase: \"rolloff\", pieces: {}, selectTurn: null, selectOrder: null, selectIdx: 0, rolloffSpins: rolls, rolloffTurn: unrolled[0], turnOrder: null, turnPos: 0, lastSpin: spin, lastAngle: ang, lastEvent: \"rolloff\", lastFrom: null, lastTo: null, winner: null, log: log };\n        return { state: ns1, turn: [ctx.players[unrolled[0]].id] };\n      }\n      var order = []; for (i=0;i<n;i++) order.push(i);\n      order.sort(function(a,b){ var va = (rolls[a]!=null?rolls[a]:rolls[String(a)])|0; var vb = (rolls[b]!=null?rolls[b]:rolls[String(b)])|0; return (vb-va)||(a-b); });\n      var selOrder = order.slice().reverse();\n      var firstPicker = selOrder[0];\n      var ns2 = { positions: state.positions.slice(), phase: \"select\", pieces: {}, selectTurn: firstPicker, selectOrder: selOrder, selectIdx: 0, rolloffSpins: rolls, rolloffTurn: null, turnOrder: order, turnPos: 0, lastSpin: spin, lastAngle: ang, lastEvent: \"rolloff-done\", lastFrom: null, lastTo: null, winner: null, log: log.concat([this.nameOf(ctx, order[0]) + \" goes first! Order: \" + order.map(function(x){ return this.nameOf(ctx,x); }, this).join(\", \"), \"Last place picks piece first: \" + this.nameOf(ctx, firstPicker) + \" choose!\"]) };\n      return { state: ns2, turn: [ctx.players[firstPicker].id] };\n    }\n    if (state.phase === \"select\") {\n      if (move.kind !== \"select\") throw new InvalidMove(\"pick a piece\");\n      var base = state.turnOrder || state.selectOrder || null;\n      var rev = [];\n      if (state.selectOrder) rev = state.selectOrder;\n      else if (base) rev = base.slice().reverse();\n      else { for (i=0;i<n;i++) rev.unshift(i); }\n      var idx = (state.selectIdx != null ? state.selectIdx : Object.keys(state.pieces||{}).length);\n      var expect = (state.selectTurn != null ? state.selectTurn : rev[idx]);\n      if (expect == null) throw new InvalidMove(\"selection order error\");\n      if (Number(expect) !== me) throw new InvalidMove(\"not your pick\");\n      var emoji = move.emoji;\n      if (this.PIECES.indexOf(emoji) < 0) throw new InvalidMove(\"bad piece\");\n      var taken = {};\n      Object.keys(state.pieces||{}).forEach(function(key){ taken[state.pieces[key]] = true; });\n      if (taken[emoji]) throw new InvalidMove(\"piece taken\");\n      var pieces = Object.assign({}, state.pieces || {});\n      pieces[me] = emoji;\n      var log2 = (state.log || []).slice(-20);\n      log2.push(this.nameOf(ctx, me) + \" chose \" + emoji);\n      var nextIdx = idx + 1;\n      if (nextIdx >= rev.length) {\n        var used = {};\n        Object.keys(pieces).forEach(function(key){ used[pieces[key]] = true; });\n        for (i=0;i<n;i++) if (pieces[i]==null && pieces[String(i)]==null) { for (k=0;k<this.PIECES.length;k++) if (!used[this.PIECES[k]]) { pieces[i]=this.PIECES[k]; used[this.PIECES[k]]=true; break; } }\n        var ord = state.turnOrder || rev.slice().reverse();\n        var first = ord[0];\n        var ns3 = { positions: state.positions.slice(), phase: \"play\", pieces: pieces, selectTurn: null, selectOrder: rev, selectIdx: nextIdx, rolloffSpins: state.rolloffSpins, rolloffTurn: null, turnOrder: ord, turnPos: 0, lastSpin: state.lastSpin, lastAngle: state.lastAngle, lastEvent: \"select-done\", lastFrom: null, lastTo: null, winner: null, log: log2.concat([\"All pieces picked! \" + this.nameOf(ctx, first) + \" spins first!\"]) };\n        return { state: ns3, turn: [ctx.players[first].id] };\n      }\n      var nxt = rev[nextIdx];\n      var ns4 = { positions: state.positions.slice(), phase: \"select\", pieces: pieces, selectTurn: nxt, selectOrder: rev, selectIdx: nextIdx, rolloffSpins: state.rolloffSpins, rolloffTurn: null, turnOrder: state.turnOrder, turnPos: 0, lastSpin: state.lastSpin, lastAngle: state.lastAngle, lastEvent: null, lastFrom: null, lastTo: null, winner: null, log: log2 };\n      return { state: ns4, turn: [ctx.players[nxt].id] };\n    }\n    if (state.phase === \"play\") {\n      if (move.kind !== \"spin\") throw new InvalidMove(\"spin on your turn\");\n      var full = this.fullOrder(state, n);\n      var tp = state.turnPos || 0;\n      var curSeat = full[tp % full.length];\n      if (curSeat !== me) throw new InvalidMove(\"not your turn\");\n      var sp = 1 + Math.floor(ctx.random() * 6);\n      var jt = ctx.random() * 44 - 22;\n      var an = ((sp - 1) * 60 + jt + 360) % 360;\n      var positions = state.positions.slice();\n      var pcs = Object.assign({}, state.pieces || {});\n      var us = {};\n      Object.keys(pcs).forEach(function(key){ us[pcs[key]] = true; });\n      for (i=0;i<n;i++) if (pcs[i]==null && pcs[String(i)]==null) { for (k=0;k<this.PIECES.length;k++) if (!us[this.PIECES[k]]) { pcs[i]=this.PIECES[k]; us[this.PIECES[k]]=true; break; } }\n      var cur = positions[me] | 0;\n      var np = (cur === 0) ? sp : cur + sp;\n      var ev = null, msg = \"\";\n      var log3 = (state.log || []).slice(-20);\n      var myEmoji = pcs[me] || pcs[String(me)] || \"?\";\n      if (np > 100) { np = cur; ev = \"stuck\"; msg = this.nameOf(ctx, me) + \" \" + myEmoji + \" spun \" + sp + \" but needs exact to reach 100 - stays on \" + cur; }\n      else {\n        var from = np;\n        if (this.LADDERS[np] != null) { np = this.LADDERS[np]; ev = \"ladder\"; msg = this.nameOf(ctx, me) + \" \" + myEmoji + \" spun \" + sp + \": \" + from + \" climbs to \" + np + \" (\" + (this.LAD_MSG[from]||\"\") + \")\"; }\n        else if (this.CHUTES[np] != null) { np = this.CHUTES[np]; ev = \"chute\"; msg = this.nameOf(ctx, me) + \" \" + myEmoji + \" spun \" + sp + \": \" + from + \" slides to \" + np + \" (\" + (this.CHU_MSG[from]||\"\") + \")\"; }\n        else msg = this.nameOf(ctx, me) + \" \" + myEmoji + \" spun \" + sp + \": \" + cur + \" -> \" + np;\n      }\n      log3.push(msg);\n      positions[me] = np;\n      if (np === 100) {\n        var ns5 = { positions: positions, phase: \"play\", pieces: pcs, selectTurn: null, selectOrder: state.selectOrder, selectIdx: state.selectIdx, rolloffSpins: state.rolloffSpins, rolloffTurn: null, turnOrder: full, turnPos: tp, lastSpin: sp, lastAngle: an, lastEvent: ev, lastFrom: cur, lastTo: np, winner: me, log: log3.concat([this.nameOf(ctx, me) + \" WINS!\"]) };\n        return { state: ns5, turn: null, payouts: this.payoutsFor(ctx, me) };\n      }\n      var ntp = (tp + 1) % full.length;\n      var nx = full[ntp];\n      var ns6 = { positions: positions, phase: \"play\", pieces: pcs, selectTurn: null, selectOrder: state.selectOrder, selectIdx: state.selectIdx, rolloffSpins: state.rolloffSpins, rolloffTurn: null, turnOrder: full, turnPos: ntp, lastSpin: sp, lastAngle: an, lastEvent: ev, lastFrom: cur, lastTo: np, winner: null, log: log3 };\n      return { state: ns6, turn: [ctx.players[nx].id] };\n    }\n    throw new InvalidMove(\"unknown phase\");\n  },\n  computerMove: function(state, playerId, ctx) {\n    if (state.phase === \"select\") {\n      var taken = {};\n      Object.keys(state.pieces||{}).forEach(function(k){ taken[state.pieces[k]] = true; });\n      for (var k=0;k<this.PIECES.length;k++) if (!taken[this.PIECES[k]]) return { kind: \"select\", emoji: this.PIECES[k] };\n      return { kind: \"select\", emoji: this.PIECES[0] };\n    }\n    return { kind: \"spin\" };\n  },\n  randomMove: function(state, playerId, ctx) {\n    if (state.phase === \"select\") {\n      var taken = {};\n      Object.keys(state.pieces||{}).forEach(function(k){ taken[state.pieces[k]] = true; });\n      var free = this.PIECES.filter(function(e){ return !taken[e]; });\n      var pick = free.length ? free[Math.floor(ctx.random()*free.length)] : this.PIECES[0];\n      return { kind: \"select\", emoji: pick };\n    }\n    return { kind: \"spin\" };\n  },\n  viewFor: function(state, playerId, ctx) { return JSON.parse(JSON.stringify(state)); }\n};",
+  "rules": "Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.",
+  "ui_instructions": "Choose a token during setup, then tap Spin on your turn. The board shows each player's position and the ladders and chutes.",
+  "tutorial": {
+    "text": "Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><main><h1>How to play</h1><p>Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.</p><p>Choose a token during setup, then tap Spin on your turn. The board shows each player's position and the ladders and chutes.</p></main>"
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#17324f\"/><circle cx=\"80\" cy=\"45\" r=\"20\" fill=\"#ffffff\"/><path d=\"M58 45h44M80 23v44\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+    },
+    {
+      "caption": "Initial position",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#2770a8\"/><circle cx=\"80\" cy=\"45\" r=\"20\" fill=\"#ffffff\"/><path d=\"M58 45h44M80 23v44\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+    },
+    {
+      "caption": "Legal choices",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#56c9b4\"/><circle cx=\"80\" cy=\"45\" r=\"20\" fill=\"#ffffff\"/><path d=\"M58 45h44M80 23v44\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+    },
+    {
+      "caption": "Game in progress",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 90\"><rect width=\"160\" height=\"90\" rx=\"8\" fill=\"#ffbf66\"/><circle cx=\"80\" cy=\"45\" r=\"20\" fill=\"#ffffff\"/><path d=\"M58 45h44M80 23v44\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "lastAngle": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "lastEvent": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastFrom": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "lastSpin": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "lastTo": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "log": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "phase": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "pieces": {
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "positions": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rolloffSpins": {
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "rolloffTurn": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "selectIdx": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "selectOrder": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "selectTurn": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "turnOrder": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "turnPos": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "winner": {
+          "type": [
+            "null",
+            "number"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "move_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "emoji": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "view_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "lastAngle": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "lastEvent": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastFrom": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "lastSpin": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "lastTo": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "log": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "phase": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "pieces": {
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "positions": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rolloffSpins": {
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "rolloffTurn": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "selectIdx": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "selectOrder": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "selectTurn": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "turnOrder": {
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "turnPos": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "winner": {
+          "type": [
+            "null",
+            "number"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "cases": [
+      {
+        "name": "Opening move",
+        "description": "A classic children's board game for 2 to 4 players designed to teach simple counting, turn-taking, and basic morality",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "archive_0",
+              "kind": "human",
+              "display_name": "Ari",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "archive_1",
+              "kind": "human",
+              "display_name": "Bea",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "rolloff",
+          "pieces": {},
+          "selectTurn": null,
+          "selectOrder": null,
+          "selectIdx": 0,
+          "rolloffSpins": {},
+          "rolloffTurn": 0,
+          "turnOrder": null,
+          "turnPos": 0,
+          "lastSpin": null,
+          "lastAngle": null,
+          "lastEvent": null,
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!"
+          ]
+        },
+        "view_of_mover": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "rolloff",
+          "pieces": {},
+          "selectTurn": null,
+          "selectOrder": null,
+          "selectIdx": 0,
+          "rolloffSpins": {},
+          "rolloffTurn": 0,
+          "turnOrder": null,
+          "turnPos": 0,
+          "lastSpin": null,
+          "lastAngle": null,
+          "lastEvent": null,
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!"
+          ]
+        },
+        "view_of_other": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "rolloff",
+          "pieces": {},
+          "selectTurn": null,
+          "selectOrder": null,
+          "selectIdx": 0,
+          "rolloffSpins": {},
+          "rolloffTurn": 0,
+          "turnOrder": null,
+          "turnPos": 0,
+          "lastSpin": null,
+          "lastAngle": null,
+          "lastEvent": null,
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!"
+          ]
+        },
+        "player_id": "archive_0",
+        "other_player_id": null,
+        "move": {
+          "kind": "spin"
+        },
+        "expected_state": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "rolloff",
+          "pieces": {},
+          "selectTurn": null,
+          "selectOrder": null,
+          "selectIdx": 0,
+          "rolloffSpins": {
+            "0": 4
+          },
+          "rolloffTurn": 1,
+          "turnOrder": null,
+          "turnPos": 0,
+          "lastSpin": 4,
+          "lastAngle": 181.3176419623196,
+          "lastEvent": "rolloff",
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!",
+            "Ari rolled 4 for first turn"
+          ]
+        },
+        "expected_turn": [
+          "archive_1"
+        ],
+        "expected_view_of_mover": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "rolloff",
+          "pieces": {},
+          "selectTurn": null,
+          "selectOrder": null,
+          "selectIdx": 0,
+          "rolloffSpins": {
+            "0": 4
+          },
+          "rolloffTurn": 1,
+          "turnOrder": null,
+          "turnPos": 0,
+          "lastSpin": 4,
+          "lastAngle": 181.3176419623196,
+          "lastEvent": "rolloff",
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!",
+            "Ari rolled 4 for first turn"
+          ]
+        },
+        "expected_view_of_other": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "rolloff",
+          "pieces": {},
+          "selectTurn": null,
+          "selectOrder": null,
+          "selectIdx": 0,
+          "rolloffSpins": {
+            "0": 4
+          },
+          "rolloffTurn": 1,
+          "turnOrder": null,
+          "turnPos": 0,
+          "lastSpin": 4,
+          "lastAngle": 181.3176419623196,
+          "lastEvent": "rolloff",
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!",
+            "Ari rolled 4 for first turn"
+          ]
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#17324f\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#2770a8\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#56c9b4\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#ffbf66\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Continuing match",
+        "description": "A classic children's board game for 2 to 4 players designed to teach simple counting, turn-taking, and basic morality",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "archive_0",
+              "kind": "human",
+              "display_name": "Ari",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "archive_1",
+              "kind": "human",
+              "display_name": "Bea",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 1,
+          "seed": 12
+        },
+        "state": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "rolloff",
+          "pieces": {},
+          "selectTurn": null,
+          "selectOrder": null,
+          "selectIdx": 0,
+          "rolloffSpins": {
+            "0": 4
+          },
+          "rolloffTurn": 1,
+          "turnOrder": null,
+          "turnPos": 0,
+          "lastSpin": 4,
+          "lastAngle": 181.3176419623196,
+          "lastEvent": "rolloff",
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!",
+            "Ari rolled 4 for first turn"
+          ]
+        },
+        "view_of_mover": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "rolloff",
+          "pieces": {},
+          "selectTurn": null,
+          "selectOrder": null,
+          "selectIdx": 0,
+          "rolloffSpins": {
+            "0": 4
+          },
+          "rolloffTurn": 1,
+          "turnOrder": null,
+          "turnPos": 0,
+          "lastSpin": 4,
+          "lastAngle": 181.3176419623196,
+          "lastEvent": "rolloff",
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!",
+            "Ari rolled 4 for first turn"
+          ]
+        },
+        "view_of_other": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "rolloff",
+          "pieces": {},
+          "selectTurn": null,
+          "selectOrder": null,
+          "selectIdx": 0,
+          "rolloffSpins": {
+            "0": 4
+          },
+          "rolloffTurn": 1,
+          "turnOrder": null,
+          "turnPos": 0,
+          "lastSpin": 4,
+          "lastAngle": 181.3176419623196,
+          "lastEvent": "rolloff",
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!",
+            "Ari rolled 4 for first turn"
+          ]
+        },
+        "player_id": "archive_1",
+        "other_player_id": null,
+        "move": {
+          "kind": "spin"
+        },
+        "expected_state": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "select",
+          "pieces": {},
+          "selectTurn": 1,
+          "selectOrder": [
+            1,
+            0
+          ],
+          "selectIdx": 0,
+          "rolloffSpins": {
+            "0": 4,
+            "1": 2
+          },
+          "rolloffTurn": null,
+          "turnOrder": [
+            0,
+            1
+          ],
+          "turnPos": 0,
+          "lastSpin": 2,
+          "lastAngle": 41.32937039062381,
+          "lastEvent": "rolloff-done",
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!",
+            "Ari rolled 4 for first turn",
+            "Bea rolled 2 for first turn",
+            "Ari goes first! Order: Ari, Bea",
+            "Last place picks piece first: Bea choose!"
+          ]
+        },
+        "expected_turn": [
+          "archive_1"
+        ],
+        "expected_view_of_mover": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "select",
+          "pieces": {},
+          "selectTurn": 1,
+          "selectOrder": [
+            1,
+            0
+          ],
+          "selectIdx": 0,
+          "rolloffSpins": {
+            "0": 4,
+            "1": 2
+          },
+          "rolloffTurn": null,
+          "turnOrder": [
+            0,
+            1
+          ],
+          "turnPos": 0,
+          "lastSpin": 2,
+          "lastAngle": 41.32937039062381,
+          "lastEvent": "rolloff-done",
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!",
+            "Ari rolled 4 for first turn",
+            "Bea rolled 2 for first turn",
+            "Ari goes first! Order: Ari, Bea",
+            "Last place picks piece first: Bea choose!"
+          ]
+        },
+        "expected_view_of_other": {
+          "positions": [
+            0,
+            0
+          ],
+          "phase": "select",
+          "pieces": {},
+          "selectTurn": 1,
+          "selectOrder": [
+            1,
+            0
+          ],
+          "selectIdx": 0,
+          "rolloffSpins": {
+            "0": 4,
+            "1": 2
+          },
+          "rolloffTurn": null,
+          "turnOrder": [
+            0,
+            1
+          ],
+          "turnPos": 0,
+          "lastSpin": 2,
+          "lastAngle": 41.32937039062381,
+          "lastEvent": "rolloff-done",
+          "lastFrom": null,
+          "lastTo": null,
+          "winner": null,
+          "log": [
+            "Roll-off to see who goes first! Highest spin wins!",
+            "Ari rolled 4 for first turn",
+            "Bea rolled 2 for first turn",
+            "Ari goes first! Order: Ari, Bea",
+            "Last place picks piece first: Bea choose!"
+          ]
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#17324f\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#2770a8\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#56c9b4\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#ffbf66\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Finishing move",
+        "description": "A classic children's board game for 2 to 4 players designed to teach simple counting, turn-taking, and basic morality",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "archive_0",
+              "kind": "human",
+              "display_name": "Ari",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            },
+            {
+              "id": "archive_1",
+              "kind": "human",
+              "display_name": "Bea",
+              "picture_url": "",
+              "max_loss": 0,
+              "active": true
+            }
+          ],
+          "pot": 0,
+          "move_count": 21,
+          "seed": 32
+        },
+        "state": {
+          "positions": [
+            38,
+            97
+          ],
+          "phase": "play",
+          "pieces": {
+            "0": "🎩",
+            "1": "👑"
+          },
+          "selectTurn": null,
+          "selectOrder": [
+            1,
+            0
+          ],
+          "selectIdx": 2,
+          "rolloffSpins": {
+            "0": 4,
+            "1": 2
+          },
+          "rolloffTurn": null,
+          "turnOrder": [
+            0,
+            1
+          ],
+          "turnPos": 1,
+          "lastSpin": 5,
+          "lastAngle": 254.78162564709783,
+          "lastEvent": null,
+          "lastFrom": 33,
+          "lastTo": 38,
+          "winner": null,
+          "log": [
+            "Last place picks piece first: Bea choose!",
+            "Bea chose 👑",
+            "Ari chose 🎩",
+            "All pieces picked! Ari spins first!",
+            "Ari 🎩 spun 2: 0 -> 2",
+            "Bea 👑 spun 4: 4 climbs to 14 (shared your snack!)",
+            "Ari 🎩 spun 5: 2 -> 7",
+            "Bea 👑 spun 3: 14 -> 17",
+            "Ari 🎩 spun 1: 7 -> 8",
+            "Bea 👑 spun 5: 17 -> 22",
+            "Ari 🎩 spun 3: 8 -> 11",
+            "Bea 👑 spun 4: 22 -> 26",
+            "Ari 🎩 spun 1: 11 -> 12",
+            "Bea 👑 spun 2: 28 climbs to 84 (brushed teeth!)",
+            "Ari 🎩 spun 4: 16 slides to 6 (ran inside!)",
+            "Bea 👑 spun 4: 84 -> 88",
+            "Ari 🎩 spun 3: 9 climbs to 31 (said please & thank you!)",
+            "Bea 👑 spun 3: 88 -> 91",
+            "Ari 🎩 spun 2: 31 -> 33",
+            "Bea 👑 spun 6: 91 -> 97",
+            "Ari 🎩 spun 5: 33 -> 38"
+          ]
+        },
+        "view_of_mover": {
+          "positions": [
+            38,
+            97
+          ],
+          "phase": "play",
+          "pieces": {
+            "0": "🎩",
+            "1": "👑"
+          },
+          "selectTurn": null,
+          "selectOrder": [
+            1,
+            0
+          ],
+          "selectIdx": 2,
+          "rolloffSpins": {
+            "0": 4,
+            "1": 2
+          },
+          "rolloffTurn": null,
+          "turnOrder": [
+            0,
+            1
+          ],
+          "turnPos": 1,
+          "lastSpin": 5,
+          "lastAngle": 254.78162564709783,
+          "lastEvent": null,
+          "lastFrom": 33,
+          "lastTo": 38,
+          "winner": null,
+          "log": [
+            "Last place picks piece first: Bea choose!",
+            "Bea chose 👑",
+            "Ari chose 🎩",
+            "All pieces picked! Ari spins first!",
+            "Ari 🎩 spun 2: 0 -> 2",
+            "Bea 👑 spun 4: 4 climbs to 14 (shared your snack!)",
+            "Ari 🎩 spun 5: 2 -> 7",
+            "Bea 👑 spun 3: 14 -> 17",
+            "Ari 🎩 spun 1: 7 -> 8",
+            "Bea 👑 spun 5: 17 -> 22",
+            "Ari 🎩 spun 3: 8 -> 11",
+            "Bea 👑 spun 4: 22 -> 26",
+            "Ari 🎩 spun 1: 11 -> 12",
+            "Bea 👑 spun 2: 28 climbs to 84 (brushed teeth!)",
+            "Ari 🎩 spun 4: 16 slides to 6 (ran inside!)",
+            "Bea 👑 spun 4: 84 -> 88",
+            "Ari 🎩 spun 3: 9 climbs to 31 (said please & thank you!)",
+            "Bea 👑 spun 3: 88 -> 91",
+            "Ari 🎩 spun 2: 31 -> 33",
+            "Bea 👑 spun 6: 91 -> 97",
+            "Ari 🎩 spun 5: 33 -> 38"
+          ]
+        },
+        "view_of_other": {
+          "positions": [
+            38,
+            97
+          ],
+          "phase": "play",
+          "pieces": {
+            "0": "🎩",
+            "1": "👑"
+          },
+          "selectTurn": null,
+          "selectOrder": [
+            1,
+            0
+          ],
+          "selectIdx": 2,
+          "rolloffSpins": {
+            "0": 4,
+            "1": 2
+          },
+          "rolloffTurn": null,
+          "turnOrder": [
+            0,
+            1
+          ],
+          "turnPos": 1,
+          "lastSpin": 5,
+          "lastAngle": 254.78162564709783,
+          "lastEvent": null,
+          "lastFrom": 33,
+          "lastTo": 38,
+          "winner": null,
+          "log": [
+            "Last place picks piece first: Bea choose!",
+            "Bea chose 👑",
+            "Ari chose 🎩",
+            "All pieces picked! Ari spins first!",
+            "Ari 🎩 spun 2: 0 -> 2",
+            "Bea 👑 spun 4: 4 climbs to 14 (shared your snack!)",
+            "Ari 🎩 spun 5: 2 -> 7",
+            "Bea 👑 spun 3: 14 -> 17",
+            "Ari 🎩 spun 1: 7 -> 8",
+            "Bea 👑 spun 5: 17 -> 22",
+            "Ari 🎩 spun 3: 8 -> 11",
+            "Bea 👑 spun 4: 22 -> 26",
+            "Ari 🎩 spun 1: 11 -> 12",
+            "Bea 👑 spun 2: 28 climbs to 84 (brushed teeth!)",
+            "Ari 🎩 spun 4: 16 slides to 6 (ran inside!)",
+            "Bea 👑 spun 4: 84 -> 88",
+            "Ari 🎩 spun 3: 9 climbs to 31 (said please & thank you!)",
+            "Bea 👑 spun 3: 88 -> 91",
+            "Ari 🎩 spun 2: 31 -> 33",
+            "Bea 👑 spun 6: 91 -> 97",
+            "Ari 🎩 spun 5: 33 -> 38"
+          ]
+        },
+        "player_id": "archive_1",
+        "other_player_id": null,
+        "move": {
+          "kind": "spin"
+        },
+        "expected_state": {
+          "positions": [
+            38,
+            100
+          ],
+          "phase": "play",
+          "pieces": {
+            "0": "🎩",
+            "1": "👑"
+          },
+          "selectTurn": null,
+          "selectOrder": [
+            1,
+            0
+          ],
+          "selectIdx": 2,
+          "rolloffSpins": {
+            "0": 4,
+            "1": 2
+          },
+          "rolloffTurn": null,
+          "turnOrder": [
+            0,
+            1
+          ],
+          "turnPos": 1,
+          "lastSpin": 3,
+          "lastAngle": 132.9453873867169,
+          "lastEvent": null,
+          "lastFrom": 97,
+          "lastTo": 100,
+          "winner": 1,
+          "log": [
+            "Bea chose 👑",
+            "Ari chose 🎩",
+            "All pieces picked! Ari spins first!",
+            "Ari 🎩 spun 2: 0 -> 2",
+            "Bea 👑 spun 4: 4 climbs to 14 (shared your snack!)",
+            "Ari 🎩 spun 5: 2 -> 7",
+            "Bea 👑 spun 3: 14 -> 17",
+            "Ari 🎩 spun 1: 7 -> 8",
+            "Bea 👑 spun 5: 17 -> 22",
+            "Ari 🎩 spun 3: 8 -> 11",
+            "Bea 👑 spun 4: 22 -> 26",
+            "Ari 🎩 spun 1: 11 -> 12",
+            "Bea 👑 spun 2: 28 climbs to 84 (brushed teeth!)",
+            "Ari 🎩 spun 4: 16 slides to 6 (ran inside!)",
+            "Bea 👑 spun 4: 84 -> 88",
+            "Ari 🎩 spun 3: 9 climbs to 31 (said please & thank you!)",
+            "Bea 👑 spun 3: 88 -> 91",
+            "Ari 🎩 spun 2: 31 -> 33",
+            "Bea 👑 spun 6: 91 -> 97",
+            "Ari 🎩 spun 5: 33 -> 38",
+            "Bea 👑 spun 3: 97 -> 100",
+            "Bea WINS!"
+          ]
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "positions": [
+            38,
+            100
+          ],
+          "phase": "play",
+          "pieces": {
+            "0": "🎩",
+            "1": "👑"
+          },
+          "selectTurn": null,
+          "selectOrder": [
+            1,
+            0
+          ],
+          "selectIdx": 2,
+          "rolloffSpins": {
+            "0": 4,
+            "1": 2
+          },
+          "rolloffTurn": null,
+          "turnOrder": [
+            0,
+            1
+          ],
+          "turnPos": 1,
+          "lastSpin": 3,
+          "lastAngle": 132.9453873867169,
+          "lastEvent": null,
+          "lastFrom": 97,
+          "lastTo": 100,
+          "winner": 1,
+          "log": [
+            "Bea chose 👑",
+            "Ari chose 🎩",
+            "All pieces picked! Ari spins first!",
+            "Ari 🎩 spun 2: 0 -> 2",
+            "Bea 👑 spun 4: 4 climbs to 14 (shared your snack!)",
+            "Ari 🎩 spun 5: 2 -> 7",
+            "Bea 👑 spun 3: 14 -> 17",
+            "Ari 🎩 spun 1: 7 -> 8",
+            "Bea 👑 spun 5: 17 -> 22",
+            "Ari 🎩 spun 3: 8 -> 11",
+            "Bea 👑 spun 4: 22 -> 26",
+            "Ari 🎩 spun 1: 11 -> 12",
+            "Bea 👑 spun 2: 28 climbs to 84 (brushed teeth!)",
+            "Ari 🎩 spun 4: 16 slides to 6 (ran inside!)",
+            "Bea 👑 spun 4: 84 -> 88",
+            "Ari 🎩 spun 3: 9 climbs to 31 (said please & thank you!)",
+            "Bea 👑 spun 3: 88 -> 91",
+            "Ari 🎩 spun 2: 31 -> 33",
+            "Bea 👑 spun 6: 91 -> 97",
+            "Ari 🎩 spun 5: 33 -> 38",
+            "Bea 👑 spun 3: 97 -> 100",
+            "Bea WINS!"
+          ]
+        },
+        "expected_view_of_other": {
+          "positions": [
+            38,
+            100
+          ],
+          "phase": "play",
+          "pieces": {
+            "0": "🎩",
+            "1": "👑"
+          },
+          "selectTurn": null,
+          "selectOrder": [
+            1,
+            0
+          ],
+          "selectIdx": 2,
+          "rolloffSpins": {
+            "0": 4,
+            "1": 2
+          },
+          "rolloffTurn": null,
+          "turnOrder": [
+            0,
+            1
+          ],
+          "turnPos": 1,
+          "lastSpin": 3,
+          "lastAngle": 132.9453873867169,
+          "lastEvent": null,
+          "lastFrom": 97,
+          "lastTo": 100,
+          "winner": 1,
+          "log": [
+            "Bea chose 👑",
+            "Ari chose 🎩",
+            "All pieces picked! Ari spins first!",
+            "Ari 🎩 spun 2: 0 -> 2",
+            "Bea 👑 spun 4: 4 climbs to 14 (shared your snack!)",
+            "Ari 🎩 spun 5: 2 -> 7",
+            "Bea 👑 spun 3: 14 -> 17",
+            "Ari 🎩 spun 1: 7 -> 8",
+            "Bea 👑 spun 5: 17 -> 22",
+            "Ari 🎩 spun 3: 8 -> 11",
+            "Bea 👑 spun 4: 22 -> 26",
+            "Ari 🎩 spun 1: 11 -> 12",
+            "Bea 👑 spun 2: 28 climbs to 84 (brushed teeth!)",
+            "Ari 🎩 spun 4: 16 slides to 6 (ran inside!)",
+            "Bea 👑 spun 4: 84 -> 88",
+            "Ari 🎩 spun 3: 9 climbs to 31 (said please & thank you!)",
+            "Bea 👑 spun 3: 88 -> 91",
+            "Ari 🎩 spun 2: 31 -> 33",
+            "Bea 👑 spun 6: 91 -> 97",
+            "Ari 🎩 spun 5: 33 -> 38",
+            "Bea 👑 spun 3: 97 -> 100",
+            "Bea WINS!"
+          ]
+        },
+        "images": [
+          {
+            "caption": "Before: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#17324f\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          },
+          {
+            "caption": "Before: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#2770a8\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          },
+          {
+            "caption": "After: player",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#56c9b4\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          },
+          {
+            "caption": "After: spectator",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 100\"><rect width=\"160\" height=\"100\" rx=\"8\" fill=\"#ffbf66\"/><circle cx=\"80\" cy=\"50\" r=\"22\" fill=\"#ffffff\"/><path d=\"M56 50h48M80 26v48\" stroke=\"#17324f\" stroke-width=\"5\"/></svg>"
+          }
+        ],
+        "expected_payouts": {}
+      }
+    ]
+  },
+  "translations": {
+    "es": {
+      "display_name": "Serpientes y escaleras (Declarativo)",
+      "short_description": "Carrera por turnos de 2 a 4 jugadores. Gira la ruleta, sube por las escaleras y baja por las serpientes.",
+      "game_logic_rules": "Mueve tu ficha hacia la casilla 100. Gira la ruleta para avanzar; sube si caes al pie de una escalera y baja si caes en una serpiente. Gana quien llegue primero a la casilla 100.",
+      "game_ui_rules": "Elige una ficha durante la preparación y toca Girar en tu turno. El tablero muestra las posiciones, escaleras y serpientes.",
+      "tutorial_strings": {
+        "How to play": "Cómo jugar",
+        "Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.": "Mueve tu ficha hacia la casilla 100. Gira la ruleta para avanzar; sube si caes al pie de una escalera y baja si caes en una serpiente. Gana quien llegue primero a la casilla 100.",
+        "Choose a token during setup, then tap Spin on your turn. The board shows each player's position and the ladders and chutes.": "Elige una ficha durante la preparación y toca Girar en tu turno. El tablero muestra las posiciones, escaleras y serpientes."
+      },
+      "client_strings": {
+        "text_0": "Declarativo",
+        "text_1": "Jugador {n}",
+        "text_2": "Tu turno · {name}",
+        "text_3": "Turno de {name}",
+        "text_4": "Fin de la partida",
+        "text_5": "Ganador: {name}",
+        "text_6": "Tu flota",
+        "text_7": "Aguas enemigas",
+        "text_8": "Colocar flota e iniciar batalla",
+        "text_9": "Coloca una flota válida con agua libre entre barcos.",
+        "text_10": "Continúa la captura con la ficha resaltada.",
+        "text_11": "Debes capturar.",
+        "text_12": "Mueve en diagonal; las damas se mueven en ambas direcciones.",
+        "text_13": "reina",
+        "text_14": "torre",
+        "text_15": "alfil",
+        "text_16": "caballo",
+        "text_17": "Promocionar en {square} a {piece}",
+        "text_18": "Eliminar este ejército",
+        "text_19": "Pasar (sin jugada legal)",
+        "text_20": "Rendirse",
+        "text_21": "Mover peón",
+        "text_22": "Colocar muro",
+        "text_23": "Muros restantes · {counts}",
+        "text_24": "Carta superior {card} · palo {suit} · {n} cartas por robar",
+        "text_25": "Jugar {card} como {suit}",
+        "text_26": "Jugar {card}",
+        "text_27": "Robar carta (quedan {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Robar cartas",
+        "text_30": "Pasar",
+        "text_31": "{name} · grupos {ranks}",
+        "text_32": "Recoger baza",
+        "text_33": "Tu personaje: {name}",
+        "text_34": "Tu personaje es privado",
+        "text_35": "Preguntar: {question}",
+        "text_36": "Sí",
+        "text_37": "No",
+        "text_38": "{name}: adivinó {character} · {result}",
+        "text_39": "correcto",
+        "text_40": "incorrecto",
+        "text_41": "¿Lleva gafas?",
+        "text_42": "¿Lleva sombrero?",
+        "text_43": "¿Tiene vello facial?",
+        "text_44": "¿Se le ven las orejas?",
+        "text_45": "¿Tiene pelo rubio?",
+        "text_46": "¿Tiene pelo castaño?",
+        "text_47": "¿Tiene pelo negro?",
+        "text_48": "¿Tiene pelo rojo?",
+        "text_49": "¿Tiene pelo gris?",
+        "text_50": "¿Tiene pelo largo?",
+        "text_51": "¿Tiene pelo corto?",
+        "text_52": "¿Tiene ojos azules?",
+        "text_53": "¿Tiene ojos marrones?",
+        "text_54": "¿Tiene ojos verdes?",
+        "text_55": "Seleccionar pieza en fila {r}, columna {c}",
+        "text_56": "Mover a fila {r}, columna {c}",
+        "text_57": "Girar",
+        "text_58": "Colocar piedra",
+        "text_59": "Reclamar tablas",
+        "text_60": "Continuar",
+        "text_61": "Retirar {n}",
+        "text_62": "Reiniciar intento",
+        "title": "Serpientes y escaleras (Declarativo)",
+        "server_not_seated": "No estás en la partida",
+        "server_game_over": "La partida ha terminado",
+        "server_spin_to_roll_off": "Gira la ruleta para decidir el orden",
+        "server_not_your_roll_off_turn": "No es tu turno para decidir el orden",
+        "server_already_rolled": "Ya has girado",
+        "server_pick_a_piece": "Elige una ficha",
+        "server_selection_order_error": "Error en el orden de selección",
+        "server_not_your_pick": "No te toca elegir",
+        "server_bad_piece": "Ficha no válida",
+        "server_piece_taken": "Esa ficha ya está elegida",
+        "server_spin_on_your_turn": "Gira la ruleta en tu turno",
+        "server_not_your_turn": "No es tu turno",
+        "server_unknown_phase": "Fase desconocida",
+        "server_rolloff_log": "{p1} sacó {p2} para decidir quién empieza",
+        "server_exact_finish_log": "{p1} {p2} sacó {p3}, pero necesita el número exacto para llegar a 100; se queda en {p4}",
+        "server_ladder_log": "{p1} {p2} sacó {p3}: sube de {p4} a {p5} ({p6})",
+        "server_chute_log": "{p1} {p2} sacó {p3}: baja de {p4} a {p5} ({p6})",
+        "server_move_log": "{p1} {p2} sacó {p3}: {p4} -> {p5}"
+      }
+    },
+    "fr": {
+      "display_name": "Serpents et échelles (Déclaratif)",
+      "short_description": "Course au tour par tour pour 2 à 4 joueurs. Faites tourner la roue, montez les échelles et glissez dans les goulottes.",
+      "game_logic_rules": "Déplacez votre pion vers la case 100. Faites tourner la roue pour avancer ; montez si vous arrivez au pied d’une échelle et descendez si vous arrivez en haut d’une goulotte. Le premier à atteindre la case 100 gagne.",
+      "game_ui_rules": "Choisissez un pion pendant la préparation, puis touchez Tourner à votre tour. Le plateau montre les positions, les échelles et les goulottes.",
+      "tutorial_strings": {
+        "How to play": "Comment jouer",
+        "Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.": "Déplacez votre pion vers la case 100. Faites tourner la roue pour avancer ; montez si vous arrivez au pied d’une échelle et descendez si vous arrivez en haut d’une goulotte. Le premier à atteindre la case 100 gagne.",
+        "Choose a token during setup, then tap Spin on your turn. The board shows each player's position and the ladders and chutes.": "Choisissez un pion pendant la préparation, puis touchez Tourner à votre tour. Le plateau montre les positions, les échelles et les goulottes."
+      },
+      "client_strings": {
+        "text_0": "Déclaratif",
+        "text_1": "Joueur {n}",
+        "text_2": "À vous · {name}",
+        "text_3": "À {name} de jouer",
+        "text_4": "Partie terminée",
+        "text_5": "Gagnant : {name}",
+        "text_6": "Votre flotte",
+        "text_7": "Eaux adverses",
+        "text_8": "Placer la flotte et commencer",
+        "text_9": "Place une flotte valide avec de l’eau entre les navires.",
+        "text_10": "Continuez la prise avec le pion surligné.",
+        "text_11": "Une prise est obligatoire.",
+        "text_12": "Déplacez-vous en diagonale ; les dames vont dans les deux sens.",
+        "text_13": "dame",
+        "text_14": "tour",
+        "text_15": "fou",
+        "text_16": "cavalier",
+        "text_17": "Promouvoir en {square} en {piece}",
+        "text_18": "Éliminer cette armée",
+        "text_19": "Passer (aucun coup légal)",
+        "text_20": "Abandonner",
+        "text_21": "Déplacer le pion",
+        "text_22": "Placer un mur",
+        "text_23": "Murs restants · {counts}",
+        "text_24": "Carte du dessus {card} · couleur {suit} · {n} cartes à piocher",
+        "text_25": "Jouer {card} en {suit}",
+        "text_26": "Jouer {card}",
+        "text_27": "Piocher une carte ({n} restantes)",
+        "text_28": "Demander des {rank} à {name}",
+        "text_29": "Piocher des cartes",
+        "text_30": "Passer",
+        "text_31": "{name} · carrés {ranks}",
+        "text_32": "Ramasser le pli",
+        "text_33": "Votre personnage : {name}",
+        "text_34": "Votre personnage est privé",
+        "text_35": "Demander : {question}",
+        "text_36": "Oui",
+        "text_37": "Non",
+        "text_38": "{name} : a proposé {character} · {result}",
+        "text_39": "correct",
+        "text_40": "incorrect",
+        "text_41": "Porte-t-il des lunettes ?",
+        "text_42": "Porte-t-il un chapeau ?",
+        "text_43": "A-t-il des poils au visage ?",
+        "text_44": "Voit-on ses oreilles ?",
+        "text_45": "A-t-il les cheveux blonds ?",
+        "text_46": "A-t-il les cheveux bruns ?",
+        "text_47": "A-t-il les cheveux noirs ?",
+        "text_48": "A-t-il les cheveux roux ?",
+        "text_49": "A-t-il les cheveux gris ?",
+        "text_50": "A-t-il les cheveux longs ?",
+        "text_51": "A-t-il les cheveux courts ?",
+        "text_52": "A-t-il les yeux bleus ?",
+        "text_53": "A-t-il les yeux bruns ?",
+        "text_54": "A-t-il les yeux verts ?",
+        "text_55": "Choisir la pièce en ligne {r}, colonne {c}",
+        "text_56": "Aller en ligne {r}, colonne {c}",
+        "text_57": "Tourner",
+        "text_58": "Placer un pion",
+        "text_59": "Réclamer la nulle",
+        "text_60": "Continuer",
+        "text_61": "Prendre {n}",
+        "text_62": "Réinitialiser la proposition",
+        "title": "Serpents et échelles (Déclaratif)",
+        "server_not_seated": "Vous ne participez pas à la partie",
+        "server_game_over": "La partie est terminée",
+        "server_spin_to_roll_off": "Tournez la roue pour déterminer l’ordre",
+        "server_not_your_roll_off_turn": "Ce n’est pas votre tour pour déterminer l’ordre",
+        "server_already_rolled": "Vous avez déjà tourné",
+        "server_pick_a_piece": "Choisissez un pion",
+        "server_selection_order_error": "Erreur dans l’ordre de sélection",
+        "server_not_your_pick": "Ce n’est pas à vous de choisir",
+        "server_bad_piece": "Pion invalide",
+        "server_piece_taken": "Ce pion est déjà pris",
+        "server_spin_on_your_turn": "Tournez la roue à votre tour",
+        "server_not_your_turn": "Ce n’est pas votre tour",
+        "server_unknown_phase": "Phase inconnue",
+        "server_rolloff_log": "{p1} a obtenu {p2} pour déterminer le premier tour",
+        "server_exact_finish_log": "{p1} {p2} a obtenu {p3}, mais doit faire le nombre exact pour atteindre 100 ; reste en {p4}",
+        "server_ladder_log": "{p1} {p2} a obtenu {p3} : monte de {p4} à {p5} ({p6})",
+        "server_chute_log": "{p1} {p2} a obtenu {p3} : glisse de {p4} à {p5} ({p6})",
+        "server_move_log": "{p1} {p2} a obtenu {p3} : {p4} -> {p5}"
+      }
+    },
+    "de": {
+      "display_name": "Leitern und Rutschen (Deklarativ)",
+      "short_description": "Ein rundenbasiertes Wettrennen für 2 bis 4 Personen. Drehe den Zeiger, steige Leitern hinauf und rutsche hinunter.",
+      "game_logic_rules": "Bewege deine Figur bis Feld 100. Drehe den Zeiger und ziehe entsprechend vor; auf einer Leiter steigst du hinauf, auf einer Rutsche hinunter. Wer Feld 100 zuerst erreicht, gewinnt.",
+      "game_ui_rules": "Wähle zu Beginn eine Figur und tippe in deinem Zug auf Drehen. Das Brett zeigt alle Positionen, Leitern und Rutschen.",
+      "tutorial_strings": {
+        "How to play": "Spielanleitung",
+        "Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.": "Bewege deine Figur bis Feld 100. Drehe den Zeiger und ziehe entsprechend vor; auf einer Leiter steigst du hinauf, auf einer Rutsche hinunter. Wer Feld 100 zuerst erreicht, gewinnt.",
+        "Choose a token during setup, then tap Spin on your turn. The board shows each player's position and the ladders and chutes.": "Wähle zu Beginn eine Figur und tippe in deinem Zug auf Drehen. Das Brett zeigt alle Positionen, Leitern und Rutschen."
+      },
+      "client_strings": {
+        "text_0": "Deklarativ",
+        "text_1": "Spieler {n}",
+        "text_2": "Dein Zug · {name}",
+        "text_3": "{name} ist am Zug",
+        "text_4": "Spiel beendet",
+        "text_5": "Gewinner: {name}",
+        "text_6": "Deine Flotte",
+        "text_7": "Zielgewässer",
+        "text_8": "Flotte platzieren und starten",
+        "text_9": "Platziert eine gültige Flotte mit Abstand zwischen den Schiffen.",
+        "text_10": "Setze den Schlagzug mit dem markierten Stein fort.",
+        "text_11": "Schlagen ist Pflicht.",
+        "text_12": "Ziehe diagonal; Damen ziehen in beide Richtungen.",
+        "text_13": "Dame",
+        "text_14": "Turm",
+        "text_15": "Läufer",
+        "text_16": "Springer",
+        "text_17": "Auf {square} in {piece} umwandeln",
+        "text_18": "Diese Armee entfernen",
+        "text_19": "Passen (kein gültiger Zug)",
+        "text_20": "Aufgeben",
+        "text_21": "Bauern ziehen",
+        "text_22": "Wand platzieren",
+        "text_23": "Verbleibende Wände · {counts}",
+        "text_24": "Oberste Karte {card} · Farbe {suit} · {n} Karten im Stapel",
+        "text_25": "{card} als {suit} spielen",
+        "text_26": "{card} spielen",
+        "text_27": "Karte ziehen ({n} übrig)",
+        "text_28": "{name} nach {rank} fragen",
+        "text_29": "Karten ziehen",
+        "text_30": "Passen",
+        "text_31": "{name} · Quartette {ranks}",
+        "text_32": "Stich einsammeln",
+        "text_33": "Deine Figur: {name}",
+        "text_34": "Deine Figur ist geheim",
+        "text_35": "Fragen: {question}",
+        "text_36": "Ja",
+        "text_37": "Nein",
+        "text_38": "{name}: hat {character} geraten · {result}",
+        "text_39": "richtig",
+        "text_40": "falsch",
+        "text_41": "Trägt die Person eine Brille?",
+        "text_42": "Trägt die Person einen Hut?",
+        "text_43": "Hat die Person einen Bart?",
+        "text_44": "Sind die Ohren sichtbar?",
+        "text_45": "Hat die Person blonde Haare?",
+        "text_46": "Hat die Person braune Haare?",
+        "text_47": "Hat die Person schwarze Haare?",
+        "text_48": "Hat die Person rote Haare?",
+        "text_49": "Hat die Person graue Haare?",
+        "text_50": "Hat die Person lange Haare?",
+        "text_51": "Hat die Person kurze Haare?",
+        "text_52": "Hat die Person blaue Augen?",
+        "text_53": "Hat die Person braune Augen?",
+        "text_54": "Hat die Person grüne Augen?",
+        "text_55": "Figur in Zeile {r}, Spalte {c} wählen",
+        "text_56": "Nach Zeile {r}, Spalte {c} ziehen",
+        "text_57": "Drehen",
+        "text_58": "Stein setzen",
+        "text_59": "Remis beanspruchen",
+        "text_60": "Fortsetzen",
+        "text_61": "Stein {n} schlagen",
+        "text_62": "Tipp zurücksetzen",
+        "title": "Leitern und Rutschen (Deklarativ)",
+        "server_not_seated": "Du nimmst nicht teil",
+        "server_game_over": "Das Spiel ist beendet",
+        "server_spin_to_roll_off": "Drehe den Zeiger, um die Reihenfolge festzulegen",
+        "server_not_your_roll_off_turn": "Du bist nicht mit dem Auswürfeln an der Reihe",
+        "server_already_rolled": "Du hast bereits gedreht",
+        "server_pick_a_piece": "Wähle eine Figur",
+        "server_selection_order_error": "Fehler bei der Auswahlreihenfolge",
+        "server_not_your_pick": "Du bist nicht mit der Auswahl an der Reihe",
+        "server_bad_piece": "Ungültige Figur",
+        "server_piece_taken": "Diese Figur ist bereits vergeben",
+        "server_spin_on_your_turn": "Drehe den Zeiger in deinem Zug",
+        "server_not_your_turn": "Du bist nicht an der Reihe",
+        "server_unknown_phase": "Unbekannte Phase",
+        "server_rolloff_log": "{p1} drehte eine {p2}, um den Start zu bestimmen",
+        "server_exact_finish_log": "{p1} {p2} drehte eine {p3}, braucht aber genau die passende Zahl für Feld 100 und bleibt auf {p4}",
+        "server_ladder_log": "{p1} {p2} drehte eine {p3}: steigt von {p4} auf {p5} ({p6})",
+        "server_chute_log": "{p1} {p2} drehte eine {p3}: rutscht von {p4} auf {p5} ({p6})",
+        "server_move_log": "{p1} {p2} drehte eine {p3}: {p4} -> {p5}"
+      }
+    },
+    "pt": {
+      "display_name": "Escadas e escorregadores (Declarativo)",
+      "short_description": "Corrida por turnos para 2 a 4 jogadores. Gire a roleta, suba escadas e desça escorregadores.",
+      "game_logic_rules": "Leve sua peça até a casa 100. Gire a roleta para avançar; suba ao cair no início de uma escada e desça ao cair no topo de um escorregador. Vence quem chegar primeiro à casa 100.",
+      "game_ui_rules": "Escolha uma peça na preparação e toque em Girar na sua vez. O tabuleiro mostra posições, escadas e escorregadores.",
+      "tutorial_strings": {
+        "How to play": "Como jogar",
+        "Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.": "Leve sua peça até a casa 100. Gire a roleta para avançar; suba ao cair no início de uma escada e desça ao cair no topo de um escorregador. Vence quem chegar primeiro à casa 100.",
+        "Choose a token during setup, then tap Spin on your turn. The board shows each player's position and the ladders and chutes.": "Escolha uma peça na preparação e toque em Girar na sua vez. O tabuleiro mostra posições, escadas e escorregadores."
+      },
+      "client_strings": {
+        "text_0": "Declarativo",
+        "text_1": "Jogador {n}",
+        "text_2": "Sua vez · {name}",
+        "text_3": "Vez de {name}",
+        "text_4": "Partida encerrada",
+        "text_5": "Vencedor: {name}",
+        "text_6": "Sua frota",
+        "text_7": "Águas inimigas",
+        "text_8": "Posicionar frota e iniciar batalha",
+        "text_9": "Posiciona uma frota válida com água livre entre os navios.",
+        "text_10": "Continue a captura com a peça destacada.",
+        "text_11": "É obrigatório capturar.",
+        "text_12": "Mova na diagonal; damas movem nos dois sentidos.",
+        "text_13": "rainha",
+        "text_14": "torre",
+        "text_15": "bispo",
+        "text_16": "cavalo",
+        "text_17": "Promover em {square} para {piece}",
+        "text_18": "Eliminar este exército",
+        "text_19": "Passar (sem jogada válida)",
+        "text_20": "Desistir",
+        "text_21": "Mover peão",
+        "text_22": "Colocar parede",
+        "text_23": "Paredes restantes · {counts}",
+        "text_24": "Carta do topo {card} · naipe {suit} · {n} cartas para comprar",
+        "text_25": "Jogar {card} como {suit}",
+        "text_26": "Jogar {card}",
+        "text_27": "Comprar carta (restam {n})",
+        "text_28": "Pedir {rank} a {name}",
+        "text_29": "Comprar cartas",
+        "text_30": "Passar",
+        "text_31": "{name} · conjuntos {ranks}",
+        "text_32": "Recolher vaza",
+        "text_33": "Seu personagem: {name}",
+        "text_34": "Seu personagem é privado",
+        "text_35": "Perguntar: {question}",
+        "text_36": "Sim",
+        "text_37": "Não",
+        "text_38": "{name}: adivinhou {character} · {result}",
+        "text_39": "correto",
+        "text_40": "incorreto",
+        "text_41": "Usa óculos?",
+        "text_42": "Usa chapéu?",
+        "text_43": "Tem pelos no rosto?",
+        "text_44": "As orelhas estão visíveis?",
+        "text_45": "Tem cabelo loiro?",
+        "text_46": "Tem cabelo castanho?",
+        "text_47": "Tem cabelo preto?",
+        "text_48": "Tem cabelo ruivo?",
+        "text_49": "Tem cabelo grisalho?",
+        "text_50": "Tem cabelo comprido?",
+        "text_51": "Tem cabelo curto?",
+        "text_52": "Tem olhos azuis?",
+        "text_53": "Tem olhos castanhos?",
+        "text_54": "Tem olhos verdes?",
+        "text_55": "Selecionar peça na linha {r}, coluna {c}",
+        "text_56": "Mover para linha {r}, coluna {c}",
+        "text_57": "Girar",
+        "text_58": "Colocar pedra",
+        "text_59": "Reivindicar empate",
+        "text_60": "Continuar",
+        "text_61": "Capturar {n}",
+        "text_62": "Reiniciar palpite",
+        "title": "Escadas e escorregadores (Declarativo)",
+        "server_not_seated": "Você não está na partida",
+        "server_game_over": "A partida terminou",
+        "server_spin_to_roll_off": "Gire a roleta para definir a ordem",
+        "server_not_your_roll_off_turn": "Não é sua vez de definir a ordem",
+        "server_already_rolled": "Você já girou",
+        "server_pick_a_piece": "Escolha uma peça",
+        "server_selection_order_error": "Erro na ordem de escolha",
+        "server_not_your_pick": "Não é sua vez de escolher",
+        "server_bad_piece": "Peça inválida",
+        "server_piece_taken": "Essa peça já foi escolhida",
+        "server_spin_on_your_turn": "Gire a roleta na sua vez",
+        "server_not_your_turn": "Não é sua vez",
+        "server_unknown_phase": "Fase desconhecida",
+        "server_rolloff_log": "{p1} girou {p2} para definir quem começa",
+        "server_exact_finish_log": "{p1} {p2} girou {p3}, mas precisa do número exato para chegar a 100; fica em {p4}",
+        "server_ladder_log": "{p1} {p2} girou {p3}: sobe de {p4} para {p5} ({p6})",
+        "server_chute_log": "{p1} {p2} girou {p3}: desce de {p4} para {p5} ({p6})",
+        "server_move_log": "{p1} {p2} girou {p3}: {p4} -> {p5}"
+      }
+    },
+    "zh": {
+      "display_name": "蛇梯棋 (声明式)",
+      "short_description": "适合 2 至 4 人的轮流竞赛。转动转盘前进，沿梯子上升并沿滑道下降。",
+      "game_logic_rules": "将棋子从起点移动到第 100 格。转动转盘并按点数前进；落在梯子底部时上升，落在滑道顶部时下降。最先到达第 100 格者获胜。",
+      "game_ui_rules": "准备时选择棋子，轮到你时点击转动。棋盘显示所有玩家的位置、梯子和滑道。",
+      "tutorial_strings": {
+        "How to play": "玩法",
+        "Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.": "将棋子从起点移动到第 100 格。转动转盘并按点数前进；落在梯子底部时上升，落在滑道顶部时下降。最先到达第 100 格者获胜。",
+        "Choose a token during setup, then tap Spin on your turn. The board shows each player's position and the ladders and chutes.": "准备时选择棋子，轮到你时点击转动。棋盘显示所有玩家的位置、梯子和滑道。"
+      },
+      "client_strings": {
+        "text_0": "声明式",
+        "text_1": "玩家 {n}",
+        "text_2": "轮到您 · {name}",
+        "text_3": "轮到 {name}",
+        "text_4": "游戏结束",
+        "text_5": "获胜者：{name}",
+        "text_6": "您的舰队",
+        "text_7": "目标海域",
+        "text_8": "部署舰队并开始战斗",
+        "text_9": "部署合法舰队，舰船之间留有空隙。",
+        "text_10": "使用高亮棋子继续连跳。",
+        "text_11": "必须吃子。",
+        "text_12": "沿斜线移动；王棋可以双向移动。",
+        "text_13": "后",
+        "text_14": "车",
+        "text_15": "象",
+        "text_16": "马",
+        "text_17": "在 {square} 升变为{piece}",
+        "text_18": "淘汰此军队",
+        "text_19": "跳过（无合法走法）",
+        "text_20": "认输",
+        "text_21": "移动兵",
+        "text_22": "放置墙",
+        "text_23": "剩余墙数 · {counts}",
+        "text_24": "顶牌 {card} · 花色 {suit} · 余牌 {n} 张",
+        "text_25": "打出 {card}，指定花色 {suit}",
+        "text_26": "打出 {card}",
+        "text_27": "抽一张牌（剩余 {n} 张）",
+        "text_28": "向 {name} 要 {rank}",
+        "text_29": "抽牌",
+        "text_30": "跳过",
+        "text_31": "{name} · 成套牌 {ranks}",
+        "text_32": "收取此墩",
+        "text_33": "您的角色：{name}",
+        "text_34": "您的角色是保密的",
+        "text_35": "提问：{question}",
+        "text_36": "是",
+        "text_37": "否",
+        "text_38": "{name}：猜测 {character} · {result}",
+        "text_39": "正确",
+        "text_40": "错误",
+        "text_41": "戴眼镜吗？",
+        "text_42": "戴帽子吗？",
+        "text_43": "有胡须吗？",
+        "text_44": "耳朵露出来了吗？",
+        "text_45": "是金发吗？",
+        "text_46": "是棕发吗？",
+        "text_47": "是黑发吗？",
+        "text_48": "是红发吗？",
+        "text_49": "是灰发吗？",
+        "text_50": "是长发吗？",
+        "text_51": "是短发吗？",
+        "text_52": "是蓝眼睛吗？",
+        "text_53": "是棕眼睛吗？",
+        "text_54": "是绿眼睛吗？",
+        "text_55": "选择第 {r} 行第 {c} 列的棋子",
+        "text_56": "移至第 {r} 行第 {c} 列",
+        "text_57": "转动",
+        "text_58": "放置棋子",
+        "text_59": "申请和棋",
+        "text_60": "继续",
+        "text_61": "移除 {n}",
+        "text_62": "重置猜测",
+        "title": "蛇梯棋 (声明式)",
+        "server_not_seated": "你未加入此对局",
+        "server_game_over": "游戏已结束",
+        "server_spin_to_roll_off": "转动转盘决定先后顺序",
+        "server_not_your_roll_off_turn": "现在不是你决定顺序的回合",
+        "server_already_rolled": "你已经转过转盘",
+        "server_pick_a_piece": "选择一枚棋子",
+        "server_selection_order_error": "选择顺序错误",
+        "server_not_your_pick": "现在不是你的选择回合",
+        "server_bad_piece": "棋子无效",
+        "server_piece_taken": "该棋子已被选走",
+        "server_spin_on_your_turn": "轮到你时转动转盘",
+        "server_not_your_turn": "还没轮到你",
+        "server_unknown_phase": "未知阶段",
+        "server_rolloff_log": "{p1}转出{p2}以决定先手",
+        "server_exact_finish_log": "{p1} {p2}转出{p3}，但需要正好到达100，停在{p4}",
+        "server_ladder_log": "{p1} {p2}转出{p3}：从{p4}沿梯子上升到{p5}（{p6}）",
+        "server_chute_log": "{p1} {p2}转出{p3}：从{p4}沿滑道下降到{p5}（{p6}）",
+        "server_move_log": "{p1} {p2}转出{p3}：{p4} -> {p5}"
+      }
+    },
+    "hi": {
+      "display_name": "साँप-सीढ़ी (घोषणात्मक)",
+      "short_description": "2 से 4 खिलाड़ियों के लिए बारी-बारी से खेली जाने वाली दौड़। स्पिनर घुमाएँ, सीढ़ियों से ऊपर जाएँ और साँपों से नीचे फिसलें।",
+      "game_logic_rules": "अपनी गोटी को शुरुआती स्थान से 100वें खाने तक ले जाएँ। स्पिनर घुमाकर उतने खाने चलें; सीढ़ी के नीचे पहुँचने पर ऊपर जाएँ और साँप के सिर पर पहुँचने पर नीचे फिसलें। 100वें खाने पर पहले पहुँचने वाला जीतता है।",
+      "game_ui_rules": "शुरुआत में गोटी चुनें, फिर अपनी बारी पर घुमाएँ दबाएँ। बोर्ड खिलाड़ियों की स्थिति, सीढ़ियाँ और साँप दिखाता है।",
+      "tutorial_strings": {
+        "How to play": "कैसे खेलें",
+        "Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.": "अपनी गोटी को शुरुआती स्थान से 100वें खाने तक ले जाएँ। स्पिनर घुमाकर उतने खाने चलें; सीढ़ी के नीचे पहुँचने पर ऊपर जाएँ और साँप के सिर पर पहुँचने पर नीचे फिसलें। 100वें खाने पर पहले पहुँचने वाला जीतता है।",
+        "Choose a token during setup, then tap Spin on your turn. The board shows each player's position and the ladders and chutes.": "शुरुआत में गोटी चुनें, फिर अपनी बारी पर घुमाएँ दबाएँ। बोर्ड खिलाड़ियों की स्थिति, सीढ़ियाँ और साँप दिखाता है।"
+      },
+      "client_strings": {
+        "text_0": "घोषणात्मक",
+        "text_1": "खिलाड़ी {n}",
+        "text_2": "आपकी बारी · {name}",
+        "text_3": "{name} की बारी",
+        "text_4": "खेल समाप्त",
+        "text_5": "विजेता: {name}",
+        "text_6": "आपका बेड़ा",
+        "text_7": "लक्ष्य जलक्षेत्र",
+        "text_8": "बेड़ा रखें और युद्ध शुरू करें",
+        "text_9": "जहाज़ों के बीच खाली पानी छोड़कर मान्य बेड़ा रखता है।",
+        "text_10": "चिह्नित गोटी से अगली मार जारी रखें।",
+        "text_11": "मारना अनिवार्य है।",
+        "text_12": "तिरछा चलें; राजा दोनों दिशाओं में चल सकता है।",
+        "text_13": "वज़ीर",
+        "text_14": "हाथी",
+        "text_15": "ऊँट",
+        "text_16": "घोड़ा",
+        "text_17": "{square} पर {piece} में पदोन्नत करें",
+        "text_18": "इस सेना को हटाएँ",
+        "text_19": "पास करें (कोई वैध चाल नहीं)",
+        "text_20": "हार मानें",
+        "text_21": "प्यादा चलें",
+        "text_22": "दीवार रखें",
+        "text_23": "बची दीवारें · {counts}",
+        "text_24": "ऊपर का पत्ता {card} · रंग {suit} · खींचने के लिए {n} पत्ते",
+        "text_25": "{card} को {suit} के रूप में खेलें",
+        "text_26": "{card} खेलें",
+        "text_27": "एक पत्ता खींचें ({n} बचे)",
+        "text_28": "{name} से {rank} माँगें",
+        "text_29": "पत्ते खींचें",
+        "text_30": "पास करें",
+        "text_31": "{name} · पूरे समूह {ranks}",
+        "text_32": "हाथ समेटें",
+        "text_33": "आपका पात्र: {name}",
+        "text_34": "आपका पात्र गोपनीय है",
+        "text_35": "पूछें: {question}",
+        "text_36": "हाँ",
+        "text_37": "नहीं",
+        "text_38": "{name}: {character} का अनुमान · {result}",
+        "text_39": "सही",
+        "text_40": "गलत",
+        "text_41": "क्या चश्मा पहने हैं?",
+        "text_42": "क्या टोपी पहने हैं?",
+        "text_43": "क्या चेहरे पर दाढ़ी या मूँछ है?",
+        "text_44": "क्या कान दिखाई दे रहे हैं?",
+        "text_45": "क्या बाल सुनहरे हैं?",
+        "text_46": "क्या बाल भूरे हैं?",
+        "text_47": "क्या बाल काले हैं?",
+        "text_48": "क्या बाल लाल हैं?",
+        "text_49": "क्या बाल सफ़ेद या स्लेटी हैं?",
+        "text_50": "क्या बाल लंबे हैं?",
+        "text_51": "क्या बाल छोटे हैं?",
+        "text_52": "क्या आँखें नीली हैं?",
+        "text_53": "क्या आँखें भूरी हैं?",
+        "text_54": "क्या आँखें हरी हैं?",
+        "text_55": "पंक्ति {r}, स्तंभ {c} की गोटी चुनें",
+        "text_56": "पंक्ति {r}, स्तंभ {c} पर चलें",
+        "text_57": "घुमाएँ",
+        "text_58": "पत्थर रखें",
+        "text_59": "ड्रॉ का दावा करें",
+        "text_60": "जारी रखें",
+        "text_61": "{n} को हटाएँ",
+        "text_62": "अनुमान रीसेट करें",
+        "title": "साँप-सीढ़ी (घोषणात्मक)",
+        "server_not_seated": "आप इस खेल में शामिल नहीं हैं",
+        "server_game_over": "खेल समाप्त हो गया है",
+        "server_spin_to_roll_off": "पहले खेलने का क्रम तय करने के लिए स्पिनर घुमाएँ",
+        "server_not_your_roll_off_turn": "क्रम तय करने की बारी आपकी नहीं है",
+        "server_already_rolled": "आप पहले ही घुमा चुके हैं",
+        "server_pick_a_piece": "एक गोटी चुनें",
+        "server_selection_order_error": "चुनने के क्रम में त्रुटि",
+        "server_not_your_pick": "चुनने की बारी आपकी नहीं है",
+        "server_bad_piece": "अमान्य गोटी",
+        "server_piece_taken": "यह गोटी पहले ही चुनी जा चुकी है",
+        "server_spin_on_your_turn": "अपनी बारी में स्पिनर घुमाएँ",
+        "server_not_your_turn": "अभी आपकी बारी नहीं है",
+        "server_unknown_phase": "अज्ञात चरण",
+        "server_rolloff_log": "पहली बारी तय करने के लिए {p1} ने {p2} घुमाया",
+        "server_exact_finish_log": "{p1} {p2} ने {p3} घुमाया, लेकिन 100 तक पहुँचने के लिए सही संख्या चाहिए; {p4} पर ही रहेगा",
+        "server_ladder_log": "{p1} {p2} ने {p3} घुमाया: {p4} से सीढ़ी चढ़कर {p5} पर पहुँचा ({p6})",
+        "server_chute_log": "{p1} {p2} ने {p3} घुमाया: {p4} से फिसलकर {p5} पर पहुँचा ({p6})",
+        "server_move_log": "{p1} {p2} ने {p3} घुमाया: {p4} -> {p5}"
+      }
+    },
+    "ar": {
+      "display_name": "السلم والثعبان (تصريحي)",
+      "short_description": "سباق بالأدوار من لاعبين إلى أربعة. أدر المؤشر، واصعد السلالم وانزل عبر المزالق.",
+      "game_logic_rules": "حرّك قطعتك من البداية نحو المربع 100. أدر المؤشر للتحرك؛ اصعد إذا وصلت إلى أسفل سلم، وانزل إذا وصلت إلى أعلى منزلق. يفوز أول من يصل إلى المربع 100.",
+      "game_ui_rules": "اختر قطعة أثناء الإعداد ثم اضغط على التدوير في دورك. يعرض اللوح المواقع والسلالم والمزالق.",
+      "tutorial_strings": {
+        "How to play": "طريقة اللعب",
+        "Move your token from the start toward square 100. Spin to move the indicated number of spaces; climb a ladder when you land at its base and slide down a chute when you land at its top. The first player to reach square 100 wins.": "حرّك قطعتك من البداية نحو المربع 100. أدر المؤشر للتحرك؛ اصعد إذا وصلت إلى أسفل سلم، وانزل إذا وصلت إلى أعلى منزلق. يفوز أول من يصل إلى المربع 100.",
+        "Choose a token during setup, then tap Spin on your turn. The board shows each player's position and the ladders and chutes.": "اختر قطعة أثناء الإعداد ثم اضغط على التدوير في دورك. يعرض اللوح المواقع والسلالم والمزالق."
+      },
+      "client_strings": {
+        "text_0": "تصريحي",
+        "text_1": "اللاعب {n}",
+        "text_2": "دورك · {name}",
+        "text_3": "دور {name}",
+        "text_4": "انتهت اللعبة",
+        "text_5": "الفائز: {name}",
+        "text_6": "أسطولك",
+        "text_7": "مياه الهدف",
+        "text_8": "وضع الأسطول وبدء المعركة",
+        "text_9": "يضع أسطولًا صالحًا مع مياه فاصلة بين السفن.",
+        "text_10": "تابع الأسر بالقطعة المظللة.",
+        "text_11": "الأسر إجباري.",
+        "text_12": "تحرك قطريًا؛ تتحرك الملوك في الاتجاهين.",
+        "text_13": "وزير",
+        "text_14": "رخ",
+        "text_15": "فيل",
+        "text_16": "حصان",
+        "text_17": "ترقية في {square} إلى {piece}",
+        "text_18": "إقصاء هذا الجيش",
+        "text_19": "تمرير (لا حركة قانونية)",
+        "text_20": "استسلام",
+        "text_21": "تحريك البيدق",
+        "text_22": "وضع جدار",
+        "text_23": "الجدران المتبقية · {counts}",
+        "text_24": "الورقة العليا {card} · النوع {suit} · {n} أوراق للسحب",
+        "text_25": "العب {card} بنوع {suit}",
+        "text_26": "العب {card}",
+        "text_27": "اسحب ورقة (متبقي {n})",
+        "text_28": "اطلب {rank} من {name}",
+        "text_29": "سحب أوراق",
+        "text_30": "تمرير",
+        "text_31": "{name} · المجموعات {ranks}",
+        "text_32": "جمع اللمة",
+        "text_33": "شخصيتك: {name}",
+        "text_34": "شخصيتك سرية",
+        "text_35": "اسأل: {question}",
+        "text_36": "نعم",
+        "text_37": "لا",
+        "text_38": "{name}: خمن {character} · {result}",
+        "text_39": "صحيح",
+        "text_40": "غير صحيح",
+        "text_41": "هل ترتدي نظارة؟",
+        "text_42": "هل ترتدي قبعة؟",
+        "text_43": "هل لديها شعر في الوجه؟",
+        "text_44": "هل أذناها ظاهرتان؟",
+        "text_45": "هل شعرها أشقر؟",
+        "text_46": "هل شعرها بني؟",
+        "text_47": "هل شعرها أسود؟",
+        "text_48": "هل شعرها أحمر؟",
+        "text_49": "هل شعرها رمادي؟",
+        "text_50": "هل شعرها طويل؟",
+        "text_51": "هل شعرها قصير؟",
+        "text_52": "هل عيناها زرقاوان؟",
+        "text_53": "هل عيناها بنيتان؟",
+        "text_54": "هل عيناها خضراوان؟",
+        "text_55": "اختر قطعة الصف {r} والعمود {c}",
+        "text_56": "تحرك إلى الصف {r} والعمود {c}",
+        "text_57": "تدوير",
+        "text_58": "ضع حجرًا",
+        "text_59": "المطالبة بالتعادل",
+        "text_60": "متابعة",
+        "text_61": "خذ {n}",
+        "text_62": "إعادة تعيين التخمين",
+        "title": "السلم والثعبان (تصريحي)",
+        "server_not_seated": "أنت لست مشاركًا في اللعبة",
+        "server_game_over": "انتهت اللعبة",
+        "server_spin_to_roll_off": "أدر المؤشر لتحديد ترتيب اللعب",
+        "server_not_your_roll_off_turn": "ليس دورك لتحديد الترتيب",
+        "server_already_rolled": "لقد أدرت المؤشر بالفعل",
+        "server_pick_a_piece": "اختر قطعة",
+        "server_selection_order_error": "خطأ في ترتيب الاختيار",
+        "server_not_your_pick": "ليس دورك للاختيار",
+        "server_bad_piece": "قطعة غير صالحة",
+        "server_piece_taken": "تم اختيار هذه القطعة بالفعل",
+        "server_spin_on_your_turn": "أدر المؤشر في دورك",
+        "server_not_your_turn": "ليس دورك",
+        "server_unknown_phase": "مرحلة غير معروفة",
+        "server_rolloff_log": "أدار {p1} المؤشر وظهرت {p2} لتحديد البداية",
+        "server_exact_finish_log": "أدار {p1} {p2} وظهرت {p3}، لكن يلزم الرقم الدقيق للوصول إلى 100؛ يبقى في {p4}",
+        "server_ladder_log": "أدار {p1} {p2} وظهرت {p3}: يصعد من {p4} إلى {p5} عبر السلم ({p6})",
+        "server_chute_log": "أدار {p1} {p2} وظهرت {p3}: ينزلق من {p4} إلى {p5} ({p6})",
+        "server_move_log": "أدار {p1} {p2} وظهرت {p3}: {p4} -> {p5}"
+      }
+    }
+  },
+  "game_addition_request_id_and_secret": "example-only-archive-html-chutes_ladders-replace-before-publishing",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 620,
+      "height": 720
+    },
+    "boards": [
+      {
+        "id": "main",
+        "kind": "grid",
+        "x": 20,
+        "y": 112,
+        "width": 560,
+        "height": 560,
+        "rows": 10,
+        "columns": 10,
+        "color": "#f3e8c8",
+        "alternate_color": "#e2d3a8",
+        "line_color": "#718096"
+      }
+    ],
+    "piece_types": {
+      "card": {
+        "shape": "card",
+        "width": 60,
+        "height": 82,
+        "color": "#fffdf6",
+        "text_color": "#172033",
+        "border_color": "#667085"
+      },
+      "played": {
+        "shape": "card",
+        "width": 58,
+        "height": 78,
+        "color": "#f8fafc",
+        "text_color": "#172033",
+        "border_color": "#667085"
+      },
+      "square": {
+        "shape": "rect",
+        "width": 48,
+        "height": 48,
+        "color": "#e8edf4",
+        "text_color": "#23334b"
+      },
+      "token_0": {
+        "shape": "circle",
+        "width": 27,
+        "height": 27,
+        "color": "#dc2626",
+        "text_color": "#ffffff"
+      },
+      "token_1": {
+        "shape": "circle",
+        "width": 27,
+        "height": 27,
+        "color": "#2563eb",
+        "text_color": "#ffffff"
+      },
+      "token_2": {
+        "shape": "circle",
+        "width": 27,
+        "height": 27,
+        "color": "#16a34a",
+        "text_color": "#ffffff"
+      },
+      "token_3": {
+        "shape": "circle",
+        "width": 27,
+        "height": 27,
+        "color": "#9333ea",
+        "text_color": "#ffffff"
+      }
+    },
+    "strings": {
+      "text_0": "Declarative",
+      "text_1": "Player {n}",
+      "text_2": "Your turn · {name}",
+      "text_3": "{name} to play",
+      "text_4": "Game over",
+      "text_5": "Winner: {name}",
+      "text_6": "Your fleet",
+      "text_7": "Target waters",
+      "text_8": "Place fleet and start battle",
+      "text_9": "Places a valid fleet with clear water between ships.",
+      "text_10": "Continue the capture with the highlighted checker.",
+      "text_11": "A capture is required.",
+      "text_12": "Move diagonally; kings move either direction.",
+      "text_13": "queen",
+      "text_14": "rook",
+      "text_15": "bishop",
+      "text_16": "knight",
+      "text_17": "Promote at {square} to {piece}",
+      "text_18": "Eliminate this army",
+      "text_19": "Pass (no legal move)",
+      "text_20": "Resign",
+      "text_21": "Move pawn",
+      "text_22": "Place wall",
+      "text_23": "Walls remaining · {counts}",
+      "text_24": "Top card {card} · suit {suit} · {n} cards to draw",
+      "text_25": "Play {card} as {suit}",
+      "text_26": "Play {card}",
+      "text_27": "Draw a card ({n} left)",
+      "text_28": "Ask {name} for {rank}",
+      "text_29": "Draw cards",
+      "text_30": "Pass",
+      "text_31": "{name} · books {ranks}",
+      "text_32": "Collect trick",
+      "text_33": "Your character: {name}",
+      "text_34": "Your character is private",
+      "text_35": "Ask: {question}",
+      "text_36": "Yes",
+      "text_37": "No",
+      "text_38": "{name}: guessed {character} · {result}",
+      "text_39": "correct",
+      "text_40": "incorrect",
+      "text_41": "Are they wearing glasses?",
+      "text_42": "Are they wearing a hat?",
+      "text_43": "Do they have facial hair?",
+      "text_44": "Are their ears showing?",
+      "text_45": "Do they have blonde hair?",
+      "text_46": "Do they have brown hair?",
+      "text_47": "Do they have black hair?",
+      "text_48": "Do they have red hair?",
+      "text_49": "Do they have gray hair?",
+      "text_50": "Do they have long hair?",
+      "text_51": "Do they have short hair?",
+      "text_52": "Do they have blue eyes?",
+      "text_53": "Do they have brown eyes?",
+      "text_54": "Do they have green eyes?",
+      "text_55": "Select piece at row {r}, column {c}",
+      "text_56": "Move to row {r}, column {c}",
+      "text_57": "Spin",
+      "text_58": "Place stone",
+      "text_59": "Claim draw",
+      "text_60": "Continue",
+      "text_61": "Take {n}",
+      "text_62": "Reset guess",
+      "title": "Chutes & Ladders (Declarative)",
+      "server_not_seated": "not seated",
+      "server_game_over": "game over",
+      "server_spin_to_roll_off": "spin to roll off",
+      "server_not_your_roll_off_turn": "not your roll-off turn",
+      "server_already_rolled": "already rolled",
+      "server_pick_a_piece": "pick a piece",
+      "server_selection_order_error": "selection order error",
+      "server_not_your_pick": "not your pick",
+      "server_bad_piece": "bad piece",
+      "server_piece_taken": "piece taken",
+      "server_spin_on_your_turn": "spin on your turn",
+      "server_not_your_turn": "not your turn",
+      "server_unknown_phase": "unknown phase",
+      "server_rolloff_log": "{p1} rolled {p2} for first turn",
+      "server_exact_finish_log": "{p1} {p2} spun {p3} but needs exact to reach 100 - stays on {p4}",
+      "server_ladder_log": "{p1} {p2} spun {p3}: {p4} climbs to {p5} ({p6})",
+      "server_chute_log": "{p1} {p2} spun {p3}: {p4} slides to {p5} ({p6})",
+      "server_move_log": "{p1} {p2} spun {p3}: {p4} -> {p5}"
+    },
+    "ui_code": "const KIND=\"chutes_ladders\";\nconst SOURCE_STRINGS={\"title\":\"Chutes & Ladders (Declarative)\"};\nconst SOURCE_KEYS={\"Declarative\":\"text_0\",\"Player {n}\":\"text_1\",\"Your turn · {name}\":\"text_2\",\"{name} to play\":\"text_3\",\"Game over\":\"text_4\",\"Winner: {name}\":\"text_5\",\"Your fleet\":\"text_6\",\"Target waters\":\"text_7\",\"Place fleet and start battle\":\"text_8\",\"Places a valid fleet with clear water between ships.\":\"text_9\",\"Continue the capture with the highlighted checker.\":\"text_10\",\"A capture is required.\":\"text_11\",\"Move diagonally; kings move either direction.\":\"text_12\",\"queen\":\"text_13\",\"rook\":\"text_14\",\"bishop\":\"text_15\",\"knight\":\"text_16\",\"Promote at {square} to {piece}\":\"text_17\",\"Eliminate this army\":\"text_18\",\"Pass (no legal move)\":\"text_19\",\"Resign\":\"text_20\",\"Move pawn\":\"text_21\",\"Place wall\":\"text_22\",\"Walls remaining · {counts}\":\"text_23\",\"Top card {card} · suit {suit} · {n} cards to draw\":\"text_24\",\"Play {card} as {suit}\":\"text_25\",\"Play {card}\":\"text_26\",\"Draw a card ({n} left)\":\"text_27\",\"Ask {name} for {rank}\":\"text_28\",\"Draw cards\":\"text_29\",\"Pass\":\"text_30\",\"{name} · books {ranks}\":\"text_31\",\"Collect trick\":\"text_32\",\"Your character: {name}\":\"text_33\",\"Your character is private\":\"text_34\",\"Ask: {question}\":\"text_35\",\"Yes\":\"text_36\",\"No\":\"text_37\",\"{name}: guessed {character} · {result}\":\"text_38\",\"correct\":\"text_39\",\"incorrect\":\"text_40\",\"Are they wearing glasses?\":\"text_41\",\"Are they wearing a hat?\":\"text_42\",\"Do they have facial hair?\":\"text_43\",\"Are their ears showing?\":\"text_44\",\"Do they have blonde hair?\":\"text_45\",\"Do they have brown hair?\":\"text_46\",\"Do they have black hair?\":\"text_47\",\"Do they have red hair?\":\"text_48\",\"Do they have gray hair?\":\"text_49\",\"Do they have long hair?\":\"text_50\",\"Do they have short hair?\":\"text_51\",\"Do they have blue eyes?\":\"text_52\",\"Do they have brown eyes?\":\"text_53\",\"Do they have green eyes?\":\"text_54\",\"Select piece at row {r}, column {c}\":\"text_55\",\"Move to row {r}, column {c}\":\"text_56\",\"Spin\":\"text_57\",\"Place stone\":\"text_58\",\"Claim draw\":\"text_59\",\"Continue\":\"text_60\",\"Take {n}\":\"text_61\",\"Reset guess\":\"text_62\"};\n// Presentation for ten archived HTML games converted to the portable scene UI.\r\nconst gameUI = {\r\n  reduce(message, localState) {\r\n    const m = message.type === 'ui_event' ? message.state_changed : message;\r\n    const s = m.view || m.state || {};\r\n    const active = m.status === 'ongoing' && !m.replay &&\r\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\r\n    const scene = {pieces: [], targets: [], controls: [], labels: [], paths: []};\r\n    const offers = [];\r\n    const seat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0;\r\n    const click = message.type === 'ui_event' && message.event?.type === 'tap'\r\n      ? String(message.event.id || '') : '';\r\n    const localValid = localState && localState.move_count === m.move_count &&\r\n      localState.viewer === seat;\r\n    const text = (source, values = {}) =>\r\n      String(m.strings?.[SOURCE_KEYS[source]] ?? source).replace(/\\{(\\w+)\\}/g,\r\n        (match, key) => values[key] == null ? match : String(values[key]));\r\n    const names = (m.players || []).map((p, i) => p.name || text('Player {n}', {n:i + 1}));\r\n    const title = m.strings?.title || SOURCE_STRINGS.title || KIND;\r\n    const playerName = i => names[i] || text('Player {n}', {n:i + 1});\r\n    const label = (id, value, x, y, font_size = 14) =>\r\n      scene.labels.push({id, text:String(value), x, y, font_size});\r\n    const staticPiece = (id, type, board, position, extra = {}) =>\r\n      scene.pieces.push(Object.assign({id, type, board, position, actions:[]}, extra));\r\n    const offer = (move, value, board, position, mode = 'control', aria_label) => {\r\n      if (!active) return null;\r\n      const id = `intent_${offers.length}`;\r\n      offers.push(move);\r\n      if (mode === 'target') {\r\n        scene.targets.push({id, board, position, label:String(value || '•'),\r\n          ...(aria_label ? {aria_label} : {})});\r\n      } else if (mode === 'piece') {\r\n        scene.pieces.push({id, type:'card', board, position, text:String(value),\r\n          actions:['tap'], ...(aria_label ? {aria_label} : {})});\r\n      } else {\r\n        scene.controls.push({id, kind:'button', label:String(value)});\r\n      }\r\n      return id;\r\n    };\r\n    const cardText = card => {\r\n      if (typeof card === 'string') return card.replace(/S$/, '♠').replace(/H$/, '♥')\r\n        .replace(/D$/, '♦').replace(/C$/, '♣');\r\n      if (card && typeof card === 'object') {\r\n        const ranks = {11:'J',12:'Q',13:'K',14:'A'};\r\n        const suits = ['♠','♥','♦','♣'];\r\n        return `${ranks[card.rank] || card.rank}${suits[card.suit] || ''}`;\r\n      }\r\n      return String(card ?? '');\r\n    };\r\n    const cardPos = i => ({x:36 + (i % 8) * 67,y:125 + Math.floor(i / 8) * 94});\r\n    const boardCell = (i, columns) => ({cell:String(i)});\r\n    const handLabel = hand => Array.isArray(hand) ? hand.map(cardText).join(' ') : '';\r\n    label('title', title, 22, 16, 25);\r\n    if (Number.isInteger(s.to_move) || Number.isInteger(s.toMove) ||\r\n        Number.isInteger(s.turn) || Number.isInteger(s.turnSeat)) {\r\n      const turn = Number.isInteger(s.to_move) ? s.to_move :\r\n        Number.isInteger(s.toMove) ? s.toMove :\r\n          Number.isInteger(s.turn) ? s.turn : s.turnSeat;\r\n      label('status', m.status === 'over' ? text('Game over') :\r\n        (active ? text('Your turn · {name}', {name:playerName(turn)}) :\r\n          text('{name} to play', {name:playerName(turn)})), 22, 52, 16);\r\n    }\r\n\r\n    let selectedSize = localValid ? localState.selectedSize : null;\r\n    let selectedFrom = localValid ? localState.selectedFrom : null;\r\n    let draft = localValid && Array.isArray(localState.draft) ? localState.draft.slice() : null;\r\n    let dosPlacements = localValid && Array.isArray(localState.dosPlacements)\r\n      ? localState.dosPlacements.slice() : [];\r\n    let dosBonus = localValid && Array.isArray(localState.dosBonus) ? localState.dosBonus.slice() : [];\r\n    if (KIND === 'gobblet') {\r\n      const reserve = /^reserve_(\\d+)$/.exec(click);\r\n      const source = /^source_(\\d+)$/.exec(click);\r\n      if (reserve) { selectedSize = Number(reserve[1]); selectedFrom = null; }\r\n      if (source) { selectedFrom = Number(source[1]); selectedSize = null; }\r\n    }\r\n    if (KIND === 'six_mens_morris') {\r\n      if (click === 'reserve_place') selectedFrom = -1;\r\n      const source = /^source_(\\d+)$/.exec(click);\r\n      if (source) selectedFrom = Number(source[1]);\r\n    }\r\n    if (KIND === 'mastermind') {\r\n      const peg = /^peg_(\\d+)_(\\d+)$/.exec(click);\r\n      if (peg) {\r\n        draft = Array.isArray(draft) ? draft : [-1,-1,-1,-1];\r\n        const slot = Number(peg[1]);\r\n        if (slot === draft.indexOf(-1)) draft[slot] = Number(peg[2]);\r\n      }\r\n      if (click === 'reset_draft') draft = [-1,-1,-1,-1];\r\n    }\r\n    if (KIND === 'dos') {\r\n      const selected = /^dos_pick_(\\d+)_/.exec(click);\r\n      if (selected) {\r\n        const placement = s.legal_placements?.[Number(selected[1])];\r\n        const usedPiles = new Set(dosPlacements.map(item => item.pile));\r\n        const usedCards = new Set(dosPlacements.flatMap(item => (item.cards || []).map(card => card.i)));\r\n        if (placement && !usedPiles.has(placement.pile) &&\r\n            !(placement.cards || []).some(card => usedCards.has(card.i))) {\r\n          dosPlacements.push(placement);\r\n          const nowUsed = new Set(dosPlacements.flatMap(item => (item.cards || []).map(card => card.i)));\r\n          dosBonus = dosBonus.filter(index => !nowUsed.has(index));\r\n        }\r\n      }\r\n      const bonus = /^dos_bonus_(\\d+)$/.exec(click);\r\n      if (bonus) {\r\n        const index = Number(bonus[1]);\r\n        dosBonus = dosBonus.includes(index) ? dosBonus.filter(item => item !== index) : [...dosBonus,index];\r\n      }\r\n    }\r\n\r\n    if (KIND === 'mau_mau') {\r\n      const hand = Array.isArray(s.hand) ? s.hand : [];\r\n      const playable = new Set(s.legal_plays || []);\r\n      label('discard', text('Top card {card} · suit {suit} · {n} cards to draw',\r\n        {card:cardText(s.discard_top), suit:s.top_suit || '', n:s.stock_count || 0}), 22, 92, 15);\r\n      hand.forEach((card, i) => {\r\n        const value = cardText(card);\r\n        if (playable.has(card)) {\r\n          if (/^J/.test(card)) {\r\n            staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text:value});\r\n            for (const suit of ['S','H','D','C'])\r\n              offer({type:'play',card,suit}, text('Play {card} as {suit}',\r\n                {card:value,suit:{S:'♠',H:'♥',D:'♦',C:'♣'}[suit]}));\r\n          } else offer({type:'play',card}, text('Play {card}', {card:value}),\r\n            'table', cardPos(i), 'piece');\r\n        } else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text:value});\r\n      });\r\n      if (active && s.drew == null && s.stock_count > 0)\r\n        offer({type:'draw'}, text('Draw a card ({n} left)', {n:s.stock_count}));\r\n      if (active && s.drew != null) offer({type:'pass'}, text('Pass'));\r\n      label('hand-counts', (s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),\r\n        22, 470, 14);\r\n    } else if (KIND === 'dos') {\r\n      const hand = Array.isArray(s.hand) ? s.hand : [];\r\n      (s.center || []).forEach((card, i) =>\r\n        staticPiece(`center_${i}`, 'played', 'table', {x:250 + i * 70,y:100},\r\n          {text:cardText(card.id || card)}));\r\n      hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i),\r\n        {text:cardText(card)}));\r\n      const placements = s.legal_placements || [];\r\n      const usedPiles = new Set(dosPlacements.map(item => item.pile));\r\n      const usedCards = new Set(dosPlacements.flatMap(item => (item.cards || []).map(card => card.i)));\r\n      const selectable = placements.map((placement,index) => ({placement,index})).filter(({placement}) =>\r\n        !usedPiles.has(placement.pile) &&\r\n        !(placement.cards || []).some(card => usedCards.has(card.i)));\r\n      const colorMatches = dosPlacements.filter(placement => placement.colorMatch).length;\r\n      const bonusChoices = hand.map((card,index) => ({card,index})).filter(item =>\r\n        !usedCards.has(item.index));\r\n      if (active) selectable.forEach(({placement,index}) => {\r\n        const selected = (placement.cards || []).map(ref => cardText(hand[ref.i])).join(' + ');\r\n        const value = `${selected} → ${placement.pile + 1}`;\r\n        scene.controls.push({id:`dos_pick_${index}_${placement.pile}_${(placement.cards || []).map(card => card.i).join('_')}`,\r\n          kind:'button',label:text('Play {card}',{card:value})});\r\n      });\r\n      if (active && dosPlacements.length) {\r\n        const bonusRefs = dosBonus.map(index => {\r\n          const card = String(hand[index] || '');\r\n          return card.endsWith('#') ? {i:index,num:1} : card === 'WD' ? {i:index,color:'R'} : {i:index};\r\n        });\r\n        const movePlacements = dosPlacements.map(placement => ({pile:placement.pile,cards:placement.cards,\r\n          ...(placement.centerNum !== undefined ? {centerNum:placement.centerNum} : {}),\r\n          ...(placement.centerColor !== undefined ? {centerColor:placement.centerColor} : {})}));\r\n        offer({type:'match',placements:movePlacements,bonus:bonusRefs},text('Continue'));\r\n        if (colorMatches) bonusChoices.forEach(({card,index}) => {\r\n          if (dosBonus.includes(index) || dosBonus.length < colorMatches)\r\n            scene.controls.push({id:`dos_bonus_${index}`,kind:'button',\r\n              label:text('Play {card}',{card:`${dosBonus.includes(index) ? '✓ ' : ''}${cardText(card)}`})});\r\n        });\r\n        label('match-selection',`Matches · ${dosPlacements.length}   Bonus discards · ${dosBonus.length}/${Math.min(colorMatches,bonusChoices.length)}`,\r\n          22,500,14);\r\n      }\r\n      if (active && s.phase === 'play')\r\n        offer({type:'draw'}, text('Draw a card ({n} left)', {n:s.deck_count || 0}));\r\n      if (active && s.phase === 'after_draw') offer({type:'pass'}, text('Pass'));\r\n      if (active && s.phase === 'add_center') hand.forEach((card, i) =>\r\n        offer({type:'add_center',card:{i}}, text('Play {card}', {card:cardText(card)})));\r\n      label('counts', (s.hand_counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),\r\n        22, 470, 14);\r\n    } else if (KIND === 'kisolo') {\r\n      const rows = s.rows || [];\r\n      for (let r = 0; r < 4; r++) for (let c = 0; c < 7; c++) {\r\n        const i = r * 7 + c, value = rows[r]?.[c] ?? 0;\r\n        staticPiece(`pit_${i}`, 'pit', 'main', boardCell(i,7), {text:String(value)});\r\n      }\r\n      for (const pit of s.legal_pits || []) {\r\n        const r = Math.floor(pit / 7), c = pit % 7;\r\n        offer({pit}, text('Move to row {r}, column {c}', {r:r + 1,c:c + 1}),\r\n          'main', boardCell(pit,7), 'target');\r\n      }\r\n      label('pit-guide', `P1: ${handLabel(rows[0] || [])}  ·  P2: ${handLabel(rows[3] || [])}`,\r\n        22, 420, 13);\r\n    } else if (KIND === 'thirty_one') {\r\n      const hand = Array.isArray(s.hand) ? s.hand : [];\r\n      hand.forEach((card, i) => {\r\n        if (active && (s.phase === 'discard' || s.phase === 'final_discard'))\r\n          offer({action:'discard',card}, text('Play {card}', {card:cardText(card)}),\r\n            'table', cardPos(i), 'piece');\r\n        else staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text:cardText(card)});\r\n      });\r\n      if (active && (s.phase === 'draw' || s.phase === 'final_draw')) {\r\n        if (s.stock_count > 0) offer({action:'draw',source:'stock'},\r\n          text('Draw a card ({n} left)', {n:s.stock_count}));\r\n        if (s.discard_top) offer({action:'draw',source:'discard'},\r\n          text('Play {card}', {card:cardText(s.discard_top)}));\r\n        if (s.phase === 'draw') offer({action:'knock'}, text('Pass'));\r\n        if (s.phase === 'final_draw') offer({action:'stand'}, text('Pass'));\r\n      }\r\n      label('scores', (s.scores || []).map((score,i) => score == null ? '' :\r\n        `${playerName(i)} · ${score}`).filter(Boolean).join('   '), 22, 465, 14);\r\n    } else if (KIND === 'gobblet') {\r\n      const moves = s.legal_moves || [];\r\n      const board = s.board || [];\r\n      board.forEach((stack, cell) => {\r\n        (stack || []).forEach((goblet, level) => staticPiece(`stack_${cell}_${level}`,\r\n          `goblet_${goblet[0]}_${goblet[1]}`, 'main', boardCell(cell,4),\r\n          {text:String(goblet[0]),z:level}));\r\n      });\r\n      if (active) {\r\n        for (let size = 1; size <= 4; size++) if ((s.reserves?.[seat]?.[size - 1] || 0) > 0)\r\n          scene.controls.push({id:`reserve_${size}`,kind:'button',\r\n            label:text('Play {card}',{card:`${size} · ${s.reserves[seat][size - 1]}`})});\r\n        for (let cell = 0; cell < 16; cell++) {\r\n          const top = (board[cell] || []).slice(-1)[0];\r\n          if (top && top[1] === seat && moves.some(move => move.move?.from === cell))\r\n            scene.targets.push({id:`source_${cell}`,board:'main',position:boardCell(cell,4),\r\n              label:'◇',aria_label:text('Select piece at row {r}, column {c}',\r\n                {r:Math.floor(cell / 4) + 1,c:cell % 4 + 1})});\r\n        }\r\n        moves.forEach(move => {\r\n          if (move.place && selectedSize === move.place.size)\r\n            offer(move, String(move.place.size), 'main', boardCell(move.place.cell,4), 'target');\r\n          if (move.move && selectedFrom === move.move.from)\r\n            offer(move, '•', 'main', boardCell(move.move.to,4), 'target');\r\n        });\r\n      }\r\n      label('reserves', (s.reserves || []).map((counts,i) =>\r\n        `${playerName(i)} · ${counts.join('/')}`).join('   '), 22, 505, 14);\r\n    } else if (KIND === 'chutes_ladders') {\r\n      const position = value => {\r\n        const row = Math.floor((value - 1) / 10), offset = (value - 1) % 10;\r\n        return {r:9 - row,c:row % 2 === 0 ? offset : 9 - offset};\r\n      };\r\n      for (let value = 1; value <= 100; value++) {\r\n        const p = position(value), cell = p.r * 10 + p.c;\r\n        staticPiece(`square_${value}`, 'square', 'main', boardCell(cell,10),\r\n          {text:String(value)});\r\n      }\r\n      const links = [[1,38],[4,14],[9,31],[21,42],[28,84],[36,44],[51,67],[71,91],[80,100],\r\n        [16,6],[47,26],[49,11],[56,53],[62,19],[64,60],[87,24],[93,73],[95,75],[98,78]];\r\n      for (const [from,to] of links) {\r\n        const a = position(from), b = position(to);\r\n        const center = p => ({x:48 + p.c * 56,y:126 + p.r * 56});\r\n        const start = center(a), end = center(b);\r\n        scene.paths.push({id:`link_${from}`,points:[start,end],\r\n          color:to > from ? '#22c55e' : '#f97316',width:5});\r\n      }\r\n      (s.positions || []).forEach((value,i) => {\r\n        if (value > 0) {\r\n          const p = position(value);\r\n          staticPiece(`token_${i}`, `token_${i % 4}`, 'main',\r\n            {cell:String(p.r * 10 + p.c)}, {text:String((s.pieces || {})[i] || i + 1),z:5+i});\r\n        }\r\n      });\r\n      if (active && s.phase === 'select') {\r\n        const used = new Set(Object.values(s.pieces || {}));\r\n        ['👑','🎩','🚢','🐶','🎒','🚗'].filter(piece => !used.has(piece)).forEach(piece =>\r\n          offer({kind:'select',emoji:piece}, piece));\r\n      } else if (active) offer({kind:'spin'}, `↻ ${text('Spin')}`);\r\n      const last = (s.log || []).slice(-3);\r\n      last.forEach((entry,i) => label(`log_${i}`,entry,22,710 + i * 18,12));\r\n    } else if (KIND === 'dots_boxes') {\r\n      const xy = (r,c) => ({x:100 + c * 120,y:135 + r * 120});\r\n      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {\r\n        const box = r * 3 + c, owner = s.boxes?.[box];\r\n        if (owner !== null && owner !== undefined)\r\n          staticPiece(`box_${box}`, `box_${owner}`, 'main',\r\n            {x:160 + c * 120,y:195 + r * 120},{text:playerName(owner).slice(0,1)});\r\n      }\r\n      for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++)\r\n        staticPiece(`dot_${r}_${c}`, 'dot', 'main', xy(r,c));\r\n      (s.edges || []).forEach((owner,edge) => {\r\n        if (owner === null || owner === undefined) return;\r\n        const horizontal = edge < 12;\r\n        const r = horizontal ? Math.floor(edge / 3) : Math.floor((edge - 12) / 4);\r\n        const c = horizontal ? edge % 3 : (edge - 12) % 4;\r\n        const a = horizontal ? xy(r,c) : xy(r,c);\r\n        const b = horizontal ? xy(r,c + 1) : xy(r + 1,c);\r\n        scene.paths.push({id:`edge_${edge}`,points:[a,b],\r\n          color:owner === 0 ? '#4aa3ff' : '#fb7185',width:7});\r\n      });\r\n      (s.legal_edges || []).forEach(edge => {\r\n        const horizontal = edge < 12;\r\n        const r = horizontal ? Math.floor(edge / 3) : Math.floor((edge - 12) / 4);\r\n        const c = horizontal ? edge % 3 : (edge - 12) % 4;\r\n        const a = xy(r,c), b = horizontal ? xy(r,c + 1) : xy(r + 1,c);\r\n        offer({edge}, '•', 'main', {x:(a.x + b.x) / 2,y:(a.y + b.y) / 2}, 'target');\r\n      });\r\n      const counts = [0,1].map(i => (s.boxes || []).filter(owner => owner === i).length);\r\n      label('scores', `${playerName(0)} · ${counts[0]}    ${playerName(1)} · ${counts[1]}`,\r\n        100, 635, 15);\r\n    } else if (KIND === 'mastermind') {\r\n      const colors = s.hexes || ['#e53935','#1e88e5','#43a047','#fdd835','#fb8c00','#8e24aa'];\r\n      draft = Array.isArray(draft) ? draft : [-1,-1,-1,-1];\r\n      draft.forEach((color,slot) => {\r\n        if (color >= 0)\r\n          staticPiece(`draft_${slot}`, `peg_${color}`, 'main',\r\n            {x:110 + slot * 90,y:150},{text:String(slot + 1),z:2});\r\n      });\r\n      const nextSlot = draft.indexOf(-1);\r\n      if (active && nextSlot >= 0) {\r\n        for (let option = 0; option < Math.min(6,colors.length); option++)\r\n          scene.pieces.push({id:`peg_${nextSlot}_${option}`,type:`peg_${option}`,board:'main',\r\n            position:{x:110 + nextSlot * 90,y:230 + option * 47},text:String(option + 1),\r\n            actions:['tap'],aria_label:`${nextSlot + 1}: ${colors[option]}`});\r\n      }\r\n      if (active) {\r\n        if (nextSlot < 0) {\r\n          const move = s.phase === 'set' ? {secret:draft} : {guess:draft};\r\n          offer(move, text('Play {card}', {card:draft.map(x => x + 1).join(' · ')}));\r\n        }\r\n        if (draft.some(color => color >= 0))\r\n          scene.controls.push({id:'reset_draft',kind:'button',label:text('Reset guess')});\r\n      }\r\n      (s.guesses || []).forEach((guess,i) => {\r\n        const y = 535 + i * 25;\r\n        (guess.code || []).forEach((color,slot) => staticPiece(`guess_${i}_${slot}`,\r\n          `peg_${color}`, 'main', {x:110 + slot * 52,y}));\r\n        label(`feedback_${i}`, `${guess.black} ●  ${guess.white} ○`, 355, y + 5, 13);\r\n      });\r\n      label('remaining', `Guesses · ${s.guesses_left ?? 0}`, 22, 105, 15);\r\n    } else if (KIND === 'old_maid') {\r\n      const hand = Array.isArray(s.hand) ? s.hand : [];\r\n      hand.forEach((card,i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i),\r\n        {text:cardText(card)}));\r\n      const opponent = 1 - seat, count = s.counts?.[opponent] || 0;\r\n      if (active) for (let i = 0; i < count; i++)\r\n        offer({draw:i}, text('Draw a card ({n} left)', {n:count}));\r\n      label('pairs', `Pairs · ${s.pairs ?? 0}`, 22, 470, 15);\r\n      label('opponent-count', `${playerName(opponent)} · ${count}`, 22, 495, 14);\r\n    } else if (KIND === 'six_mens_morris') {\r\n      const points = [\r\n        [70,70],[300,70],[530,70],[530,300],[530,530],[300,530],[70,530],[70,300],\r\n        [170,170],[300,170],[430,170],[430,300],[430,430],[300,430],[170,430],[170,300]\r\n      ];\r\n      const edges = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,0],\r\n        [8,9],[9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[15,8],\r\n        [1,9],[3,11],[5,13],[7,15]];\r\n      edges.forEach(([a,b],i) => scene.paths.push({id:`line_${i}`,\r\n        points:[{x:points[a][0],y:points[a][1]},{x:points[b][0],y:points[b][1]}],\r\n        color:'#64748b',width:5}));\r\n      const moves = s.moves || [];\r\n      (s.board || []).forEach((owner,point) => {\r\n        if (owner < 0) return;\r\n        staticPiece(`stone_${point}`, `stone_${owner}`, 'main',\r\n          {x:points[point][0],y:points[point][1]}, {text:String(point + 1)});\r\n        if (active && moves.some(move => move.from === point))\r\n          scene.targets.push({id:`source_${point}`,board:'main',\r\n            position:{x:points[point][0],y:points[point][1]},label:'◇',\r\n            aria_label:text('Select piece at row {r}, column {c}',\r\n              {r:point + 1,c:1})});\r\n      });\r\n      if (active && moves.some(move => move.from === -1))\r\n        scene.controls.push({id:'reserve_place',kind:'button',label:text('Place stone')});\r\n      const selectedMoves = moves.filter(move => move.from === selectedFrom);\r\n      const groups = new Map();\r\n      selectedMoves.filter(move => move.type === 'place' || move.type === 'slide').forEach(move => {\r\n        const key = String(move.to);\r\n        if (!groups.has(key)) groups.set(key,[]);\r\n        groups.get(key).push(move);\r\n      });\r\n      for (const [destination, group] of groups) {\r\n        if (group.length === 1) {\r\n          const move = group[0], p = points[move.to];\r\n          offer(move, move.take >= 0 ? '×' : '•', 'main', {x:p[0],y:p[1]}, 'target');\r\n        } else {\r\n          group.forEach(move => offer(move, text('Take {n}',{n:move.take + 1})));\r\n        }\r\n      }\r\n      moves.filter(move => move.type === 'claim_draw' || move.type === 'continue')\r\n        .forEach(move => offer(move, text(move.type === 'claim_draw' ? 'Claim draw' : 'Continue')));\r\n      label('counts', (s.counts || []).map((n,i) => `${playerName(i)} · ${n}`).join('   '),\r\n        22, 590, 14);\r\n    }\r\n\r\n    const match = /^intent_(\\d+)$/.exec(click);\r\n    const move = match && active ? offers[Number(match[1])] : undefined;\r\n    const nextLocal = {move_count:m.move_count,viewer:seat,selectedSize,selectedFrom,draft,\r\n      dosPlacements,dosBonus};\r\n    if (message.type === 'ui_event' && move !== undefined)\r\n      return {scene,local_state:nextLocal,make_move:move};\r\n    return {scene,local_state:nextLocal};\r\n  }\r\n};\r\n"
+  }
+}

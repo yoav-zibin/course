@@ -1,0 +1,706 @@
+{
+  "mau_mau": {
+    "english": {
+      "server_the_game_is_over": "the game is over",
+      "server_it_is_not_your_turn": "it is not your turn",
+      "server_send_a_play_draw_or_pass_move": "send a play, draw or pass move",
+      "server_that_is_not_a_valid_card": "that is not a valid card",
+      "server_that_is_not_a_valid_suit": "that is not a valid suit",
+      "server_that_card_is_not_in_your_hand": "that card is not in your hand",
+      "server_that_card_does_not_match_the_top_card": "that card does not match the top card",
+      "server_you_must_choose_a_suit_when_you_play_a_jack": "you must choose a suit when you play a jack",
+      "server_a_suit_is_only_chosen_for_a_jack": "a suit is only chosen for a jack",
+      "server_you_must_play_a_seven_or_draw_the_pending_cards": "you must play a seven or draw the pending cards",
+      "server_you_may_only_play_the_card_you_just_drew_or_pass": "you may only play the card you just drew or pass",
+      "server_you_can_only_pass_after_drawing_a_card": "you can only pass after drawing a card",
+      "server_you_have_already_drawn_a_card": "you have already drawn a card"
+    },
+    "locales": {
+      "es": {
+        "server_the_game_is_over": "la partida ha terminado",
+        "server_it_is_not_your_turn": "no es tu turno",
+        "server_send_a_play_draw_or_pass_move": "envía una jugada de jugar, robar o pasar",
+        "server_that_is_not_a_valid_card": "esa no es una carta válida",
+        "server_that_is_not_a_valid_suit": "ese no es un palo válido",
+        "server_that_card_is_not_in_your_hand": "esa carta no está en tu mano",
+        "server_that_card_does_not_match_the_top_card": "esa carta no coincide con la carta superior",
+        "server_you_must_choose_a_suit_when_you_play_a_jack": "debes elegir un palo al jugar una Jota",
+        "server_a_suit_is_only_chosen_for_a_jack": "el palo solo se elige para una Jota",
+        "server_you_must_play_a_seven_or_draw_the_pending_cards": "debes jugar un 7 o robar las cartas pendientes",
+        "server_you_may_only_play_the_card_you_just_drew_or_pass": "solo puedes jugar la carta que acabas de robar o pasar",
+        "server_you_can_only_pass_after_drawing_a_card": "solo puedes pasar después de robar una carta",
+        "server_you_have_already_drawn_a_card": "ya has robado una carta"
+      },
+      "fr": {
+        "server_the_game_is_over": "la partie est terminée",
+        "server_it_is_not_your_turn": "ce n'est pas votre tour",
+        "server_send_a_play_draw_or_pass_move": "envoyez un coup jouer, piocher ou passer",
+        "server_that_is_not_a_valid_card": "ce n'est pas une carte valide",
+        "server_that_is_not_a_valid_suit": "ce n'est pas une couleur valide",
+        "server_that_card_is_not_in_your_hand": "cette carte n'est pas dans votre main",
+        "server_that_card_does_not_match_the_top_card": "cette carte ne correspond pas à la carte du dessus",
+        "server_you_must_choose_a_suit_when_you_play_a_jack": "vous devez choisir une couleur quand vous jouez un Valet",
+        "server_a_suit_is_only_chosen_for_a_jack": "la couleur ne se choisit que pour un Valet",
+        "server_you_must_play_a_seven_or_draw_the_pending_cards": "vous devez jouer un 7 ou piocher les cartes en attente",
+        "server_you_may_only_play_the_card_you_just_drew_or_pass": "vous ne pouvez jouer que la carte que vous venez de piocher, ou passer",
+        "server_you_can_only_pass_after_drawing_a_card": "vous ne pouvez passer qu'après avoir pioché une carte",
+        "server_you_have_already_drawn_a_card": "vous avez déjà pioché une carte"
+      },
+      "de": {
+        "server_the_game_is_over": "das Spiel ist vorbei",
+        "server_it_is_not_your_turn": "du bist nicht dran",
+        "server_send_a_play_draw_or_pass_move": "sende einen Zug aus Spielen, Ziehen oder Passen",
+        "server_that_is_not_a_valid_card": "das ist keine gültige Karte",
+        "server_that_is_not_a_valid_suit": "das ist keine gültige Farbe",
+        "server_that_card_is_not_in_your_hand": "diese Karte ist nicht auf deiner Hand",
+        "server_that_card_does_not_match_the_top_card": "diese Karte passt nicht zur obersten Karte",
+        "server_you_must_choose_a_suit_when_you_play_a_jack": "du musst eine Farbe wählen, wenn du einen Buben spielst",
+        "server_a_suit_is_only_chosen_for_a_jack": "eine Farbe wird nur für einen Buben gewählt",
+        "server_you_must_play_a_seven_or_draw_the_pending_cards": "du musst eine 7 spielen oder die ausstehenden Karten ziehen",
+        "server_you_may_only_play_the_card_you_just_drew_or_pass": "du darfst nur die Karte spielen, die du gerade gezogen hast, oder passen",
+        "server_you_can_only_pass_after_drawing_a_card": "du kannst nur passen, nachdem du eine Karte gezogen hast",
+        "server_you_have_already_drawn_a_card": "du hast bereits eine Karte gezogen"
+      },
+      "pt": {
+        "server_the_game_is_over": "o jogo acabou",
+        "server_it_is_not_your_turn": "não é a sua vez",
+        "server_send_a_play_draw_or_pass_move": "envie uma jogada de jogar, comprar ou passar",
+        "server_that_is_not_a_valid_card": "essa não é uma carta válida",
+        "server_that_is_not_a_valid_suit": "esse não é um naipe válido",
+        "server_that_card_is_not_in_your_hand": "essa carta não está na sua mão",
+        "server_that_card_does_not_match_the_top_card": "essa carta não combina com a carta do topo",
+        "server_you_must_choose_a_suit_when_you_play_a_jack": "você deve escolher um naipe ao jogar um Valete",
+        "server_a_suit_is_only_chosen_for_a_jack": "o naipe só é escolhido para um Valete",
+        "server_you_must_play_a_seven_or_draw_the_pending_cards": "você deve jogar um 7 ou comprar as cartas pendentes",
+        "server_you_may_only_play_the_card_you_just_drew_or_pass": "você só pode jogar a carta que acabou de comprar ou passar",
+        "server_you_can_only_pass_after_drawing_a_card": "você só pode passar depois de comprar uma carta",
+        "server_you_have_already_drawn_a_card": "você já comprou uma carta"
+      },
+      "zh": {
+        "server_the_game_is_over": "游戏已结束",
+        "server_it_is_not_your_turn": "还没轮到你",
+        "server_send_a_play_draw_or_pass_move": "请发送出牌、抽牌或跳过操作",
+        "server_that_is_not_a_valid_card": "这不是一张有效的牌",
+        "server_that_is_not_a_valid_suit": "这不是一个有效的花色",
+        "server_that_card_is_not_in_your_hand": "这张牌不在你手里",
+        "server_that_card_does_not_match_the_top_card": "这张牌与顶牌不匹配",
+        "server_you_must_choose_a_suit_when_you_play_a_jack": "出 J 时必须选择一个花色",
+        "server_a_suit_is_only_chosen_for_a_jack": "只有出 J 时才选择花色",
+        "server_you_must_play_a_seven_or_draw_the_pending_cards": "你必须出一张 7 或抽取待抽的牌",
+        "server_you_may_only_play_the_card_you_just_drew_or_pass": "你只能打出刚抽到的牌或跳过",
+        "server_you_can_only_pass_after_drawing_a_card": "只有抽牌后才能跳过",
+        "server_you_have_already_drawn_a_card": "你已经抽过一张牌了"
+      },
+      "hi": {
+        "server_the_game_is_over": "खेल समाप्त हो गया है",
+        "server_it_is_not_your_turn": "आपकी बारी नहीं है",
+        "server_send_a_play_draw_or_pass_move": "खेलने, उठाने या पास करने की चाल भेजें",
+        "server_that_is_not_a_valid_card": "यह मान्य पत्ता नहीं है",
+        "server_that_is_not_a_valid_suit": "यह मान्य रंग नहीं है",
+        "server_that_card_is_not_in_your_hand": "यह पत्ता आपके हाथ में नहीं है",
+        "server_that_card_does_not_match_the_top_card": "यह पत्ता ऊपर के पत्ते से मेल नहीं खाता",
+        "server_you_must_choose_a_suit_when_you_play_a_jack": "गुलाम खेलते समय आपको रंग चुनना होगा",
+        "server_a_suit_is_only_chosen_for_a_jack": "रंग केवल गुलाम के लिए चुना जाता है",
+        "server_you_must_play_a_seven_or_draw_the_pending_cards": "आपको 7 खेलना होगा या बाकी पत्ते उठाने होंगे",
+        "server_you_may_only_play_the_card_you_just_drew_or_pass": "आप केवल अभी उठाया गया पत्ता खेल सकते हैं या पास कर सकते हैं",
+        "server_you_can_only_pass_after_drawing_a_card": "आप केवल पत्ता उठाने के बाद ही पास कर सकते हैं",
+        "server_you_have_already_drawn_a_card": "आप पहले ही एक पत्ता उठा चुके हैं"
+      },
+      "ar": {
+        "server_the_game_is_over": "انتهت اللعبة",
+        "server_it_is_not_your_turn": "ليس دورك",
+        "server_send_a_play_draw_or_pass_move": "أرسل حركة لعب أو سحب أو تمرير",
+        "server_that_is_not_a_valid_card": "هذه ليست بطاقة صالحة",
+        "server_that_is_not_a_valid_suit": "هذا ليس لونًا صالحًا",
+        "server_that_card_is_not_in_your_hand": "هذه البطاقة ليست في يدك",
+        "server_that_card_does_not_match_the_top_card": "هذه البطاقة لا تطابق البطاقة العليا",
+        "server_you_must_choose_a_suit_when_you_play_a_jack": "يجب أن تختار لونًا عند لعب جاك",
+        "server_a_suit_is_only_chosen_for_a_jack": "لا يُختار اللون إلا عند لعب جاك",
+        "server_you_must_play_a_seven_or_draw_the_pending_cards": "يجب أن تلعب 7 أو تسحب البطاقات المعلّقة",
+        "server_you_may_only_play_the_card_you_just_drew_or_pass": "لا يمكنك إلا لعب البطاقة التي سحبتها للتو أو التمرير",
+        "server_you_can_only_pass_after_drawing_a_card": "لا يمكنك التمرير إلا بعد سحب بطاقة",
+        "server_you_have_already_drawn_a_card": "لقد سحبت بطاقة بالفعل"
+      }
+    }
+  },
+  "dos": {
+    "english": {
+      "server_send_a_match_draw_or_pass_move": "send a match, draw or pass move",
+      "server_the_game_is_over": "the game is over",
+      "server_it_is_not_your_turn": "it is not your turn",
+      "server_you_can_only_pass_after_drawing": "you can only pass after drawing",
+      "server_you_can_only_add_a_card_to_the_center_row_after_drawing": "you can only add a card to the center row after drawing",
+      "server_that_is_not_a_valid_card": "that is not a valid card",
+      "server_that_card_is_not_in_your_hand": "that card is not in your hand",
+      "server_that_card_is_already_used": "that card is already used",
+      "server_that_is_not_a_valid_number": "that is not a valid number",
+      "server_that_is_not_a_valid_color": "that is not a valid color",
+      "server_you_cannot_draw_now": "you cannot draw now",
+      "server_you_cannot_match_now": "you cannot match now",
+      "server_that_pile_does_not_exist": "that pile does not exist",
+      "server_you_cannot_match_that_pile_twice": "you cannot match that pile twice",
+      "server_you_must_play_one_or_two_cards": "you must play one or two cards",
+      "server_that_card_does_not_match_the_center_row": "that card does not match the center row",
+      "server_you_cannot_discard_that_many_bonus_cards": "you cannot discard that many bonus cards",
+      "server_declare_the_number_of_the_wild_card": "declare the number of the wild card",
+      "server_declare_the_color_of_the_wild_card": "declare the color of the wild card"
+    },
+    "locales": {
+      "es": {
+        "server_send_a_match_draw_or_pass_move": "envía una jugada de coincidencia, robo o pase",
+        "server_the_game_is_over": "la partida ha terminado",
+        "server_it_is_not_your_turn": "no es tu turno",
+        "server_you_can_only_pass_after_drawing": "solo puedes pasar después de robar",
+        "server_you_can_only_add_a_card_to_the_center_row_after_drawing": "solo puedes añadir una carta a la fila central después de robar",
+        "server_that_is_not_a_valid_card": "esa no es una carta válida",
+        "server_that_card_is_not_in_your_hand": "esa carta no está en tu mano",
+        "server_that_card_is_already_used": "esa carta ya está en uso",
+        "server_that_is_not_a_valid_number": "ese no es un número válido",
+        "server_that_is_not_a_valid_color": "ese no es un color válido",
+        "server_you_cannot_draw_now": "no puedes robar ahora",
+        "server_you_cannot_match_now": "no puedes igualar ahora",
+        "server_that_pile_does_not_exist": "esa pila no existe",
+        "server_you_cannot_match_that_pile_twice": "no puedes igualar esa pila dos veces",
+        "server_you_must_play_one_or_two_cards": "debes jugar una o dos cartas",
+        "server_that_card_does_not_match_the_center_row": "esa carta no coincide con la fila central",
+        "server_you_cannot_discard_that_many_bonus_cards": "no puedes descartar tantas cartas de bonificación",
+        "server_declare_the_number_of_the_wild_card": "declara el número del comodín",
+        "server_declare_the_color_of_the_wild_card": "declara el color del comodín"
+      },
+      "fr": {
+        "server_send_a_match_draw_or_pass_move": "envoyez un coup de correspondance, de pioche ou de passe",
+        "server_the_game_is_over": "la partie est terminée",
+        "server_it_is_not_your_turn": "ce n'est pas votre tour",
+        "server_you_can_only_pass_after_drawing": "vous ne pouvez passer qu'après avoir pioché",
+        "server_you_can_only_add_a_card_to_the_center_row_after_drawing": "vous ne pouvez ajouter une carte à la rangée centrale qu'après avoir pioché",
+        "server_that_is_not_a_valid_card": "ce n'est pas une carte valide",
+        "server_that_card_is_not_in_your_hand": "cette carte n'est pas dans votre main",
+        "server_that_card_is_already_used": "cette carte est déjà utilisée",
+        "server_that_is_not_a_valid_number": "ce n'est pas un nombre valide",
+        "server_that_is_not_a_valid_color": "ce n'est pas une couleur valide",
+        "server_you_cannot_draw_now": "vous ne pouvez pas piocher maintenant",
+        "server_you_cannot_match_now": "vous ne pouvez pas jouer maintenant",
+        "server_that_pile_does_not_exist": "cette pile n'existe pas",
+        "server_you_cannot_match_that_pile_twice": "vous ne pouvez pas égaler cette pile deux fois",
+        "server_you_must_play_one_or_two_cards": "vous devez jouer une ou deux cartes",
+        "server_that_card_does_not_match_the_center_row": "cette carte ne correspond pas à la rangée centrale",
+        "server_you_cannot_discard_that_many_bonus_cards": "vous ne pouvez pas défausser autant de cartes bonus",
+        "server_declare_the_number_of_the_wild_card": "déclarez le nombre du joker",
+        "server_declare_the_color_of_the_wild_card": "déclarez la couleur du joker"
+      },
+      "de": {
+        "server_send_a_match_draw_or_pass_move": "sende einen Treffer-, Zieh- oder Passzug",
+        "server_the_game_is_over": "das Spiel ist vorbei",
+        "server_it_is_not_your_turn": "du bist nicht dran",
+        "server_you_can_only_pass_after_drawing": "du kannst nur passen, nachdem du gezogen hast",
+        "server_you_can_only_add_a_card_to_the_center_row_after_drawing": "du kannst erst eine Karte in die Mittelreihe legen, nachdem du gezogen hast",
+        "server_that_is_not_a_valid_card": "das ist keine gültige Karte",
+        "server_that_card_is_not_in_your_hand": "diese Karte ist nicht auf deiner Hand",
+        "server_that_card_is_already_used": "diese Karte wird bereits verwendet",
+        "server_that_is_not_a_valid_number": "das ist keine gültige Zahl",
+        "server_that_is_not_a_valid_color": "das ist keine gültige Farbe",
+        "server_you_cannot_draw_now": "du kannst jetzt nicht ziehen",
+        "server_you_cannot_match_now": "du kannst jetzt nicht spielen",
+        "server_that_pile_does_not_exist": "dieser Stapel existiert nicht",
+        "server_you_cannot_match_that_pile_twice": "du kannst diesen Stapel nicht zweimal treffen",
+        "server_you_must_play_one_or_two_cards": "du musst eine oder zwei Karten spielen",
+        "server_that_card_does_not_match_the_center_row": "diese Karte passt nicht zur Mittelreihe",
+        "server_you_cannot_discard_that_many_bonus_cards": "du kannst nicht so viele Bonuskarten ablegen",
+        "server_declare_the_number_of_the_wild_card": "nenne die Zahl der Wild-Karte",
+        "server_declare_the_color_of_the_wild_card": "nenne die Farbe der Wild-Karte"
+      },
+      "pt": {
+        "server_send_a_match_draw_or_pass_move": "envie uma jogada de combinação, compra ou passe",
+        "server_the_game_is_over": "o jogo acabou",
+        "server_it_is_not_your_turn": "não é a sua vez",
+        "server_you_can_only_pass_after_drawing": "você só pode passar depois de comprar",
+        "server_you_can_only_add_a_card_to_the_center_row_after_drawing": "você só pode adicionar uma carta à fileira central depois de comprar",
+        "server_that_is_not_a_valid_card": "essa não é uma carta válida",
+        "server_that_card_is_not_in_your_hand": "essa carta não está na sua mão",
+        "server_that_card_is_already_used": "essa carta já está em uso",
+        "server_that_is_not_a_valid_number": "esse não é um número válido",
+        "server_that_is_not_a_valid_color": "essa não é uma cor válida",
+        "server_you_cannot_draw_now": "você não pode comprar agora",
+        "server_you_cannot_match_now": "você não pode combinar agora",
+        "server_that_pile_does_not_exist": "essa pilha não existe",
+        "server_you_cannot_match_that_pile_twice": "você não pode combinar essa pilha duas vezes",
+        "server_you_must_play_one_or_two_cards": "você deve jogar uma ou duas cartas",
+        "server_that_card_does_not_match_the_center_row": "essa carta não combina com a fileira central",
+        "server_you_cannot_discard_that_many_bonus_cards": "você não pode descartar tantas cartas bónus",
+        "server_declare_the_number_of_the_wild_card": "declare o número do curinga",
+        "server_declare_the_color_of_the_wild_card": "declare a cor do curinga"
+      },
+      "zh": {
+        "server_send_a_match_draw_or_pass_move": "请发送一个匹配、摸牌或跳过的操作",
+        "server_the_game_is_over": "游戏已结束",
+        "server_it_is_not_your_turn": "还没轮到你",
+        "server_you_can_only_pass_after_drawing": "只有在摸牌后才能跳过",
+        "server_you_can_only_add_a_card_to_the_center_row_after_drawing": "只有在摸牌后才能向中央牌行添加牌",
+        "server_that_is_not_a_valid_card": "这不是一张有效的牌",
+        "server_that_card_is_not_in_your_hand": "这张牌不在你手里",
+        "server_that_card_is_already_used": "这张牌已经被使用了",
+        "server_that_is_not_a_valid_number": "这不是一个有效的数字",
+        "server_that_is_not_a_valid_color": "这不是一种有效的颜色",
+        "server_you_cannot_draw_now": "现在不能摸牌",
+        "server_you_cannot_match_now": "现在不能匹配",
+        "server_that_pile_does_not_exist": "这个牌堆不存在",
+        "server_you_cannot_match_that_pile_twice": "不能对同一个牌堆匹配两次",
+        "server_you_must_play_one_or_two_cards": "必须打出一两张牌",
+        "server_that_card_does_not_match_the_center_row": "这张牌与中央牌行不匹配",
+        "server_you_cannot_discard_that_many_bonus_cards": "不能弃掉这么多张奖励牌",
+        "server_declare_the_number_of_the_wild_card": "请声明万能牌的数字",
+        "server_declare_the_color_of_the_wild_card": "请声明万能牌的颜色"
+      },
+      "hi": {
+        "server_send_a_match_draw_or_pass_move": "मिलान, पत्ता लेने या पास करने की चाल भेजें",
+        "server_the_game_is_over": "खेल समाप्त हो गया है",
+        "server_it_is_not_your_turn": "आपकी बारी नहीं है",
+        "server_you_can_only_pass_after_drawing": "आप केवल पत्ता लेने के बाद ही पास कर सकते हैं",
+        "server_you_can_only_add_a_card_to_the_center_row_after_drawing": "आप केवल पत्ता लेने के बाद ही केंद्रीय पंक्ति में पत्ता जोड़ सकते हैं",
+        "server_that_is_not_a_valid_card": "यह मान्य पत्ता नहीं है",
+        "server_that_card_is_not_in_your_hand": "यह पत्ता आपके हाथ में नहीं है",
+        "server_that_card_is_already_used": "यह पत्ता पहले से इस्तेमाल हो रहा है",
+        "server_that_is_not_a_valid_number": "यह मान्य संख्या नहीं है",
+        "server_that_is_not_a_valid_color": "यह मान्य रंग नहीं है",
+        "server_you_cannot_draw_now": "आप अभी पत्ता नहीं ले सकते",
+        "server_you_cannot_match_now": "आप अभी मिलान नहीं कर सकते",
+        "server_that_pile_does_not_exist": "वह ढेर मौजूद नहीं है",
+        "server_you_cannot_match_that_pile_twice": "आप उस ढेर से दो बार मिलान नहीं कर सकते",
+        "server_you_must_play_one_or_two_cards": "आपको एक या दो पत्ते खेलने होंगे",
+        "server_that_card_does_not_match_the_center_row": "वह पत्ता केंद्रीय पंक्ति से नहीं मिलता",
+        "server_you_cannot_discard_that_many_bonus_cards": "आप इतने बोनस पत्ते नहीं फेंक सकते",
+        "server_declare_the_number_of_the_wild_card": "वाइल्ड पत्ते की संख्या बताएँ",
+        "server_declare_the_color_of_the_wild_card": "वाइल्ड पत्ते का रंग बताएँ"
+      },
+      "ar": {
+        "server_send_a_match_draw_or_pass_move": "أرسل نقلة مطابقة أو سحب أو تمرير",
+        "server_the_game_is_over": "انتهت اللعبة",
+        "server_it_is_not_your_turn": "ليس دورك",
+        "server_you_can_only_pass_after_drawing": "لا يمكنك التمرير إلا بعد السحب",
+        "server_you_can_only_add_a_card_to_the_center_row_after_drawing": "لا يمكنك إضافة بطاقة إلى الصف الأوسط إلا بعد السحب",
+        "server_that_is_not_a_valid_card": "هذه ليست بطاقة صالحة",
+        "server_that_card_is_not_in_your_hand": "هذه البطاقة ليست في يدك",
+        "server_that_card_is_already_used": "هذه البطاقة مستخدمة بالفعل",
+        "server_that_is_not_a_valid_number": "هذا ليس رقمًا صالحًا",
+        "server_that_is_not_a_valid_color": "هذا ليس لونًا صالحًا",
+        "server_you_cannot_draw_now": "لا يمكنك السحب الآن",
+        "server_you_cannot_match_now": "لا يمكنك المطابقة الآن",
+        "server_that_pile_does_not_exist": "هذه الكومة غير موجودة",
+        "server_you_cannot_match_that_pile_twice": "لا يمكنك مطابقة هذه الكومة مرتين",
+        "server_you_must_play_one_or_two_cards": "يجب أن تلعب بطاقة أو بطاقتين",
+        "server_that_card_does_not_match_the_center_row": "هذه البطاقة لا تطابق الصف الأوسط",
+        "server_you_cannot_discard_that_many_bonus_cards": "لا يمكنك التخلص من هذا العدد من البطاقات الإضافية",
+        "server_declare_the_number_of_the_wild_card": "أعلن رقم البطاقة البرية",
+        "server_declare_the_color_of_the_wild_card": "أعلن لون البطاقة البرية"
+      }
+    }
+  },
+  "kisolo": {
+    "english": {
+      "server_the_game_is_over": "the game is over",
+      "server_it_is_not_your_turn": "it is not your turn",
+      "server_send_a_pit_from_0_to_27": "send a pit from 0 to 27",
+      "server_that_pit_is_not_yours": "that pit is not yours",
+      "server_that_pit_is_empty": "that pit is empty",
+      "server_you_must_capture": "you must capture"
+    },
+    "locales": {
+      "es": {
+        "server_the_game_is_over": "la partida ha terminado",
+        "server_it_is_not_your_turn": "no es tu turno",
+        "server_send_a_pit_from_0_to_27": "envía un hoyo del 0 al 27",
+        "server_that_pit_is_not_yours": "ese hoyo no es tuyo",
+        "server_that_pit_is_empty": "ese hoyo está vacío",
+        "server_you_must_capture": "debes capturar"
+      },
+      "fr": {
+        "server_the_game_is_over": "la partie est terminée",
+        "server_it_is_not_your_turn": "ce n'est pas votre tour",
+        "server_send_a_pit_from_0_to_27": "envoyez un trou de 0 à 27",
+        "server_that_pit_is_not_yours": "ce trou n'est pas le vôtre",
+        "server_that_pit_is_empty": "ce trou est vide",
+        "server_you_must_capture": "vous devez capturer"
+      },
+      "de": {
+        "server_the_game_is_over": "das Spiel ist vorbei",
+        "server_it_is_not_your_turn": "du bist nicht dran",
+        "server_send_a_pit_from_0_to_27": "sende eine Mulde von 0 bis 27",
+        "server_that_pit_is_not_yours": "diese Mulde gehört dir nicht",
+        "server_that_pit_is_empty": "diese Mulde ist leer",
+        "server_you_must_capture": "du musst erbeuten"
+      },
+      "pt": {
+        "server_the_game_is_over": "o jogo acabou",
+        "server_it_is_not_your_turn": "não é a sua vez",
+        "server_send_a_pit_from_0_to_27": "envie uma cova de 0 a 27",
+        "server_that_pit_is_not_yours": "essa cova não é sua",
+        "server_that_pit_is_empty": "essa cova está vazia",
+        "server_you_must_capture": "você deve capturar"
+      },
+      "zh": {
+        "server_the_game_is_over": "游戏已结束",
+        "server_it_is_not_your_turn": "还没轮到你",
+        "server_send_a_pit_from_0_to_27": "请发送 0 到 27 号棋洞",
+        "server_that_pit_is_not_yours": "这个棋洞不是你的",
+        "server_that_pit_is_empty": "这个棋洞是空的",
+        "server_you_must_capture": "你必须捕获"
+      },
+      "hi": {
+        "server_the_game_is_over": "खेल समाप्त हो गया है",
+        "server_it_is_not_your_turn": "आपकी बारी नहीं है",
+        "server_send_a_pit_from_0_to_27": "0 से 27 तक का गड्ढा भेजें",
+        "server_that_pit_is_not_yours": "यह गड्ढा आपका नहीं है",
+        "server_that_pit_is_empty": "यह गड्ढा खाली है",
+        "server_you_must_capture": "आपको कब्ज़ा करना होगा"
+      },
+      "ar": {
+        "server_the_game_is_over": "انتهت اللعبة",
+        "server_it_is_not_your_turn": "ليس دورك",
+        "server_send_a_pit_from_0_to_27": "أرسل حفرة من 0 إلى 27",
+        "server_that_pit_is_not_yours": "هذه الحفرة ليست لك",
+        "server_that_pit_is_empty": "هذه الحفرة فارغة",
+        "server_you_must_capture": "يجب أن تلتقط"
+      }
+    }
+  },
+  "thirty_one": {
+    "english": {
+      "server_the_game_is_over": "the game is over",
+      "server_it_is_not_your_turn": "it is not your turn",
+      "server_send_a_draw_discard_knock_or_stand_move": "send a draw, discard, knock or stand move",
+      "server_you_must_draw_before_discarding": "you must draw before discarding",
+      "server_you_cannot_knock_now": "you cannot knock now",
+      "server_you_cannot_stand_now": "you cannot stand now",
+      "server_the_stock_is_empty": "the stock is empty",
+      "server_the_discard_pile_is_empty": "the discard pile is empty",
+      "server_send_a_card_like_as": "send a card like AS",
+      "server_that_card_is_not_in_your_hand": "that card is not in your hand"
+    },
+    "locales": {
+      "es": {
+        "server_the_game_is_over": "la partida ha terminado",
+        "server_it_is_not_your_turn": "no es tu turno",
+        "server_send_a_draw_discard_knock_or_stand_move": "envía una jugada de robar, descartar, tocar o plantarse",
+        "server_you_must_draw_before_discarding": "primero debes robar y luego descartar",
+        "server_you_cannot_knock_now": "no puedes tocar ahora",
+        "server_you_cannot_stand_now": "no puedes plantarte ahora",
+        "server_the_stock_is_empty": "el mazo está vacío",
+        "server_the_discard_pile_is_empty": "la pila de descartes está vacía",
+        "server_send_a_card_like_as": "envía una carta como AS",
+        "server_that_card_is_not_in_your_hand": "esa carta no está en tu mano"
+      },
+      "fr": {
+        "server_the_game_is_over": "la partie est terminée",
+        "server_it_is_not_your_turn": "ce n'est pas votre tour",
+        "server_send_a_draw_discard_knock_or_stand_move": "envoyez un coup piocher, défausser, frapper ou rester",
+        "server_you_must_draw_before_discarding": "vous devez piocher avant de défausser",
+        "server_you_cannot_knock_now": "vous ne pouvez pas frapper maintenant",
+        "server_you_cannot_stand_now": "vous ne pouvez pas rester maintenant",
+        "server_the_stock_is_empty": "la pioche est vide",
+        "server_the_discard_pile_is_empty": "la défausse est vide",
+        "server_send_a_card_like_as": "envoyez une carte comme AS",
+        "server_that_card_is_not_in_your_hand": "cette carte n'est pas dans votre main"
+      },
+      "de": {
+        "server_the_game_is_over": "das Spiel ist vorbei",
+        "server_it_is_not_your_turn": "du bist nicht dran",
+        "server_send_a_draw_discard_knock_or_stand_move": "sende einen Zug: ziehen, ablegen, klopfen oder stehen bleiben",
+        "server_you_must_draw_before_discarding": "du musst erst ziehen und dann ablegen",
+        "server_you_cannot_knock_now": "du kannst jetzt nicht klopfen",
+        "server_you_cannot_stand_now": "du kannst jetzt nicht stehen bleiben",
+        "server_the_stock_is_empty": "der Stapel ist leer",
+        "server_the_discard_pile_is_empty": "der Ablagestapel ist leer",
+        "server_send_a_card_like_as": "sende eine Karte wie AS",
+        "server_that_card_is_not_in_your_hand": "diese Karte ist nicht auf deiner Hand"
+      },
+      "pt": {
+        "server_the_game_is_over": "o jogo acabou",
+        "server_it_is_not_your_turn": "não é a sua vez",
+        "server_send_a_draw_discard_knock_or_stand_move": "envie uma jogada de comprar, descartar, bater ou ficar",
+        "server_you_must_draw_before_discarding": "você deve comprar antes de descartar",
+        "server_you_cannot_knock_now": "você não pode bater agora",
+        "server_you_cannot_stand_now": "você não pode ficar agora",
+        "server_the_stock_is_empty": "o monte está vazio",
+        "server_the_discard_pile_is_empty": "a pilha de descartes está vazia",
+        "server_send_a_card_like_as": "envie uma carta como AS",
+        "server_that_card_is_not_in_your_hand": "essa carta não está na sua mão"
+      },
+      "zh": {
+        "server_the_game_is_over": "游戏已结束",
+        "server_it_is_not_your_turn": "还没轮到你",
+        "server_send_a_draw_discard_knock_or_stand_move": "请发送摸牌、弃牌、敲桌或停牌的操作",
+        "server_you_must_draw_before_discarding": "你必须先摸牌再弃牌",
+        "server_you_cannot_knock_now": "你现在不能敲桌",
+        "server_you_cannot_stand_now": "你现在不能停牌",
+        "server_the_stock_is_empty": "牌堆已空",
+        "server_the_discard_pile_is_empty": "弃牌堆已空",
+        "server_send_a_card_like_as": "请发送一张像 AS 这样的牌",
+        "server_that_card_is_not_in_your_hand": "这张牌不在你手里"
+      },
+      "hi": {
+        "server_the_game_is_over": "खेल समाप्त हो गया है",
+        "server_it_is_not_your_turn": "आपकी बारी नहीं है",
+        "server_send_a_draw_discard_knock_or_stand_move": "पत्ता लेने, फेंकने, खटखटाने या रुकने की चाल भेजें",
+        "server_you_must_draw_before_discarding": "आपको पहले पत्ता लेना होगा, फिर फेंकना होगा",
+        "server_you_cannot_knock_now": "आप अभी खटखटा नहीं सकते",
+        "server_you_cannot_stand_now": "आप अभी रुक नहीं सकते",
+        "server_the_stock_is_empty": "गड्डी खाली है",
+        "server_the_discard_pile_is_empty": "फेंके गए पत्तों का ढेर खाली है",
+        "server_send_a_card_like_as": "AS जैसा पत्ता भेजें",
+        "server_that_card_is_not_in_your_hand": "यह पत्ता आपके हाथ में नहीं है"
+      },
+      "ar": {
+        "server_the_game_is_over": "انتهت اللعبة",
+        "server_it_is_not_your_turn": "ليس دورك",
+        "server_send_a_draw_discard_knock_or_stand_move": "أرسل حركة سحب أو تخلص أو طرق أو وقوف",
+        "server_you_must_draw_before_discarding": "يجب أن تسحب قبل أن تتخلص",
+        "server_you_cannot_knock_now": "لا يمكنك أن تطرق الآن",
+        "server_you_cannot_stand_now": "لا يمكنك أن تقف الآن",
+        "server_the_stock_is_empty": "الكومة فارغة",
+        "server_the_discard_pile_is_empty": "كومة المهملات فارغة",
+        "server_send_a_card_like_as": "أرسل بطاقة مثل AS",
+        "server_that_card_is_not_in_your_hand": "هذه البطاقة ليست في يدك"
+      }
+    }
+  },
+  "gobblet": {
+    "english": {
+      "server_the_game_is_over": "the game is over",
+      "server_it_is_not_your_turn": "it is not your turn",
+      "server_send_a_place_or_a_move": "send a place or a move",
+      "server_that_is_not_a_goblet_size": "that is not a goblet size",
+      "server_that_square_is_not_on_the_board": "that square is not on the board",
+      "server_that_size_is_not_in_your_reserve": "that size is not in your reserve",
+      "server_that_goblet_is_too_small_to_cover": "that goblet is too small to cover",
+      "server_that_square_is_empty": "that square is empty",
+      "server_that_goblet_is_not_yours": "that goblet is not yours",
+      "server_you_cannot_move_a_goblet_to_its_own_square": "you cannot move a goblet to its own square"
+    },
+    "locales": {
+      "es": {
+        "server_the_game_is_over": "la partida ha terminado",
+        "server_it_is_not_your_turn": "no es tu turno",
+        "server_send_a_place_or_a_move": "envía una colocación o un movimiento",
+        "server_that_is_not_a_goblet_size": "ese no es un tamaño de cubilete",
+        "server_that_square_is_not_on_the_board": "esa casilla no está en el tablero",
+        "server_that_size_is_not_in_your_reserve": "ese tamaño no está en tu reserva",
+        "server_that_goblet_is_too_small_to_cover": "ese cubilete es demasiado pequeño para cubrir",
+        "server_that_square_is_empty": "esa casilla está vacía",
+        "server_that_goblet_is_not_yours": "ese cubilete no es tuyo",
+        "server_you_cannot_move_a_goblet_to_its_own_square": "no puedes mover un cubilete a su propia casilla"
+      },
+      "fr": {
+        "server_the_game_is_over": "la partie est terminée",
+        "server_it_is_not_your_turn": "ce n'est pas votre tour",
+        "server_send_a_place_or_a_move": "envoyez un placement ou un déplacement",
+        "server_that_is_not_a_goblet_size": "ce n'est pas une taille de gobelet",
+        "server_that_square_is_not_on_the_board": "cette case n'est pas sur le plateau",
+        "server_that_size_is_not_in_your_reserve": "cette taille n'est pas dans votre réserve",
+        "server_that_goblet_is_too_small_to_cover": "ce gobelet est trop petit pour recouvrir",
+        "server_that_square_is_empty": "cette case est vide",
+        "server_that_goblet_is_not_yours": "ce gobelet n'est pas le vôtre",
+        "server_you_cannot_move_a_goblet_to_its_own_square": "vous ne pouvez pas déplacer un gobelet sur sa propre case"
+      },
+      "de": {
+        "server_the_game_is_over": "das Spiel ist vorbei",
+        "server_it_is_not_your_turn": "du bist nicht dran",
+        "server_send_a_place_or_a_move": "sende ein Setzen oder einen Zug",
+        "server_that_is_not_a_goblet_size": "das ist keine Bechergröße",
+        "server_that_square_is_not_on_the_board": "dieses Feld ist nicht auf dem Brett",
+        "server_that_size_is_not_in_your_reserve": "diese Größe ist nicht in deiner Reserve",
+        "server_that_goblet_is_too_small_to_cover": "dieser Becher ist zu klein zum Überstülpen",
+        "server_that_square_is_empty": "dieses Feld ist leer",
+        "server_that_goblet_is_not_yours": "dieser Becher gehört nicht dir",
+        "server_you_cannot_move_a_goblet_to_its_own_square": "du kannst einen Becher nicht auf sein eigenes Feld ziehen"
+      },
+      "pt": {
+        "server_the_game_is_over": "o jogo acabou",
+        "server_it_is_not_your_turn": "não é a sua vez",
+        "server_send_a_place_or_a_move": "envie uma colocação ou um movimento",
+        "server_that_is_not_a_goblet_size": "esse não é um tamanho de copo",
+        "server_that_square_is_not_on_the_board": "essa casa não está no tabuleiro",
+        "server_that_size_is_not_in_your_reserve": "esse tamanho não está na sua reserva",
+        "server_that_goblet_is_too_small_to_cover": "esse copo é pequeno demais para cobrir",
+        "server_that_square_is_empty": "essa casa está vazia",
+        "server_that_goblet_is_not_yours": "esse copo não é seu",
+        "server_you_cannot_move_a_goblet_to_its_own_square": "você não pode mover um copo para a sua própria casa"
+      },
+      "zh": {
+        "server_the_game_is_over": "游戏已结束",
+        "server_it_is_not_your_turn": "还没轮到你",
+        "server_send_a_place_or_a_move": "请发送一个放置或移动",
+        "server_that_is_not_a_goblet_size": "这不是一个杯子尺寸",
+        "server_that_square_is_not_on_the_board": "这个格子不在棋盘上",
+        "server_that_size_is_not_in_your_reserve": "你的备用杯里没有这个尺寸",
+        "server_that_goblet_is_too_small_to_cover": "这个杯子太小，盖不住",
+        "server_that_square_is_empty": "这个格子是空的",
+        "server_that_goblet_is_not_yours": "这个杯子不是你的",
+        "server_you_cannot_move_a_goblet_to_its_own_square": "你不能把一个杯子移到它自己的格子上"
+      },
+      "hi": {
+        "server_the_game_is_over": "खेल समाप्त हो गया है",
+        "server_it_is_not_your_turn": "आपकी बारी नहीं है",
+        "server_send_a_place_or_a_move": "रखने या चलने की चाल भेजें",
+        "server_that_is_not_a_goblet_size": "यह प्याले का आकार नहीं है",
+        "server_that_square_is_not_on_the_board": "यह खाना बोर्ड पर नहीं है",
+        "server_that_size_is_not_in_your_reserve": "यह आकार आपके भंडार में नहीं है",
+        "server_that_goblet_is_too_small_to_cover": "यह प्याला ढकने के लिए बहुत छोटा है",
+        "server_that_square_is_empty": "यह खाना खाली है",
+        "server_that_goblet_is_not_yours": "यह प्याला आपका नहीं है",
+        "server_you_cannot_move_a_goblet_to_its_own_square": "आप किसी प्याले को उसी के खाने पर नहीं ले जा सकते"
+      },
+      "ar": {
+        "server_the_game_is_over": "انتهت اللعبة",
+        "server_it_is_not_your_turn": "ليس دورك",
+        "server_send_a_place_or_a_move": "أرسل وضعًا أو نقلة",
+        "server_that_is_not_a_goblet_size": "هذا ليس حجم كأس",
+        "server_that_square_is_not_on_the_board": "هذا المربع ليس على اللوحة",
+        "server_that_size_is_not_in_your_reserve": "هذا الحجم ليس في احتياطيّك",
+        "server_that_goblet_is_too_small_to_cover": "هذه الكأس أصغر من أن تغطي",
+        "server_that_square_is_empty": "هذا المربع فارغ",
+        "server_that_goblet_is_not_yours": "هذه الكأس ليست لك",
+        "server_you_cannot_move_a_goblet_to_its_own_square": "لا يمكنك نقل كأس إلى مربعها نفسه"
+      }
+    }
+  },
+  "mastermind": {
+    "english": {
+      "server_the_game_is_over": "the game is over",
+      "server_it_is_not_your_turn": "it is not your turn",
+      "server_that_move_is_not_allowed": "that move is not allowed"
+    },
+    "locales": {
+      "es": {
+        "server_the_game_is_over": "la partida ha terminado",
+        "server_it_is_not_your_turn": "no es tu turno",
+        "server_that_move_is_not_allowed": "ese movimiento no está permitido"
+      },
+      "fr": {
+        "server_the_game_is_over": "la partie est terminée",
+        "server_it_is_not_your_turn": "ce n'est pas votre tour",
+        "server_that_move_is_not_allowed": "ce coup n'est pas autorisé"
+      },
+      "de": {
+        "server_the_game_is_over": "das Spiel ist vorbei",
+        "server_it_is_not_your_turn": "du bist nicht dran",
+        "server_that_move_is_not_allowed": "dieser Zug ist nicht erlaubt"
+      },
+      "pt": {
+        "server_the_game_is_over": "o jogo acabou",
+        "server_it_is_not_your_turn": "não é a sua vez",
+        "server_that_move_is_not_allowed": "esse lance não é permitido"
+      },
+      "zh": {
+        "server_the_game_is_over": "游戏已结束",
+        "server_it_is_not_your_turn": "还没轮到你",
+        "server_that_move_is_not_allowed": "这一步不允许"
+      },
+      "hi": {
+        "server_the_game_is_over": "खेल समाप्त हो गया है",
+        "server_it_is_not_your_turn": "यह आपकी बारी नहीं है",
+        "server_that_move_is_not_allowed": "यह चाल अनुमति नहीं है"
+      },
+      "ar": {
+        "server_the_game_is_over": "انتهت اللعبة",
+        "server_it_is_not_your_turn": "ليس دورك",
+        "server_that_move_is_not_allowed": "هذه الحركة غير مسموحة"
+      }
+    }
+  },
+  "old_maid": {
+    "english": {
+      "server_send_a_draw_move": "send a draw move",
+      "server_the_game_is_over": "the game is over",
+      "server_not_your_turn": "not your turn",
+      "server_that_position_is_not_in_the_opponents_hand": "that position is not in the opponent's hand"
+    },
+    "locales": {
+      "es": {
+        "server_send_a_draw_move": "envía una jugada de robar",
+        "server_the_game_is_over": "la partida terminó",
+        "server_not_your_turn": "no es tu turno",
+        "server_that_position_is_not_in_the_opponents_hand": "esa posición no está en la mano del oponente"
+      },
+      "fr": {
+        "server_send_a_draw_move": "envoie un coup de tirage",
+        "server_the_game_is_over": "la partie est terminée",
+        "server_not_your_turn": "ce n'est pas ton tour",
+        "server_that_position_is_not_in_the_opponents_hand": "cette position n'est pas dans la main de l'adversaire"
+      },
+      "de": {
+        "server_send_a_draw_move": "sende einen Zug zum Ziehen",
+        "server_the_game_is_over": "das Spiel ist vorbei",
+        "server_not_your_turn": "du bist nicht am Zug",
+        "server_that_position_is_not_in_the_opponents_hand": "diese Position ist nicht in der Hand des Gegners"
+      },
+      "pt": {
+        "server_send_a_draw_move": "envie uma jogada de compra",
+        "server_the_game_is_over": "a partida acabou",
+        "server_not_your_turn": "não é a sua vez",
+        "server_that_position_is_not_in_the_opponents_hand": "essa posição não está na mão do oponente"
+      },
+      "zh": {
+        "server_send_a_draw_move": "发送一个抽牌动作",
+        "server_the_game_is_over": "对局已经结束",
+        "server_not_your_turn": "还没轮到你",
+        "server_that_position_is_not_in_the_opponents_hand": "该位置不在对手的手牌中"
+      },
+      "hi": {
+        "server_send_a_draw_move": "कार्ड निकालने की चाल भेजें",
+        "server_the_game_is_over": "मैच समाप्त हो गया है",
+        "server_not_your_turn": "आपकी बारी नहीं है",
+        "server_that_position_is_not_in_the_opponents_hand": "वह स्थान प्रतिद्वंद्वी के हाथ में नहीं है"
+      },
+      "ar": {
+        "server_send_a_draw_move": "أرسل حركة سحب",
+        "server_the_game_is_over": "انتهت المباراة",
+        "server_not_your_turn": "ليس دورك",
+        "server_that_position_is_not_in_the_opponents_hand": "هذا الموضع ليس في يد الخصم"
+      }
+    }
+  },
+  "six_mens_morris": {
+    "english": {
+      "server_over": "The game has ended.",
+      "server_turn": "Wait for your turn.",
+      "server_move": "Choose a listed legal move."
+    },
+    "locales": {
+      "es": {
+        "server_over": "La partida ha terminado.",
+        "server_turn": "Espera tu turno.",
+        "server_move": "Elige una jugada legal de la lista."
+      },
+      "fr": {
+        "server_over": "La partie est terminée.",
+        "server_turn": "Attendez votre tour.",
+        "server_move": "Choisissez un coup légal proposé."
+      },
+      "de": {
+        "server_over": "Die Partie ist beendet.",
+        "server_turn": "Warte auf deinen Zug.",
+        "server_move": "Wähle einen aufgeführten erlaubten Zug."
+      },
+      "pt": {
+        "server_over": "A partida terminou.",
+        "server_turn": "Espere sua vez.",
+        "server_move": "Escolha uma jogada legal da lista."
+      },
+      "zh": {
+        "server_over": "对局已经结束。",
+        "server_turn": "请等待你的回合。",
+        "server_move": "请选择列出的合法走法。"
+      },
+      "hi": {
+        "server_over": "खेल समाप्त हो चुका है।",
+        "server_turn": "अपनी बारी की प्रतीक्षा करें।",
+        "server_move": "सूची की मान्य चाल चुनें।"
+      },
+      "ar": {
+        "server_over": "انتهت اللعبة.",
+        "server_turn": "انتظر دورك.",
+        "server_move": "اختر نقلة قانونية من القائمة."
+      }
+    }
+  }
+}

@@ -12,6 +12,8 @@ from game_platform.tools.declarative_demo import KINDS
 from game_platform.tools.publish_declarative_games import scene_event
 
 EXAMPLES = Path(__file__).resolve().parents[1] / 'games' / 'declarative'
+ARCHIVED_HTML_KINDS = ('mau_mau','dos','kisolo','thirty_one','gobblet','chutes_ladders',
+                       'dots_boxes','mastermind','old_maid','six_mens_morris')
 
 
 def load(kind):
@@ -76,3 +78,31 @@ def test_documented_examples_match_real_rules_and_reject_malformed_moves(kind):
     for bad in [None,False,[],{}, {'cell':-4}, {'cell':0,'extra':True}]:
         with pytest.raises(InvalidMoveError):
             logic.call('applyMove',case['state'],case['player_id'],bad,ctx=case['ctx'],seed=11)
+
+
+@pytest.mark.parametrize('kind', ARCHIVED_HTML_KINDS)
+def test_archived_html_ui_can_emit_every_documented_legal_move(kind):
+    body=load(kind)
+    logic=GameLogic(body.server_code,game_schemas=body.game_schemas())
+    ui=DeclarativeLogic(body.declarative_ui)
+    for case in body.unit_tests['cases']:
+        if case.get('expected_error'):
+            continue
+        current={'state':case['state'],'turn':[case['player_id']]}
+        message_data=message(logic,current,case['ctx'],case['player_id'])
+        frame=ui.reduce(message_data)
+        emitted=scene_event(ui,message_data,frame,case['move'])
+        assert emitted.get('make_move')==case['move'], (kind,case['name'],case['move'])
+
+
+def test_demo_validation_subprocess_imports_the_local_checkout():
+    import os
+    import subprocess
+    import sys
+
+    from game_platform.tools.declarative_demo import _validation_import_path
+
+    with _validation_import_path():
+        result=subprocess.run([sys.executable,'-c','import game_platform.agent_import'],
+                              capture_output=True,text=True,timeout=30,env=os.environ.copy())
+    assert result.returncode==0, result.stderr
