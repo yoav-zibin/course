@@ -53,6 +53,29 @@ def test_target_hit_area_matches_browser_geometry_cases(case):
             validate_response(spec(), response)
 
 
+HIT_SHAPE_CASES = json.loads((Path(__file__).with_name("fixtures") /
+                              "declarative/target-hit-shape-cases.json").read_text())
+
+
+@pytest.mark.parametrize("case", HIT_SHAPE_CASES)
+def test_target_hit_shape_matches_browser_geometry_cases(case):
+    response = {"scene": {"targets": [{"id": "edge", "board": "board",
+                                       "position": {"cell": "1"}, **case["target"]}]}}
+    if case["valid"]:
+        assert validate_response(spec(), response) == response
+    else:
+        with pytest.raises(DeclarativeUIError):
+            validate_response(spec(), response)
+
+
+def test_target_hit_shape_does_not_apply_to_pieces():
+    with pytest.raises(DeclarativeUIError):
+        validate_response(spec(), {"scene": {"pieces": [
+            {"id": "die", "type": "token", "board": "board", "position": {"cell": "0"},
+             "hit_shape": {"kind": "polygon", "points": [
+                 {"x": 0, "y": 0}, {"x": 10, "y": 0}, {"x": 0, "y": 10}]}}]}})
+
+
 def test_target_hit_area_limits_match_existing_logical_geometry_and_do_not_apply_to_pieces():
     target = {"id": "destination", "board": "board", "position": {"cell": "1"},
               "hit_area": {"x": -100000, "y": 100000, "width": 100000, "height": 100000}}

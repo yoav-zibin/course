@@ -30,9 +30,12 @@ export type Piece = {
   draggable?: boolean; actions?: PieceAction[];
   animation?: { kind: 'roll' | 'move' | 'notice' | 'pulse'; key: string; duration_ms?: number; delay_ms?: number };
 };
+export type HitShape =
+  | { kind: 'line'; from: Point; to: Point; width: number }
+  | { kind: 'polygon'; points: Point[] };
 export type Target = {
   id: string; board: string; position: Position; label?: string; aria_label?: string; color?: string;
-  asset?: string; hit_area?: Point & { width: number; height: number };
+  asset?: string; hit_area?: Point & { width: number; height: number }; hit_shape?: HitShape;
   preview?: { position: Position; color?: string; asset?: string; rotation?: number; text?: string }[];
 };
 export type Control = {

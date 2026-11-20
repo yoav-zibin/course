@@ -1,4 +1,5 @@
-import type { Board, GameSpec, MoveAnimation, Piece, PieceAction, Point, Scene, SceneAnimation } from './types';
+import type { Board, GameSpec, MoveAnimation, Piece, PieceAction, Point, Scene, SceneAnimation, Target } from './types';
+export function targetBounds(spec: GameSpec, target: Target): Point & {width:number;height:number};
 export function finiteJSON(value: unknown, depth?: number): void;
 export function knownObject(value: unknown, allowed: string[], required?: string[]): void;
 export function validateSpec(spec: unknown): GameSpec;

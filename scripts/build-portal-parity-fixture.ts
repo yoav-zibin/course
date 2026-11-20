@@ -35,7 +35,7 @@ function actionsFor(game:any,message:any,move:any){
     for(const target of targets){
       const event={type:'tap',id:target.id};
       const result=present(game,{type:'ui_event',event,state_changed:message},current.result.local_state||{});
-      const action={id:target.id,label:target.aria_label||target.label||target.id,board:target.board,position:target.position,hitArea:target.hit_area};
+      const action={id:target.id,label:target.aria_label||target.label||target.id,board:target.board,position:target.position,hitArea:target.hit_area,hitShape:target.hit_shape};
       const actions=[...current.actions,action];
       if(result.make_move!==undefined){if(equal(result.make_move,move))return actions;continue;}
       const key=JSON.stringify(result.local_state||{});if(seen.has(key))continue;seen.add(key);queue.push({result,actions});

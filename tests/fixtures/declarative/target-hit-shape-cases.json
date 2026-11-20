@@ -1,0 +1,21 @@
+[
+  {"target":{"hit_shape":{"kind":"line","from":{"x":-40,"y":0},"to":{"x":40,"y":0},"width":44}},"valid":true},
+  {"target":{"hit_shape":{"kind":"line","from":{"x":0,"y":0},"to":{"x":0,"y":0},"width":0.5}},"valid":true},
+  {"target":{"hit_shape":{"kind":"polygon","points":[{"x":0,"y":-30},{"x":30,"y":30},{"x":-30,"y":30}]}},"valid":true},
+  {"target":{"hit_shape":null},"valid":false},
+  {"target":{"hit_shape":[]},"valid":false},
+  {"target":{"hit_shape":{}},"valid":false},
+  {"target":{"hit_shape":{"kind":"circle","radius":20}},"valid":false},
+  {"target":{"hit_shape":{"kind":"line","from":{"x":-40,"y":0},"to":{"x":40,"y":0}}},"valid":false},
+  {"target":{"hit_shape":{"kind":"line","from":{"x":-40,"y":0},"to":{"x":40,"y":0},"width":0}},"valid":false},
+  {"target":{"hit_shape":{"kind":"line","from":{"x":-40,"y":0},"to":{"x":40,"y":0},"width":-4}},"valid":false},
+  {"target":{"hit_shape":{"kind":"line","from":{"x":-40,"y":0},"to":{"x":40,"y":0},"width":100001}},"valid":false},
+  {"target":{"hit_shape":{"kind":"line","from":{"x":-100001,"y":0},"to":{"x":40,"y":0},"width":10}},"valid":false},
+  {"target":{"hit_shape":{"kind":"line","from":{"x":"0","y":0},"to":{"x":40,"y":0},"width":10}},"valid":false},
+  {"target":{"hit_shape":{"kind":"line","from":{"x":0,"y":0},"to":{"x":40,"y":0},"width":10,"cap":"round"}},"valid":false},
+  {"target":{"hit_shape":{"kind":"polygon","points":[{"x":0,"y":0},{"x":10,"y":0}]}},"valid":false},
+  {"target":{"hit_shape":{"kind":"polygon","points":[]}},"valid":false},
+  {"target":{"hit_shape":{"kind":"polygon","points":[{"x":0,"y":0},{"x":10,"y":0},{"x":0,"y":10},{"x":0,"y":100001}]}},"valid":false},
+  {"target":{"hit_shape":{"kind":"polygon","points":[{"x":0,"y":0},{"x":10,"y":0},{"x":0,"y":10}],"width":4}},"valid":false},
+  {"target":{"hit_shape":{"kind":"line","from":{"x":-40,"y":0},"to":{"x":40,"y":0},"width":44},"hit_area":{"x":-24,"y":-24,"width":48,"height":48}},"valid":false}
+]

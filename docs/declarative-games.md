@@ -548,6 +548,25 @@ checker anywhere along its triangle. It does not make an unavailable target
 legal or change a piece's movement permissions. Omit it for the default marker
 hit area; it is not a piece property.
 
+Targets that are really lines or regions can declare `hit_shape` instead of a
+rectangle. Coordinates are logical units relative to the target position, with
+the same ±100000 bounds as `hit_area`:
+
+- `{kind:"line", from:{x,y}, to:{x,y}, width}` is a segment with rounded ends.
+  A tap within `width/2` of the segment hits it, so a diagonal edge is tapped
+  along its length rather than at a midpoint. `width` is the line's thickness
+  (the 32/44 px touch guidance applies to it).
+- `{kind:"polygon", points:[{x,y}, ...]}` is a filled region of 3 to 32 corners.
+  A tap inside it hits it.
+
+The host draws the shape itself as the target marker, tinted by `color`; it
+never draws the bounding rectangle. `hit_shape` replaces `hit_area`, so a target
+declaring both is rejected. Drag-and-drop adds the same small margin around a
+shape as around a rectangle, and where zones overlap the nearest one wins (a
+line by its distance to the segment). Like `hit_area` it grants no move and is
+not a piece property. Zones should still not overlap each other: leave gaps
+where lines meet, for example by shortening each line a little at its ends.
+
 Pieces can attach `animation:{kind:"roll",key:"turn-12"}` to identify a visual
 roll event. Both fields are required when the object is present. Optional
 `duration_ms` and `delay_ms` are integer milliseconds from 0 to 5000.

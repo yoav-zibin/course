@@ -67,7 +67,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     if([point.x,point.y].some(value=>typeof value!=="number"||Math.abs(value)>100000))throw new Error(t("ui.declarative.error.invalid_point_geometry", {}, "Invalid point geometry"));
   }
   function checkElement(kind,item) {
-    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions","animation"],targets:["id","board","position","label","aria_label","color","asset","hit_area","preview"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
+    const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions","animation"],targets:["id","board","position","label","aria_label","color","asset","hit_area","hit_shape","preview"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
     const required={pieces:["id","type","board","position"],targets:["id","board","position"],labels:["id","text","x","y"],controls:["id","label","kind"],paths:["id","points"]};
     knownObject(item,fields[kind],required[kind]);
     for(const key of ["id","type","board","asset"])if(key in item&&!isId(item[key]))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
@@ -95,6 +95,21 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
       knownObject(item.hit_area,["x","y","width","height"],["x","y","width","height"]);
       for(const key of ["x","y"])if(typeof item.hit_area[key]!=="number"||Math.abs(item.hit_area[key])>100000)throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
       for(const key of ["width","height"])if(typeof item.hit_area[key]!=="number"||item.hit_area[key]<=0||item.hit_area[key]>100000)throw new Error(t("ui.declarative.error.invalid_positive_geometry", {}, "Invalid positive geometry"));
+    }
+    if("hit_shape" in item){
+      // A line (capsule) or polygon tap zone relative to the target position.
+      // It replaces the rectangle, so declaring both would be ambiguous.
+      const shape=item.hit_shape,bad=()=>new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
+      if("hit_area" in item)throw bad();
+      if(shape&&shape.kind==="line"){
+        knownObject(shape,["kind","from","to","width"],["kind","from","to","width"]);
+        checkPoint(shape.from);checkPoint(shape.to);
+        if(typeof shape.width!=="number"||shape.width<=0||shape.width>100000)throw new Error(t("ui.declarative.error.invalid_positive_geometry", {}, "Invalid positive geometry"));
+      }else if(shape&&shape.kind==="polygon"){
+        knownObject(shape,["kind","points"],["kind","points"]);
+        if(!Array.isArray(shape.points)||shape.points.length<3||shape.points.length>32)throw new Error(t("ui.declarative.error.invalid_path_points", {}, "Invalid path points"));
+        shape.points.forEach(checkPoint);
+      }else throw bad();
     }
     if("preview" in item){
       // Ghost cells drawn while a destination is hovered, focused, dragged over
@@ -224,6 +239,21 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     if(action==="flip")return t("ui.declarative.hints.flip", {}, "Flip");
     return t("ui.declarative.hints.scale", {}, "Resize");
   }
+  // Tap zone of a target as an axis-aligned box in board-space units. A line or
+  // polygon `hit_shape` is bounded by its points (plus half the line width).
+  function targetBounds(spec, target) {
+    const point=position(spec,target),board=point.board,shape=target.hit_shape;
+    if(shape){
+      const points=shape.kind==="line"?[shape.from,shape.to]:shape.points,pad=shape.kind==="line"?shape.width/2:0;
+      const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+      const x=Math.min(...xs)-pad,y=Math.min(...ys)-pad;
+      return {x:point.x+x,y:point.y+y,width:Math.max(...xs)+pad-x,height:Math.max(...ys)+pad-y};
+    }
+    const width=board.kind==="grid"?board.width/board.columns:44,height=board.kind==="grid"?board.height/board.rows:44;
+    const hit=target.hit_area||{};
+    return {x:point.x+num(hit.x,-width/2),y:point.y+num(hit.y,-height/2),
+      width:num(hit.width,width),height:num(hit.height,height)};
+  }
   function contentBounds(spec, scene = {}) {
     const boxes = [{x:0,y:0,width:spec.viewport.width,height:spec.viewport.height},
       ...spec.boards.map(board => ({x:num(board.x),y:num(board.y),width:board.width,height:board.height}))];
@@ -239,13 +269,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
       const h=(Math.abs(Math.sin(angle))*width+Math.abs(Math.cos(angle))*height)*scale;
       boxes.push({x:point.x-w/2,y:point.y-h/2,width:w,height:h});
     }
-    for(const target of scene.targets || []) {
-      const point=position(spec,target),board=point.board;
-      const width=board.kind==="grid"?board.width/board.columns:44,height=board.kind==="grid"?board.height/board.rows:44;
-      const hit=target.hit_area||{};
-      boxes.push({x:point.x+num(hit.x,-width/2),y:point.y+num(hit.y,-height/2),
-        width:num(hit.width,width),height:num(hit.height,height)});
-    }
+    for(const target of scene.targets || [])boxes.push(targetBounds(spec,target));
     const x=Math.min(...boxes.map(box=>box.x)),y=Math.min(...boxes.map(box=>box.y));
     return {x,y,width:Math.max(...boxes.map(box=>box.x+box.width))-x,height:Math.max(...boxes.map(box=>box.y+box.height))-y};
   }
@@ -259,4 +283,4 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
       minY:top-marginY,maxY:Math.max(top,bounds.y+bounds.height-height)+marginY};
   }
 
-module.exports={finiteJSON,validateSpec,validateScene,validateMoveAnimations,validateSceneAnimations,knownObject,assetURI,boardCell,position,pieceActions,contentBounds,cameraLimits};
+module.exports={finiteJSON,validateSpec,validateScene,validateMoveAnimations,validateSceneAnimations,knownObject,assetURI,boardCell,position,pieceActions,contentBounds,targetBounds,cameraLimits};

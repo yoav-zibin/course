@@ -6,7 +6,7 @@ import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect,
 import G from './SceneGroup';
 import type { Board, Control, GameSpec, Json, Piece, Point, Scene, StateMessage, Target, UIEvent } from './types';
 import { assetURI, boardCell, cameraLimits, contentBounds, finiteJSON, knownObject, pieceActions, position, validateMoveAnimations, validateScene, validateSceneAnimations, validateSpec } from './validation';
-import { animateUpdate, canMove, historyChanges, hitPiece, hitTarget, pieceName, pieceSize, presentationSteps, targetBox, validEvent } from './interactions';
+import { animateUpdate, canMove, historyChanges, hitPiece, hitTarget, pieceName, pieceSize, presentationSteps, targetBox, targetShape, targetThickness, validEvent } from './interactions';
 import { runPresentation } from './runtime';
 import { animateLastMove, moveTracks, trackPosition, type MoveTrack } from './moveAnimations';
 import { animateSceneUpdate, sceneTracks, sceneTransform, type SceneTrack } from './sceneAnimations';
@@ -74,7 +74,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const bounds = useMemo(()=>contentBounds(spec,display.scene),[spec,display.scene]);
   const smallestObject = useMemo(()=>Math.min(Infinity,
     ...(display.scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>{const size=pieceSize(spec,piece);return Math.min(size.width,size.height)*(piece.scale??1);}),
-    ...(display.scene.targets||[]).map(target=>{const size=targetBox(spec,target);return Math.min(size.width,size.height);}),
+    ...(display.scene.targets||[]).map(target=>targetThickness(spec,target)),
   ),[spec,display.scene]);
   const widthFittedHeight=width*bounds.height/bounds.width;
   // A short screen may scroll a taller canvas rather than shrink physical
@@ -396,7 +396,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
           onPress={()=>activatePiece(piece)}/>) }
         {!reducedMotion&&display.ghosts.map(piece=><PieceGraphic key={`history-ghost-${piece.id}`} piece={piece} previous={piece} spec={spec} animate={true} serial={display.serial} effect="exit" enabled={false}/>)}
         {previewTarget?.preview?.map((cell,index)=>{
-          const point=position(spec,{board:previewTarget.board,position:cell.position}),size=targetBox(spec,{...previewTarget,position:cell.position,hit_area:undefined});
+          const point=position(spec,{board:previewTarget.board,position:cell.position}),size=targetBox(spec,{...previewTarget,position:cell.position,hit_area:undefined,hit_shape:undefined});
           return <G key={`preview-${index}`} transform={`translate(${point.x} ${point.y}) rotate(${cell.rotation||0})`} opacity={.7} pointerEvents="none">
             <Rect x={-size.width/2+1} y={-size.height/2+1} width={size.width-2} height={size.height-2} fill={cell.color||previewTarget.color||'#b8ef5b'} rx={4}/>
             <Asset spec={spec} id={cell.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
@@ -501,14 +501,21 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
 });
 
 const TargetGraphic=memo(function TargetGraphic({target,spec,enabled,selected,onPress}:{target:Target;spec:GameSpec;enabled:boolean;selected:boolean;onPress:()=>void}) {
-  const point=position(spec,target),box=targetBox(spec,target),art=!!target.asset,board=point.board;
+  const point=position(spec,target),box=targetBox(spec,target),art=!!target.asset,board=point.board,shape=targetShape(spec,target);
   // Keep the accessible group's geometry in scene coordinates. Android SVG
   // virtual-node bounds misplace a translated group under a scaled viewBox;
   // its reported Cell 1 rectangle can otherwise physically hit Cell 4.
   return <G opacity={enabled?selected?1:.72:.18}
     accessible accessibilityRole="button" accessibilityLabel={playerText(target.aria_label||target.label||copyText("Destination {v0}",{v0:target.id}))} accessibilityState={{disabled:!enabled,selected}}
     onPress={enabled?onPress:undefined}>
-    {board.kind==='graph'?<>
+    {shape?<>
+      {shape.kind==='line'
+        ?<Line x1={shape.from.x} y1={shape.from.y} x2={shape.to.x} y2={shape.to.y} strokeLinecap="round" strokeWidth={shape.width} stroke={art?'transparent':target.color||'#b8ef5b'}/>
+        :<Polygon points={shape.points.map(p=>`${p.x},${p.y}`).join(' ')} strokeLinejoin="round" fill={art?'transparent':target.color||'#b8ef5b'} stroke={selected?'#ffffff':'#c9ff63'} strokeWidth={selected?4:2}/>}
+      {selected&&shape.kind==='line'&&<Line x1={shape.from.x} y1={shape.from.y} x2={shape.to.x} y2={shape.to.y} strokeLinecap="round" strokeWidth={shape.width+8} stroke="#ffffff" opacity={.5}/>}
+      <Asset spec={spec} id={target.asset} x={box.x} y={box.y} width={box.width} height={box.height}/>
+      {!!target.label&&!art&&<SvgText x={point.x} y={point.y} textAnchor="middle" alignmentBaseline="central" fill="#102330" fontSize={14}>{playerText(target.label)}</SvgText>}
+    </>:board.kind==='graph'?<>
       <Rect x={box.x} y={box.y} width={box.width} height={box.height} fill="transparent" stroke="none"/>
       <Circle cx={point.x} cy={point.y} r={14} fill={art?'transparent':target.color||'#b8ef5b'} fillOpacity={art?1:.32} stroke={selected?'#ffffff':'#c9ff63'} strokeWidth={selected?3:2}/>
       {!art&&<Circle cx={point.x} cy={point.y} r={5} fill="#f4ffe4"/>}

@@ -4,7 +4,7 @@ import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { validateSpec, validateScene, position, pieceActions, assetURI, contentBounds } from '../src/game/validation';
+import { validateSpec, validateScene, position, pieceActions, assetURI, contentBounds, targetBounds } from '../src/game/validation';
 import { canMove, historyChanges, hitPiece, hitTarget, pieceName, validEvent, animateUpdate, presentationSteps } from '../src/game/interactions';
 import { presentationSource, rulesSource } from '../src/game/runtimeSource';
 import type { GameSpec, Json, Scene, StateMessage } from '../src/game/types';
@@ -35,6 +35,32 @@ test('hit testing respects transformed artwork, expanded legal destinations and 
   assert.equal(hitTarget(pkg,data,{x:240,y:50},data.pieces![0])?.id,'destination');
   data.pieces![0].hidden=true;assert.equal(hitPiece(pkg,data,{x:50,y:50}),undefined);
   assert.deepEqual(pieceActions({actions:[],rotation:90,scale:2}),[]);
+});
+
+test('hit shape cases validate like the server and line or polygon zones hit by true geometry',()=>{
+  const cases=JSON.parse(readFileSync(join(repo,'tests/fixtures/declarative/target-hit-shape-cases.json'),'utf8'));
+  for(const item of cases){
+    const data=scene();Object.assign(data.targets![0],item.target);
+    if(item.valid)assert.doesNotThrow(()=>validateScene(spec(),data));else assert.throws(()=>validateScene(spec(),data));
+  }
+  // Cell 1 is centred at (150,50). A horizontal 20-wide line through it.
+  const pkg=spec(),data:Scene={targets:[
+    {id:'bar',board:'board',position:{cell:'1'},hit_shape:{kind:'line',from:{x:-40,y:0},to:{x:40,y:0},width:20}},
+    {id:'tri',board:'board',position:{cell:'7'},hit_shape:{kind:'polygon',points:[{x:0,y:-40},{x:40,y:40},{x:-40,y:40}]}},
+    {id:'diag',board:'board',position:{cell:'4'},hit_shape:{kind:'line',from:{x:-40,y:-40},to:{x:40,y:40},width:20}},
+  ]};
+  validateScene(pkg,data);
+  const at=(x:number,y:number,margin=0)=>hitTarget(pkg,data,{x,y},undefined,margin)?.id;
+  assert.equal(at(150,50),'bar');assert.equal(at(188,55),'bar');       // along the line, round end included
+  assert.equal(at(150,65),undefined);assert.equal(at(150,65,6),'bar'); // beside it, only with margin
+  assert.equal(at(205,50),undefined);                                  // past the round end (10 beyond the 190 cap)
+  assert.equal(at(150,230),'tri');assert.equal(at(140,280),'tri');assert.equal(at(150,185),undefined);assert.equal(at(100,270),undefined);
+  assert.equal(at(150,150),'diag');assert.equal(at(130,132),'diag');   // on the diagonal
+  assert.equal(at(190,110),undefined);                                  // the bounding box corner, off the line
+  assert.equal(at(190,110,60),'diag');                                  // within a drag margin of it
+  const far:Scene={targets:[{id:'far',board:'board',position:{x:250,y:250},hit_shape:{kind:'line',from:{x:0,y:0},to:{x:80,y:0},width:20}}]};
+  validateScene(pkg,far);
+  assert.deepEqual(targetBounds(pkg,far.targets![0]),{x:240,y:240,width:100,height:20});
 });
 
 test('camera fitting preserves the declared instruction viewport and complete offset target bodies',()=>{

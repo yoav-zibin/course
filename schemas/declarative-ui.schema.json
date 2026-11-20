@@ -711,6 +711,38 @@
           ],
           "additionalProperties": false
         },
+        "hit_shape": {
+          "description": "Optional line or polygon interaction zone, with coordinates in logical units relative to the target position. The host draws the shape as the marker. It replaces hit_area (declaring both is invalid) and does not grant a move.",
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "A line segment with rounded ends; taps within width/2 of the segment hit it.",
+              "properties": {
+                "kind": {"const": "line"},
+                "from": {"$ref": "#/$defs/point"},
+                "to": {"$ref": "#/$defs/point"},
+                "width": {"type": "number", "exclusiveMinimum": 0, "maximum": 100000}
+              },
+              "required": ["kind", "from", "to", "width"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "A filled polygon of 3 to 32 corners; taps inside it hit it.",
+              "properties": {
+                "kind": {"const": "polygon"},
+                "points": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 32,
+                  "items": {"$ref": "#/$defs/point"}
+                }
+              },
+              "required": ["kind", "points"],
+              "additionalProperties": false
+            }
+          ]
+        },
         "id": {
           "type": "string",
           "minLength": 1,
@@ -761,6 +793,9 @@
         "board",
         "position"
       ],
+      "not": {
+        "required": ["hit_area", "hit_shape"]
+      },
       "additionalProperties": false
     },
     "preview_cell": {

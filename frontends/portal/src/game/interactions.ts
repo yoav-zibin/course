@@ -1,6 +1,6 @@
 import {copyText} from '../platform/i18n';
 import type { GameSpec, Piece, Point, Scene, StateMessage, Target, UIEvent } from './types';
-import { pieceActions, position } from './validation';
+import { pieceActions, position, targetBounds } from './validation';
 
 export function canMove(message: StateMessage | null, sent = false): boolean {
   return !!message && message.status === 'ongoing' && Number.isInteger(message.acting_for_player_index)
@@ -18,12 +18,58 @@ export function pieceSize(spec: GameSpec, piece: Piece): { width: number; height
   return {width, height: type.height ?? (board.kind === 'grid' ? board.height / board.rows! * .76 : width)};
 }
 
-export function targetBox(spec: GameSpec, target: Target) {
-  const point = position(spec, target), board = point.board;
-  const width = board.kind === 'grid' ? board.width / board.columns! : 44;
-  const height = board.kind === 'grid' ? board.height / board.rows! : 44;
-  return {x: point.x + (target.hit_area?.x ?? -width / 2), y: point.y + (target.hit_area?.y ?? -height / 2),
-    width: target.hit_area?.width ?? width, height: target.hit_area?.height ?? height};
+// Axis-aligned bounds of a target's tap zone (for a line or polygon, its extent).
+export function targetBox(spec: GameSpec, target: Target) { return targetBounds(spec, target); }
+
+function segmentDistance(p: Point, a: Point, b: Point) {
+  const dx = b.x - a.x, dy = b.y - a.y, length = dx * dx + dy * dy;
+  const along = length ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
+  return Math.hypot(p.x - a.x - along * dx, p.y - a.y - along * dy);
+}
+
+function insidePolygon(p: Point, points: Point[]) {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[i], b = points[j];
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+// A target's line or polygon tap zone in scene coordinates, or undefined for the
+// rectangular default.
+export function targetShape(spec: GameSpec, target: Target) {
+  const shape = target.hit_shape;
+  if (!shape) return undefined;
+  const at = position(spec, target), shift = (p: Point) => ({x: at.x + p.x, y: at.y + p.y});
+  return shape.kind === 'line'
+    ? {kind: 'line' as const, from: shift(shape.from), to: shift(shape.to), width: shape.width}
+    : {kind: 'polygon' as const, points: shape.points.map(shift)};
+}
+
+// Distance from `at` to the target's tap zone: 0 inside it, so a margin of m
+// means "within m units of the zone".
+export function targetGap(spec: GameSpec, target: Target, at: Point) {
+  const shape = targetShape(spec, target);
+  if (!shape) {
+    const box = targetBox(spec, target);
+    return Math.hypot(Math.max(box.x - at.x, 0, at.x - box.x - box.width), Math.max(box.y - at.y, 0, at.y - box.y - box.height));
+  }
+  if (shape.kind === 'line') return Math.max(0, segmentDistance(at, shape.from, shape.to) - shape.width / 2);
+  if (insidePolygon(at, shape.points)) return 0;
+  return Math.min(...shape.points.map((p, i) => segmentDistance(at, p, shape.points[(i + 1) % shape.points.length])));
+}
+
+export function targetContains(spec: GameSpec, target: Target, at: Point, margin = 0) {
+  // Rectangles keep their square margin; shapes use true distance.
+  return target.hit_shape ? targetGap(spec, target, at) <= margin : contains(targetBox(spec, target), at, margin);
+}
+
+// Smallest tappable thickness: a line's width, otherwise the shorter box side.
+export function targetThickness(spec: GameSpec, target: Target) {
+  if (target.hit_shape?.kind === 'line') return target.hit_shape.width;
+  const box = targetBox(spec, target);
+  return Math.min(box.width, box.height);
 }
 
 export function contains(box: Point & {width: number; height: number}, at: Point, margin = 0) {
@@ -48,13 +94,21 @@ export function hitPiece(spec: GameSpec, scene: Scene, at: Point): Piece | undef
   });
 }
 
+// Tie-break when zones overlap: a rectangle ranks by its centre as before; a
+// line by its distance to the segment, a polygon by its distance outside it and
+// then to its first corner.
+function closeness(spec: GameSpec, target: Target, at: Point) {
+  const shape = targetShape(spec, target);
+  if (shape?.kind === 'line') return segmentDistance(at, shape.from, shape.to);
+  if (shape) return targetGap(spec, target, at) * 1000 + Math.hypot(at.x - shape.points[0].x, at.y - shape.points[0].y);
+  const center = position(spec, target);
+  return Math.hypot(at.x - center.x, at.y - center.y);
+}
+
 export function hitTarget(spec: GameSpec, scene: Scene, at: Point, piece?: Piece, margin = 0): Target | undefined {
   return [...(scene.targets || [])].filter(target => !piece || piece.move_targets?.includes(target.id))
-    .filter(target => contains(targetBox(spec,target),at,margin))
-    .sort((a,b)=>{
-      const pa=position(spec,a),pb=position(spec,b);
-      return Math.hypot(at.x-pa.x,at.y-pa.y)-Math.hypot(at.x-pb.x,at.y-pb.y);
-    })[0];
+    .filter(target => targetContains(spec,target,at,margin))
+    .sort((a,b)=>closeness(spec,a,at)-closeness(spec,b,at))[0];
 }
 
 export function validEvent(scene: Scene, event: UIEvent): boolean {
