@@ -74,3 +74,31 @@ def test_wrong_player_cannot_move():
     _,logic,ctx=fixture()
     with pytest.raises(Exception):
         logic.call('applyMove',{'piles':[3,5,7],'seat':0,'winner':None},'u2',{'pile':0,'take':1},ctx=ctx,seed=1)
+
+
+def test_heap_artwork_matches_hitbox_and_labels_stay_inside_rows():
+    body,logic,ctx=fixture()
+    spec=body.declarative_ui
+    assert spec['viewport']['height']==550
+    for kind in ('heap','heap_selected'):
+        piece_type=spec['piece_types'][kind]
+        asset=spec['assets'][piece_type['asset']]
+        assert asset['width']==piece_type['width']==432
+        assert asset['height']==piece_type['height']==72
+    message=ui_message(logic,logic.call('newMatch',ctx=ctx,seed=1),ctx,0,1)
+    ui=DeclarativeLogic(spec);frame=ui.reduce(message,None)
+    assert len([p for p in frame['scene']['pieces'] if p['id'].startswith('player_')])==0
+    labels={label['id']:label for label in frame['scene']['labels']}
+    for i in range(3):
+        row=next(p for p in frame['scene']['pieces'] if p['id']==f'pile_{i}')
+        x,y=row['position']['x'],row['position']['y']
+        for label_id in (f'pile_label_{i}',f'pile_count_{i}'):
+            label=labels[label_id]
+            assert x-216+12<=label['x']<x-116
+            assert y-36<=label['y']<=label['y']+label['font_size']<=y+36
+    selected=ui.reduce({'type':'ui_event','event':{'type':'tap','id':'pile_2'},'state_changed':message},frame['local_state'])
+    buttons=[p for p in selected['scene']['pieces'] if p['id'].startswith('take_')]
+    assert len(buttons)==7
+    for p in buttons:
+        assert 24<=p['position']['x']-48<p['position']['x']+48<=456
+        assert p['position']['y']+24<=550

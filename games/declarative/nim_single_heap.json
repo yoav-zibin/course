@@ -13,7 +13,7 @@
     "version": 1,
     "viewport": {
       "width": 480,
-      "height": 700,
+      "height": 550,
       "camera_enabled": false
     },
     "boards": [
@@ -23,9 +23,9 @@
         "x": 0,
         "y": 0,
         "width": 480,
-        "height": 700,
-        "color": "#0c2630",
-        "line_color": "#0c2630"
+        "height": 550,
+        "color": "#123538",
+        "line_color": "#123538"
       }
     ],
     "piece_types": {
@@ -33,7 +33,7 @@
         "shape": "image",
         "asset": "table_art",
         "width": 480,
-        "height": 700,
+        "height": 550,
         "text_color": "#fffbec",
         "font_size": 20,
         "action_outline": "none"
@@ -77,10 +77,10 @@
       "take_button": {
         "shape": "image",
         "asset": "take_button",
-        "width": 130,
-        "height": 52,
+        "width": 96,
+        "height": 48,
         "text_color": "#fffbec",
-        "font_size": 20,
+        "font_size": 17,
         "action_outline": "none"
       },
       "result_panel": {
@@ -118,27 +118,23 @@
       },
       "heap": {
         "shape": "image",
-        "asset": "primary_button",
-        "width": 400,
-        "height": 66,
-        "text_color": "#fffbec",
-        "font_size": 20,
+        "asset": "heap",
+        "width": 432,
+        "height": 72,
         "action_outline": "none"
       },
       "heap_selected": {
         "shape": "image",
-        "asset": "gold_button",
-        "width": 400,
-        "height": 66,
-        "text_color": "#163d3c",
-        "font_size": 20,
+        "asset": "heap_selected",
+        "width": 432,
+        "height": 72,
         "action_outline": "none"
       },
       "nim_gem": {
         "shape": "image",
         "asset": "gem",
-        "width": 36,
-        "height": 30,
+        "width": 42,
+        "height": 38,
         "text_color": "#fffbec",
         "font_size": 20,
         "action_outline": "none"
@@ -148,8 +144,8 @@
       "table_art": {
         "media_type": "image/svg+xml",
         "width": 480,
-        "height": 700,
-        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0ODAiIGhlaWdodD0iNzAwIiB2aWV3Qm94PSIwIDAgNDgwIDcwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDI9Ii44IiB5Mj0iMSI+PHN0b3Agc3RvcC1jb2xvcj0iIzE3M2Y0MCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzA5MWYyOSIvPjwvbGluZWFyR3JhZGllbnQ+PHJhZGlhbEdyYWRpZW50IGlkPSJmZWx0Ij48c3RvcCBzdG9wLWNvbG9yPSIjMjg2MzViIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMTc0NDNmIi8+PC9yYWRpYWxHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjQ4MCIgaGVpZ2h0PSI3MDAiIHJ4PSIyNiIgZmlsbD0idXJsKCNiZykiLz48cmVjdCB4PSIxMCIgeT0iMTAiIHdpZHRoPSI0NjAiIGhlaWdodD0iNjgwIiByeD0iMjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2I5ZDVjMCIgc3Ryb2tlLW9wYWNpdHk9Ii4xNCIvPjxwYXRoIGQ9Ik0yNiA2N0g0NTQiIHN0cm9rZT0iI2Q5YzI5MCIgc3Ryb2tlLW9wYWNpdHk9Ii4yOCIvPjxlbGxpcHNlIGN4PSIyNDAiIGN5PSIzMDAiIHJ4PSIyMTQiIHJ5PSIxMTUiIGZpbGw9IiMwNjFkMjIiIG9wYWNpdHk9Ii40Ii8+PGVsbGlwc2UgY3g9IjI0MCIgY3k9IjI4OSIgcng9IjIxMSIgcnk9IjExMiIgZmlsbD0idXJsKCNmZWx0KSIgc3Ryb2tlPSIjYjdiNDhhIiBzdHJva2Utd2lkdGg9IjIiLz48ZWxsaXBzZSBjeD0iMjQwIiBjeT0iMjg5IiByeD0iMTk5IiByeT0iMTAxIiBmaWxsPSIjMjA1MTQ5IiBmaWxsLW9wYWNpdHk9Ii4xMiIgc3Ryb2tlPSIjYzlkOWI5IiBzdHJva2Utb3BhY2l0eT0iLjE1Ii8+PHJlY3QgeD0iMjAiIHk9IjQ0MiIgd2lkdGg9IjQ0MCIgaGVpZ2h0PSIyMzEiIHJ4PSIxOCIgZmlsbD0iIzA2MWIyNCIgZmlsbC1vcGFjaXR5PSIuNTYiIHN0cm9rZT0iI2IwY2NjMCIgc3Ryb2tlLW9wYWNpdHk9Ii4xMiIvPjxwYXRoIGQ9Ik00MCA0NzRINDQwIiBzdHJva2U9IiNhNWM1YmEiIHN0cm9rZS1vcGFjaXR5PSIuMTYiLz48cGF0aCBkPSJNMjE5IDM2OWwyMS0xMiAyMSAxMi0yMSAxMnoiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2Q0YzA4YiIgc3Ryb2tlLW9wYWNpdHk9Ii4zNSIvPjwvc3ZnPg=="
+        "height": 550,
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0ODAiIGhlaWdodD0iNTUwIiB2aWV3Qm94PSIwIDAgNDgwIDU1MCI+PHJlY3Qgd2lkdGg9IjQ4MCIgaGVpZ2h0PSI1NTAiIHJ4PSIyMiIgZmlsbD0iIzEyMzUzOCIvPjxyZWN0IHg9IjEwIiB5PSIxMCIgd2lkdGg9IjQ2MCIgaGVpZ2h0PSI1MzAiIHJ4PSIxNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMzE1NDUyIi8+PHBhdGggZD0iTTI2IDUzSDQ1NCIgc3Ryb2tlPSIjNzM4NTZiIiBzdHJva2Utb3BhY2l0eT0iLjMiLz48L3N2Zz4="
       },
       "card_back": {
         "media_type": "image/svg+xml",
@@ -495,9 +491,9 @@
       },
       "take_button": {
         "media_type": "image/svg+xml",
-        "width": 130,
-        "height": 52,
-        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMzAiIGhlaWdodD0iNTIiIHZpZXdCb3g9IjAgMCAxMzAgNTIiPjxyZWN0IHg9IjEiIHk9IjQiIHdpZHRoPSIxMjgiIGhlaWdodD0iNDciIHJ4PSIxMyIgZmlsbD0iIzA0MTkxZSIgb3BhY2l0eT0iLjI4Ii8+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjEyOCIgaGVpZ2h0PSI0NyIgcng9IjEzIiBmaWxsPSIjMzE1OTU0IiBzdHJva2U9IiM3OGI1YTAiIHN0cm9rZS1vcGFjaXR5PSIuOCIvPjwvc3ZnPg=="
+        "width": 96,
+        "height": 48,
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5NiIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDk2IDQ4Ij48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iOTQiIGhlaWdodD0iNDYiIHJ4PSIxMCIgZmlsbD0iIzI2NWI1MCIgc3Ryb2tlPSIjODBiMjliIi8+PC9zdmc+"
       },
       "result_panel": {
         "media_type": "image/svg+xml",
@@ -510,6 +506,18 @@
         "width": 70,
         "height": 58,
         "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI3MCIgaGVpZ2h0PSI1OCIgdmlld0JveD0iMCAwIDcwIDU4Ij48ZGVmcz48cmFkaWFsR3JhZGllbnQgaWQ9ImciIGN4PSIuMyIgY3k9Ii4yIj48c3RvcCBzdG9wLWNvbG9yPSIjZTRmZmRmIi8+PHN0b3Agb2Zmc2V0PSIuNDUiIHN0b3AtY29sb3I9IiNhOGUwYmMiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMzYzg4N2MiLz48L3JhZGlhbEdyYWRpZW50PjwvZGVmcz48ZWxsaXBzZSBjeD0iMzUiIGN5PSI0MyIgcng9IjI3IiByeT0iMTAiIGZpbGw9IiMwMzFmMjgiIG9wYWNpdHk9Ii4yOCIvPjxlbGxpcHNlIGN4PSIzNCIgY3k9IjI5IiByeD0iMjciIHJ5PSIyNCIgZmlsbD0idXJsKCNnKSIgc3Ryb2tlPSIjZTVmZmQ5IiBzdHJva2Utb3BhY2l0eT0iLjciLz48ZWxsaXBzZSBjeD0iMjUiIGN5PSIxNyIgcng9IjExIiByeT0iNSIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjUiLz48L3N2Zz4="
+      },
+      "heap": {
+        "media_type": "image/svg+xml",
+        "width": 432,
+        "height": 72,
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MzIiIGhlaWdodD0iNzIiIHZpZXdCb3g9IjAgMCA0MzIgNzIiPjxyZWN0IHg9IjEiIHk9IjEiIHdpZHRoPSI0MzAiIGhlaWdodD0iNzAiIHJ4PSIxMiIgZmlsbD0iIzFhNDI0MyIgc3Ryb2tlPSIjNDI2MTVhIiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMTAwIDE0VjU4IiBzdHJva2U9IiM0MjYxNWEiIHN0cm9rZS1vcGFjaXR5PSIuNSIvPjwvc3ZnPg=="
+      },
+      "heap_selected": {
+        "media_type": "image/svg+xml",
+        "width": 432,
+        "height": 72,
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MzIiIGhlaWdodD0iNzIiIHZpZXdCb3g9IjAgMCA0MzIgNzIiPjxyZWN0IHg9IjEiIHk9IjEiIHdpZHRoPSI0MzAiIGhlaWdodD0iNzAiIHJ4PSIxMiIgZmlsbD0iIzJjNWI0ZSIgc3Ryb2tlPSIjZGVjMjdiIiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMTAwIDE0VjU4IiBzdHJva2U9IiNkZWMyN2IiIHN0cm9rZS1vcGFjaXR5PSIuNSIvPjwvc3ZnPg=="
       }
     },
     "strings": {
@@ -525,7 +533,7 @@
       "take_from": "Take {n} from pile {pile}",
       "server_illegal": "Choose a legal move on your turn."
     },
-    "ui_code": "const SOURCE_STRINGS={\"title\": \"Nim\", \"turn\": \"{name}'s turn\", \"winner\": \"{name} wins\", \"hint\": \"Take stones from one pile only. The last stone wins.\", \"pile\": \"Pile {pile}\", \"pile_count\": \"Pile {pile}: {n} stones\", \"choose_pile\": \"Select a pile to begin\", \"choose_amount\": \"Choose how many to take from pile {pile}\", \"take\": \"Take {n}\", \"take_from\": \"Take {n} from pile {pile}\", \"server_illegal\": \"Choose a legal move on your turn.\"};\nconst gameUI={\n reduce(message,previous){\n  const m=message.type==='ui_event'?message.state_changed:message,v=m.view||m.state;\n  const strings={...SOURCE_STRINGS,...m.strings};\n  const t=(key,values={})=>String(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String(values[k]??''));\n  const active=m.status==='ongoing'&&!m.replay&&v.winner===null&&\n    m.acting_for_player_index===v.seat&&m.turn_of_player_indices?.includes(v.seat);\n  const name=i=>m.players?.[i]?.name||m.players?.[i]?.display_name||String(i+1);\n  let selected=previous?.moveCount===m.move_count&&previous?.seat===v.seat?previous.selected:null;\n  if(!Number.isInteger(selected)||!v.piles[selected])selected=null;\n  const click=message.type==='ui_event'&&message.event?.type==='tap'?message.event.id:'';\n  if(active&&/^pile_[0-2]$/.test(click)&&v.piles[Number(click.slice(5))]>0)selected=Number(click.slice(5));\n  const scene={pieces:[],labels:[],controls:[]};\n  const piece=(id,type,x,y,extra={})=>scene.pieces.push({id,type,board:'surface',position:{x,y},actions:[],...extra});\n  const label=(id,text,x,y,size=17,color='#f5eddb')=>scene.labels.push({id,text:String(text),x,y,font_size:size,color});\n  piece('polish_background','table_art',240,350,{z:-100});\n  label('title',t('title'),26,22,28);\n  for(let i=0;i<2;i++){\n   const x=26+i*222;\n   piece('player_'+i,m.status==='ongoing'&&v.seat===i?'seat_active':'seat_idle',x+67,108);\n   label('player_name_'+i,name(i).slice(0,16),x+11,92,15,i===v.seat?'#f7dfa1':'#d0dfd7');\n  }\n  label('status',v.winner!==null?t('winner',{name:name(v.winner)}):t('turn',{name:name(v.seat)}),28,153,22,'#ead9a3');\n  label('hint',t('hint'),28,185,14,'#abcbbc');\n  for(let i=0;i<3;i++){\n   const y=246+i*78,n=v.piles[i];\n   piece('pile_'+i,selected===i?'heap_selected':'heap',240,y,{actions:active&&n>0?['tap']:[],aria_label:t('pile_count',{pile:i+1,n}),opacity:n>0?1:.4});\n   label('pile_label_'+i,t('pile',{pile:i+1}),52,y-20,16,selected===i?'#173d39':'#f4edda');\n   label('pile_count_'+i,String(n),52,y+2,19,selected===i?'#173d39':'#c8decf');\n   for(let j=0;j<n;j++)piece('stone_'+i+'_'+j,'nim_gem',184+j*34,y,{opacity:selected===i?1:.8});\n  }\n  label('quantity',selected===null?t('choose_pile'):t('choose_amount',{pile:selected+1}),35,453,17,'#bddbca');\n  if(active&&selected!==null){\n   for(let take=1;take<=v.piles[selected];take++){\n    const i=take-1;piece('take_'+take,'take_button',98+(i%3)*142,515+Math.floor(i/3)*65,\n      {actions:['tap'],text:t('take',{n:take}),aria_label:t('take_from',{n:take,pile:selected+1})});\n   }\n  }\n  const result={scene,local_state:{moveCount:m.move_count,seat:v.seat,selected}};\n  if(active&&selected!==null&&/^take_[1-7]$/.test(click)){\n   const take=Number(click.slice(5));if(take<=v.piles[selected])result.make_move={pile:selected,take};\n  }\n  return result;\n }\n};\n",
+    "ui_code": "const SOURCE_STRINGS={\"title\": \"Nim\", \"turn\": \"{name}'s turn\", \"winner\": \"{name} wins\", \"hint\": \"Take stones from one pile only. The last stone wins.\", \"pile\": \"Pile {pile}\", \"pile_count\": \"Pile {pile}: {n} stones\", \"choose_pile\": \"Select a pile to begin\", \"choose_amount\": \"Choose how many to take from pile {pile}\", \"take\": \"Take {n}\", \"take_from\": \"Take {n} from pile {pile}\", \"server_illegal\": \"Choose a legal move on your turn.\"};\nconst gameUI={\n reduce(message,previous){\n  const m=message.type==='ui_event'?message.state_changed:message,v=m.view||m.state;\n  const strings={...SOURCE_STRINGS,...m.strings};\n  const t=(key,values={})=>String(strings[key]||key).replace(/\\{(\\w+)\\}/g,(_,k)=>String(values[k]??''));\n  const active=m.status==='ongoing'&&!m.replay&&v.winner===null&&\n    m.acting_for_player_index===v.seat&&m.turn_of_player_indices?.includes(v.seat);\n  const name=i=>m.players?.[i]?.name||m.players?.[i]?.display_name||String(i+1);\n  let selected=previous?.moveCount===m.move_count&&previous?.seat===v.seat?previous.selected:null;\n  if(!Number.isInteger(selected)||!v.piles[selected])selected=null;\n  const click=message.type==='ui_event'&&message.event?.type==='tap'?message.event.id:'';\n  if(active&&/^pile_[0-2]$/.test(click)&&v.piles[Number(click.slice(5))]>0)selected=Number(click.slice(5));\n  const scene={pieces:[],labels:[],controls:[]};\n  const piece=(id,type,x,y,extra={})=>scene.pieces.push({id,type,board:'surface',position:{x,y},actions:[],...extra});\n  const label=(id,text,x,y,size=17,color='#f5eddb')=>scene.labels.push({id,text:String(text),x,y,font_size:size,color});\n  piece('polish_background','table_art',240,275,{z:-100});\n  label('title',t('title'),26,22,28);\n  label('status',v.winner!==null?t('winner',{name:name(v.winner)}):t('turn',{name:name(v.seat)}),28,62,20,'#ead9a3');\n  label('hint',t('hint'),28,95,14,'#abcbbc');\n  for(let i=0;i<3;i++){\n   const y=174+i*80,n=v.piles[i];\n   piece('pile_'+i,selected===i?'heap_selected':'heap',240,y,{actions:active&&n>0?['tap']:[],aria_label:t('pile_count',{pile:i+1,n}),opacity:n>0?1:.4});\n   label('pile_label_'+i,t('pile',{pile:i+1}),42,y-20,17,'#f4edda');\n   label('pile_count_'+i,String(n),42,y+4,16,'#b4d2c4');\n   for(let j=0;j<n;j++)piece('stone_'+i+'_'+j,'nim_gem',174+j*38,y,{opacity:selected===i?1:.8});\n  }\n  label('quantity',selected===null?t('choose_pile'):t('choose_amount',{pile:selected+1}),28,380,16,'#bddbca');\n  if(active&&selected!==null){\n   for(let take=1;take<=v.piles[selected];take++){\n    const i=take-1,row=Math.floor(i/4),cols=Math.min(4,v.piles[selected]-row*4),x=240-(cols-1)*54+(i%4)*108;piece('take_'+take,'take_button',x,450+row*60,\n      {actions:['tap'],text:t('take',{n:take}),aria_label:t('take_from',{n:take,pile:selected+1})});\n   }\n  }\n  const result={scene,local_state:{moveCount:m.move_count,seat:v.seat,selected}};\n  if(active&&selected!==null&&/^take_[1-7]$/.test(click)){\n   const take=Number(click.slice(5));if(take<=v.piles[selected])result.make_move={pile:selected,take};\n  }\n  return result;\n }\n};\n",
     "motion": {
       "move_ms": 180,
       "easing": "ease-out"
