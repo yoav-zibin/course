@@ -230,10 +230,13 @@ def test_winners_follow_the_official_tie_breaks():
 
 @pytest.mark.parametrize('count', [2, 3, 4])
 def test_seeded_random_walks_always_reach_a_legal_end(count):
+    # Four-player walks use all 48 tiles. Allow slower runners enough bounded
+    # time to reach the same eight-game minimum; do not lower rule coverage.
+    budget_seconds = 90 if count == 4 else 45
     report = run_random_walks(BODY.server_code, game_schemas=BODY.game_schemas(),
                               rules=GameRules(allowed_player_counts=(count,), allows_leave_mid_match=False,
                                               allows_join_mid_match=False),
-                              run_seed=60 + count, max_walks=40, budget_seconds=45, max_moves_per_walk=200,
+                              run_seed=60 + count, max_walks=40, budget_seconds=budget_seconds, max_moves_per_walk=200,
                               contract=BODY.unit_tests)
     assert report.passed, report.failures
     assert report.walks_completed >= 8 and report.terminal_states == report.walks_completed

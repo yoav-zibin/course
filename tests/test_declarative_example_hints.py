@@ -74,3 +74,65 @@ def test_examples_do_not_treat_rotation_or_scaling_as_a_move(kind):
                   {'type':'scale','id':piece['id'],'factor':1.1}]:
         response=logic.reduce({'type':'ui_event','event':event,'state_changed':message})
         assert 'make_move'not in response
+
+
+def selected_ids(frame):
+    return {piece['id']for piece in frame['scene']['pieces']if piece.get('selected')}
+
+
+def select_marble(logic,message,frame,cell):
+    ident=f'piece_{cell}'
+    piece=next(piece for piece in frame['scene']['pieces']if piece['id']==ident)
+    assert piece['actions']==['tap']
+    answer=logic.reduce({'type':'ui_event','event':{'type':'tap','id':ident},
+                         'state_changed':message},frame.get('local_state'))
+    assert 'make_move'not in answer
+    return answer
+
+
+def assert_hex_target_moves(logic,message,frame,cells):
+    expected=[move for move in message['view']['legal']
+              if set(move.get('from',[])if isinstance(move.get('from',[]),list)
+                     else [move['from']])==set(cells)]
+    emitted=[]
+    for target in frame['scene']['targets']:
+        answer=logic.reduce({'type':'ui_event','event':{'type':'tap','id':target['id']},
+                             'state_changed':message},frame['local_state'])
+        assert 'make_move'in answer
+        emitted.append(answer['make_move'])
+    encode=lambda moves:sorted(json.dumps(move,sort_keys=True)for move in moves)
+    assert encode(emitted)==encode(expected)
+
+
+def test_chinese_checkers_selecting_another_marble_clears_the_previous_selection():
+    logic,message=inputs('chinese_checkers')
+    frame=logic.reduce(message)
+    cells=sorted({move['from']for move in message['view']['legal']})
+    assert len(cells)>=2
+    first=select_marble(logic,message,frame,cells[0])
+    assert selected_ids(first)=={f'piece_{cells[0]}'}
+    second=select_marble(logic,message,first,cells[1])
+    assert selected_ids(second)=={f'piece_{cells[1]}'}
+    assert_hex_target_moves(logic,message,second,[cells[1]])
+
+
+def test_abalone_group_can_be_deselected_and_selected_again_before_a_move():
+    logic,message=inputs('abalone')
+    original=json.dumps(message,sort_keys=True)
+    frame=logic.reduce(message)
+    cells=next(move['from']for move in message['view']['legal']if len(move['from'])==2)
+    for cell in cells:
+        frame=select_marble(logic,message,frame,cell)
+    assert selected_ids(frame)=={f'piece_{cell}'for cell in cells}
+    assert_hex_target_moves(logic,message,frame,cells)
+    frame=select_marble(logic,message,frame,cells[-1])
+    assert selected_ids(frame)=={f'piece_{cells[0]}'}
+    assert_hex_target_moves(logic,message,frame,cells[:1])
+    frame=select_marble(logic,message,frame,cells[0])
+    assert not selected_ids(frame)
+    assert not frame['scene']['targets']
+    for cell in cells:
+        frame=select_marble(logic,message,frame,cell)
+    assert selected_ids(frame)=={f'piece_{cell}'for cell in cells}
+    assert_hex_target_moves(logic,message,frame,cells)
+    assert json.dumps(message,sort_keys=True)==original
