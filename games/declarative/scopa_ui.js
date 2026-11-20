@@ -50,9 +50,12 @@ const gameUI = {
     label('score',s.over ? text('final',{a:s.scores[0],b:s.scores[1]}) :
       text('sweeps',{a:s.sweeps[0],b:s.sweeps[1]}),195,52,19);
     label('stock',text('stock',{n:s.deck_count}),260,85,16);
+    const extraRows = Math.max(0, Math.ceil(s.table.length / 7) - 2);
+    const shift = extraRows * 105;
     if (s.over) label('result',s.winner < 0 ? strings.tie :
-      text('winner',{name:m.players?.[s.winner]?.name || text('player',{n:s.winner+1})}),240,405,18);
-    else label('hint',selected ? strings.choose_capture : strings.choose_card,220,405,16);
+      text('winner',{name:m.players?.[s.winner]?.name || text('player',{n:s.winner+1})}),240,105,18);
+    else if (active && s.hand?.length)
+      label('hint',selected ? strings.choose_capture : strings.choose_card,220,405+shift,16);
     s.table.forEach((card,i) => {
       const row = Math.floor(i/7);
       const count = Math.min(7,s.table.length-row*7);
@@ -63,7 +66,7 @@ const gameUI = {
         target(`take_${card}`,position,text('capture',{card:cardText(card)}));
     });
     (s.hand || []).forEach((card,i) => {
-      const position = {x:320-(s.hand.length-1)*60+i*120,y:500};
+      const position = {x:320-(s.hand.length-1)*60+i*120,y:500+shift};
       piece(`card_${i}`,card,position,selected === card ? 1.08 : 1);
       if (active && legal.some(move => move.card === card))
         target(`hand_${card}`,position,text('play',{card:cardText(card)}));

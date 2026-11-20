@@ -36,7 +36,8 @@ const EXTRA_STRINGS = {
   'Previous center cards':['Cartas centrales anteriores','Cartes centrales précédentes','Vorherige Mittelkarten','Cartas centrais anteriores','上一组中央牌','पिछले बीच के पत्ते','أوراق الوسط السابقة'],
   'Next center cards':['Más cartas centrales','Cartes centrales suivantes','Weitere Mittelkarten','Próximas cartas centrais','下一组中央牌','अगले बीच के पत्ते','أوراق الوسط التالية'],
   'Choose a card for the center':['Elige una carta para el centro','Choisissez une carte pour le centre','Karte für die Mitte wählen','Escolha uma carta para o centro','选择一张牌放到中央','बीच के लिए एक पत्ता चुनें','اختر ورقة للوسط'],
-  Cancel:['Cancelar','Annuler','Abbrechen','Cancelar','取消','रद्द करें','إلغاء']
+  Cancel:['Cancelar','Annuler','Abbrechen','Cancelar','取消','रद्द करें','إلغاء'],
+  '{name} · size {n}':['{name} · tamaño {n}','{name} · taille {n}','{name} · Größe {n}','{name} · tamanho {n}','{name} · 大小 {n}','{name} · आकार {n}','{name} · الحجم {n}']
 };
 const ALL_STRINGS={...COPY.strings,...EXTRA_STRINGS};
 const STRING_KEYS = Object.fromEntries(Object.keys(ALL_STRINGS).map((text,index) => [text,`text_${index}`]));
@@ -365,6 +366,9 @@ function gobbletAssets() {
       <path d="M25 35 C25 25 103 25 103 35 L95 98 Q92 113 64 114 Q36 113 33 98 Z"
         fill="${mid}" stroke="${dark}" stroke-width="4" stroke-linejoin="round"/>
       <path d="M36 49 Q39 90 43 99 Q48 106 54 107" fill="none" stroke="${light}" stroke-width="8" stroke-linecap="round" opacity=".7"/>
+      ${key === 'goblet_0'
+        ? `<circle cx="69" cy="76" r="8" fill="none" stroke="${light}" stroke-width="4"/>`
+        : `<path d="M69 64 L78 76 L69 88 L60 76 Z" fill="none" stroke="${light}" stroke-width="4" stroke-linejoin="round"/>`}
       <ellipse cx="64" cy="35" rx="39" ry="17" fill="${light}" stroke="${dark}" stroke-width="4"/>
       <ellipse cx="64" cy="34" rx="29" ry="10" fill="${dark}" opacity=".72"/>
       <ellipse cx="55" cy="29" rx="15" ry="3" fill="#ffffff" opacity=".5"/>

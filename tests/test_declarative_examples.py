@@ -291,6 +291,13 @@ def test_gobblet_reserves_and_covered_own_pieces_are_reachable():
     selected = ui.reduce({'type':'ui_event', 'event':{'type':'tap', 'id':'reserve_4'},
                           'state_changed':m}, initial['local_state'])
     assert not any(t['id'] == 'source_0' for t in selected['scene']['targets'])
+    assert all(t['color'] == '#fff0d833' for t in selected['scene']['targets']
+               if t['id'].startswith('intent_'))
+    source = ui.reduce({'type':'ui_event', 'event':{'type':'tap', 'id':'source_0'},
+                        'state_changed':m}, initial['local_state'])
+    selected_piece = next(piece for piece in source['scene']['pieces'] if piece['id'] == 'stack_0_0')
+    assert selected_piece['scale'] == 1.1
+    assert selected_piece['aria_label'] == 'A · size 2'
     for move in ({'place':{'size':4,'cell':0}}, {'place':{'size':4,'cell':5}},
                  {'move':{'from':0,'to':5}}):
         assert scene_event(ui, m, initial, move)['make_move'] == move

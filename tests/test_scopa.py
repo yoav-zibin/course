@@ -84,3 +84,27 @@ def test_complete_deal_through_offered_ui_actions():
     trace, observations = play_trace(load(), seed=42, mode='pass_and_play')
     assert len(trace['moves']) == len(observations) == 36
     assert trace['states'][-1]['over'] is True
+
+
+def test_large_table_does_not_overlap_hand_or_hint():
+    body = load()
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = dict(body.unit_tests['cases'][0]['view_of_mover'])
+    view.update(table=[f'{rank}{suit}' for suit in 'SHC' for rank in range(1, 8)],
+                hand=['10D'], legal=[{'card':'10D','capture':['3S','7C']}])
+    message = {'type':'state_changed','view':view,'status':'ongoing',
+               'acting_for_player_index':0,'my_player_index':0,'move_count':0}
+    frame = ui.reduce(message)
+    pieces = frame['scene']['pieces']
+    table_bottom = max(p['position']['y'] for p in pieces if p['id'].startswith('table_')) + 48
+    hand_top = next(p['position']['y'] for p in pieces if p['id'] == 'card_0') - 48
+    hint = next(label for label in frame['scene']['labels'] if label['id'] == 'hint')
+    assert table_bottom < hint['y'] < hand_top
+    assert scene_event(ui, message, frame, view['legal'][0])['make_move'] == view['legal'][0]
+
+    spectator = {**message, 'my_player_index':None, 'acting_for_player_index':None,
+                 'view':{**view, 'hand':[], 'legal':[]}}
+    assert not any(label['id'] == 'hint' for label in ui.reduce(spectator)['scene']['labels'])
+    terminal = {**spectator, 'status':'over', 'view':{**spectator['view'], 'over':True}}
+    result = next(label for label in ui.reduce(terminal)['scene']['labels'] if label['id'] == 'result')
+    assert result['y'] < min(p['position']['y'] for p in pieces if p['id'].startswith('table_')) - 48

@@ -33,7 +33,9 @@ const gameUI = {
     });
     const legal = new Set(active ? s.legal : []);
     (s.hand || []).forEach((card,i) => {
-      const position = {x:80 + (i % 7) * 80,y:395 + Math.floor(i / 7) * 105};
+      const row = Math.floor(i / 7);
+      const count = Math.min(7, s.hand.length - row * 7);
+      const position = {x:320 - (count - 1) * 40 + (i % 7) * 80,y:395 + row * 105};
       scene.pieces.push({id:`hand_${i}`,type:cardType(card),board:'table',position,
         text:cardText(card),actions:[]});
       if (legal.has(card)) scene.targets.push({id:`play_${card}`,board:'table',position,

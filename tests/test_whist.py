@@ -43,6 +43,21 @@ def test_whist_deal_private_views_and_direct_actions():
     assert not ui.reduce({**message,'acting_for_player_index':None})['scene']['targets']
 
 
+def test_whist_centers_each_hand_row():
+    body = load()
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = dict(body.unit_tests['cases'][0]['view_of_mover'])
+    view['hand'] = view['hand'][:9]
+    view['legal'] = view['hand']
+    message = {'type':'state_changed','view':view,'status':'ongoing',
+               'acting_for_player_index':0,'my_player_index':0,'move_count':0}
+    pieces = [piece for piece in ui.reduce(message)['scene']['pieces']
+              if piece['id'].startswith('hand_')]
+    for y in (395, 500):
+        x = [piece['position']['x'] for piece in pieces if piece['position']['y'] == y]
+        assert (min(x) + max(x)) / 2 == 320
+
+
 def test_whist_follows_suit_and_trump_wins_with_team_payouts():
     body = load()
     logic = GameLogic(body.server_code, game_schemas=body.game_schemas())

@@ -37,6 +37,7 @@ const gameUI = {
           ...(aria_label ? {aria_label} : {})});
       } else if (mode === 'target') {
         scene.targets.push({id, board, position, label:String(value || '•'),
+          ...(KIND === 'gobblet' ? {color:'#fff0d833'} : {}),
           ...(aria_label ? {aria_label} : {})});
       } else if (mode === 'piece') {
         scene.pieces.push({id, type:'card', board, position, text:String(value),
@@ -394,7 +395,8 @@ const gameUI = {
       board.forEach((stack, cell) => {
         (stack || []).forEach((goblet, level) => staticPiece(`stack_${cell}_${level}`,
           `goblet_${goblet[0]}_${goblet[1]}`, 'main', boardCell(cell,4),
-          {z:level}));
+          {z:level,scale:selectedFrom === cell && level === stack.length - 1 ? 1.1 : 1,
+            aria_label:text('{name} · size {n}', {name:playerName(goblet[1]),n:goblet[0]})}));
       });
       if (Number.isInteger(m.my_player_index)) {
         for (let size = 1; size <= 4; size++) {
