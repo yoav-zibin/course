@@ -90,14 +90,14 @@ def test_heap_artwork_matches_hitbox_and_labels_stay_inside_rows():
     assert len([p for p in frame['scene']['pieces'] if p['id'].startswith('player_')])==0
     labels={label['id']:label for label in frame['scene']['labels']}
     for i in range(3):
-        row=next(p for p in frame['scene']['pieces'] if p['id']==f'pile_{i}')
+        row=next(p for p in frame['scene']['targets'] if p['id']==f'pile_{i}')
         x,y=row['position']['x'],row['position']['y']
         for label_id in (f'pile_label_{i}',f'pile_count_{i}'):
             label=labels[label_id]
             assert x-216+12<=label['x']<x-116
             assert y-36<=label['y']<=label['y']+label['font_size']<=y+36
     selected=ui.reduce({'type':'ui_event','event':{'type':'tap','id':'pile_2'},'state_changed':message},frame['local_state'])
-    buttons=[p for p in selected['scene']['pieces'] if p['id'].startswith('take_')]
+    buttons=[p for p in selected['scene']['targets'] if p['id'].startswith('take_')]
     assert len(buttons)==7
     for p in buttons:
         assert 24<=p['position']['x']-48<p['position']['x']+48<=456
