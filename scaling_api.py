@@ -215,10 +215,9 @@ def install(app, *, debug_tools):
         match_id: str,
         start: int = Query(0, ge=0),
         limit: int = Query(50, ge=1, le=100),
-        invite: str | None = None,
     ):
         store_of(platform)
-        match = platform.get_match(match_id=match_id, caller_id=caller_id, invite_token=invite)
+        match = platform.get_match(match_id=match_id, caller_id=caller_id)
         stop = min(start + limit, len(match.moves))
         moves = match.moves[start:stop]
         # Apply per-player views to history as well as current state. Each

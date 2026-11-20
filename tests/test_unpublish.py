@@ -36,15 +36,16 @@ def test_unpublish_hides_public_routes_and_all_user_libraries(api: Api):
     assert updated.json()['published'] is True
 
 
-def test_existing_participants_keep_playing_but_outsiders_cannot_read_or_join(api: Api):
+def test_existing_matches_stay_public_and_participants_keep_playing_after_unpublish(api: Api):
     owner, a, b, outsider = [api.new_user(name) for name in ['owner','a','b','outsider']]
     game = api.new_game(owner=owner, allowed_player_counts=[2,3], allows_join_mid_match=True)
     match = api.new_match(owner=a, game_id=game, joiners=[b], start=True)
     api.ok('POST', f'/games/{game}/unpublish', as_user=owner)
     for caller in [None, outsider, owner]:
-        assert api.request('GET', f'/matches/{match}', as_user=caller).status_code == 404
-        assert api.request('GET', f'/matches/{match}/moves', as_user=caller).status_code == 404
+        assert api.request('GET', f'/matches/{match}', as_user=caller).status_code == 200
+        assert api.request('GET', f'/matches/{match}/moves', as_user=caller).status_code == 200
         assert api.request('GET', f'/games/{game}/versions/1', as_user=caller).status_code == 404
+        assert api.ok('GET', f'/matches/{match}/game', as_user=caller)['version'] == 1
     assert api.request('POST', f'/matches/{match}/join', as_user=outsider).status_code == 409
     for participant in [a,b]:
         assert api.ok('GET', f'/games/{game}/versions/1', as_user=participant)['published'] is False

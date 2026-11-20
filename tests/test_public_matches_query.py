@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from game_platform.query_store import QueryStore
 from game_platform.scaling_service import ScalablePlatform
 from game_platform.tests.fake_firestore import query_store
@@ -19,7 +21,7 @@ def _api_for(store, previous=None):
     return api
 
 
-def test_query_reload_preserves_legacy_private_audience_and_player_projection():
+def test_query_reload_ignores_old_audience_flags_and_preserves_player_projection():
     store = query_store()
     api = _api_for(store)
     alice, bob = api.new_user("Alice"), api.new_user("Bob")
@@ -37,11 +39,10 @@ def test_query_reload_preserves_legacy_private_audience_and_player_projection():
     cold = QueryStore(store.client, namespace=store.namespace)
     restarted = _api_for(cold, api)
     try:
-        assert restarted.request("GET", f"/matches/{match_id}").status_code == 404
-        assert restarted.request("POST", f"/matches/{match_id}/join", as_user=bob).status_code == 404
-        assert restarted.ok("GET", f"/matches/{match_id}", as_user=alice)["id"] == match_id
-        invite = restarted.ok("POST", f"/matches/{match_id}/invites", as_user=alice)
-        joined = restarted.ok("POST", f"/invites/{invite['token']}/accept", as_user=bob)
+        for caller in (None, alice, bob):
+            visible = restarted.ok("GET", f"/matches/{match_id}", as_user=caller)
+            assert visible["id"] == match_id and "private" not in visible
+        joined = restarted.ok("POST", f"/matches/{match_id}/join", as_user=bob)
         assert joined["status"] == "waiting_for_players"
         assert all(player["kind"] == "human" for player in joined["players"])
         restarted.ok("POST", f"/matches/{match_id}/start", as_user=alice)
@@ -50,18 +51,34 @@ def test_query_reload_preserves_legacy_private_audience_and_player_projection():
         for path in (f"/matches/{match_id}", f"/matches/{match_id}/history",
                      f"/v2/matches/{match_id}/history"):
             response = restarted.request("GET", path)
-            assert response.status_code == 404
+            assert response.status_code == 200
             assert "secret-of-" not in response.text
         batch = restarted.ok("GET", "/batch", params={"requests": json.dumps([
             f"/matches/{match_id}", f"/matches/{match_id}/history", f"/v2/matches/{match_id}/history"])})
-        assert [row["status"] for row in batch] == [404, 404, 404]
+        assert [row["status"] for row in batch] == [200, 200, 200]
+        assert "secret-of-" not in json.dumps(batch)
         own = restarted.ok("GET", f"/matches/{match_id}", as_user=bob)
         assert own["state"]["your_secret"] == f"secret-of-{bob}"
         persisted = ref.get().to_dict()
-        assert persisted["private"] is True
-        assert json.loads(persisted["json"])["private"] is True
+        assert "private" not in persisted
+        assert "private" not in json.loads(persisted["json"])
         assert not {"matchmaking_player_count", "joinable"} & persisted.keys()
         assert "matchmaking_player_count" not in json.loads(persisted["json"])
+        outsider = restarted.new_user("Outsider")
+        assert restarted.request("POST", f"/matches/{match_id}/moves", as_user=outsider,
+                                 json={"move": {"add": 1}}).status_code == 403
+        for caller, amount in ((bob, 3), (alice, 3), (bob, 3)):
+            ended = restarted.ok("POST", f"/matches/{match_id}/moves", as_user=caller,
+                                 json={"move": {"add": amount}})
+        assert ended["status"] == "over"
+        for path in (f"/matches/{match_id}", f"/matches/{match_id}/history",
+                     f"/v2/matches/{match_id}/history"):
+            response = restarted.request("GET", path)
+            assert response.status_code == 200
+            assert "secret-of-" not in response.text
+        rematch = restarted.ok("POST", f"/matches/{match_id}/rematch", as_user=alice)
+        assert "private" not in rematch
+        assert restarted.ok("GET", f"/matches/{rematch['id']}")["id"] == rematch["id"]
     finally:
         api.platform.close_workers()
         restarted.platform.close_workers()
@@ -102,3 +119,40 @@ def test_query_creation_and_rematches_are_human_only_but_old_computer_matches_co
         api.ok("POST", f"/matches/{rematch['id']}/join", as_user=bob)
     finally:
         api.platform.close_workers()
+
+
+@pytest.mark.parametrize("query", [False, True])
+@pytest.mark.parametrize("retirement", ["unpublish", "delete"])
+def test_public_matches_keep_their_pinned_renderer_after_game_retirement(query, retirement):
+    from game_platform.tests.helpers import TEST_GAME_SECRET
+
+    api = _api_for(query_store()) if query else Api()
+    try:
+        alice, bob = api.new_user("Alice"), api.new_user("Bob")
+        game_id = _create_game(api, alice)
+        match_id = api.new_match(owner=alice, game_id=game_id, joiners=[bob], start=True)
+        api.ok("PATCH", f"/games/{game_id}", as_user=alice, json={
+            "name": "Updated counter game",
+            "game_addition_request_id_and_secret": TEST_GAME_SECRET,
+        })
+        api.ok("POST", f"/games/{game_id}/unpublish", as_user=alice)
+        if retirement == "delete":
+            api.ok("DELETE", f"/games/{game_id}", as_user=alice)
+        assert api.request("GET", f"/games/{game_id}").status_code == 404
+        assert api.request("GET", f"/games/{game_id}/versions/2").status_code == 404
+        assert api.request("GET", f"/games/{game_id}/versions/1").status_code == 404
+        public = api.ok("GET", f"/matches/{match_id}")
+        assert public["id"] == match_id and public["game_version"] == 1
+        assert "secret-of-" not in json.dumps(public)
+        for suffix in ("/history", "/moves"):
+            response = api.request("GET", f"/matches/{match_id}{suffix}")
+            assert response.status_code == 200 and "secret-of-" not in response.text
+        renderer = api.ok("GET", f"/matches/{match_id}/game")
+        assert (renderer["id"], renderer["version"], renderer["name"]) == (game_id, 1, "Counter race")
+        assert renderer["declarative_ui"] and renderer["server_code"]
+        assert not {"seed", "pending_leave", "import_package"} & renderer.keys()
+        assert TEST_GAME_SECRET not in json.dumps(renderer)
+        assert api.request("GET", "/matches/missing/game").status_code == 404
+    finally:
+        if query:
+            api.platform.close_workers()

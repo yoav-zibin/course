@@ -106,19 +106,28 @@ def _private_directory(path):
 
 
 def cleanup(store, directory, *, apply=False, page_size=50, max_documents=10000):
+    return cleanup_records(store, directory, kinds=KINDS,
+                           transform=without_attribution, policy=POLICY,
+                           apply=apply, page_size=page_size,
+                           max_documents=max_documents)
+
+
+def cleanup_records(store, directory, *, kinds, transform, policy,
+                    apply=False, page_size=50, max_documents=10000):
+    """Bounded transactional scrub with durable recovery and source-bound resume."""
     if not 1 <= page_size <= 100 or not 1 <= max_documents <= 100000:
         raise ValueError("Invalid maintenance bounds")
     directory = Path(directory)
     _private_directory(directory)
     identity = {"project": store.client.project,
                 "database": getattr(store.client, "_database", "fake"),
-                "namespace": store.namespace, "policy": POLICY, "apply": apply}
+                "namespace": store.namespace, "policy": policy, "apply": apply}
     with _private_file(directory / "lock", os.O_CREAT | os.O_RDWR) as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         path = directory / "progress.json"
         progress = (json.loads(path.read_text()) if path.exists() else {
             "source": identity, "stage": 0, "complete": False,
-            "counts": {kind: {"scanned": 0, "legacy": 0, "updated": 0} for kind in KINDS}})
+            "counts": {kind: {"scanned": 0, "legacy": 0, "updated": 0} for kind in kinds}})
         if progress["source"] != identity:
             raise ValueError("Maintenance checkpoint has a different source or mode")
         # Bind source/mode before even the first backup or database mutation.
@@ -127,13 +136,13 @@ def cleanup(store, directory, *, apply=False, page_size=50, max_documents=10000)
             _save(path, progress)
         processed = 0
         while not progress["complete"] and processed < max_documents:
-            kind = KINDS[progress["stage"]]
+            kind = kinds[progress["stage"]]
             docs = store._run_query(kind, (), limit=min(page_size, max_documents-processed),
                                     after=progress.get("last_doc"), transaction=None)
             if not docs:
                 progress["stage"] += 1
                 progress.pop("last_doc", None)
-                progress["complete"] = progress["stage"] == len(KINDS)
+                progress["complete"] = progress["stage"] == len(kinds)
                 _save(path, progress)
                 continue
             for doc in docs:
@@ -141,7 +150,7 @@ def cleanup(store, directory, *, apply=False, page_size=50, max_documents=10000)
                 # content edit with the earlier listing's document snapshot.
                 with store.atomic():
                     before = store.raw_get(doc.reference)
-                    after = without_attribution(before)
+                    after = transform(before)
                     changed = before != after
                     if apply and changed:
                         _backup(directory / "preimages", doc.reference, before, after)
@@ -158,7 +167,12 @@ def cleanup(store, directory, *, apply=False, page_size=50, max_documents=10000)
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    return run_cli(argv, operation=cleanup, description=__doc__)
+
+
+def run_cli(argv, *, operation, description):
+    """Shared explicit-target CLI; output only aggregate counts or error classes."""
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--expected-project", required=True)
@@ -181,8 +195,8 @@ def main(argv=None):
             client, store = open_store(config)
             resources.callback(client.close)
             resources.callback(store.close)
-            result = cleanup(store, args.state_dir, apply=args.apply,
-                             page_size=args.page_size, max_documents=args.max_documents)
+            result = operation(store, args.state_dir, apply=args.apply,
+                               page_size=args.page_size, max_documents=args.max_documents)
         print(json.dumps(result, sort_keys=True))
         return 0 if result["complete"] else 2
     except Exception as error:

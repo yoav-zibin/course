@@ -60,17 +60,17 @@ async function fixture(signedIn=false){
   return {store,match,calls,hold:(fn:()=>Promise<void>)=>{hold=fn;},restore:()=>{globalThis.fetch=original;}};
 }
 
-test('visitors see a private full match through its invite and polling/history retain the capability',async()=>{
+test('legacy audience flags do not restrict visitor polling or history after opening an invite',async()=>{
   const f=await fixture();try{
     await f.store.actions.openInvite('abcd');assert.equal(f.store.getSnapshot().selectedMatch?.id,f.match.id);
     assert.equal(f.calls.some(call=>call.method==='POST'&&call.url.pathname.endsWith('/accept')),false);
     await f.store.actions.refreshMatch();await f.store.actions.loadHistory();
-    for(const call of f.calls.filter(call=>call.url.pathname.startsWith('/matches/invite-match')||call.url.pathname.startsWith('/v2/matches/invite-match')))assert.equal(call.url.searchParams.get('invite'),'abcd');
+    for(const call of f.calls.filter(call=>call.url.pathname.startsWith('/matches/invite-match')||call.url.pathname.startsWith('/v2/matches/invite-match')))assert.equal(call.url.searchParams.has('invite'),false);
     assert.equal(f.calls.some(call=>call.url.pathname==='/users/me/invites'),false);
   }finally{f.restore();}
 });
 
-test('accepting a full invitation preserves its spectator result without an unauthorized detail reload',async()=>{
+test('accepting a full invitation preserves its spectator result without a redundant detail reload',async()=>{
   const f=await fixture(true);try{
     await f.store.actions.openInvite('abcd');f.calls.length=0;
     const result=await f.store.actions.acceptInvite('abcd');

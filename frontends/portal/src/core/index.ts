@@ -268,7 +268,7 @@ export class PortalStore {
         snapshot = Object.hasOwn(match,'state') ? await this.cache(`/matches/${encodeURIComponent(match.id)}`,match) : await this.read(`/matches/${encodeURIComponent(match.id)}`);
         guard();
         const cached = this.exactPackage(snapshot.game_id,snapshot.game_version);
-        const game = isValidDownloadedGame(cached,snapshot.game_id,snapshot.game_version) ? cached : await this.pinnedGame(snapshot.game_id,snapshot.game_version); guard();
+        const game = isValidDownloadedGame(cached,snapshot.game_id,snapshot.game_version) ? cached : await this.pinnedGame(snapshot.game_id,snapshot.game_version,snapshot.id); guard();
         await this.rememberMatchGame(game);guard();
         if (!isValidDownloadedGame(game,snapshot.game_id,snapshot.game_version)) throw new Error('Incomplete downloaded game');
       } catch (error) {guard();failed=true;if (!isOnline() || !this.state.network) throw error;return;}
@@ -460,15 +460,15 @@ export class PortalStore {
     if (this.data.local[selected.id]) { await this.reloadData(); return; }
     let match: Match;
     if (this.data.queues[selected.id]?.length) { await this.sync().catch(() => {}); guard(); match = this.data.responses[`/matches/${selected.id}`] || selected; }
-    else match = await this.read(this.invitePath(`/matches/${encodeURIComponent(selected.id)}`,selected.id));
+    else match = await this.read(`/matches/${encodeURIComponent(selected.id)}`);
     guard(); if (token !== this.selection) return;
     this.patch({ selectedMatch: this.decorate(match) });
-    const game = await this.pinnedGame(match.game_id, match.game_version); guard(); if (token !== this.selection) return;
+    const game = await this.pinnedGame(match.game_id, match.game_version,match.localMode?undefined:match.id); guard(); if (token !== this.selection) return;
     this.patch({ game, selectedGameId: game.id }); await this.loadProfiles().catch(() => {}); guard(); if (token !== this.selection) return;
     await this.recoverPresentation(match, selected).catch(() => {});
     if (match.status !== selected.status || match.token_pot !== selected.token_pot || !equal(match.token_payouts, selected.token_payouts)) await this.refreshProfile().catch(() => {});
   }
-  private async pinnedGame(id: string, version?: number): Promise<Game> {
+  private async pinnedGame(id: string, version?: number, matchId?: string): Promise<Game> {
     if (id === bundled.id) return localizeGame(bundled as Game);
     const guard = this.capture();
     const path = version === undefined ? `/games/${encodeURIComponent(id)}` : `/games/${encodeURIComponent(id)}/versions/${version}`;
@@ -480,8 +480,15 @@ export class PortalStore {
       // different version must never become an immutable offline package.
       try {
         if (this.localOnly || !isOnline() || Date.now() < this.retryAfter) throw new TypeError('Offline');
-        game = await this.request('GET',path);guard();
-        this.retryAfter = 0;this.patch({network:isOnline()});
+        try { game = await this.request('GET',path); }
+        catch (error) {
+          guard();
+          // A catalog withdrawal does not hide the package needed to watch an
+          // existing public match. This route returns only that pinned version.
+          if (!(error instanceof ApiError) || error.status !== 404 || !matchId || version === undefined) throw error;
+          game = await this.request('GET',`/matches/${encodeURIComponent(matchId)}/game`);
+        }
+        guard();this.retryAfter = 0;this.patch({network:isOnline()});
       } catch (error) {
         guard();if (error instanceof ApiError && error.status < 500) throw error;
         this.retryAfter = Date.now()+10000;this.patch({network:false});
@@ -513,11 +520,6 @@ export class PortalStore {
     guard(); if (token !== this.selection) return;
     const game = await this.pinnedGame(id); guard(); if (token === this.selection) this.patch({ selectedGameId: id, game }); return game;
   }
-  private invitePath(path: string, matchId: string): string {
-    const match=this.state.selectedMatch;
-    const spectator=match?.id===matchId&&match.private&&!match.players.some(player=>player.user_id===this.state.account?.id);
-    return spectator&&this.selectedInvite?.matchId === matchId ? `${path}${path.includes('?') ? '&' : '?'}invite=${encodeURIComponent(this.selectedInvite.token)}` : path;
-  }
   async openInvite(token: string) {
     const guard = this.capture(), selection = ++this.selection;
     const preview = await this.request('GET', `/invites/${encodeURIComponent(token)}`); guard(); if (selection !== this.selection) return null;
@@ -534,14 +536,14 @@ export class PortalStore {
     if (inviteToken) this.selectedInvite = {matchId: id, token: inviteToken};
     else if (this.selectedInvite?.matchId !== id) this.selectedInvite = null;
     const token = ++this.selection; const guard = this.capture(); await this.reloadData();
-    const match = initialMatch || this.data.local[id] || await this.read(this.invitePath(`/matches/${encodeURIComponent(id)}`,id)); guard(); if (token !== this.selection) return;
+    const match = initialMatch || this.data.local[id] || await this.read(`/matches/${encodeURIComponent(id)}`); guard(); if (token !== this.selection) return;
     const packageMatches = this.state.game?.id === match.game_id && this.state.game.version === match.game_version;
     this.patch({ selectedMatch: this.decorate(match), game: packageMatches ? this.state.game : null, selectedGameId: match.game_id, replayIndex: null, history: null });
     try { await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) {data.selectedId = id; if(!data.local[id])data.responses[`/matches/${id}`]=match;} }); }
     catch (error) { guard(); if (!isQuotaError(error)) throw error; }
     guard(); if (token !== this.selection) return;
     this.repository.protectGame(this.identity(),match.game_id,match.game_version);
-    const game = await this.pinnedGame(match.game_id, match.game_version); guard(); if (token === this.selection) this.patch({ game, selectedGameId: game.id });
+    const game = await this.pinnedGame(match.game_id, match.game_version,match.localMode?undefined:match.id); guard(); if (token === this.selection) this.patch({ game, selectedGameId: game.id });
     await this.loadProfiles().catch(() => {});
     if (token === this.selection) await this.recoverPresentation(match).catch(() => {});
   }
@@ -786,8 +788,8 @@ export class PortalStore {
     const local = this.data.local[match.id]; let history: any;
     if (local) history = { initial_state: local.initialState, initial_turn_player_indices: local.initialTurn, moves: local.moves, total: local.move_count };
     else if (this.paginated) {
-      const result = await this.read(this.invitePath(`/v2/matches/${encodeURIComponent(match.id)}/history?start=0&limit=100`,match.id)); history = { ...result, moves: result.items, nextStart: result.next_start };
-    } else history = await this.read(this.invitePath(`/matches/${encodeURIComponent(match.id)}/history`,match.id));
+      const result = await this.read(`/v2/matches/${encodeURIComponent(match.id)}/history?start=0&limit=100`); history = { ...result, moves: result.items, nextStart: result.next_start };
+    } else history = await this.read(`/matches/${encodeURIComponent(match.id)}/history`);
     guard(); if (token === this.selection && replayToken === this.replaySelection) this.patch({ history }); return history;
   }
   async replay(index: number | null) {
@@ -796,7 +798,7 @@ export class PortalStore {
     const guard = this.capture(); const token = this.selection; let wanted = Math.max(0, Math.min(match.move_count, index));
     let history = this.state.history;
     if (this.paginated && !this.data.local[match.id]) {
-      const result = await this.read(this.invitePath(`/v2/matches/${encodeURIComponent(match.id)}/history?start=${Math.max(0, wanted - 1)}&limit=1`,match.id)); history = { ...result, moves: result.items, offset: Math.max(0, wanted - 1), total: result.total };
+      const result = await this.read(`/v2/matches/${encodeURIComponent(match.id)}/history?start=${Math.max(0, wanted - 1)}&limit=1`); history = { ...result, moves: result.items, offset: Math.max(0, wanted - 1), total: result.total };
     } else if (!history) history = await this.loadHistory();
     guard(); if (token !== this.selection || replayToken !== this.replaySelection) return;
     if (wanted === 0 && match.move_count > 0 && history?.initial_turn_player_indices === null) wanted = 1;
@@ -812,8 +814,8 @@ export class PortalStore {
     if (match.move_count > 0 && (delta === null || delta > 1 || delta < 0 || !snapshots.length)) {
       const start = Math.max(0, match.move_count - 12); let moves: any[] = [];
       if (this.data.local[match.id]) moves = this.data.local[match.id].moves.slice(start);
-      else if (this.paginated) moves = (await this.read(this.invitePath(`/v2/matches/${encodeURIComponent(match.id)}/history?start=${start}&limit=${match.move_count - start}`,match.id))).items;
-      else if (match.move_count <= 12) moves = (await this.read(this.invitePath(`/matches/${encodeURIComponent(match.id)}/moves`,match.id))).slice(start);
+      else if (this.paginated) moves = (await this.read(`/v2/matches/${encodeURIComponent(match.id)}/history?start=${start}&limit=${match.move_count - start}`)).items;
+      else if (match.move_count <= 12) moves = (await this.read(`/matches/${encodeURIComponent(match.id)}/moves`)).slice(start);
       guard(); if (token !== this.selection) return;
       if (Array.isArray(moves) && moves.length === match.move_count - start && moves.every((move, index) => Object.hasOwn(move, 'new_state') && Number.isInteger(move.player_index) && move.player_index >= 0 && move.player_index <= 9 && (move.move_number === start + index + 1 || this.data.local[match.id] && move.move_number === undefined))) snapshots = moves.map((move, index) => ({ view: move.new_state, move_count: start + index + 1, last_move_player_index: move.player_index }));
     }

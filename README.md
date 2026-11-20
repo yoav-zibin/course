@@ -430,11 +430,11 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
   `game_version` it was created with, and that version's rules apply for the whole match,
   even if the game is later updated or deleted. Clients load that version's `code` from
   `GET /games/{game_id}/versions/{game_version}`.
-- New online matches are public and contain human players in join order. Starting
+- All online matches, including older matches, are public and contain human players in join order. Starting
   requires the number of seats to be in the game's `allowed_player_counts`.
   Computer opponents are available in local practice.
-  Previously private matches retain their participant/valid-invite audience,
-  including on rematch. Requests to create a new private match are rejected.
+  Matches have no privacy setting. Anyone can open a match link and take an
+  available seat; invitations are sharing links, not access permissions.
 - A move is accepted from any player whose turn it is. The client sends the game's
   own move object; the server runs `applyMove`, whose result names the set of seats
   that may move next (`turn_of_player_indices`), and a `null` turn ends the match
@@ -536,10 +536,14 @@ Rematches keep the setting.
 - Games see a timed-out ending as `end_reason: "player_left"` in `state_changed` (see
   [Game API](#game-api)), so the Game API is unchanged.
 
-### Public matches and invites
+### Match links and invites
 
-All new matches are public and can be opened through their match link. The portal
+All matches are public and can be opened through their match link. The portal
 lists your own matches; invitations open directly from URLs.
+Existing matches remain viewable if their game is later unpublished or deleted;
+`GET /matches/{id}/game` supplies their pinned rendering package. The
+[data cleanup](docs/match-data-cleanup.md) removes retired privacy flags from
+persisted match records.
 
 - **Invites** use `<public_base_url>/invite/abcd`. `MatchOut.invite_code` is the
   automatically assigned reservation, or null after release. Full lobbies remain
@@ -892,7 +896,7 @@ Once the server is running, open these pages in a browser:
   a texted or emailed code, or as a guest — and switch between accounts, log
   out, or link more logins to your account from the account menu (see [Third-party
   login](#third-party-login)). The left side lists your matches (your move, ongoing,
-  waiting for players, over). Create a public match for friends on
+  waiting for players, over). Create a match for friends on
   a game's page, or practice locally against computers. The selected match shows
   its players and the actions you can take (join and start if you own it,
   leave, delete or hide), and renders its declarative scene with platform-owned

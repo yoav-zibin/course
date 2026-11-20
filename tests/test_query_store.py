@@ -858,31 +858,32 @@ def test_seed_resume_does_not_reset_existing_user(store):
     assert store.get_user(user.id).token_balance == 17
 
 
-def test_match_writes_preserve_legacy_privacy_but_omit_retired_matchmaking_metadata(store):
+def test_match_writes_remove_obsolete_audience_and_matchmaking_metadata(store):
     api = api_for(store)
     owner = api.new_user("owner")
     match_id = api.new_match(owner=owner, game_id=api.new_game(owner=owner))
     ref = store.ref("matches", match_id)
 
-    def assert_metadata(private):
+    def assert_metadata():
         raw = ref.get().to_dict()
         payload = json.loads(raw["json"])
-        assert raw["private"] is private and payload["private"] is private
         for record in (raw, payload):
-            assert not {"joinable", "matchmaking_player_count"} & record.keys()
+            assert not {"private", "joinable", "matchmaking_player_count"} & record.keys()
 
-    assert_metadata(False)  # New online matches remain public.
-    store.put_match(replace(store.get_match(match_id), private=True))
+    assert_metadata()
+    raw = ref.get().to_dict()
+    payload = {**json.loads(raw["json"]), "private": True, "matchmaking_player_count": 2}
+    ref.set({**raw, "private": True, "joinable": False, "json": json.dumps(payload)})
     cold = QueryStore(store.client, namespace=store.namespace)
     try:
         legacy = cold.get_match(match_id)
-        assert legacy.private is True
-        cold.put_match(legacy)  # Rewriting an old match must retain its audience.
-        assert_metadata(True)
+        assert not hasattr(legacy, "private")
+        cold.put_match(legacy)
+        assert_metadata()
         restarted = api_for(cold)
         restarted.passwords_by_user_id = api.passwords_by_user_id
-        assert restarted.request("GET", f"/matches/{match_id}").status_code == 404
-        assert restarted.ok("GET", f"/matches/{match_id}", as_user=owner)["private"] is True
+        match = restarted.ok("GET", f"/matches/{match_id}")
+        assert match["id"] == match_id and "private" not in match
     finally:
         cold.close()
 

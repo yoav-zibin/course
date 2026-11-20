@@ -107,6 +107,7 @@ def test_debug_endpoints_are_not_in_the_api_schema(api: Api) -> None:
         "/legacy/games/{game_id}",
         "/matches",
         "/matches/{match_id}",
+        "/matches/{match_id}/game",
         "/matches/{match_id}/history",
         "/matches/{match_id}/invites",
         "/matches/{match_id}/join",

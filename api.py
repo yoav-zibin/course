@@ -1139,11 +1139,17 @@ def list_matches(
 
 
 @router.get("/matches/{match_id}")
-def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId, invite: str | None = None) -> MatchOut:
+def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchOut:
     return _match_out(
-        platform, platform.get_match(match_id, caller_id=caller_id, invite_token=invite),
+        platform, platform.get_match(match_id, caller_id=caller_id),
         caller_id=caller_id,
     )
+
+
+@router.get("/matches/{match_id}/game")
+def get_match_game(platform: Platform, match_id: str) -> GameOut:
+    """The retained game package used to render this public match."""
+    return GameOut.of(platform.get_match_game(match_id))
 
 
 @router.delete("/matches/{match_id}", status_code=HTTPStatus.NO_CONTENT)
@@ -1233,19 +1239,19 @@ def remove_player(
 
 
 @router.get("/matches/{match_id}/history")
-def get_match_history(platform: Platform, match_id: str, caller_id: OptionalCallerId, invite: str | None = None) -> MatchHistoryOut:
+def get_match_history(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchHistoryOut:
     # One match's moves: the query store reads them in bounded chunks behind
     # the lazy history, so the full list costs no dataset-sized read. Every
     # state is the caller's own view of it (see GamePlatform.view_history):
     # a full state never leaves the server.
-    match = platform.get_match(match_id, caller_id=caller_id, invite_token=invite)
+    match = platform.get_match(match_id, caller_id=caller_id)
     initial_view, move_views = platform.view_history(match, caller_id)
     return MatchHistoryOut.of(match, initial_view, move_views, caller_id=caller_id)
 
 
 @router.get("/matches/{match_id}/moves")
-def list_moves(platform: Platform, match_id: str, caller_id: OptionalCallerId, invite: str | None = None) -> list[MoveOut]:
-    match = platform.get_match(match_id, caller_id=caller_id, invite_token=invite)
+def list_moves(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> list[MoveOut]:
+    match = platform.get_match(match_id, caller_id=caller_id)
     _, move_views = platform.view_history(match, caller_id)
     return [
         MoveOut.of(move, caller_id=caller_id).model_copy(update={"new_state": view})

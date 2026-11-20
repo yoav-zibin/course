@@ -2,7 +2,7 @@
 
 Fake users that use the game platform's **real website** like people do: each one opens the
 portal in its own headless Chromium browser context, signs up as a guest, starts or joins
-public matches with a friend through an invite link, plays with random clicks, sometimes
+matches with a friend through an invite link, plays with random clicks, sometimes
 leaves, and goes. It never calls the REST API
 itself and never uses the builder or the AI agent.
 
@@ -71,7 +71,7 @@ All of these can change on the control page while running (the starting values a
 | `lobby_wait_seconds` | How long a lobby owner waits for people before trying to start or deleting an unfilled lobby |
 | `skip_games` | Game names never chosen (the debug game accepts any typed move) |
 
-The host creates a public match, then presses **Invite friends**. The copied link
+The host creates a match, then presses **Invite friends**. The copied link
 goes to another fake user (counting toward `max_users`). All online players are
 humans; a host whose lobby nobody joins deletes it.
 

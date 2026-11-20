@@ -1,4 +1,4 @@
-"""New matches are public; previously private matches retain their audience."""
+"""All matches are public, including records with obsolete audience flags."""
 
 import json
 import datetime as dt
@@ -11,12 +11,13 @@ from game_platform.json_file_store import JsonFileStore
 from game_platform.tests.helpers import Api
 
 
-def test_legacy_private_requests_are_rejected_without_creating_a_public_match(api: Api) -> None:
+@pytest.mark.parametrize("obsolete_private", [True, False, None])
+def test_cached_client_audience_option_is_ignored(api: Api, obsolete_private) -> None:
     alice = api.new_user("alice")
-    response = api.request("POST", "/matches", as_user=alice,
-                           json={"game_id": api.new_game(owner=alice), "private": True})
-    assert response.status_code == 422
-    assert api.ok("GET", "/matches", as_user=alice) == []
+    match = api.ok("POST", "/matches", as_user=alice,
+                   json={"game_id": api.new_game(owner=alice), "private": obsolete_private})
+    assert "private" not in match
+    assert api.ok("GET", f"/matches/{match['id']}")["id"] == match["id"]
 
 
 def test_new_matches_remain_public(api: Api) -> None:
@@ -32,7 +33,7 @@ def test_new_matches_remain_public(api: Api) -> None:
     assert [player["user_id"] for player in joined["players"]] == [alice, bob]
 
 
-def test_stored_private_matches_keep_their_audience_after_a_restart(tmp_path: Path) -> None:
+def test_stored_audience_flags_disappear_and_matches_are_public_after_a_restart(tmp_path: Path) -> None:
     path = tmp_path / "data.json"
     store = JsonFileStore(path)
     api = Api(store=store)
@@ -46,28 +47,24 @@ def test_stored_private_matches_keep_their_audience_after_a_restart(tmp_path: Pa
 
     restarted = Api(store=JsonFileStore(path))
     restarted.passwords_by_user_id = api.passwords_by_user_id
-    for caller in (None, bob):
+    for caller in (None, alice, bob):
         for suffix in ("", "/history", "/moves"):
-            assert restarted.request("GET", f"/matches/{match_id}{suffix}", as_user=caller).status_code == 404
-    own = restarted.ok("GET", f"/matches/{match_id}", as_user=alice)
-    assert own["id"] == match_id and own["private"] is True
-    assert restarted.request("POST", f"/matches/{match_id}/join", as_user=bob).status_code == 404
-    invite = restarted.ok("POST", f"/matches/{match_id}/invites", as_user=alice)
-    assert restarted.ok("GET", f"/invites/{invite['token']}")["match"]["id"] == match_id
-    joined = restarted.ok("POST", f"/invites/{invite['token']}/accept", as_user=bob)
-    assert joined["status"] == "waiting_for_players"
+            response = restarted.ok("GET", f"/matches/{match_id}{suffix}", as_user=caller)
+            if not suffix:
+                assert response["id"] == match_id and "private" not in response
+    joined = restarted.ok("POST", f"/matches/{match_id}/join", as_user=bob)
+    assert [player["user_id"] for player in joined["players"]] == [alice, bob]
     restarted.platform._store.close()
     stored_match = json.loads(path.read_text())["data"]["matches"][0]
-    assert stored_match["private"] is True
+    assert "private" not in stored_match
     assert "matchmaking_player_count" not in stored_match
 
 
 @pytest.mark.parametrize("unusable", ["revoked", "expired", "consumed"])
-def test_unusable_legacy_private_invites_cannot_reveal_match(api: Api, unusable):
+def test_unusable_invites_do_not_restrict_match_access(api: Api, unusable):
     alice, bob = api.new_user("alice"), api.new_user("bob")
     match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
     store = api.platform._store
-    store.put_match(replace(store.get_match(match_id), private=True))
     invite = api.ok("POST", f"/matches/{match_id}/invites", as_user=alice, json={"max_uses": 1})
     if unusable == "consumed":
         # Older stored capabilities may still carry a per-invite use limit.
@@ -77,7 +74,10 @@ def test_unusable_legacy_private_invites_cannot_reveal_match(api: Api, unusable)
         record = store.get_invite(invite["token"])
         store.put_invite(replace(record, revoked=unusable == "revoked",
             expires_at=api.platform.now() - dt.timedelta(seconds=1) if unusable == "expired" else None))
-    assert api.request("GET", f"/invites/{invite['token']}").status_code == 404
+    view = api.request("GET", f"/invites/{invite['token']}")
+    assert view.status_code == (200 if unusable == "consumed" else 404)
+    assert api.ok("GET", f"/matches/{match_id}")["id"] == match_id
+    assert api.request("GET", f"/matches/{match_id}/history").status_code == 200
 
 
 @pytest.mark.parametrize("computers", [1, 2, -1, True, "1", None])
@@ -102,6 +102,11 @@ def test_api_schema_has_no_retired_match_options(api: Api) -> None:
     schema = api.client.get("/openapi.json").json()
     properties = schema["components"]["schemas"]["MatchCreate"]["properties"]
     assert "private" not in properties
+    for name in ("MatchOut", "MatchSummaryOut"):
+        assert "private" not in schema["components"]["schemas"][name]["properties"]
+    for path in ("/matches/{match_id}", "/matches/{match_id}/history", "/matches/{match_id}/moves",
+                 "/v2/matches/{match_id}/history"):
+        assert "invite" not in {item["name"] for item in schema["paths"][path]["get"].get("parameters", [])}
     assert "num_computer_opponents" not in properties
     assert "/matchmaking/quick-match" not in schema["paths"]
     assert "/matches/open" not in schema["paths"]

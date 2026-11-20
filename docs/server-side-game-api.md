@@ -177,27 +177,29 @@ viewer's seat as seat indices (`turn_of_player_indices`, `my_player_index`,
 |---|---|
 | `POST /games` | Creates and publishes a complete game: `declarative_ui`, `server_code`, schemas (in `unit_tests`), translations and images are supplied; all creation gates must pass. `/games/declarative` is a creation alias. |
 | `PATCH /games/{id}` | The single content update API. Include the game secret or master password in `game_addition_request_id_and_secret`; all content fields are optional. Server-code, unit-test or mechanical-rule changes run server checks; presentation changes require recorded tests for the merged payload; metadata changes use lightweight checks. |
-| `POST /matches` | `{game_id, max_loss?, turn_seconds?}` — creates a public match with human players |
+| `POST /matches` | `{game_id, max_loss?, turn_seconds?}` — creates a match with human players |
 | `POST /matches/{id}/join`, `POST /invites/{token}/accept` | Take a seat and deduct the stake (409 if the balance is too low); mid-match the server calls `playerJoined` |
 | `POST /matches/{id}/leave` | Before the start, a refund; mid-match, `playerLeft` |
 | `POST /matches/{id}/maybeLeave`, `POST /matches/{id}/playerLeft` | Leave preview + confirm |
 | `POST /matches/{id}/start` | `{}` — the server calls `newMatch` |
 | `POST /matches/{id}/moves` | `{move, expected_move_count?}`, only from a human in `turn` (403 otherwise); 400 for `InvalidMove` |
 | `GET /matches/{id}` | The caller's `view` and the pot — never the state; the full state only in the debug tools. A caller without a seat gets the spectator view (`viewFor` with a null player), in history and move reads too, so a shared match link shows the game's public view |
+| `GET /matches/{id}/game` | The match's pinned game package, including when the game was later unpublished or deleted, so spectators can still render the match |
 | `GET /matches/{id}/moves` | Each move's player id, move and time, with the caller's view of the resulting state (the spectator view for a caller without a seat) |
 | `GET /auth/me` | Your profile, including your token balance |
 
 ## Human-only online matches
 
 Online matches contain human players. Computer opponent selection, random
-matchmaking and open-match discovery have been removed. New matches are public;
+matchmaking and open-match discovery have been removed. All matches are public;
 `viewFor` still controls each player's and spectator's view of hidden information.
 Local practice and random walks continue to exercise `computerMove`.
 
-Matches created as private before this change retain their restricted audience:
-participants can read them, and an active invitation grants its existing viewing
-and joining capability. Their rematches keep that audience. Cached clients that
-explicitly request a new private match receive a validation error.
+There is no match privacy setting or invite-only audience, including for older
+matches and rematches. Invitations are convenient sharing and joining links;
+they grant no additional viewing permissions. Cached clients' obsolete privacy
+fields are ignored. Spectators can read match details, history and move views
+without an invitation, and take an available seat under the ordinary game rules.
 
 Timeouts end a match — a server timer fires at the deadline, and reads and
 moves check too — and pay its outstanding pot to the players who did not hold

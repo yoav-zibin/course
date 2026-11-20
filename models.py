@@ -428,9 +428,6 @@ class Match:
     hidden_for_user_ids: frozenset[str]
     created_at: dt.datetime
     updated_at: dt.datetime
-    # Retain the audience chosen for matches created before private creation
-    # was retired. New online matches are public.
-    private: bool = False
     # The match created as a replay of this match, if any.
     rematch_match_id: str | None = None
     # Reserved only while a multiplayer lobby is waiting for people to join.

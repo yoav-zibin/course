@@ -2646,22 +2646,22 @@ class GamePlatform:
         self._store.put_match(match)
         return match
 
-    def get_match(self, match_id: str, *, caller_id: str | None = None,
-                  invite_token: str | None = None) -> Match:
+    def get_match(self, match_id: str, *, caller_id: str | None = None) -> Match:
+        with self._lock:
+            return self._get_match(match_id)
+
+    def get_match_game(self, match_id: str) -> Game:
+        """The pinned renderer and rules needed to open a public match.
+
+        Matches outlive game publication. The match reference exposes only its
+        own retained version, including after the game is unpublished or deleted.
+        """
         with self._lock:
             match = self._get_match(match_id)
-            game = self._get_game(match.game_id)
-            if not game.published and (
-                caller_id is None or not match.involves(caller_id)
-            ):
-                raise NotFoundError("match not found")
-            if match.private and (caller_id is None or not match.involves(caller_id)):
-                invite = self._store.get_invite(invite_token) if invite_token else None
-                if (invite is None or invite.match_id != match.id or invite.revoked
-                        or (invite.expires_at is not None and self._clock() >= invite.expires_at)
-                        or (invite.max_uses is not None and len(invite.acceptances) >= invite.max_uses)):
-                    raise NotFoundError("match not found")
-            return match
+            game = self._store.get_game_version(match.game_id, match.game_version)
+            if game is None or not game.is_declarative:
+                raise NotFoundError("game version not found")
+            return game
 
     def list_matches(
         self, *, caller_id: str, status: MatchStatus | None, game_id: str | None
@@ -2682,8 +2682,6 @@ class GamePlatform:
     def join_match(self, *, caller_id: str, match_id: str) -> Match:
         with self._lock:
             match = self._get_match(match_id)
-            if match.private and match.seat_of(caller_id) is None:
-                raise NotFoundError("match not found")
             return self._join(match, caller_id=caller_id)
 
     def _join(self, match: Match, *, caller_id: str) -> Match:
@@ -2828,7 +2826,6 @@ class GamePlatform:
                 created_at=now,
                 updated_at=now,
                 turn_seconds=match.turn_seconds,
-                private=match.private,
                 # Hold a seat for every original player, so a stranger can't take
                 # the last one before the opponent comes back.
                 reserved_for_user_ids=frozenset(match.human_user_ids),
@@ -4189,17 +4186,11 @@ class GamePlatform:
             return self._get_invite(match.invite_code)
 
     def view_invite(self, token: str) -> InviteView:
-        """Shows a match through its invite capability and reports usability.
+        """Opens a shared match and reports whether its invite can seat someone.
         Counted as a view in the creator's referral stats."""
         with self._lock:
             invite = self._get_invite(token)
             match = self._get_match(invite.match_id)
-            if match.private and (
-                invite.revoked
-                or (invite.expires_at is not None and self._clock() >= invite.expires_at)
-                or (invite.max_uses is not None and len(invite.acceptances) >= invite.max_uses)
-            ):
-                raise NotFoundError("invite not found")
             invite = replace(invite, views=invite.views + 1)
             self._store.put_invite(invite)
             game = self._store.get_game_version(match.game_id, match.game_version)
@@ -4946,7 +4937,7 @@ class GamePlatform:
                 raise missing
             return record.id, record.name, {"game_version": record.version}
         if target_type == "match":
-            if not isinstance(record, Match) or (record.private and not record.involves(caller.id)):
+            if not isinstance(record, Match):
                 raise missing
             # A match's name needs its game: the admin page looks the games up, so
             # sending feedback doesn't need another read.

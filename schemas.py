@@ -647,12 +647,11 @@ class MatchCreate(_Request):
     @model_validator(mode="before")
     @classmethod
     def _retired_options(cls, value: object) -> object:
-        # Cached clients may still send former defaults, but an explicit private
-        # or computer match request must fail instead of changing its intent.
+        # Ignore the obsolete audience option sent by cached clients. Online
+        # computer opponents remain unsupported.
         if isinstance(value, dict):
             value = dict(value)
-            if value.pop("private", False) is not False:
-                raise ValueError("new online matches are public")
+            value.pop("private", None)
             computers = value.pop("num_computer_opponents", 0)
             if type(computers) is not int or computers != 0:
                 raise ValueError("online matches support human players only")
@@ -739,8 +738,6 @@ class MatchOut(BaseModel):
     rematch_match_id: str | None
     created_at: dt.datetime
     updated_at: dt.datetime
-    # Compatibility marker for the audience of pre-existing private matches.
-    private: bool = Field(default=False, exclude_if=lambda value: not value)
     # Speed matches: seconds per move (None for a regular match); when the human
     # seats with the turn run out of time (None when there's no running clock); and
     # seats that ran out of time.
@@ -803,7 +800,6 @@ class MatchOut(BaseModel):
             rematch_match_id=match.rematch_match_id,
             created_at=match.created_at,
             updated_at=match.updated_at,
-            private=match.private,
         )
 
 
@@ -859,7 +855,6 @@ class MatchSummaryOut(BaseModel):
     rematch_match_id: str | None
     created_at: dt.datetime
     updated_at: dt.datetime
-    private: bool = Field(default=False, exclude_if=lambda value: not value)
     turn_seconds: int | None = None
     turn_deadline: dt.datetime | None = None
     timeouts: list[SeatTimeoutOut] = []

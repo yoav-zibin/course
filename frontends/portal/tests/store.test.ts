@@ -326,7 +326,7 @@ for (const publicState of [false, undefined, 'true']) test(`private or unknown s
     assert.equal(restarted.getSnapshot().selectedMatch!.awaitingHandoff, true);
   } finally { restore(); }
 });
-for (const gameId of ['bundled-tictactoe', 'downloaded-public']) test(`${gameId} public matches with a saved pending handoff immediately allow play and history after restart`, async () => {
+for (const gameId of ['bundled-tictactoe', 'downloaded-public']) test(`${gameId} matches with a saved pending handoff immediately allow play and history after restart`, async () => {
   browserStorage();
   const fixture = { ...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json', import.meta.url), 'utf8')), id: gameId, all_state_public: true };
   const restore = mockedFetch(url => url.pathname.startsWith('/games/downloaded-public') ? fixture : undefined);
@@ -500,6 +500,40 @@ test('failed game-package fetch cannot pair an old match with a newly selected g
     await assert.rejects(store.actions.selectGame('missing'), /Game not found/);
     assert.equal(store.getSnapshot().selectedMatch, null); assert.equal(store.getSnapshot().game, null); assert.equal(store.getSnapshot().selectedGameId, 'missing'); assert.equal(store.getSnapshot().history, null); assert.equal((await new AccountRepository('https://local.test').read('visitor')).selectedId, null);
   } finally { restore(); }
+});
+test('visitors load an unpublished match’s pinned package and keep it for offline reopening',async()=>{
+  browserStorage();
+  const game={...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8')),id:'withdrawn-game',version:7};
+  const match={id:'public-archive',game_id:game.id,game_version:game.version,owner_user_id:'host',players:[],status:'ongoing',state:{board:[]},turn_of_player_indices:[0],move_count:0};
+  const paths:string[]=[];
+  const restore=mockedFetch((url,init)=>{
+    paths.push(url.pathname);
+    if(url.pathname===`/matches/${match.id}`)return match;
+    if(url.pathname===`/games/${game.id}/versions/7`||url.pathname===`/games/${game.id}`)throw new ApiError(404,'Game version not found');
+    if(url.pathname===`/matches/${match.id}/game`){assert.equal((init.headers as any)['X-User-Id'],undefined);assert.equal(url.search,'');return game;}
+  });
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');await store.actions.selectMatch(match.id);
+    assert.equal(store.getSnapshot().account,null);assert.equal(store.getSnapshot().game!.id,game.id);assert.equal(store.getSnapshot().game!.version,7);
+    assert.ok(paths.includes(`/matches/${match.id}/game`));
+    const saved=await new AccountRepository('https://local.test').read('visitor');assert.equal(saved.responses[`/games/${game.id}/versions/7`].id,game.id);
+    const before=paths.length,offline=new PortalStore(testRuntime());await offline.bootstrap('https://local.test',true);await offline.actions.selectMatch(match.id);
+    assert.equal(offline.getSnapshot().game!.version,7);assert.equal(paths.length,before);
+    const packageCalls=paths.filter(path=>path===`/matches/${match.id}/game`).length;await assert.rejects(store.actions.selectGame(game.id),/Game version not found/);
+    assert.equal(paths.filter(path=>path===`/matches/${match.id}/game`).length,packageCalls);
+  }finally{restore();}
+});
+for(const mismatch of [{id:'another-game',version:7},{id:'withdrawn-game',version:8}])test(`a match package with the wrong ${mismatch.id==='another-game'?'identity':'version'} cannot replace its pinned game`,async()=>{
+  browserStorage();const game={...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8')),...mismatch};
+  const restore=mockedFetch(url=>{
+    if(url.pathname==='/matches/public-archive')return {id:'public-archive',game_id:'withdrawn-game',game_version:7,players:[],status:'ongoing',turn_of_player_indices:[0],move_count:0};
+    if(url.pathname==='/games/withdrawn-game/versions/7')throw new ApiError(404,'Game version not found');
+    if(url.pathname==='/matches/public-archive/game')return game;
+  });
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');await assert.rejects(store.actions.selectMatch('public-archive'),/wrong version/);
+    assert.equal(store.getSnapshot().game,null);assert.equal((await new AccountRepository('https://local.test').read('visitor')).responses['/games/withdrawn-game/versions/7'],undefined);
+  }finally{restore();}
 });
 test('opening another match never pairs its private view with the previous game package', async () => {
   browserStorage();

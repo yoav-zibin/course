@@ -1,6 +1,10 @@
 """Rematches are public and reserve a seat for every original human player."""
 
-from dataclasses import replace
+from dataclasses import asdict
+
+from pydantic import TypeAdapter
+
+from game_platform.models import Match
 
 from game_platform.tests.helpers import Api
 
@@ -48,20 +52,21 @@ def test_invite_seats_a_reserved_opponent_and_only_shows_strangers_the_rematch()
     assert [player["user_id"] for player in joined["players"]] == [alice, bob]
 
 
-def test_legacy_private_rematch_retains_its_audience_and_reserved_rejoin():
+def test_legacy_audience_option_does_not_change_rematch_access_or_reserved_rejoin():
     api = Api()
     match_id, _, alice, bob = finished_match(api)
     store = api.platform._store
-    store.put_match(replace(store.get_match(match_id), private=True))
+    old_record = {**asdict(store.get_match(match_id)), "private": True}
+    store.put_match(TypeAdapter(Match).validate_python(old_record))
     rematch = api.ok("POST", f"/matches/{match_id}/rematch", as_user=alice)
-    assert rematch["private"] is True
-    assert store.get_match(rematch["id"]).private is True
+    assert "private" not in rematch
+    assert not hasattr(store.get_match(rematch["id"]), "private")
     stranger = api.new_user("stranger")
     for caller in (None, stranger):
-        assert api.request("GET", f"/matches/{rematch['id']}", as_user=caller).status_code == 404
-    assert api.request("POST", f"/matches/{rematch['id']}/join", as_user=stranger).status_code == 404
+        assert api.ok("GET", f"/matches/{rematch['id']}", as_user=caller)["id"] == rematch["id"]
+    assert api.request("POST", f"/matches/{rematch['id']}/join", as_user=stranger).status_code == 409
     joined = api.ok("POST", f"/matches/{match_id}/rematch", as_user=bob)
-    assert joined["private"] is True
+    assert "private" not in joined
     assert [p["user_id"] for p in joined["players"]] == [alice, bob]
 
 

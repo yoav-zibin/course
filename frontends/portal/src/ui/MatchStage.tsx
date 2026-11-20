@@ -52,7 +52,7 @@ export function MatchStage() {
   const submit=async(move:any)=>{if(local)await p.actions.practiceMove(move);else await p.actions.submitMove(move);};
   const replay=p.replayIndex;
   return <>
-    <Row>{local&&<Button compact secondary onPress={()=>navigate('local')}>← {t('ui.portal.nav_matches','Matches')}</Button>}<View style={{flex:1}}/><Copy small muted>{local?copyText("On this device"):match.private===true?copyText("Invite only"):copyText("Public match")}</Copy></Row>
+    {local&&<Row><Button compact secondary onPress={()=>navigate('local')}>← {t('ui.portal.nav_matches','Matches')}</Button><View style={{flex:1}}/><Copy small muted>{copyText("On this device")}</Copy></Row>}
     <View style={{gap:8}}><Row><Title>{game?.name||copyText("Match")}</Title><View style={{flex:1}}/><Copy style={{color:over?colors.purple:yourTurn?colors.accent:colors.blue,fontWeight:'700'}}>{over?copyText("Finished"):waiting?copyText("Waiting for players"):yourTurn?copyText("Your turn"):copyText("Game in progress")}</Copy></Row><Copy small muted>{match.move_count} {copyText("moves ·")} {match.players.length} {copyText("players")}{local?copyText(" · Saved on this device"):''}{clock?copyText(" · {v0} remaining",{v0:clock}):''}</Copy></View>
     <MatchOutcome match={match}/>
     <Row>{match.players.map(player=>{const profile=player.user_id?p.profiles[player.user_id]:null;const label=player.name||profile?.display_name||(player.user_id===p.account?.id?p.account?.display_name:null)||(player.kind==='computer'?copyText("Computer {v0}",{v0:player.player_index+1}):copyText("Player {v0}",{v0:player.player_index+1}));return <Card key={player.player_index} style={{padding:12,flexGrow:1,flexBasis:150,borderColor:turns.includes(player.player_index)?colors.accent:colors.border}}>

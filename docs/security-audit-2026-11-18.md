@@ -5,6 +5,12 @@ Initial reviewed baseline: `874f1e55797fad5a26b504d35dda643cf88b64a0` on
 clients, HTTP APIs, match execution and persistence. Production data and game
 packages stored only in Firestore were not downloaded or penetration tested.
 
+Match audience policy was superseded on November 20, 2026: all matches,
+including older matches and rematches, are public. Match privacy settings and
+invite-based viewing restrictions have been removed at the user's request.
+The historical invite finding below is not a requirement to restore them.
+Player-specific hidden information still uses `viewFor` projection.
+
 ## Findings addressed
 
 - **Global game writes bypassed game capabilities.** PATCH, DELETE and
@@ -78,7 +84,7 @@ packages stored only in Firestore were not downloaded or penetration tested.
 - **Submission verification bypassed the heavy-validation limit.** The
   submission endpoint now shares the bounded validation slots with imports
   and other expensive game checks.
-- **Revoked private invites still exposed match details.** Private match
+- **Historical finding, superseded November 20: revoked private invites exposed match details.** Private match
   invite views now return 404 when the bearer link is revoked, expired or
   fully consumed. Public match invitation diagnostics remain available.
 - **Private bug evidence could be copied into HTTP logs.** The new protected

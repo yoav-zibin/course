@@ -665,15 +665,6 @@
     "hi": "इतिहास का यह दृश्य पूरा नहीं दिख सका। कृपया एक-एक चाल करके देखें।",
     "ar": "تعذّر إكمال عرض هذه الخطوة من السجل. جرّب التنقل يدويًا."
   },
-  "Public match": {
-    "es": "Partida pública",
-    "fr": "Partie publique",
-    "de": "Öffentliche Partie",
-    "pt": "Partida pública",
-    "zh": "公开对局",
-    "hi": "सार्वजनिक मैच",
-    "ar": "مباراة عامة"
-  },
   "Refresh": {
     "es": "Actualizar",
     "fr": "Actualiser",

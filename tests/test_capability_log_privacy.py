@@ -1,7 +1,6 @@
 """Opaque invite and app-login route capabilities never enter server logs."""
 import json
 import logging
-from dataclasses import replace
 
 import pytest
 
@@ -53,7 +52,7 @@ def test_capability_paths_are_hidden_in_pending_slow_error_and_api_logs(prefix, 
         assert any(getattr(record, "_event", "") == "request_very_slow" for record in records)
 
 
-def test_private_invite_urls_and_batch_paths_are_redacted_but_regular_ids_remain(caplog):
+def test_invite_urls_and_batch_paths_are_redacted_but_regular_ids_remain(caplog):
     api = Api()
     # A random four-letter code can also be an ordinary log word, such as
     # "game". Pin an uncommon test capability without changing live minting.
@@ -61,8 +60,6 @@ def test_private_invite_urls_and_batch_paths_are_redacted_but_regular_ids_remain
     caplog.set_level(logging.INFO, logger="game_platform.events")
     alice = api.new_user("Alice")
     match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
-    store = api.platform._store
-    store.put_match(replace(store.get_match(match_id), private=True))
     invite = api.ok("POST", f"/matches/{match_id}/invites", as_user=alice)
     token = invite["token"]
     api.ok("GET", f"/invites/{token}")

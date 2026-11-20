@@ -91,7 +91,7 @@ test('empty fitted board space permits native touch scrolling and retains real p
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeAttached();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
 });
 
-test('online matches have human-only public controls and stay selected after reload',async({page,request})=>{
+test('online matches have human-only controls and stay selected after reload',async({page,request})=>{
   const user=await account(request,'Reload player'),created=await game(request,uniqueName('Reload game'));
   await restore(page,user);await page.goto(`/portal#game=${created.id}`);
   await expect(page.getByText('Computer opponents',{exact:true})).toHaveCount(0);
@@ -103,7 +103,7 @@ test('online matches have human-only public controls and stay selected after rel
   expect((await creation).postDataJSON()).toEqual({game_id:created.id,bet_per_player:0,turn_seconds:null});
   await expect(page.getByRole('button',{name:'Share link',exact:true})).toBeVisible();
   await expect(page).toHaveURL(/#match=/);
-  await expect(page.getByText('Public match',{exact:true})).toBeVisible();
+  await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Add a computer',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Remove a computer',exact:true})).toHaveCount(0);
   const current=new URL(page.url()),selected=new URLSearchParams(current.hash.slice(1)).get('match');
@@ -117,8 +117,27 @@ test('online matches have human-only public controls and stay selected after rel
   const opened:string[]=[];page.on('request',request=>opened.push(new URL(request.url()).pathname));
   await page.goto('/portal#matches');
   await expect(page.getByText('Open matches you can join',{exact:true})).toHaveCount(0);
-  await expect(page.getByText('No open matches right now. Create a public match to invite someone.',{exact:true})).toHaveCount(0);
   expect(opened).not.toContain('/matches/open');expect(opened).not.toContain('/v2/matches/open');
+});
+
+test('visitors can watch existing matches after the game leaves the catalog',async({page,request})=>{
+  const host=await account(request,'Archived match host'),opponent=await account(request,'Archived match opponent'),created=await game(request,uniqueName('Archived public match'));
+  const headers={'X-User-Id':host.id,'X-User-Password':host.password};
+  const response=await request.post('/matches',{headers,data:{game_id:created.id}});expect(response.ok()).toBeTruthy();const match=await response.json();
+  const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password}});expect(joined.ok()).toBeTruthy();
+  const started=await request.post(`/matches/${match.id}/start`,{headers});expect(started.ok()).toBeTruthy();
+  const moved=await request.post(`/matches/${match.id}/moves`,{headers,data:{move:{cell:0},expected_move_count:0}});expect(moved.ok()).toBeTruthy();
+  const withdrawal=await request.post(`/games/${created.id}/unpublish`,{headers:E2E_ADMIN_HEADERS});expect(withdrawal.ok(),await withdrawal.text()).toBeTruthy();
+  expect((await request.get(`/games/${created.id}/versions/${created.version}`)).status()).toBe(404);
+  const packageResponse=page.waitForResponse(response=>new URL(response.url()).pathname===`/matches/${match.id}/game`);
+  await page.goto(`/portal#match=${match.id}`);expect((await packageResponse).ok()).toBeTruthy();
+  await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+  await expect(page.getByTestId('game-stage')).toBeVisible();
+  await expect(page.getByText('Game in progress',{exact:true})).toBeVisible();
+  await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);
+  await page.reload();await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+  await expect(page.getByTestId('game-stage')).toBeVisible();
+  await expect(page.getByText('Game in progress',{exact:true})).toBeVisible();
 });
 
 test('browser Back from a local match restores its game detail screen and play controls',async({page,request})=>{

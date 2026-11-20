@@ -25,7 +25,7 @@ test('online matches use the shared navigation and retain their public game thro
   expect(moved.ok(),await moved.text()).toBeTruthy();
   const viewerHeaders={'X-User-Id':opponent.id,'X-User-Password':opponent.password};
   const initialResponse=await request.get(`/matches/${match.id}`,{headers:viewerHeaders});expect(initialResponse.ok()).toBeTruthy();
-  const initial=await initialResponse.json();expect(initial.status).toBe('ongoing');expect(initial.move_count).toBe(1);expect(initial.state).toBeDefined();expect(initial.private).not.toBe(true);
+  const initial=await initialResponse.json();expect(initial.status).toBe('ongoing');expect(initial.move_count).toBe(1);expect(initial.state).toBeDefined();expect(initial).not.toHaveProperty('private');
   await loginAs(page,opponent);
   const mutations:string[]=[];
   page.on('request',request=>{const path=new URL(request.url()).pathname;if(/^\/matches(?:\/|$)/.test(path)&&!['GET','HEAD'].includes(request.method()))mutations.push(`${request.method()} ${path}`);});
@@ -33,7 +33,7 @@ test('online matches use the shared navigation and retain their public game thro
 
   for(const viewport of viewports){
     await page.setViewportSize(viewport);
-    await expect(page.getByText('Public match',{exact:true})).toBeVisible();
+    await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);
     await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
@@ -44,7 +44,7 @@ test('online matches use the shared navigation and retain their public game thro
     await expect(backToMatches(page)).toHaveCount(0);
     await activate(page.getByRole('button',{name:'Exit focus mode',exact:true}),isMobile);
     await expect(matchesNavigation(page)).toBeVisible();
-    await expect(page.getByText('Public match',{exact:true})).toBeVisible();
+    await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);
     await page.screenshot({path:info.outputPath(`online-navigation-${viewport.width}.png`)});
 
     await activate(matchesNavigation(page),isMobile);
@@ -70,7 +70,7 @@ test('online matches use the shared navigation and retain their public game thro
   expect(current.players).toEqual(initial.players);
   expect(current.state).toEqual(initial.state);
   expect(current.turn_of_player_indices).toEqual(initial.turn_of_player_indices);
-  expect(current.private).not.toBe(true);
+  expect(current).not.toHaveProperty('private');
 });
 
 test('the local return control still opens saved local matches and resumes the played board',async({page,isMobile},info)=>{
