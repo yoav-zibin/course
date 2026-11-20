@@ -551,6 +551,120 @@ test('hiding an online match cannot silently discard its durable pending move', 
     const saved = await repository.read('visitor'); assert.deepEqual(saved.queues.pending, [pending]); assert.equal(saved.archivedMatches.length, 0);
   } finally { restore(); }
 });
+
+for (const scenario of [
+  { name: 'finished host', status: 'over', account: 'alice', active: true, method: 'DELETE', suffix: '', removes: true },
+  { name: 'finished guest', status: 'over', account: 'bob', active: true, method: 'DELETE', suffix: '', removes: true },
+  { name: 'finished departed guest', status: 'over', account: 'bob', active: false, method: 'DELETE', suffix: '', removes: true },
+  { name: 'waiting host', status: 'waiting_for_players', account: 'alice', active: true, method: 'DELETE', suffix: '', removes: true },
+  { name: 'waiting guest', status: 'waiting_for_players', account: 'bob', active: true, method: 'POST', suffix: '/leave', removes: true },
+  { name: 'ongoing guest', status: 'ongoing', account: 'bob', active: true, method: 'POST', suffix: '/playerLeft', removes: false },
+]) test(`Leave match handles a ${scenario.name}`, async () => {
+  const saved = browserStorage();
+  saved['game-platform.accounts.v1'] = JSON.stringify([{ id: scenario.account, password: 'synthetic-secret', display_name: scenario.account }]);
+  saved['game-platform.current-account.v1'] = scenario.account;
+  const match = {
+    id: 'leave-me', game_id: 'bundled-tictactoe', game_version: 1, owner_user_id: 'alice', status: scenario.status,
+    players: [{ id: 'alice', user_id: 'alice', kind: 'human', player_index: 0 }, { id: 'bob', user_id: 'bob', kind: 'human', player_index: 1, active: scenario.active }],
+    state: {}, turn_of_player_indices: scenario.status === 'over' ? null : [0], move_count: 0, created_at: '2026-01-01T00:00:00Z',
+  };
+  const other = { ...match, id: 'keep-me' };
+  const result = { ...match, status: 'over', turn_of_player_indices: null, players: match.players.map(player => player.user_id === scenario.account ? { ...player, active: false } : player), move_count: 1 };
+  const mutations: string[] = [];
+  const restore = mockedFetch((url, init) => {
+    if (url.pathname.startsWith('/matches/leave-me') && init.method !== 'GET') { mutations.push(`${init.method} ${url.pathname}`); return result; }
+    if (url.pathname === '/matches/leave-me') return match;
+    if (url.pathname === '/matches') return [match, other];
+    if (url.pathname === `/users/${scenario.account}`) return { id: scenario.account, token_balance: 100 };
+  });
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.selectMatch(match.id);
+    await store.actions.leaveMatch();
+    assert.deepEqual(mutations, [`${scenario.method} /matches/leave-me${scenario.suffix}`]);
+    const durable = await new AccountRepository('https://local.test').read(scenario.account);
+    if (scenario.removes) {
+      assert.equal(store.getSnapshot().selectedMatch, null);
+      assert.deepEqual(store.getSnapshot().myMatches.map(item => item.id), ['keep-me']);
+      assert.equal(durable.responses['/matches/leave-me'], undefined);
+      assert.deepEqual(durable.responses['/matches'].map((item: any) => item.id), ['keep-me']);
+      assert.equal(durable.selectedId, null);
+      assert.equal(durable.archivedMatches.length, scenario.name === 'waiting guest' ? 0 : 1);
+      assert.equal(durable.archives.length, scenario.name === 'waiting guest' ? 1 : 0);
+    } else {
+      assert.equal(store.getSnapshot().selectedMatch!.status, 'over');
+      assert.equal(store.getSnapshot().selectedMatch!.players[1].active, false);
+      assert.equal(durable.responses['/matches/leave-me'].move_count, 1);
+      assert.equal(durable.archivedMatches.length, 0);
+    }
+  } finally { restore(); }
+});
+
+test('a guest who leaves a waiting lobby can rejoin and see it in their matches again', async () => {
+  const saved = browserStorage(); saved['game-platform.accounts.v1'] = JSON.stringify([{ id: 'bob', password: 'synthetic-secret', display_name: 'Bob' }]); saved['game-platform.current-account.v1'] = 'bob';
+  let joined = true;
+  const alice = { id: 'alice', user_id: 'alice', kind: 'human', player_index: 0 }, bob = { id: 'bob', user_id: 'bob', kind: 'human', player_index: 1 };
+  const match = () => ({ id: 'rejoin-lobby', game_id: 'bundled-tictactoe', game_version: 1, owner_user_id: 'alice', status: 'waiting_for_players', players: joined ? [alice, bob] : [alice], state: null, turn_of_player_indices: null, move_count: 0, created_at: '2026-01-01T00:00:00Z' });
+  const restore = mockedFetch((url, init) => {
+    if (url.pathname === '/matches/rejoin-lobby/leave' && init.method === 'POST') { joined = false; return match(); }
+    if (url.pathname === '/matches/rejoin-lobby/join' && init.method === 'POST') { joined = true; return match(); }
+    if (url.pathname === '/matches/rejoin-lobby') return match();
+    if (url.pathname === '/matches') return joined ? [match()] : [];
+    if (url.pathname === '/users/bob') return { id: 'bob', token_balance: 100 };
+  });
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.selectMatch('rejoin-lobby');
+    await store.actions.leaveMatch(); await store.actions.refresh();
+    assert.deepEqual(store.getSnapshot().myMatches, []);
+    await store.actions.selectMatch('rejoin-lobby'); await store.actions.matchAction('join'); store.actions.clearMatch(); await store.actions.refresh();
+    assert.deepEqual(store.getSnapshot().myMatches.map(item => item.id), ['rejoin-lobby']);
+    const durable = await new AccountRepository('https://local.test').read('bob');
+    assert.deepEqual(durable.responses['/matches'].map((item: any) => item.id), ['rejoin-lobby']);
+    assert.equal(durable.archivedMatches.length, 0);
+  } finally { restore(); }
+});
+
+test('a refused Leave match keeps the match selected and saved', async () => {
+  const saved = browserStorage(); saved['game-platform.accounts.v1'] = JSON.stringify([{ id: 'alice', password: 'synthetic-secret', display_name: 'Alice' }]); saved['game-platform.current-account.v1'] = 'alice';
+  const match = { id: 'refused-leave', game_id: 'bundled-tictactoe', game_version: 1, owner_user_id: 'alice', status: 'over', players: [{ id: 'alice', user_id: 'alice', kind: 'human', player_index: 0 }], state: {}, turn_of_player_indices: null, move_count: 0, created_at: '2026-01-01T00:00:00Z' };
+  const restore = mockedFetch((url, init) => {
+    if (url.pathname === '/matches/refused-leave' && init.method === 'DELETE') throw new ApiError(403, 'Leaving was refused');
+    if (url.pathname === '/matches/refused-leave') return match;
+    if (url.pathname === '/matches') return [match];
+  });
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.selectMatch(match.id);
+    await assert.rejects(store.actions.leaveMatch(), /Leaving was refused/);
+    assert.equal(store.getSnapshot().selectedMatch!.id, match.id);
+    assert.deepEqual(store.getSnapshot().myMatches.map(item => item.id), [match.id]);
+    const durable = await new AccountRepository('https://local.test').read('alice');
+    assert.equal(durable.responses['/matches/refused-leave'].id, match.id);
+    assert.equal(durable.archivedMatches.length, 0);
+  } finally { restore(); }
+});
+
+test('a late Leave match response cannot remove another account saved match', async () => {
+  const saved = browserStorage(); saved['game-platform.accounts.v1'] = JSON.stringify(['alice', 'bob'].map(id => ({ id, password: `${id}-secret`, display_name: id }))); saved['game-platform.current-account.v1'] = 'alice';
+  const match = { id: 'shared-finished', game_id: 'bundled-tictactoe', game_version: 1, owner_user_id: 'alice', status: 'over', players: [{ id: 'alice', user_id: 'alice', kind: 'human', player_index: 0 }, { id: 'bob', user_id: 'bob', kind: 'human', player_index: 1 }], state: {}, turn_of_player_indices: null, move_count: 0, created_at: '2026-01-01T00:00:00Z' };
+  let release!: () => void, started!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; }), begin = new Promise<void>(resolve => { started = resolve; });
+  const restore = mockedFetch(async (url, init) => {
+    if (url.pathname === '/matches/shared-finished' && init.method === 'DELETE') { assert.equal((init.headers as any)['X-User-Id'], 'alice'); started(); await gate; return null; }
+    if (url.pathname === '/matches/shared-finished') return match;
+    if (url.pathname === '/matches') return [match];
+  });
+  try {
+    const store = new PortalStore(testRuntime()); await store.bootstrap('https://local.test'); await store.actions.selectMatch(match.id);
+    const pending = assert.rejects(store.actions.leaveMatch(), /Account changed/);
+    await begin; await store.actions.switchAccount('bob'); await store.actions.selectMatch(match.id); release(); await pending;
+    assert.equal(store.getSnapshot().account!.id, 'bob');
+    assert.equal(store.getSnapshot().selectedMatch!.id, match.id);
+    assert.deepEqual(store.getSnapshot().myMatches.map(item => item.id), [match.id]);
+    const durable = await new AccountRepository('https://local.test').read('bob');
+    assert.equal(durable.responses['/matches/shared-finished'].id, match.id);
+    assert.equal(durable.archivedMatches.length, 0);
+  } finally { release(); restore(); }
+});
+
 test('a delayed language download cannot replace a newer language selection', async () => {
   browserStorage(); let release!: (value: any) => void, started!: () => void;
   const delayed = new Promise(resolve => { release = resolve; }); const downloading = new Promise<void>(resolve => { started = resolve; });

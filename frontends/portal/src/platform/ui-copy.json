@@ -935,15 +935,6 @@
     "hi": "मैच छोड़ें",
     "ar": "مغادرة المباراة"
   },
-  "Delete match": {
-    "es": "Eliminar partida",
-    "fr": "Supprimer la partie",
-    "de": "Spiel löschen",
-    "pt": "Excluir partida",
-    "zh": "删除对局",
-    "hi": "मैच हटाएँ",
-    "ar": "حذف المباراة"
-  },
   "Play again": {
     "es": "Jugar de nuevo",
     "fr": "Rejouer",
@@ -1178,15 +1169,6 @@
     "hi": "सर्वर संस्करण उपयोग करें",
     "ar": "استخدام نسخة الخادم"
   },
-  "Delete this match?": {
-    "es": "¿Eliminar esta partida?",
-    "fr": "Supprimer cette partie ?",
-    "de": "Diese Partie löschen?",
-    "pt": "Excluir esta partida?",
-    "zh": "删除这场对局？",
-    "hi": "यह मैच मिटाएँ?",
-    "ar": "هل تريد حذف هذه المباراة؟"
-  },
   "Leave this match?": {
     "es": "¿Abandonar esta partida?",
     "fr": "Quitter cette partie ?",
@@ -1205,14 +1187,23 @@
     "hi": "सर्वर का बोर्ड लोड करने से पहले आपकी लंबित शाखा संग्रह में सुरक्षित रखी जाएगी।",
     "ar": "سيُحفظ فرعك المعلّق في الأرشيف قبل تحميل لوحة الخادم."
   },
-  "This removes the match for everyone. This action cannot be undone.": {
-    "es": "Esto elimina la partida para todos. Esta acción no se puede deshacer.",
-    "fr": "Cette action supprime la partie pour tout le monde. Elle est irréversible.",
-    "de": "Dies löscht die Partie für alle. Die Aktion kann nicht rückgängig gemacht werden.",
-    "pt": "Isso exclui a partida para todos. Esta ação não pode ser desfeita.",
-    "zh": "这会为所有人删除此对局，且无法撤销。",
-    "hi": "इससे मैच सभी के लिए मिट जाएगा। यह कार्रवाई वापस नहीं की जा सकती।",
-    "ar": "سيؤدي ذلك إلى حذف المباراة للجميع. لا يمكن التراجع عن هذا الإجراء."
+  "This removes the match from your list. Other players can still see it.": {
+    "es": "Esto quita la partida de tu lista. Los demás jugadores pueden seguir viéndola.",
+    "fr": "Cela retire la partie de votre liste. Les autres joueurs peuvent toujours la voir.",
+    "de": "Dies entfernt die Partie aus deiner Liste. Andere Spieler können sie weiterhin sehen.",
+    "pt": "Isso remove a partida da sua lista. Os outros jogadores ainda podem vê-la.",
+    "zh": "这会将对局从你的列表中移除。其他玩家仍然可以看到它。",
+    "hi": "इससे मैच आपकी सूची से हट जाएगा। अन्य खिलाड़ी इसे अब भी देख सकेंगे।",
+    "ar": "سيؤدي ذلك إلى إزالة المباراة من قائمتك. سيظل بإمكان اللاعبين الآخرين رؤيتها."
+  },
+  "Leaving closes this lobby for everyone and refunds any tokens.": {
+    "es": "Al salir, se cierra esta sala para todos y se devuelven las fichas apostadas.",
+    "fr": "Quitter ferme ce salon pour tout le monde et rembourse les jetons misés.",
+    "de": "Beim Verlassen wird diese Lobby für alle geschlossen und eingesetzte Marken werden erstattet.",
+    "pt": "Sair fecha esta sala para todos e devolve as fichas apostadas.",
+    "zh": "离开后，此大厅将对所有人关闭，已投入的代币将退还。",
+    "hi": "छोड़ने पर यह लॉबी सभी के लिए बंद हो जाएगी और लगाए गए टोकन लौटा दिए जाएँगे।",
+    "ar": "ستؤدي المغادرة إلى إغلاق هذه الردهة للجميع وإعادة أي رموز تم دفعها."
   },
   "Your seat will leave the match. The server calculates any token settlement.": {
     "es": "Tu plaza abandonará la partida. El servidor calcula la liquidación de fichas.",

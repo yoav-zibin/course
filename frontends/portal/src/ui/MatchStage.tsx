@@ -16,6 +16,7 @@ export function MatchStage() {
   const [share,setShare]=useState(false),[invite,setInvite]=useState<any>(null),[confirm,setConfirm]=useState(''),[clock,setClock]=useState(''),[rendererError,setRendererError]=useState('');
   const [help,setHelp]=useState(false),[recipient,setRecipient]=useState('');
   const owner=match.owner_user_id===p.account?.id,local=Boolean(match.localMode),seat=match.players.find(player=>player.active!==false&&(match.localMode==='computer'?player.kind==='human':player.user_id===p.account?.id)),participant=local||Boolean(seat),waiting=match.status==='waiting_for_players',over=match.status==='over';
+  const canLeave=over?Boolean(p.account&&match.players.some(player=>player.kind==='human'&&player.user_id===p.account?.id)):participant&&(waiting||Boolean(game?.allows_leave_mid_match));
   const turns=match.turn_of_player_indices||[],yourTurn=participant&&Boolean(seat&&turns.includes(seat.player_index));
   const conflict=p.conflicts[match.id],pending=match.pending||0;
   const message=p.actions.presentationMessage();
@@ -64,8 +65,7 @@ export function MatchStage() {
         {waiting&&owner&&!match.bet_per_player&&<Button secondary onPress={()=>run(()=>p.actions.addBots(match.players.filter(player=>player.kind==='computer').length+1))}>{copyText("Add a computer")}</Button>}
         {waiting&&owner&&match.players.some(player=>player.kind==='computer')&&<Button secondary onPress={()=>run(()=>p.actions.addBots(Math.max(0,match.players.filter(player=>player.kind==='computer').length-1)))}>{copyText("Remove a computer")}</Button>}
         {participant&&<Button secondary onPress={shareMatch}>{t('ui.match.share','Share match')}</Button>}
-        {participant&&!over&&(waiting||game?.allows_leave_mid_match)&&<Button danger onPress={()=>setConfirm('leave')}>{t('ui.match.leave','Leave match')}</Button>}
-        {owner&&(waiting||over)&&<Button danger onPress={()=>setConfirm('delete')}>{copyText("Delete match")}</Button>}
+        {canLeave&&<Button danger onPress={()=>setConfirm('leave')}>{t('ui.match.leave','Leave match')}</Button>}
         {over&&participant&&<Button onPress={()=>run(async()=>{const next=await p.actions.matchAction('rematch');await openMatch(next.id);})}>{copyText("Play again")}</Button>}
       </Row>
     </Card>}
@@ -81,10 +81,10 @@ export function MatchStage() {
       <Field label={copyText('Player code or ID')} value={recipient} onChangeText={setRecipient} autoCapitalize="none" autoCorrect={false}/><Button disabled={!recipient.trim()} onPress={()=>run(async()=>{await p.actions.createInvite({recipient_user_id:recipient.trim()});setRecipient('');notify(copyText('Invitation sent.'));})}>{copyText('Send invitation')}</Button>
       {invite&&<><Field label={copyText("Invite link")} value={invite.url} editable={false}/><Row><Button onPress={()=>run(async()=>{await Clipboard.setStringAsync(invite.url);})}>{copyText("Copy link")}</Button><Button secondary onPress={()=>run(()=>Share.share({message:invite.url,url:invite.url}))}>{copyText("Share…")}</Button></Row><View style={{alignItems:'center',padding:20,backgroundColor:'white',borderRadius:8}}><SvgUri uri={new URL(invite.qr_code_url,p.baseUrl).href} width={200} height={200} accessibilityLabel={copyText("Match invite QR code")}/></View><Copy small muted>{match.private?copyText("Anyone with this invite can join this private match."):copyText("Send the link or scan the QR code to join.")}</Copy></>}
     </Dialog>
-    <Dialog visible={Boolean(confirm)} title={confirm==='resolve'?copyText("Use server version?"):confirm==='delete'?copyText("Delete this match?"):copyText("Leave this match?")} onClose={()=>setConfirm('')}>
-      <Copy>{confirm==='resolve'?copyText("Your pending branch will be kept in an archive before loading the server board."):confirm==='delete'?copyText("This removes the match for everyone. This action cannot be undone."):copyText("Your seat will leave the match. The server calculates any token settlement.")}</Copy>
-      {confirm==='leave'&&match.pending_leave_payout!==null&&match.pending_leave_payout!==undefined&&<Copy>{copyText("Your payout:")} {match.pending_leave_payout} {copyText("tokens")}</Copy>}
-      <Button danger onPress={()=>run(async()=>{if(confirm==='resolve')await p.actions.resolveConflict(match.id);else if(confirm==='delete'){await p.actions.deleteMatch();navigate('matches');}else if(!waiting){if(match.pending_leave_player_id){await p.actions.matchAction('playerLeft');setConfirm('');return;}await p.actions.matchAction('maybeLeave');return;}else await p.actions.matchAction('leave');setConfirm('');})}>{confirm==='resolve'?copyText("Use server version"):confirm==='delete'?copyText("Delete match"):!waiting&&!match.pending_leave_player_id?copyText("Preview leaving"):copyText("Confirm leaving")}</Button>
+    <Dialog visible={Boolean(confirm)} title={confirm==='resolve'?copyText("Use server version?"):copyText("Leave this match?")} onClose={()=>setConfirm('')}>
+      <Copy>{confirm==='resolve'?copyText("Your pending branch will be kept in an archive before loading the server board."):over?copyText("This removes the match from your list. Other players can still see it."):waiting&&owner?copyText("Leaving closes this lobby for everyone and refunds any tokens."):copyText("Your seat will leave the match. The server calculates any token settlement.")}</Copy>
+      {confirm==='leave'&&!waiting&&!over&&match.pending_leave_payout!==null&&match.pending_leave_payout!==undefined&&<Copy>{copyText("Your payout:")} {match.pending_leave_payout} {copyText("tokens")}</Copy>}
+      <Button danger onPress={()=>run(async()=>{if(confirm==='resolve')await p.actions.resolveConflict(match.id);else if(waiting||over){await p.actions.leaveMatch();navigate('matches');}else if(match.pending_leave_player_id)await p.actions.leaveMatch();else{await p.actions.matchAction('maybeLeave');return;}setConfirm('');})}>{confirm==='resolve'?copyText("Use server version"):!waiting&&!over&&!match.pending_leave_player_id?copyText("Preview leaving"):copyText("Confirm leaving")}</Button>
     </Dialog>
   </>;
 }

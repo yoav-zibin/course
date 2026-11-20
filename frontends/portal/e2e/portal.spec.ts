@@ -14,7 +14,7 @@ test('host controls and the offline starter game retain all eight languages with
   test.setTimeout(120000);
   const copy=(source:string,locale:string)=>locale==='en'?source:(sharedCopy as Record<string,Record<string,string>>)[source][locale];
   const locales=(await (await request.get('/i18n/locales')).json()).locales;
-  await page.goto('/portal');await page.getByRole('button',{name:'On this device',exact:true}).click();
+  await page.goto('/portal#local');
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   // Constructed roster fixtures exercise the API's valid 200-codepoint names;
   // they are local layout evidence, not a claim of multiplayer browser play.
@@ -45,8 +45,7 @@ test('host controls and the offline starter game retain all eight languages with
 
 test('short screens keep the full native board width and can scroll to its last rank',async({page},info)=>{
   for(const viewport of [{width:320,height:480},{width:480,height:320},{width:844,height:390}]){
-    await page.setViewportSize(viewport);await page.goto('/portal');
-    await page.getByRole('button',{name:'On this device',exact:true}).click();
+    await page.setViewportSize(viewport);await page.goto('/portal#local');
     await page.getByRole('button',{name:'Pass and play',exact:true}).click();
     const board=page.getByLabel('Game board. Use pieces and highlighted destinations. Zoom controls are above the board.');
     await expect(page.getByRole('button',{name:'Cell 9',exact:true})).toBeAttached();
@@ -77,8 +76,7 @@ test('short screens keep the full native board width and can scroll to its last 
 
 test('empty fitted board space permits native touch scrolling and retains real piece taps',async({page,isMobile})=>{
   test.skip(!isMobile,'Uses the mobile project’s native touch input');
-  await page.setViewportSize({width:480,height:320});await page.goto('/portal');
-  await page.getByRole('button',{name:'On this device',exact:true}).click();await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  await page.setViewportSize({width:480,height:320});await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   const board=page.getByLabel('Game board. Use pieces and highlighted destinations. Zoom controls are above the board.');
   await expect(page.getByRole('button',{name:'Cell 9',exact:true})).toBeAttached();await board.scrollIntoViewIfNeeded();
   const port=await board.evaluateHandle(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)if(/auto|scroll/.test(getComputedStyle(parent).overflowY))return parent;throw new Error('Missing native containing scroll view');});
@@ -142,18 +140,18 @@ test('full localized instructions remain available between public turns, at game
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
 });
 
-test('a delayed browser Back response cannot replace newer Preferences navigation',async({page,request})=>{
+test('a delayed browser Back response cannot replace newer Invites navigation',async({page,request})=>{
   const created=await game(request,uniqueName('Delayed history game'));await page.goto(`/portal#game=${created.id}`);
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
   let release!:()=>void,started!:()=>void;
   const held=new Promise<void>(resolve=>{release=resolve;}),requested=new Promise<void>(resolve=>{started=resolve;});
   await page.route(`**/games/${created.id}`,async route=>{started();await held;await route.continue();});
   await page.goBack();await requested;
-  await page.getByRole('button',{name:'Preferences',exact:true}).click();await expect(page.getByRole('heading',{name:'Preferences',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Invites',exact:true}).click();await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
   const response=page.waitForResponse(response=>new URL(response.url()).pathname===`/games/${created.id}`);
   release();await (await response).finished();
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-  await expect(page).toHaveURL(/#settings$/);await expect(page.getByRole('heading',{name:'Preferences',exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/#invites$/);await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
 });
 
 test('campaign arrival persists before login and attributes the guest signup',async({page,request})=>{
@@ -189,25 +187,26 @@ test('campaign arrival persists before login and attributes the guest signup',as
   }
 });
 
-test('navigation stays directly accessible without a hamburger, including saved menu preferences',async({page})=>{
-  await page.addInitScript(()=>localStorage.setItem('buildplay.navigation.v2','hamburger'));
+for(const savedLayout of ['hamburger','left'])test(`navigation stays directly accessible with the saved ${savedLayout} layout`,async({page})=>{
+  await page.addInitScript(layout=>localStorage.setItem('buildplay.navigation.v2',layout),savedLayout);
   await page.goto('/portal');
   await expect(page.getByRole('button',{name:'Navigation menu',exact:true})).toHaveCount(0);
   await expect(page.getByText('☰',{exact:true})).toHaveCount(0);
-  for(const name of ['Games','Matches','On this device','Invites'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(1);
+  for(const name of ['Games','Matches','Invites'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(1);
+  await expect(page.getByRole('button',{name:'On this device',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Invites',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Log in',exact:true}).click();
   await expect(page.getByRole('button',{name:'Close dialog',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
-  await page.getByRole('button',{name:'Preferences',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Preferences',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Privacy',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Navigation layout: Menu',exact:true})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Navigation layout: Top navigation',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Navigation layout: Left navigation',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Navigation layout: Top navigation',exact:true})).toHaveCount(0);
   for(const width of [1200,900,390]){
     await page.setViewportSize({width,height:850});
-    await page.getByRole('button',{name:'On this device',exact:true}).click();
-    await expect(page.getByRole('heading',{name:'On this device',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Matches',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Invites',exact:true}).click();
     await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'Navigation menu',exact:true})).toHaveCount(0);
@@ -274,14 +273,17 @@ test('guest identity survives reload, shared navigation stays responsive, and bu
   await page.getByRole('textbox',{name:'Bug or feature request'}).fill('The shared portal feedback acceptance check.');
   await page.getByRole('button',{name:'Send report',exact:true}).click();await expect(page.getByText('Thanks! Your report was sent.')).toBeVisible();
   await page.getByRole('button',{name:'Close',exact:true}).click();
-  await page.getByRole('button',{name:'Preferences',exact:true}).click();
-  await page.getByRole('button',{name:'Navigation layout: Left navigation'}).click();
+  await page.getByRole('button',{name:'Matches',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Privacy',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBeTruthy();
   expect(errors).toEqual([]);
 });
 
 test('bundled public-state game is playable offline without handoffs, persists, and replays',async({page,context})=>{
-  await page.goto('/portal');await page.getByRole('button',{name:'On this device',exact:true}).click();
+  await page.goto('/portal#local');
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   // Account preferences stay reachable without leaving the current native game.
@@ -302,12 +304,12 @@ test('bundled public-state game is playable offline without handoffs, persists, 
   await page.getByRole('button',{name:'Play history',exact:true}).click();await expect(page.getByText('Replay · move 5 of 5')).toBeVisible();await expect(page.getByRole('button',{name:'Play history',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Live board',exact:true}).click();await expect(page.getByText('Live board',{exact:true}).first()).toBeVisible();
   await context.setOffline(false);
-  await page.getByRole('button',{name:'On this device',exact:true}).click();
+  await page.goto('/portal#local');
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
 });
 
 test('a genuinely finished local draw stays translated offline in detail and match list',async({page,context})=>{
-  await page.goto('/portal');await page.getByRole('button',{name:'On this device',exact:true}).click();await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   for(const cell of [1,2,3,5,4,6,8,7,9]){
     const target=page.getByRole('button',{name:`Cell ${cell}`,exact:true});await target.click();await expect(target).toHaveCount(0);
   }
@@ -319,7 +321,7 @@ test('a genuinely finished local draw stays translated offline in detail and mat
   await expect(page.locator('html')).toHaveAttribute('lang','es');
   await page.getByRole('button',{name:'Cerrar diálogo',exact:true}).click();
   await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
-  await page.getByRole('button',{name:'En este dispositivo',exact:true}).click();await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
+  await page.goto('/portal#local');await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
 });
 
 test('private invitation survives guest sign-in and creates a usable shared link and QR code',async({page,request})=>{

@@ -379,6 +379,56 @@ def test_only_players_delete_and_players_only_hide_an_ended_match(api: Api) -> N
     assert api.ok("GET", f"/matches/{match_id}")["status"] == "over"
 
 
+def test_departed_player_can_hide_finished_match_without_changing_it_for_others(
+    api: Api,
+) -> None:
+    alice = api.new_user("alice", tokens=10)
+    bob = api.new_user("bob", tokens=10)
+    outsider = api.new_user("outsider")
+    game_id = api.new_game(owner=alice, allows_leave_mid_match=True)
+    match = api.ok(
+        "POST", "/matches", as_user=alice,
+        json={"game_id": game_id, "max_loss": 10},
+    )
+    match_id = match["id"]
+    api.ok("POST", f"/matches/{match_id}/join", as_user=bob)
+    api.ok("POST", f"/matches/{match_id}/start", as_user=alice)
+    assert api.move(match_id, as_user=alice, next_turn=1).status_code == 201
+    api.ok("POST", f"/matches/{match_id}/maybeLeave", as_user=bob)
+    ended = api.ok("POST", f"/matches/{match_id}/playerLeft", as_user=bob)
+    assert ended["status"] == "over"
+    assert ended["players"][1]["active"] is False
+    assert ended["token_pot"] == 0
+
+    def listed(user_id: str) -> list[str]:
+        return [item["id"] for item in api.ok("GET", "/matches", as_user=user_id)]
+
+    def balances() -> dict[str, int]:
+        return {
+            user_id: api.ok("GET", f"/users/{user_id}", as_user=user_id)["token_balance"]
+            for user_id in (alice, bob)
+        }
+
+    history = api.ok("GET", f"/matches/{match_id}/history", as_user=bob)
+    assert len(history["moves"]) == 2
+    settled_balances = balances()
+    assert settled_balances == {alice: 10, bob: 10}
+    assert listed(alice) == listed(bob) == [match_id]
+    assert error(api.request("DELETE", f"/matches/{match_id}", as_user=outsider)) == (
+        403, "you are not a player in this match",
+    )
+
+    assert api.request("DELETE", f"/matches/{match_id}", as_user=bob).status_code == 204
+    assert listed(bob) == []
+    assert listed(alice) == [match_id]
+    remaining = api.ok("GET", f"/matches/{match_id}", as_user=alice)
+    assert remaining["status"] == "over"
+    assert remaining["players"] == ended["players"]
+    assert remaining["token_payouts"] == ended["token_payouts"]
+    assert api.ok("GET", f"/matches/{match_id}/history", as_user=bob) == history
+    assert balances() == settled_balances
+
+
 # A minimal v2 race game whose playerLeft hands the turn to another
 # player, so a leaver's seat is taken over and the match plays on.
 _LEAVE_AND_PLAY_ON_GAME = r"""

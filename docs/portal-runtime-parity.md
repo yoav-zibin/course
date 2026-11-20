@@ -10,6 +10,12 @@ This is a comparison of application source
 `600e8e35ab3d7338055e4f28eaa3d165be4bdba2`, the revision selected when the audit
 started. It does not establish parity for later commits or physical devices.
 
+The current portal has since removed the footer, Preferences screen and
+On this device navigation tab, and moved Privacy into the account dialog.
+The coverage and findings below describe the pinned audit revision, including
+its retired screens. These UI changes have not been rechecked on native devices
+as part of this report.
+
 ## Coverage
 
 - Games, Matches, On this device, Preferences, and the signed-out account dialog.
@@ -71,8 +77,12 @@ scenes. Regenerating it from another revision creates a different comparison.
 
 `scripts/portal-parity-web.cjs` drives the matching export with Playwright.
 `PORTAL_PARITY_VIEWPORT=1440x1000` runs the wider layout;
-`PORTAL_PARITY_PAGES_ONLY=1` refreshes Preferences/account captures while retaining
-game proof. The manual `Portal runtime parity audit` workflow reuses the pinned
+`PORTAL_PARITY_PAGES_ONLY=1` refreshes the pinned revision's Preferences/account
+captures while retaining game proof. These pinned drivers target that older UI.
+The current Android `frontends/portal/scripts/native-smoke.py` opens the saved
+local games list through `buildplay://portal#local`, with its existing offline
+test flag. Its restart check uses a normal launch to resume the saved game.
+The manual `Portal runtime parity audit` workflow reuses the pinned
 simulator artifact on a fresh owned simulator. Its scope is recorded explicitly;
 it does not rebuild or publish an application.
 

@@ -4138,7 +4138,11 @@ class GamePlatform:
                 raise ForbiddenError(
                     "only a player in the match can delete it"
                 )
-            self._get_seat(match, caller_id)
+            # A finished match stays in a departed player's history until
+            # they hide it, even though their original seat is inactive.
+            seat = match.seat_of(caller_id)
+            if seat is None or seat.kind != "human":
+                raise ForbiddenError("you are not a player in this match")
             self._save(
                 replace(
                     match,

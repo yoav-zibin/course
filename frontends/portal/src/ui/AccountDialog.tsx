@@ -5,6 +5,7 @@ import {Button, Card, Choices, Copy, Dialog, Field, Notice, Row, Title, colors} 
 import {text,useApp} from './context';
 import GoogleLogin from './GoogleLogin';
 import {NotificationPreferences} from './Notifications';
+import {PrivacyDialog} from './PrivacyDialog';
 import {getLocales} from '../platform/i18n';
 import {accountDeletion} from '../core/account-deletion';
 import {AccountDeletionStatus} from './AccountDeletion';
@@ -14,13 +15,13 @@ export function AccountDialog({visible,onClose}: {visible:boolean;onClose:()=>vo
   const {p}=useApp(), t=(key:string,fallback:string)=>text(p,key,fallback);
   const [method,setMethod]=useState('google'),[name,setName]=useState(''),[identifier,setIdentifier]=useState(''),[code,setCode]=useState(''),[verification,setVerification]=useState('');
   const [editing,setEditing]=useState(false),[error,setError]=useState(''),[confirmLink,setConfirmLink]=useState<number|null>(null),[approvedLink,setApprovedLink]=useState<number|null>(null);
-  const [confirmDeletion,setConfirmDeletion]=useState(false);
+  const [confirmDeletion,setConfirmDeletion]=useState(false),[privacy,setPrivacy]=useState(false);
   const scope=JSON.stringify([p.baseUrl,p.account?.id]),current=useRef({scope,visible,epoch:0,dialog:0}),revision=useRef(0);
   if(current.current.scope!==scope||current.current.visible!==visible)current.current={scope,visible,epoch:current.current.epoch+1,dialog:current.current.dialog+(current.current.visible!==visible?1:0)};
   const epoch=current.current.epoch;
-  useEffect(()=>{++revision.current;setMethod('google');setName(p.account?.display_name||'');setIdentifier('');setVerification('');setCode('');setError('');setConfirmDeletion(false);setConfirmLink(null);setApprovedLink(null);},[visible,scope]);
+  useEffect(()=>{++revision.current;setMethod('google');setName(p.account?.display_name||'');setIdentifier('');setVerification('');setCode('');setError('');setConfirmDeletion(false);setConfirmLink(null);setApprovedLink(null);setPrivacy(false);},[visible,scope]);
   const deletion=accountDeletion(p.account,p.profile);
-  const close=()=>{++revision.current;setConfirmDeletion(false);setConfirmLink(null);setApprovedLink(null);onClose();};
+  const close=()=>{++revision.current;setConfirmDeletion(false);setConfirmLink(null);setApprovedLink(null);setPrivacy(false);onClose();};
   const verifiedMethods=[...(p.authConfig?.google_client_id?[{value:'google',label:'Google'}]:[]),...(p.authConfig?.email_login_enabled?[{value:'email',label:t('ui.auth.email','Email')}]:[]),...(p.authConfig?.phone_login_enabled?[{value:'phone',label:t('ui.auth.phone','Phone')}]:[])];
   const methods=[...verifiedMethods,...(!p.account?[{value:'guest',label:t('ui.auth.guest','Guest')}]:[])];
   const selected=methods.some(item=>item.value===method)?method:methods[0]?.value;
@@ -60,5 +61,7 @@ export function AccountDialog({visible,onClose}: {visible:boolean;onClose:()=>vo
           :<><Field label={t('ui.auth.code','Verification code')} secureTextEntry value={code} onChangeText={setCode} keyboardType="number-pad" autoComplete="one-time-code" maxLength={12}/><Button disabled={!code.trim()||!p.network} onPress={()=>authenticate(guard=>p.actions.verifyCode(selected as 'email'|'phone',verification,code.trim(),name.trim()||'Player',Boolean(p.account),guard))}>{t('ui.auth.verify','Verify and continue')}</Button><Button secondary onPress={()=>{++revision.current;setVerification('');setCode('');}}>{copyText('Use another address or resend')}</Button></>}
       </>}
     </>}
+    <Button secondary compact onPress={()=>setPrivacy(true)}>{t('ui.privacy.title','Privacy')}</Button>
+    <PrivacyDialog visible={visible&&privacy} onClose={()=>setPrivacy(false)} />
   </Dialog>;
 }

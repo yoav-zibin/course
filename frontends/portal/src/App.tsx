@@ -7,10 +7,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {usePortal} from './core';
 import {Button, Card, Copy, Notice, Row, Title, colors} from './ui/components';
 import {Context, Screen, text} from './ui/context';
-import {Catalog, GameDetail, Matches, LocalMatches, Invitations, Settings} from './ui/screens';
+import {Catalog, GameDetail, Matches, LocalMatches, Invitations} from './ui/screens';
 import {AccountDialog} from './ui/AccountDialog';
 import {AccountDeletionBanner} from './ui/AccountDeletion';
-import {PrivacyDialog} from './ui/PrivacyDialog';
 import {MatchStage} from './ui/MatchStage';
 import {BugReporter} from './ui/BugReporter';
 import {BugButton} from './ui/BugButton';
@@ -32,7 +31,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const insets = useSafeAreaInsets();
   const localOnly=useRef(readLocalUiTest()).current;
   const [screen, setScreen] = useState<Screen>('games');
-  const [account, setAccount] = useState(false), [focus,setFocus]=useState(false), [privacy,setPrivacy]=useState(false);
+  const [account, setAccount] = useState(false), [focus,setFocus]=useState(false);
   const [notice, setNotice] = useState('');
   const [inbox,setInbox] = useState(false), [notificationBanner,setNotificationBanner] = useState<InAppNotification|null>(null);
   const observedNotifications = useRef<{scope:string; ids:Set<string>; initialized:boolean}>({scope:'',ids:new Set(),initialized:false});
@@ -113,7 +112,8 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
       else if (id) await openMatch(id);
       else if (game) await openGame(game);
       else if (invite) await openInvite(invite);
-      else if (['games','matches','local','invites','settings'].includes(url.hash.slice(1))) setScreen(url.hash.slice(1) as Screen);
+      else if (['games','matches','local','invites'].includes(url.hash.slice(1))) {p.actions.clearGame();setScreen(url.hash.slice(1) as Screen);}
+      else if (url.hash) {p.actions.clearGame();setScreen('games');}
     };
     await receive(initialUrl);
   });}, []);
@@ -125,7 +125,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
       if (rematch) {const next = await p.actions.request('POST', `/matches/${encodeURIComponent(rematch)}/rematch`); await openMatch(next.id);} else if (match) await openMatch(match); else if (game) await openGame(game); else if (invite) await openInvite(invite);
     });});
     const resume = AppState.addEventListener('change', state => {if (state === 'active') void run(() => p.actions.refresh());});
-    const pop = () => {void run(async () => {await p.actions.rememberAttribution(window.location.href);const hash = new URLSearchParams(window.location.hash.slice(1)); const id=hash.get('match'), game=hash.get('game'), invite=hash.get('invite'), rematch=hash.get('rematch'); if(rematch) {const next=await p.actions.request('POST',`/matches/${encodeURIComponent(rematch)}/rematch`);await openMatch(next.id);} else if(invite) await openInvite(invite); else if(id) {setScreen('matches');await p.actions.selectMatch(id);} else {p.actions.clearGame(); if(game) {setScreen('games');await p.actions.selectGame(game);} else setScreen((['games','matches','local','invites','settings'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'games') as Screen);}});};
+    const pop = () => {void run(async () => {await p.actions.rememberAttribution(window.location.href);const hash = new URLSearchParams(window.location.hash.slice(1)); const id=hash.get('match'), game=hash.get('game'), invite=hash.get('invite'), rematch=hash.get('rematch'); if(rematch) {const next=await p.actions.request('POST',`/matches/${encodeURIComponent(rematch)}/rematch`);await openMatch(next.id);} else if(invite) await openInvite(invite); else if(id) {setScreen('matches');await p.actions.selectMatch(id);} else {p.actions.clearGame(); if(game) {setScreen('games');await p.actions.selectGame(game);} else setScreen((['games','matches','local','invites'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'games') as Screen);}});};
     if (Platform.OS === 'web') window.addEventListener('popstate',pop);
     return () => {subscription.remove(); resume.remove(); if (Platform.OS === 'web') window.removeEventListener('popstate',pop);};
   }, []);
@@ -138,14 +138,13 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   useEffect(()=>{
     if(Platform.OS!=='android')return;
     const listener=BackHandler.addEventListener('hardwareBackPress',()=>{
-      if(privacy){setPrivacy(false);return true;}
       if(account){setAccount(false);return true;}
       if(p.selectedMatch){navigate(p.selectedMatch.localMode?'local':'matches');return true;}
       if(p.selectedGameId){p.actions.clearGame();setScreen('games');return true;}
       if(screen!=='games'){navigate('games');return true;}
       return false;
     });return()=>listener.remove();
-  },[privacy,account,screen,p.selectedMatch?.id,p.selectedGameId]);
+  },[account,screen,p.selectedMatch?.id,p.selectedGameId]);
   useEffect(()=>{
     if(!p.ready)return;
     if(localOnly){configureReporter(()=>{});return;}
@@ -165,7 +164,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
 
   const links: {key: Screen; label: string; icon: string}[] = [
     {key:'games',label:t('ui.portal.nav_games','Games'),icon:'◇'}, {key:'matches',label:t('ui.portal.nav_matches','Matches'),icon:'▦'},
-    {key:'local',label:t('ui.practice.local_matches','On this device'),icon:'▣'}, {key:'invites',label:t('ui.invite.title','Invites'),icon:'↗'},
+    {key:'invites',label:t('ui.invite.title','Invites'),icon:'↗'},
   ];
   const side = width >= 1000 && layout === 'left';
   const inlineNavigation=width>=1280&&!side;
@@ -182,7 +181,7 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
       {!focus&&!side&&!inlineNavigation&&<ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
       <AccountDeletionBanner/>
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
-        {!focus&&side && <View style={s.sidebar}>{tabs}<View style={{flex:1}}/><Button secondary onPress={()=>navigate('settings')}>⚙ {t('ui.preferences.title','Preferences')}</Button></View>}
+        {!focus&&side && <View style={s.sidebar}>{tabs}</View>}
         <ScrollView key={contentKey} style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},focus&&{paddingTop:42}]} keyboardShouldPersistTaps="handled">
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
@@ -195,13 +194,10 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
             : screen==='games' ? p.selectedGameId ? <GameDetail /> : <Catalog />
             : screen==='matches' ? <Matches />
             : screen==='local' ? <LocalMatches />
-            : screen==='invites' ? <Invitations />
-            : <Settings layout={layout} setLayout={next=>{setLayout(next); void AsyncStorage.setItem('buildplay.navigation.v2',next);}} />}
-          {!focus&&<Row style={s.footer}><Copy small muted>BuildPlay</Copy><Button secondary compact onPress={()=>navigate('settings')}>{t('ui.preferences.title','Preferences')}</Button><Button secondary compact onPress={()=>setPrivacy(true)}>{t('ui.privacy.title','Privacy')}</Button><Copy small muted>{p.network ? copyText("● Online") : copyText("○ Offline")}</Copy></Row>}
+            : <Invitations />}
         </ScrollView>
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />
-      <PrivacyDialog visible={privacy} onClose={()=>setPrivacy(false)} />
       <NotificationInbox visible={inbox} onClose={()=>setInbox(false)} onOpen={openNotification}/>
       <NotificationPrompt/>
       {gameVisible&&focus&&<View style={{position:'absolute',right:8,top:insets.top+2,zIndex:100}}><Button secondary compact onPress={toggleFocus}>{copyText('Exit focus mode')}</Button></View>}
@@ -216,5 +212,5 @@ export default function App() {
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},
   mobileTabs:{maxHeight:58,flexGrow:0,backgroundColor:colors.surface}, sidebar:{width:230,backgroundColor:colors.surface,padding:18,gap:12,borderRightWidth:1,borderColor:colors.border},
-  content:{width:'100%',maxWidth:1240,alignSelf:'center',gap:22,flexGrow:1},loading:{minHeight:300,alignItems:'center',justifyContent:'center',gap:20},footer:{marginTop:28,paddingTop:22,paddingBottom:20,borderTopWidth:1,borderColor:colors.border,justifyContent:'center'},
+  content:{width:'100%',maxWidth:1240,alignSelf:'center',gap:22,flexGrow:1},loading:{minHeight:300,alignItems:'center',justifyContent:'center',gap:20},
 });

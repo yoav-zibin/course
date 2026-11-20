@@ -2,10 +2,10 @@ import {test,expect} from '@playwright/test';
 
 test('match focus entry leaves account controls reachable and keeps a visible exit in focus mode',async({page,baseURL},info)=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Focus control checks require a disposable loopback server.');
-  await page.goto('/portal');
-  await page.getByRole('button',{name:'On this device',exact:true}).click();
+  await page.goto('/portal#local');
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/#match=local-/);
   const matchUrl=page.url();
   const account=page.getByRole('button',{name:'Log in',exact:true});
   const enter=page.getByRole('button',{name:'Focus mode',exact:true});

@@ -13,8 +13,7 @@ test('full storage still opens remote matches and game details without changing 
   expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
   const started=await request.post(`/matches/${match.id}/start`,{headers,data:{}});
   expect(started.ok(),await started.text()).toBeTruthy();expect((await started.json()).status).toBe('ongoing');
-  await loginAs(page,user);await page.goto('/portal');
-  await page.getByRole('button',{name:'On this device',exact:true}).click();
+  await loginAs(page,user);await page.goto('/portal#local');
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);

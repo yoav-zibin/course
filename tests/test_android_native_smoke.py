@@ -53,6 +53,25 @@ def driver():
     return value
 
 
+def test_initial_local_list_deep_link_keeps_offline_mode_and_restart_resumes_saved_game():
+    value = driver()
+    value.package = "com.buildplay.app"
+    commands = []
+
+    def command(*arguments):
+        commands.append(arguments)
+        return value.package + "/.MainActivity" if arguments[1:3] == ("cmd", "package") else ""
+
+    value.command = command
+    value.launch(local_list=True)
+    initial = commands[-1]
+    assert initial[:6] == ("shell", "am", "start", "-W", "-n", value.package + "/.MainActivity")
+    assert initial[6:9] == ("--ez", "buildplayLocalUiTest", "true")
+    assert initial[9:] == ("-a", "android.intent.action.VIEW", "-d", "buildplay://portal#local")
+    value.launch()
+    assert commands[-1] == initial[:9]
+
+
 def test_clipped_canvas_is_revealed_then_physical_tap_ignores_bad_virtual_bounds():
     value = driver()
     trees = iter([android_tree("[0,1770][1080,2328]", 1), android_tree("[0,555][1080,1563]", 1), android_tree("[0,555][1080,1563]", 4)])

@@ -415,19 +415,36 @@ export class PortalStore {
   async matchAction(action: string, body?: any) { const match = this.state.selectedMatch; if (!match) throw new Error('Choose a match first'); const token = this.selection; const result = await this.request('POST', `/matches/${encodeURIComponent(match.id)}/${action}`, body); if (result?.id) { await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); } await this.refreshProfile().catch(() => {}); return result; }
   async addBots(count: number) { const match = this.state.selectedMatch; if (!match) return; const token = this.selection; const result = await this.request('PATCH', `/matches/${encodeURIComponent(match.id)}`, { num_computer_opponents: count }); await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); }
   async removePlayer(userId: string) { const match = this.state.selectedMatch; if (!match) return; const token = this.selection; const result = await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}/players/${encodeURIComponent(userId)}`); await this.cache(`/matches/${result.id}`, result); if (token === this.selection) this.patch({ selectedMatch: this.decorate(result) }); }
-  async archiveMatch(id: string, deleted = false) {
+  async archiveMatch(id: string, { deleted = false, hidePermanently = true }: { deleted?: boolean; hidePermanently?: boolean } = {}) {
     const guard = this.capture(), owner = this.identity(), token = this.selection;
     await this.repository.mutate(owner, data => {
       guard();
       if (!deleted && !data.local[id] && (data.queues[id]?.length || data.conflicts[id] || this.data.conflicts[id])) throw new Error(copyText('Sync or resolve pending actions before hiding this match.'));
-      data.archivedMatches.push({ id, match: data.local[id] || data.responses[`/matches/${id}`], moves: data.queues[id] || [], savedAt: new Date().toISOString() });
+      const archives = hidePermanently ? data.archivedMatches : data.archives;
+      archives.push({ id, match: data.local[id] || data.responses[`/matches/${id}`], moves: data.queues[id] || [], savedAt: new Date().toISOString() });
       delete data.local[id]; delete data.queues[id]; delete data.conflicts[id]; delete data.responses[`/matches/${id}`];
+      if (Array.isArray(data.responses['/matches'])) data.responses['/matches'] = data.responses['/matches'].filter((match: Match) => match.id !== id);
       if (data.selectedId === id) data.selectedId = null;
     });
     guard(); if (token === this.selection && this.state.selectedMatch?.id === id) this.clearMatch();
     await this.reloadData(); guard(); this.patch({ myMatches: this.state.myMatches.filter(m => m.id !== id) });
   }
-  async deleteMatch() { const match = this.state.selectedMatch; if (!match) return; if (!this.data.local[match.id]) await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}`); await this.archiveMatch(match.id, true); }
+  async leaveMatch() {
+    const match = this.state.selectedMatch; if (!match) return;
+    const guard = this.capture(), waiting = match.status === 'waiting_for_players', over = match.status === 'over';
+    if (over || waiting && match.owner_user_id === this.state.account?.id) {
+      // The existing endpoint hides a finished match for this player, or
+      // cancels a waiting lobby and refunds its players when the host leaves.
+      await this.request('DELETE', `/matches/${encodeURIComponent(match.id)}`); guard();
+      await this.archiveMatch(match.id, { deleted: true });
+      return;
+    }
+    const result = await this.matchAction(waiting ? 'leave' : 'playerLeft'); guard();
+    // A guest can rejoin this lobby later, so the server's membership list
+    // should decide its visibility instead of a permanent local hide record.
+    if (waiting) await this.archiveMatch(match.id, { deleted: true, hidePermanently: false });
+    return result;
+  }
   private async sync(freshRequestId?: string, matchId?: string) {
     if (this.localOnly || !this.state.account || !isOnline() || (!freshRequestId && Date.now() < this.retryAfter)) return;
     if (this.syncPromise) return this.syncPromise;
@@ -584,7 +601,7 @@ export class PortalStore {
     switchAccount: (id: string,intentGuard?:()=>void) => this.perform(() => this.switchAccount(id,intentGuard)), logout: (id?: string) => this.perform(() => this.logout(id)), updateProfile: (patch: any) => this.perform(() => this.updateProfile(patch)),
     createMatch: (options: any) => this.perform(() => this.createMatch(options)), quickMatch: (gameId?: string, count?: number) => this.perform(() => this.quickMatch(gameId, count)),
     matchAction: (action: 'join' | 'start' | 'leave' | 'rematch' | 'maybeLeave' | 'playerLeft', body?: any) => this.perform(() => this.matchAction(action, body)), addBots: (count: number) => this.perform(() => this.addBots(count)), removePlayer: (id: string) => this.perform(() => this.removePlayer(id)),
-    deleteMatch: () => this.perform(() => this.deleteMatch()), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),
+    leaveMatch: () => this.perform(() => this.leaveMatch()), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),
     startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.archiveMatch(id)),
     loadHistory: () => this.perform(() => this.loadHistory()), replay: (index: number | null) => this.perform(() => this.replay(index), false), presentationMessage: () => this.presentationMessage(), presentationHistory: () => this.presentationHistory(),
     saveGame: (id: string, saved: boolean) => this.perform(async () => { await this.request(saved ? 'PUT' : 'DELETE', `${this.paginated ? '/v2' : ''}/users/me/saved-games/${encodeURIComponent(id)}`); await this.list('savedGames'); }),

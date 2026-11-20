@@ -194,12 +194,15 @@ class NativeSmoke:
             (self.output / f"{stage}.png").write_bytes(result.stdout)
         (self.output / "native-gameplay.json").write_text(json.dumps({"package": self.package, "events": self.events}, indent=2))
 
-    def launch(self):
+    def launch(self, *, local_list: bool = False):
         response = self.command("shell", "cmd", "package", "resolve-activity", "--brief", self.package)
         component = next((line.strip() for line in reversed(response.splitlines()) if "/" in line and self.package in line), None)
         if not component:
             raise RuntimeError("The standalone BuildPlay launch activity was not found")
-        self.command("shell", "am", "start", "-W", "-n", component, "--ez", "buildplayLocalUiTest", "true")
+        arguments = ["shell", "am", "start", "-W", "-n", component, "--ez", "buildplayLocalUiTest", "true"]
+        if local_list:
+            arguments.extend(["-a", "android.intent.action.VIEW", "-d", "buildplay://portal#local"])
+        self.command(*arguments)
 
     def assert_bug_control(self, stage: str, *, clear_logo: bool = False):
         node = self.wait(self.BUG_BUTTON, clickable=True, scroll=False)
@@ -369,10 +372,11 @@ class NativeSmoke:
             raise RuntimeError("The public-state bundled game unexpectedly requires a handoff")
 
     def run(self):
-        self.launch()
+        # Saved local games remain available by deep link after their navigation
+        # tab was removed. Restart launches below omit the route to resume play.
+        self.launch(local_list=True)
         self.wait("On this device")
         self.bug_report_from_account()
-        self.tap("On this device")
         self.tap("Pass and play")
         self.tap("Focus mode", scroll=False)
         self.wait("Exit focus mode")

@@ -1,17 +1,23 @@
 import {test,expect} from '@playwright/test';
 import copy from '../src/platform/ui-copy.json';
 import policy from '../src/platform/privacy-policy.json';
+import {createUser,loginAs,uniqueName} from './helpers';
 const retention=policy.blocks.find(block=>block.text.startsWith('Your account data is kept'))!.text;
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Privacy dialog tests require a disposable loopback server.');
 });
 
-test('Privacy stays in a themed closable dialog and preserves the page underneath',async({page,context},info)=>{
+test('Privacy opens from the bottom of the profile and preserves the profile draft and page underneath',async({page,context,request},info)=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
-  await page.goto('/portal');
-  await page.getByRole('button',{name:'On this device',exact:true}).click();
+  await loginAs(page,await createUser(request,uniqueName('Privacy player')));
+  await page.goto('/portal#local');
+  await expect(page.getByRole('button',{name:'Privacy',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Preferences',exact:true})).toHaveCount(0);
   const before=page.url(),pages=context.pages().length;
+  await page.getByRole('button',{name:'Account menu',exact:true}).click();
+  await page.getByRole('button',{name:'Edit profile',exact:true}).click();
+  await page.getByRole('textbox',{name:'Display name',exact:true}).fill('Unsubmitted privacy profile draft');
   await page.getByRole('button',{name:'Privacy',exact:true}).click();
   const content=page.getByTestId('privacy-policy-content');
   await expect(content).toBeVisible();
@@ -30,25 +36,31 @@ test('Privacy stays in a themed closable dialog and preserves the page underneat
   await page.screenshot({path:info.outputPath('privacy-modal.png')});
   await content.getByRole('link',{name:'yoavgamingcoursezibin@gmail.com'}).scrollIntoViewIfNeeded();
   await expect(content.getByRole('link',{name:'yoavgamingcoursezibin@gmail.com'})).toBeVisible();
-  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await page.getByRole('button',{name:'Close dialog',exact:true}).last().click();
   await expect(content).toHaveCount(0);
+  await expect(page.getByRole('textbox',{name:'Display name',exact:true})).toHaveValue('Unsubmitted privacy profile draft');
+  await expect(page.getByRole('button',{name:'Privacy',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
   await expect(page.getByRole('heading',{name:'On this device',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Privacy',exact:true})).toHaveCount(0);
   expect(page.url()).toBe(before);expect(errors).toEqual([]);
 });
 
-test('the privacy dialog translates offline from the bundled policy copy',async({page,context})=>{
+test('anonymous visitors can read Privacy offline from the translated account dialog',async({page,context})=>{
   await page.goto('/portal');
+  await expect(page.getByRole('button',{name:'Privacy',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Log in',exact:true}).first().click();
   await page.getByRole('button').filter({hasText:'Français'}).last().click();
   await expect(page.locator('html')).toHaveAttribute('lang','fr');
-  await page.getByRole('button',{name:copy['Close dialog'].fr,exact:true}).click();
-  await expect(page.getByRole('button',{name:copy['Close dialog'].fr,exact:true})).toHaveCount(0);
   await context.setOffline(true);
   await page.getByRole('button',{name:copy.Privacy.fr,exact:true}).click();
   const content=page.getByTestId('privacy-policy-content');
   await expect(page.getByRole('heading',{name:(copy as Record<string,Record<string,string>>)['Privacy Policy for BuildPlay'].fr,exact:true})).toBeVisible();
   await expect(content).toContainText((copy as Record<string,Record<string,string>>)['How we use it'].fr);
   await expect(content).toContainText((copy as Record<string,Record<string,string>>)[retention].fr);
-  await page.getByRole('button',{name:copy['Close dialog'].fr,exact:true}).click();
+  await page.getByRole('button',{name:copy['Close dialog'].fr,exact:true}).last().click();
   await expect(content).toHaveCount(0);
+  await expect(page.getByRole('button',{name:copy.Privacy.fr,exact:true})).toBeVisible();
+  await page.getByRole('button',{name:copy['Close dialog'].fr,exact:true}).click();
+  await expect(page.getByRole('button',{name:copy.Privacy.fr,exact:true})).toHaveCount(0);
 });
