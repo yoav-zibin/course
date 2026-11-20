@@ -8,7 +8,7 @@
   3,
   4
  ],
- "server_code": "\nconst CATS=[\"Geography\",\"Entertainment\",\"History\",\"Arts & Literature\",\"Science & Nature\",\"Sports & Leisure\"];\nconst WEDGESQ=[0,4,8,12,16,20];\nconst BANK=[[[\"What is the capital of France?\",[\"Paris\",\"London\",\"Berlin\",\"Madrid\"],0],[\"Which is the largest ocean on Earth?\",[\"Atlantic Ocean\",\"Indian Ocean\",\"Pacific Ocean\",\"Arctic Ocean\"],2],[\"Which river flows through Egypt?\",[\"Danube\",\"Nile\",\"Amazon\",\"Rhine\"],1],[\"What is the capital of Japan?\",[\"Seoul\",\"Beijing\",\"Bangkok\",\"Tokyo\"],3],[\"Which is the largest hot desert in the world?\",[\"Gobi\",\"Mojave\",\"Sahara\",\"Kalahari\"],2],[\"The Great Wall is a landmark of which country?\",[\"China\",\"India\",\"Japan\",\"Mongolia\"],0],[\"What is the capital of Australia?\",[\"Sydney\",\"Canberra\",\"Perth\",\"Darwin\"],1],[\"Mount Everest stands on the border of Nepal and which other country?\",[\"India\",\"Bhutan\",\"Pakistan\",\"China\"],3],[\"On which continent is Brazil located?\",[\"Africa\",\"North America\",\"South America\",\"Europe\"],2],[\"What is the capital of Canada?\",[\"Toronto\",\"Ottawa\",\"Vancouver\",\"Montreal\"],1]],[[\"How many keys does a standard piano have?\",[\"76\",\"88\",\"96\",\"104\"],1],[\"The Beatles formed in which English city?\",[\"London\",\"Manchester\",\"Liverpool\",\"Leeds\"],2],[\"Who directed the 1997 film Titanic?\",[\"Steven Spielberg\",\"James Cameron\",\"Ridley Scott\",\"Peter Jackson\"],1],[\"Which animated film features the snowman Olaf?\",[\"Shrek\",\"Frozen\",\"Moana\",\"Tangled\"],1],[\"How many strings does a standard guitar have?\",[\"Four\",\"Five\",\"Six\",\"Seven\"],2],[\"Which superhero is secretly Bruce Wayne?\",[\"Batman\",\"Superman\",\"Spider-Man\",\"Iron Man\"],0],[\"What was the first name of the magician Houdini?\",[\"Harry\",\"David\",\"Jack\",\"Walter\"],0],[\"Which film series features Luke Skywalker?\",[\"Star Trek\",\"Star Wars\",\"Avatar\",\"Alien\"],1],[\"What does an orchestra conductor hold in one hand?\",[\"A baton\",\"A whistle\",\"A metronome\",\"A tuning fork\"],0],[\"Who plays Harry Potter in the Harry Potter films?\",[\"Daniel Radcliffe\",\"Rupert Grint\",\"Tom Felton\",\"Matthew Lewis\"],0]],[[\"Who was the first President of the United States?\",[\"Abraham Lincoln\",\"Thomas Jefferson\",\"George Washington\",\"John Adams\"],2],[\"In which year did the Second World War end?\",[\"1918\",\"1939\",\"1941\",\"1945\"],3],[\"The ancient pyramids of Giza were built by which civilisation?\",[\"The Romans\",\"The Egyptians\",\"The Aztecs\",\"The Greeks\"],1],[\"Which city was the capital of the Roman Empire?\",[\"Athens\",\"Constantinople\",\"Rome\",\"Alexandria\"],2],[\"Who was the first person to walk on the Moon?\",[\"Neil Armstrong\",\"Buzz Aldrin\",\"Yuri Gagarin\",\"Michael Collins\"],0],[\"In which year did the Berlin Wall fall?\",[\"1979\",\"1985\",\"1989\",\"1991\"],2],[\"Machu Picchu was built by which people?\",[\"The Maya\",\"The Inca\",\"The Romans\",\"The Vikings\"],1],[\"In which year was the United States Declaration of Independence adopted?\",[\"1776\",\"1789\",\"1801\",\"1812\"],0],[\"The Victorian era is named after a queen of which country?\",[\"France\",\"Spain\",\"Prussia\",\"Britain\"],3],[\"Who is credited with developing the movable-type printing press in Europe?\",[\"Leonardo da Vinci\",\"Johannes Gutenberg\",\"Isaac Newton\",\"Galileo Galilei\"],1]],[[\"Who painted the Mona Lisa?\",[\"Raphael\",\"Rembrandt\",\"Leonardo da Vinci\",\"Claude Monet\"],2],[\"Who wrote Romeo and Juliet?\",[\"Charles Dickens\",\"William Shakespeare\",\"Jane Austen\",\"Oscar Wilde\"],1],[\"Who painted The Starry Night?\",[\"Vincent van Gogh\",\"Pablo Picasso\",\"Salvador Dali\",\"Henri Matisse\"],0],[\"Who wrote Pride and Prejudice?\",[\"Charlotte Bronte\",\"Jane Austen\",\"Mary Shelley\",\"Virginia Woolf\"],1],[\"Which sculptor created the marble statue of David in Florence?\",[\"Donatello\",\"Bernini\",\"Rodin\",\"Michelangelo\"],3],[\"Who wrote the novel Moby-Dick?\",[\"Herman Melville\",\"Mark Twain\",\"Nathaniel Hawthorne\",\"Jack London\"],0],[\"How many lines does a sonnet have?\",[\"10\",\"12\",\"14\",\"16\"],2],[\"The Odyssey is an epic poem attributed to which author?\",[\"Virgil\",\"Homer\",\"Sophocles\",\"Plato\"],1],[\"Who composed the ballet The Nutcracker?\",[\"Igor Stravinsky\",\"Ludwig van Beethoven\",\"Pyotr Ilyich Tchaikovsky\",\"Johann Strauss\"],2],[\"Who wrote Alice's Adventures in Wonderland?\",[\"J. R. R. Tolkien\",\"Lewis Carroll\",\"Roald Dahl\",\"C. S. Lewis\"],1]],[[\"What is the chemical formula for water?\",[\"CO2\",\"O2\",\"H2O\",\"NaCl\"],2],[\"Which planet is known as the Red Planet?\",[\"Venus\",\"Mars\",\"Jupiter\",\"Mercury\"],1],[\"Which gas do plants absorb from the air for photosynthesis?\",[\"Oxygen\",\"Nitrogen\",\"Hydrogen\",\"Carbon dioxide\"],3],[\"How many legs does a spider have?\",[\"Six\",\"Eight\",\"Ten\",\"Twelve\"],1],[\"What is the chemical symbol for gold?\",[\"Ag\",\"Fe\",\"Au\",\"Pb\"],2],[\"What is the Earth's only natural satellite?\",[\"The Moon\",\"Titan\",\"Europa\",\"Phobos\"],0],[\"At sea level, at what temperature does water boil?\",[\"90 degrees Celsius\",\"95 degrees Celsius\",\"100 degrees Celsius\",\"110 degrees Celsius\"],2],[\"Which organ pumps blood around the human body?\",[\"Liver\",\"Lung\",\"Brain\",\"Heart\"],3],[\"Which is the largest mammal in the world?\",[\"African elephant\",\"Blue whale\",\"Giraffe\",\"Polar bear\"],1],[\"Which force keeps our feet on the ground?\",[\"Magnetism\",\"Friction\",\"Gravity\",\"Inertia\"],2]],[[\"How many players does a football (soccer) team field at once?\",[\"9\",\"10\",\"11\",\"12\"],2],[\"How many rings appear on the Olympic flag?\",[\"Four\",\"Five\",\"Six\",\"Seven\"],1],[\"In tennis, what is a score of zero called?\",[\"Deuce\",\"Ace\",\"Love\",\"Let\"],2],[\"How many holes are played in a standard round of golf?\",[\"12\",\"18\",\"9\",\"24\"],1],[\"About how many kilometres is a marathon?\",[\"26\",\"32\",\"42\",\"52\"],2],[\"How many feet above the floor is a basketball hoop?\",[\"9\",\"10\",\"11\",\"8\"],1],[\"Which sport uses a shuttlecock?\",[\"Squash\",\"Badminton\",\"Cricket\",\"Hockey\"],1],[\"How many pieces does each player start with in chess?\",[\"12\",\"14\",\"16\",\"20\"],2],[\"How many players from one baseball team are on the field in defence?\",[\"7\",\"8\",\"9\",\"10\"],2],[\"Which swimming stroke shares its name with an insect?\",[\"Backstroke\",\"Breaststroke\",\"Freestyle\",\"Butterfly\"],3]]];\n// Wedge (headquarters) squares 0,4,8,12,16,20 carry the six categories in\n// order; every other square takes its category from its position in the\n// six-category cycle. (A plain position%6 for the wedge squares too would\n// only ever award Geography, History and Science & Nature wedges, so no one\n// could ever collect all six.)\nfunction catOf(p){var w=WEDGESQ.indexOf(p);return w>=0?w:p%6;}\nfunction fresh(n){return {positions:Array(n).fill(0),wedges:Array.from({length:n},function(){return Array(6).fill(false);}),correct:Array(n).fill(0),turn:0,phase:\"roll\",die:0,qcat:-1,qidx:-1,asked:[[],[],[],[],[],[]],totalQ:0,streak:0,winner:-1,over:false};}\nfunction legal(s){if(s.over)return[];if(s.phase===\"roll\")return[{type:\"roll\"}];return [0,1,2,3].map(function(c){return{type:\"answer\",choice:c};});}\nfunction wcount(w){return w.filter(Boolean).length;}\nfunction capWinner(s){var best=0;for(var i=1;i<s.positions.length;i++){var a=wcount(s.wedges[i]),b=wcount(s.wedges[best]);if(a>b||(a===b&&s.correct[i]>s.correct[best]))best=i;}return best;}\nfunction finish(s,w){s.over=true;s.winner=w;}\nfunction payout(s,ctx){const humans=ctx.players.filter(p=>p.kind==='human'&&p.active!==false),winner=ctx.players[s.winner];const recipients=winner&&winner.kind==='human'&&winner.active!==false?[winner]:humans;const out={};if(!recipients.length)return out;recipients.forEach((p,i)=>out[p.id]=Math.floor(ctx.pot/recipients.length)+(i<ctx.pot%recipients.length?1:0));return out;}\nconst game={\n  newMatch(ctx){return {state:fresh(ctx.players.length),turn:[ctx.players[0].id]};},\n  applyMove(state,id,move,ctx){\n    if(state.over||ctx.players[state.turn].id!==id||!move||typeof move!==\"object\"||Array.isArray(move))throw new InvalidMove(\"Illegal move\");\n    const options=legal(state),keys=Object.keys(move);\n    if(!options.some(m=>Object.keys(m).length===keys.length&&keys.every(k=>Object.prototype.hasOwnProperty.call(m,k)&&m[k]===move[k])))throw new InvalidMove(\"Illegal move\");\n    const s=JSON.parse(JSON.stringify(state)),seat=s.turn;\n    if(move.type===\"roll\"){\n      s.die=1+Math.floor(ctx.random()*6);\n      s.positions[seat]=(s.positions[seat]+s.die)%24;\n      const cat=catOf(s.positions[seat]);\n      let avail=[];for(let i=0;i<BANK[cat].length;i++)if(s.asked[cat].indexOf(i)<0)avail.push(i);\n      if(!avail.length){s.asked[cat]=[];avail=BANK[cat].map((_,i)=>i);}\n      const pick=avail[Math.floor(ctx.random()*avail.length)];\n      s.asked[cat].push(pick);s.qcat=cat;s.qidx=pick;s.phase=\"question\";s.totalQ++;\n    }else{\n      const right=BANK[s.qcat][s.qidx][2];\n      if(move.choice===right){\n        s.correct[seat]++;s.streak++;\n        if(s.wedges[seat].every(Boolean)){finish(s,seat);}\n        else{\n          // Wedge square: earn its wedge. Otherwise every second correct\n          // answer in a row earns the question category's wedge as well.\n          if(WEDGESQ.indexOf(s.positions[seat])>=0||s.streak%2===0)s.wedges[seat][s.qcat]=true;\n          if(s.totalQ>=300)finish(s,capWinner(s));else{s.phase=\"roll\";s.qcat=-1;s.qidx=-1;}\n        }\n      }else{\n        s.streak=0;\n        if(s.totalQ>=300)finish(s,capWinner(s));else{s.turn=(seat+1)%s.positions.length;s.phase=\"roll\";s.qcat=-1;s.qidx=-1;}\n      }\n    }\n    return s.over?{state:s,turn:null,payouts:payout(s,ctx)}:{state:s,turn:[ctx.players[s.turn].id]};\n  },\n  viewFor(state,id,ctx){\n    const s=JSON.parse(JSON.stringify(state));\n    s.question=(!s.over&&s.phase===\"question\"&&s.qcat>=0)?{cat:s.qcat,category:CATS[s.qcat],q:BANK[s.qcat][s.qidx][0],options:BANK[s.qcat][s.qidx][1]}:null;\n    s.legal=(!s.over&&id===ctx.players[s.turn].id)?legal(s):[];\n    return s;\n  },\n  randomMove(s,id,ctx){const o=legal(s);return o[Math.floor(ctx.random()*o.length)];},\n  computerMove(s,id,ctx){\n    if(s.phase===\"roll\")return {type:\"roll\"};\n    const right=BANK[s.qcat][s.qidx][2];\n    if(ctx.random()<0.6)return {type:\"answer\",choice:right};\n    const wrong=[];for(let i=0;i<4;i++)if(i!==right)wrong.push(i);\n    return {type:\"answer\",choice:wrong[Math.floor(ctx.random()*wrong.length)]};\n  }\n};\n",
+ "server_code": "\nconst CATS=[\"Geography\",\"Entertainment\",\"History\",\"Arts & Literature\",\"Science & Nature\",\"Sports & Leisure\"];\nconst WEDGESQ=[0,4,8,12,16,20];\nconst BANK=[[[\"What is the capital of France?\",[\"Paris\",\"London\",\"Berlin\",\"Madrid\"],0],[\"Which is the largest ocean on Earth?\",[\"Atlantic Ocean\",\"Indian Ocean\",\"Pacific Ocean\",\"Arctic Ocean\"],2],[\"Which river flows through Egypt?\",[\"Danube\",\"Nile\",\"Amazon\",\"Rhine\"],1],[\"What is the capital of Japan?\",[\"Seoul\",\"Beijing\",\"Bangkok\",\"Tokyo\"],3],[\"Which is the largest hot desert in the world?\",[\"Gobi\",\"Mojave\",\"Sahara\",\"Kalahari\"],2],[\"The Great Wall is a landmark of which country?\",[\"China\",\"India\",\"Japan\",\"Mongolia\"],0],[\"What is the capital of Australia?\",[\"Sydney\",\"Canberra\",\"Perth\",\"Darwin\"],1],[\"Mount Everest stands on the border of Nepal and which other country?\",[\"India\",\"Bhutan\",\"Pakistan\",\"China\"],3],[\"On which continent is Brazil located?\",[\"Africa\",\"North America\",\"South America\",\"Europe\"],2],[\"What is the capital of Canada?\",[\"Toronto\",\"Ottawa\",\"Vancouver\",\"Montreal\"],1]],[[\"How many keys does a standard piano have?\",[\"76\",\"88\",\"96\",\"104\"],1],[\"The Beatles formed in which English city?\",[\"London\",\"Manchester\",\"Liverpool\",\"Leeds\"],2],[\"Who directed the 1997 film Titanic?\",[\"Steven Spielberg\",\"James Cameron\",\"Ridley Scott\",\"Peter Jackson\"],1],[\"Which animated film features the snowman Olaf?\",[\"Shrek\",\"Frozen\",\"Moana\",\"Tangled\"],1],[\"How many strings does a standard guitar have?\",[\"Four\",\"Five\",\"Six\",\"Seven\"],2],[\"Which superhero is secretly Bruce Wayne?\",[\"Batman\",\"Superman\",\"Spider-Man\",\"Iron Man\"],0],[\"What was the first name of the magician Houdini?\",[\"Harry\",\"David\",\"Jack\",\"Walter\"],0],[\"Which film series features Luke Skywalker?\",[\"Star Trek\",\"Star Wars\",\"Avatar\",\"Alien\"],1],[\"What does an orchestra conductor hold in one hand?\",[\"A baton\",\"A whistle\",\"A metronome\",\"A tuning fork\"],0],[\"Who plays Harry Potter in the Harry Potter films?\",[\"Daniel Radcliffe\",\"Rupert Grint\",\"Tom Felton\",\"Matthew Lewis\"],0]],[[\"Who was the first President of the United States?\",[\"Abraham Lincoln\",\"Thomas Jefferson\",\"George Washington\",\"John Adams\"],2],[\"In which year did the Second World War end?\",[\"1918\",\"1939\",\"1941\",\"1945\"],3],[\"The ancient pyramids of Giza were built by which civilisation?\",[\"The Romans\",\"The Egyptians\",\"The Aztecs\",\"The Greeks\"],1],[\"Which city was the capital of the Roman Empire?\",[\"Athens\",\"Constantinople\",\"Rome\",\"Alexandria\"],2],[\"Who was the first person to walk on the Moon?\",[\"Neil Armstrong\",\"Buzz Aldrin\",\"Yuri Gagarin\",\"Michael Collins\"],0],[\"In which year did the Berlin Wall fall?\",[\"1979\",\"1985\",\"1989\",\"1991\"],2],[\"Machu Picchu was built by which people?\",[\"The Maya\",\"The Inca\",\"The Romans\",\"The Vikings\"],1],[\"In which year was the United States Declaration of Independence adopted?\",[\"1776\",\"1789\",\"1801\",\"1812\"],0],[\"The Victorian era is named after a queen of which country?\",[\"France\",\"Spain\",\"Prussia\",\"Britain\"],3],[\"Who is credited with developing the movable-type printing press in Europe?\",[\"Leonardo da Vinci\",\"Johannes Gutenberg\",\"Isaac Newton\",\"Galileo Galilei\"],1]],[[\"Who painted the Mona Lisa?\",[\"Raphael\",\"Rembrandt\",\"Leonardo da Vinci\",\"Claude Monet\"],2],[\"Who wrote Romeo and Juliet?\",[\"Charles Dickens\",\"William Shakespeare\",\"Jane Austen\",\"Oscar Wilde\"],1],[\"Who painted The Starry Night?\",[\"Vincent van Gogh\",\"Pablo Picasso\",\"Salvador Dali\",\"Henri Matisse\"],0],[\"Who wrote Pride and Prejudice?\",[\"Charlotte Bronte\",\"Jane Austen\",\"Mary Shelley\",\"Virginia Woolf\"],1],[\"Which sculptor created the marble statue of David in Florence?\",[\"Donatello\",\"Bernini\",\"Rodin\",\"Michelangelo\"],3],[\"Who wrote the novel Moby-Dick?\",[\"Herman Melville\",\"Mark Twain\",\"Nathaniel Hawthorne\",\"Jack London\"],0],[\"How many lines does a sonnet have?\",[\"10\",\"12\",\"14\",\"16\"],2],[\"The Odyssey is an epic poem attributed to which author?\",[\"Virgil\",\"Homer\",\"Sophocles\",\"Plato\"],1],[\"Who composed the ballet The Nutcracker?\",[\"Igor Stravinsky\",\"Ludwig van Beethoven\",\"Pyotr Ilyich Tchaikovsky\",\"Johann Strauss\"],2],[\"Who wrote Alice's Adventures in Wonderland?\",[\"J. R. R. Tolkien\",\"Lewis Carroll\",\"Roald Dahl\",\"C. S. Lewis\"],1]],[[\"What is the chemical formula for water?\",[\"CO2\",\"O2\",\"H2O\",\"NaCl\"],2],[\"Which planet is known as the Red Planet?\",[\"Venus\",\"Mars\",\"Jupiter\",\"Mercury\"],1],[\"Which gas do plants absorb from the air for photosynthesis?\",[\"Oxygen\",\"Nitrogen\",\"Hydrogen\",\"Carbon dioxide\"],3],[\"How many legs does a spider have?\",[\"Six\",\"Eight\",\"Ten\",\"Twelve\"],1],[\"What is the chemical symbol for gold?\",[\"Ag\",\"Fe\",\"Au\",\"Pb\"],2],[\"What is the Earth's only natural satellite?\",[\"The Moon\",\"Titan\",\"Europa\",\"Phobos\"],0],[\"At sea level, at what temperature does water boil?\",[\"90 degrees Celsius\",\"95 degrees Celsius\",\"100 degrees Celsius\",\"110 degrees Celsius\"],2],[\"Which organ pumps blood around the human body?\",[\"Liver\",\"Lung\",\"Brain\",\"Heart\"],3],[\"Which is the largest mammal in the world?\",[\"African elephant\",\"Blue whale\",\"Giraffe\",\"Polar bear\"],1],[\"Which force keeps our feet on the ground?\",[\"Magnetism\",\"Friction\",\"Gravity\",\"Inertia\"],2]],[[\"How many players does a football (soccer) team field at once?\",[\"9\",\"10\",\"11\",\"12\"],2],[\"How many rings appear on the Olympic flag?\",[\"Four\",\"Five\",\"Six\",\"Seven\"],1],[\"In tennis, what is a score of zero called?\",[\"Deuce\",\"Ace\",\"Love\",\"Let\"],2],[\"How many holes are played in a standard round of golf?\",[\"12\",\"18\",\"9\",\"24\"],1],[\"About how many kilometres is a marathon?\",[\"26\",\"32\",\"42\",\"52\"],2],[\"How many feet above the floor is a basketball hoop?\",[\"9\",\"10\",\"11\",\"8\"],1],[\"Which sport uses a shuttlecock?\",[\"Squash\",\"Badminton\",\"Cricket\",\"Hockey\"],1],[\"How many pieces does each player start with in chess?\",[\"12\",\"14\",\"16\",\"20\"],2],[\"How many players from one baseball team are on the field in defence?\",[\"7\",\"8\",\"9\",\"10\"],2],[\"Which swimming stroke shares its name with an insect?\",[\"Backstroke\",\"Breaststroke\",\"Freestyle\",\"Butterfly\"],3]]];\n// Wedge (headquarters) squares 0,4,8,12,16,20 carry the six categories in\n// order; every other square takes its category from its position in the\n// six-category cycle. (A plain position%6 for the wedge squares too would\n// only ever award Geography, History and Science & Nature wedges, so no one\n// could ever collect all six.)\nfunction catOf(p){var w=WEDGESQ.indexOf(p);return w>=0?w:p%6;}\nfunction fresh(n){return {positions:Array(n).fill(0),wedges:Array.from({length:n},function(){return Array(6).fill(false);}),correct:Array(n).fill(0),turn:0,phase:\"roll\",die:0,qcat:-1,qidx:-1,asked:[[],[],[],[],[],[]],totalQ:0,streak:0,winner:-1,over:false,last_move:null};}\nfunction legal(s){if(s.over)return[];if(s.phase===\"roll\")return[{type:\"roll\"}];return [0,1,2,3].map(function(c){return{type:\"answer\",choice:c};});}\nfunction wcount(w){return w.filter(Boolean).length;}\nfunction capWinner(s){var best=0;for(var i=1;i<s.positions.length;i++){var a=wcount(s.wedges[i]),b=wcount(s.wedges[best]);if(a>b||(a===b&&s.correct[i]>s.correct[best]))best=i;}return best;}\nfunction finish(s,w){s.over=true;s.winner=w;}\nfunction payout(s,ctx){const humans=ctx.players.filter(p=>p.kind==='human'&&p.active!==false),winner=ctx.players[s.winner];const recipients=winner&&winner.kind==='human'&&winner.active!==false?[winner]:humans;const out={};if(!recipients.length)return out;recipients.forEach((p,i)=>out[p.id]=Math.floor(ctx.pot/recipients.length)+(i<ctx.pot%recipients.length?1:0));return out;}\nconst game={\n  newMatch(ctx){return {state:fresh(ctx.players.length),turn:[ctx.players[0].id]};},\n  applyMove(state,id,move,ctx){\n    if(state.over||ctx.players[state.turn].id!==id||!move||typeof move!==\"object\"||Array.isArray(move))throw new InvalidMove(\"Illegal move\");\n    const options=legal(state),keys=Object.keys(move);\n    if(!options.some(m=>Object.keys(m).length===keys.length&&keys.every(k=>Object.prototype.hasOwnProperty.call(m,k)&&m[k]===move[k])))throw new InvalidMove(\"Illegal move\");\n    const s=JSON.parse(JSON.stringify(state)),seat=s.turn;\n    if(move.type===\"roll\"){\n      const fromSq=s.positions[seat];\n      s.die=1+Math.floor(ctx.random()*6);\n      s.positions[seat]=(s.positions[seat]+s.die)%24;\n      s.last_move={kind:\"move\",seat:seat,piece_id:\"tok_\"+seat,roll:s.die,from_square:fromSq,to_square:s.positions[seat],from:{board:\"track\",position:{cell:String(fromSq)}},to:{board:\"track\",position:{cell:String(s.positions[seat])}}};\n      const cat=catOf(s.positions[seat]);\n      let avail=[];for(let i=0;i<BANK[cat].length;i++)if(s.asked[cat].indexOf(i)<0)avail.push(i);\n      if(!avail.length){s.asked[cat]=[];avail=BANK[cat].map((_,i)=>i);}\n      const pick=avail[Math.floor(ctx.random()*avail.length)];\n      s.asked[cat].push(pick);s.qcat=cat;s.qidx=pick;s.phase=\"question\";s.totalQ++;\n    }else{\n      const right=BANK[s.qcat][s.qidx][2];\n      const acat=s.qcat,hadWedge=s.wedges[seat][acat];\n      if(move.choice===right){\n        s.correct[seat]++;s.streak++;\n        if(s.wedges[seat].every(Boolean)){finish(s,seat);}\n        else{\n          // Wedge square: earn its wedge. Otherwise every second correct\n          // answer in a row earns the question category's wedge as well.\n          if(WEDGESQ.indexOf(s.positions[seat])>=0||s.streak%2===0)s.wedges[seat][s.qcat]=true;\n          if(s.totalQ>=300)finish(s,capWinner(s));else{s.phase=\"roll\";s.qcat=-1;s.qidx=-1;}\n        }\n      }else{\n        s.streak=0;\n        if(s.totalQ>=300)finish(s,capWinner(s));else{s.turn=(seat+1)%s.positions.length;s.phase=\"roll\";s.qcat=-1;s.qidx=-1;}\n      }\n      s.last_move=(!hadWedge&&s.wedges[seat][acat])?{kind:\"answer\",seat:seat,wedge:{piece_id:\"pip_\"+seat+\"_\"+acat,category:acat}}:{kind:\"answer\",seat:seat};\n    }\n    return s.over?{state:s,turn:null,payouts:payout(s,ctx)}:{state:s,turn:[ctx.players[s.turn].id]};\n  },\n  viewFor(state,id,ctx){\n    const s=JSON.parse(JSON.stringify(state));\n    if(s.last_move===undefined)s.last_move=null;\n    s.question=(!s.over&&s.phase===\"question\"&&s.qcat>=0)?{cat:s.qcat,category:CATS[s.qcat],q:BANK[s.qcat][s.qidx][0],options:BANK[s.qcat][s.qidx][1]}:null;\n    s.legal=(!s.over&&id===ctx.players[s.turn].id)?legal(s):[];\n    return s;\n  },\n  randomMove(s,id,ctx){const o=legal(s);return o[Math.floor(ctx.random()*o.length)];},\n  computerMove(s,id,ctx){\n    if(s.phase===\"roll\")return {type:\"roll\"};\n    const right=BANK[s.qcat][s.qidx][2];\n    if(ctx.random()<0.6)return {type:\"answer\",choice:right};\n    const wrong=[];for(let i=0;i<4;i++)if(i!==right)wrong.push(i);\n    return {type:\"answer\",choice:wrong[Math.floor(ctx.random()*wrong.length)]};\n  }\n};\n",
  "declarative_ui": {
   "format": "buildplay-ui",
   "version": 1,
@@ -313,28 +313,32 @@
     "width": 30,
     "height": 30,
     "color": "#ffffff",
-    "text_color": "#102039"
+    "text_color": "#102039",
+    "action_outline": "ellipse"
    },
    "tok1": {
     "shape": "circle",
     "width": 30,
     "height": 30,
     "color": "#ffd23f",
-    "text_color": "#102039"
+    "text_color": "#102039",
+    "action_outline": "ellipse"
    },
    "tok2": {
     "shape": "circle",
     "width": 30,
     "height": 30,
     "color": "#4fc3f7",
-    "text_color": "#102039"
+    "text_color": "#102039",
+    "action_outline": "ellipse"
    },
    "tok3": {
     "shape": "circle",
     "width": 30,
     "height": 30,
     "color": "#ff8a65",
-    "text_color": "#102039"
+    "text_color": "#102039",
+    "action_outline": "ellipse"
    },
    "die": {
     "shape": "dice",
@@ -349,7 +353,8 @@
     "height": 26,
     "color": "#3a4658",
     "text_color": "#9fb0c3",
-    "font_size": 9
+    "font_size": 9,
+    "action_outline": "none"
    },
    "pip0": {
     "shape": "circle",
@@ -357,7 +362,8 @@
     "height": 26,
     "color": "#2f6fd0",
     "font_size": 9,
-    "text_color": "#ffffff"
+    "text_color": "#ffffff",
+    "action_outline": "none"
    },
    "pip1": {
     "shape": "circle",
@@ -365,7 +371,8 @@
     "height": 26,
     "color": "#e56aa1",
     "font_size": 9,
-    "text_color": "#ffffff"
+    "text_color": "#ffffff",
+    "action_outline": "none"
    },
    "pip2": {
     "shape": "circle",
@@ -373,7 +380,8 @@
     "height": 26,
     "color": "#e8c33a",
     "font_size": 9,
-    "text_color": "#172743"
+    "text_color": "#172743",
+    "action_outline": "none"
    },
    "pip3": {
     "shape": "circle",
@@ -381,7 +389,8 @@
     "height": 26,
     "color": "#8e5aa8",
     "font_size": 9,
-    "text_color": "#ffffff"
+    "text_color": "#ffffff",
+    "action_outline": "none"
    },
    "pip4": {
     "shape": "circle",
@@ -389,7 +398,8 @@
     "height": 26,
     "color": "#3d9e4d",
     "font_size": 9,
-    "text_color": "#ffffff"
+    "text_color": "#ffffff",
+    "action_outline": "none"
    },
    "pip5": {
     "shape": "circle",
@@ -397,7 +407,8 @@
     "height": 26,
     "color": "#e07b2a",
     "font_size": 9,
-    "text_color": "#ffffff"
+    "text_color": "#ffffff",
+    "action_outline": "none"
    }
   },
   "strings": {
@@ -412,7 +423,15 @@
    "die": "Die: {n}",
    "server_invalid": "Illegal move"
   },
-  "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Trivial Pursuit\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"winner\": \"Player {n} wins\", \"roll\": \"Roll die\", \"phase_roll\": \"Roll the die to move your token\", \"phase_question\": \"{cat} question - choose an answer\", \"player_score\": \"Player {n}: {c} correct\", \"die\": \"Die: {n}\", \"server_invalid\": \"Illegal move\"};\nconst CELLS=[[48, 36], [142, 36], [236, 36], [330, 36], [424, 36], [518, 36], [612, 36], [706, 36], [706, 98], [706, 160], [706, 222], [706, 284], [706, 346], [612, 346], [518, 346], [424, 346], [330, 346], [236, 346], [142, 346], [48, 346], [48, 222], [48, 160], [48, 98], [48, 36]];\nconst SHORT=[\"GEO\",\"ENT\",\"HIS\",\"ART\",\"SCI\",\"SPO\"];\nvar gameUI={\n  reduce:function(message,localState){\n    var m=message.type===\"ui_event\"?message.state_changed:message;\n    var s=m.view||m.state;\n    var strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    var t=function(k,a){a=a||{};return (strings[k]||k).replace(/\\{(\\w+)\\}/g,function(_,x){return String(a[x]===undefined?\"\":a[x]);});};\n    var active=m.status===\"ongoing\"&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined;\n    var legal=active?(s.legal||[]):[];\n    var pieces=[],controls=[],labels=[];\n    labels.push({id:\"title\",text:t(\"title\"),x:20,y:10,font_size:26});\n    labels.push({id:\"status\",text:s.over?t(\"winner\",{n:s.winner+1}):t(\"turn\",{n:s.turn+1}),x:20,y:40,font_size:18});\n    s.positions.forEach(function(pos,seat){\n      var c=CELLS[pos],dx=(seat%2===0?-14:14),dy=(seat<2?-14:14);\n      pieces.push({id:\"tok_\"+seat,type:\"tok\"+seat,board:\"track\",position:{x:c[0]+dx,y:c[1]+dy},text:String(seat+1),actions:[]});\n    });\n    pieces.push({id:\"die\",type:\"die\",board:\"panel\",position:{x:706,y:30},text:s.die?String(s.die):\"-\",actions:[]});\n    labels.push({id:\"die_label\",text:t(\"die\",{n:s.die||\"-\"}),x:636,y:446+62,font_size:15});\n    s.wedges.forEach(function(w,seat){\n      w.forEach(function(owned,cat){\n        pieces.push({id:\"pip_\"+seat+\"_\"+cat,type:owned?\"pip\"+cat:\"pip_empty\",board:\"panel\",position:{x:262+cat*42,y:30+seat*38},text:owned?SHORT[cat]:\"\",actions:[]});\n      });\n      labels.push({id:\"prow_\"+seat,text:t(\"player_score\",{n:seat+1,c:s.correct[seat]}),x:36,y:446+30+seat*38-9,font_size:16});\n    });\n    if(s.question){\n      labels.push({id:\"qcat\",text:t(\"phase_question\",{cat:s.question.category}),x:20,y:628,font_size:18});\n      labels.push({id:\"qtext\",text:s.question.q,x:20,y:656,font_size:20});\n    }else if(!s.over){\n      labels.push({id:\"qcat\",text:t(\"phase_roll\"),x:20,y:628,font_size:18});\n    }\n    if(s.over)labels.push({id:\"fin\",text:t(\"finished\"),x:20,y:656,font_size:20});\n    var keyOf=function(mv){return Object.keys(mv).map(function(k){return k+\"_\"+mv[k];}).join(\"_\");};\n    legal.forEach(function(mv){\n      if(mv.type===\"roll\")controls.push({id:keyOf(mv),kind:\"button\",label:t(\"roll\")});\n      else controls.push({id:keyOf(mv),kind:\"button\",label:s.question?s.question.options[mv.choice]:\"\"});\n    });\n    var out={scene:{pieces:pieces,targets:[],controls:controls,labels:labels},local_state:{}};\n    if(message.type===\"ui_event\"&&active&&message.event.type===\"tap\"){\n      var mv=legal.find(function(o){return keyOf(o)===message.event.id;});\n      if(mv)out.make_move=mv;\n    }\n    return out;\n  }\n};\n"
+  "ui_code": "\nconst SOURCE_STRINGS={\"title\": \"Trivial Pursuit\", \"turn\": \"Player {n} to move\", \"finished\": \"Finished\", \"winner\": \"Player {n} wins\", \"roll\": \"Roll die\", \"phase_roll\": \"Roll the die to move your token\", \"phase_question\": \"{cat} question - choose an answer\", \"player_score\": \"Player {n}: {c} correct\", \"die\": \"Die: {n}\", \"server_invalid\": \"Illegal move\"};\nconst CELLS=[[48, 36], [142, 36], [236, 36], [330, 36], [424, 36], [518, 36], [612, 36], [706, 36], [706, 98], [706, 160], [706, 222], [706, 284], [706, 346], [612, 346], [518, 346], [424, 346], [330, 346], [236, 346], [142, 346], [48, 346], [48, 222], [48, 160], [48, 98], [48, 36]];\nconst SHORT=[\"GEO\",\"ENT\",\"HIS\",\"ART\",\"SCI\",\"SPO\"];\nvar gameUI={\n  reduce:function(message,localState){\n    var m=message.type===\"ui_event\"?message.state_changed:message;\n    var s=m.view||m.state;\n    var strings=Object.assign({},SOURCE_STRINGS,m.strings||{});\n    var t=function(k,a){a=a||{};return (strings[k]||k).replace(/\\{(\\w+)\\}/g,function(_,x){return String(a[x]===undefined?\"\":a[x]);});};\n    var active=m.status===\"ongoing\"&&!m.replay&&m.acting_for_player_index!==null&&m.acting_for_player_index!==undefined;\n    var legal=active?(s.legal||[]):[];\n    var pieces=[],controls=[],labels=[];\n    labels.push({id:\"title\",text:t(\"title\"),x:20,y:10,font_size:26});\n    labels.push({id:\"status\",text:s.over?t(\"winner\",{n:s.winner+1}):t(\"turn\",{n:s.turn+1}),x:20,y:40,font_size:18});\n    s.positions.forEach(function(pos,seat){\n      var c=CELLS[pos],dx=(seat%2===0?-14:14),dy=(seat<2?-14:14);\n      pieces.push({id:\"tok_\"+seat,type:\"tok\"+seat,board:\"track\",position:{x:c[0]+dx,y:c[1]+dy},text:String(seat+1),actions:[]});\n    });\n    pieces.push({id:\"die\",type:\"die\",board:\"panel\",position:{x:706,y:30},text:s.die?String(s.die):\"-\",actions:[]});\n    labels.push({id:\"die_label\",text:t(\"die\",{n:s.die||\"-\"}),x:636,y:446+62,font_size:15});\n    s.wedges.forEach(function(w,seat){\n      w.forEach(function(owned,cat){\n        pieces.push({id:\"pip_\"+seat+\"_\"+cat,type:owned?\"pip\"+cat:\"pip_empty\",board:\"panel\",position:{x:262+cat*42,y:30+seat*38},text:owned?SHORT[cat]:\"\",actions:[]});\n      });\n      labels.push({id:\"prow_\"+seat,text:t(\"player_score\",{n:seat+1,c:s.correct[seat]}),x:36,y:446+30+seat*38-9,font_size:16});\n    });\n    if(s.question){\n      labels.push({id:\"qcat\",text:t(\"phase_question\",{cat:s.question.category}),x:20,y:628,font_size:18});\n      labels.push({id:\"qtext\",text:s.question.q,x:20,y:656,font_size:20});\n    }else if(!s.over){\n      labels.push({id:\"qcat\",text:t(\"phase_roll\"),x:20,y:628,font_size:18});\n    }\n    if(s.over)labels.push({id:\"fin\",text:t(\"finished\"),x:20,y:656,font_size:20});\n    var keyOf=function(mv){return Object.keys(mv).map(function(k){return k+\"_\"+mv[k];}).join(\"_\");};\n    legal.forEach(function(mv){\n      if(mv.type===\"roll\")controls.push({id:keyOf(mv),kind:\"button\",label:t(\"roll\")});\n      else controls.push({id:keyOf(mv),kind:\"button\",label:s.question?s.question.options[mv.choice]:\"\"});\n    });\n    var out={scene:{pieces:pieces,targets:[],controls:controls,labels:labels},local_state:{}};\n    if(message.type===\"ui_event\"&&active&&message.event.type===\"tap\"){\n      var mv=legal.find(function(o){return keyOf(o)===message.event.id;});\n      if(mv)out.make_move=mv;\n    }\n    return out;\n  },\n  getLastMoveAnimations:function(view,scene){\n    if(!view||!Object.prototype.hasOwnProperty.call(view,\"last_move\"))return null;\n    var mv=view.last_move;\n    if(!mv)return [];\n    var pieces=(scene&&scene.pieces)||[];\n    var find=function(id){for(var i=0;i<pieces.length;i++)if(pieces[i].id===id)return pieces[i];return null;};\n    if(mv.kind===\"move\"){\n      var pawn=find(mv.piece_id||(\"tok_\"+mv.seat));\n      if(!pawn)return [];\n      var fromSq=mv.from_square,roll=mv.roll;\n      if(typeof fromSq!==\"number\"||typeof roll!==\"number\"||roll<1||roll>6)return [];\n      var dx=(mv.seat%2===0?-14:14),dy=(mv.seat<2?-14:14);\n      var path=[];\n      for(var step=0;step<=roll;step++){var sq=(fromSq+step)%24,c=CELLS[sq];path.push({board:\"track\",position:{x:c[0]+dx,y:c[1]+dy}});}\n      path[path.length-1]={board:pawn.board,position:{x:pawn.position.x,y:pawn.position.y}};\n      return [{piece_id:pawn.id,duration_ms:Math.min(5000,roll*180),path:path}];\n    }\n    if(mv.kind===\"answer\"&&mv.wedge){\n      var pip=find(mv.wedge.piece_id),tok=find(\"tok_\"+mv.seat);\n      if(!pip||!tok)return [];\n      return [{piece_id:pip.id,duration_ms:700,path:[{board:tok.board,position:{x:tok.position.x,y:tok.position.y}},{board:pip.board,position:{x:pip.position.x,y:pip.position.y}}]}];\n    }\n    return [];\n  }\n};\n",
+  "motion": {
+   "move_ms": 800,
+   "roll_ms": 500,
+   "roll_settle_ms": 800,
+   "turn_pause_ms": 500,
+   "animate_own": true,
+   "easing": "ease-in-out-quad"
+  }
  },
  "rules": "Trivial Pursuit for 2 to 4 players on a loop of 24 squares. All tokens start on square 0 and seat 0 moves first. On your turn, roll the die and move that many squares around the loop, then answer a multiple-choice question in the category of the square you landed on. The six categories, in order, are Geography, Entertainment, History, Arts and Literature, Science and Nature, and Sports and Leisure, and the squares cycle through them. Squares 0, 4, 8, 12, 16 and 20 are wedge (headquarters) squares, one for each category in that order, and a wedge square's category is its headquarters category. A correct answer on a wedge square earns that category's wedge. Every second correct answer in a row also earns the wedge of that question's category, even on a plain square. A correct answer lets you roll again; a wrong answer passes the turn to the next player. Once you hold all six wedges, your next correct answer is the final question and wins the game immediately. The winner takes the pot. Questions do not repeat within a category until its bank is exhausted. If 300 questions are asked with no winner, the player with the most wedges wins, breaking ties by most correct answers, then by earliest seat.",
  "ui_instructions": "The coloured 24-square track is at the top; each square's colour shows its category and a star marks the six wedge squares. Player tokens sit on the track, and each player's wedges and correct-answer count are shown below it. On your turn, tap Roll die, then tap one of the four answer buttons for the question shown. Only the player whose turn it is sees the Roll and answer controls.",
@@ -458,7 +477,8 @@
     "totalQ",
     "streak",
     "winner",
-    "over"
+    "over",
+    "last_move"
    ],
    "additionalProperties": false,
    "properties": {
@@ -521,6 +541,149 @@
     },
     "over": {
      "type": "boolean"
+    },
+    "last_move": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "required": [
+        "kind",
+        "seat",
+        "piece_id",
+        "roll",
+        "from_square",
+        "to_square",
+        "from",
+        "to"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "move"
+         ]
+        },
+        "seat": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 3
+        },
+        "piece_id": {
+         "type": "string"
+        },
+        "roll": {
+         "type": "integer",
+         "minimum": 1,
+         "maximum": 6
+        },
+        "from_square": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 23
+        },
+        "to_square": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 23
+        },
+        "from": {
+         "type": "object",
+         "required": [
+          "board",
+          "position"
+         ],
+         "additionalProperties": false,
+         "properties": {
+          "board": {
+           "enum": [
+            "track"
+           ]
+          },
+          "position": {
+           "type": "object",
+           "required": [
+            "cell"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "cell": {
+             "type": "string"
+            }
+           }
+          }
+         }
+        },
+        "to": {
+         "type": "object",
+         "required": [
+          "board",
+          "position"
+         ],
+         "additionalProperties": false,
+         "properties": {
+          "board": {
+           "enum": [
+            "track"
+           ]
+          },
+          "position": {
+           "type": "object",
+           "required": [
+            "cell"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "cell": {
+             "type": "string"
+            }
+           }
+          }
+         }
+        }
+       }
+      },
+      {
+       "type": "object",
+       "required": [
+        "kind",
+        "seat"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "answer"
+         ]
+        },
+        "seat": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 3
+        },
+        "wedge": {
+         "type": "object",
+         "required": [
+          "piece_id",
+          "category"
+         ],
+         "additionalProperties": false,
+         "properties": {
+          "piece_id": {
+           "type": "string"
+          },
+          "category": {
+           "type": "integer",
+           "minimum": 0,
+           "maximum": 5
+          }
+         }
+        }
+       }
+      }
+     ]
     }
    }
   },
@@ -541,7 +704,8 @@
     "winner",
     "over",
     "question",
-    "legal"
+    "legal",
+    "last_move"
    ],
    "additionalProperties": false,
    "properties": {
@@ -655,6 +819,149 @@
       ],
       "additionalProperties": false
      }
+    },
+    "last_move": {
+     "anyOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "required": [
+        "kind",
+        "seat",
+        "piece_id",
+        "roll",
+        "from_square",
+        "to_square",
+        "from",
+        "to"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "move"
+         ]
+        },
+        "seat": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 3
+        },
+        "piece_id": {
+         "type": "string"
+        },
+        "roll": {
+         "type": "integer",
+         "minimum": 1,
+         "maximum": 6
+        },
+        "from_square": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 23
+        },
+        "to_square": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 23
+        },
+        "from": {
+         "type": "object",
+         "required": [
+          "board",
+          "position"
+         ],
+         "additionalProperties": false,
+         "properties": {
+          "board": {
+           "enum": [
+            "track"
+           ]
+          },
+          "position": {
+           "type": "object",
+           "required": [
+            "cell"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "cell": {
+             "type": "string"
+            }
+           }
+          }
+         }
+        },
+        "to": {
+         "type": "object",
+         "required": [
+          "board",
+          "position"
+         ],
+         "additionalProperties": false,
+         "properties": {
+          "board": {
+           "enum": [
+            "track"
+           ]
+          },
+          "position": {
+           "type": "object",
+           "required": [
+            "cell"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "cell": {
+             "type": "string"
+            }
+           }
+          }
+         }
+        }
+       }
+      },
+      {
+       "type": "object",
+       "required": [
+        "kind",
+        "seat"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "answer"
+         ]
+        },
+        "seat": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 3
+        },
+        "wedge": {
+         "type": "object",
+         "required": [
+          "piece_id",
+          "category"
+         ],
+         "additionalProperties": false,
+         "properties": {
+          "piece_id": {
+           "type": "string"
+          },
+          "category": {
+           "type": "integer",
+           "minimum": 0,
+           "maximum": 5
+          }
+         }
+        }
+       }
+      }
+     ]
     }
    }
   },
@@ -747,7 +1054,8 @@
      "totalQ": 0,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -803,7 +1111,8 @@
       {
        "type": "roll"
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "positions": [
@@ -850,7 +1159,8 @@
      "winner": -1,
      "over": false,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "images": [
      {
@@ -915,7 +1225,27 @@
      "totalQ": 1,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 4,
+      "from_square": 0,
+      "to_square": 4,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "4"
+       }
+      }
+     }
     },
     "expected_turn": [
      "u1"
@@ -994,7 +1324,27 @@
        "type": "answer",
        "choice": 3
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 4,
+      "from_square": 0,
+      "to_square": 4,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "4"
+       }
+      }
+     }
     },
     "expected_view_of_other": {
      "positions": [
@@ -1053,7 +1403,27 @@
        "Iron Man"
       ]
      },
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 4,
+      "from_square": 0,
+      "to_square": 4,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "4"
+       }
+      }
+     }
     }
    },
    {
@@ -1126,7 +1496,8 @@
      "totalQ": 0,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1183,7 +1554,8 @@
       {
        "type": "roll"
       }
-     ]
+     ],
+     "last_move": null
     },
     "view_of_other": {
      "positions": [
@@ -1230,7 +1602,8 @@
      "winner": -1,
      "over": false,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": null
     },
     "images": [
      {
@@ -1297,7 +1670,8 @@
      "totalQ": 0,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": null
     },
     "expected_turn": [
      "u1"
@@ -1351,7 +1725,8 @@
       {
        "type": "roll"
       }
-     ]
+     ],
+     "last_move": null
     },
     "expected_view_of_other": {
      "positions": [
@@ -1398,7 +1773,8 @@
      "winner": -1,
      "over": false,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": null
     }
    },
    {
@@ -1473,7 +1849,27 @@
      "totalQ": 3,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 4,
+      "from_square": 0,
+      "to_square": 4,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "4"
+       }
+      }
+     }
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1555,7 +1951,27 @@
        "type": "answer",
        "choice": 3
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 4,
+      "from_square": 0,
+      "to_square": 4,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "4"
+       }
+      }
+     }
     },
     "view_of_other": {
      "positions": [
@@ -1614,7 +2030,27 @@
        "104"
       ]
      },
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 4,
+      "from_square": 0,
+      "to_square": 4,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "4"
+       }
+      }
+     }
     },
     "images": [
      {
@@ -1679,7 +2115,15 @@
      "totalQ": 3,
      "streak": 1,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "answer",
+      "seat": 0,
+      "wedge": {
+       "piece_id": "pip_0_1",
+       "category": 1
+      }
+     }
     },
     "expected_turn": [
      "u1"
@@ -1735,7 +2179,15 @@
       {
        "type": "roll"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0,
+      "wedge": {
+       "piece_id": "pip_0_1",
+       "category": 1
+      }
+     }
     },
     "expected_view_of_other": {
      "positions": [
@@ -1784,7 +2236,15 @@
      "winner": -1,
      "over": false,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0,
+      "wedge": {
+       "piece_id": "pip_0_1",
+       "category": 1
+      }
+     }
     }
    },
    {
@@ -1859,7 +2319,27 @@
      "totalQ": 1,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 6,
+      "from_square": 0,
+      "to_square": 6,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "6"
+       }
+      }
+     }
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -1941,7 +2421,27 @@
        "type": "answer",
        "choice": 3
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 6,
+      "from_square": 0,
+      "to_square": 6,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "6"
+       }
+      }
+     }
     },
     "view_of_other": {
      "positions": [
@@ -2000,7 +2500,27 @@
        "Madrid"
       ]
      },
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 6,
+      "from_square": 0,
+      "to_square": 6,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "6"
+       }
+      }
+     }
     },
     "images": [
      {
@@ -2065,7 +2585,11 @@
      "totalQ": 1,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     },
     "expected_turn": [
      "u2"
@@ -2117,7 +2641,11 @@
      "winner": -1,
      "over": false,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     },
     "expected_view_of_other": {
      "positions": [
@@ -2170,7 +2698,11 @@
       {
        "type": "roll"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     }
    },
    {
@@ -2245,7 +2777,27 @@
      "totalQ": 1,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 6,
+      "from_square": 0,
+      "to_square": 6,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "6"
+       }
+      }
+     }
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -2327,7 +2879,27 @@
        "type": "answer",
        "choice": 3
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 6,
+      "from_square": 0,
+      "to_square": 6,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "6"
+       }
+      }
+     }
     },
     "view_of_other": {
      "positions": [
@@ -2386,7 +2958,27 @@
        "Arctic Ocean"
       ]
      },
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 6,
+      "from_square": 0,
+      "to_square": 6,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "6"
+       }
+      }
+     }
     },
     "images": [
      {
@@ -2451,7 +3043,11 @@
      "totalQ": 1,
      "streak": 1,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     },
     "expected_turn": [
      "u1"
@@ -2507,7 +3103,11 @@
       {
        "type": "roll"
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     },
     "expected_view_of_other": {
      "positions": [
@@ -2556,7 +3156,11 @@
      "winner": -1,
      "over": false,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     }
    },
    {
@@ -2631,7 +3235,27 @@
      "totalQ": 40,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 3,
+      "from_square": 7,
+      "to_square": 10,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "7"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "10"
+       }
+      }
+     }
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -2713,7 +3337,27 @@
        "type": "answer",
        "choice": 3
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 3,
+      "from_square": 7,
+      "to_square": 10,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "7"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "10"
+       }
+      }
+     }
     },
     "view_of_other": {
      "positions": [
@@ -2772,7 +3416,27 @@
        "Mercury"
       ]
      },
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 3,
+      "from_square": 7,
+      "to_square": 10,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "7"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "10"
+       }
+      }
+     }
     },
     "images": [
      {
@@ -2837,7 +3501,11 @@
      "totalQ": 40,
      "streak": 1,
      "winner": 0,
-     "over": true
+     "over": true,
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     },
     "expected_turn": null,
     "expected_payouts": {
@@ -2890,7 +3558,11 @@
      "winner": 0,
      "over": true,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     },
     "expected_view_of_other": {
      "positions": [
@@ -2939,7 +3611,11 @@
      "winner": 0,
      "over": true,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     }
    },
    {
@@ -3014,7 +3690,27 @@
      "totalQ": 300,
      "streak": 0,
      "winner": -1,
-     "over": false
+     "over": false,
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 6,
+      "from_square": 0,
+      "to_square": 6,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "6"
+       }
+      }
+     }
     },
     "player_id": "u1",
     "other_player_id": "u2",
@@ -3096,7 +3792,27 @@
        "type": "answer",
        "choice": 3
       }
-     ]
+     ],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 6,
+      "from_square": 0,
+      "to_square": 6,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "6"
+       }
+      }
+     }
     },
     "view_of_other": {
      "positions": [
@@ -3155,7 +3871,27 @@
        "Rhine"
       ]
      },
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "move",
+      "seat": 0,
+      "piece_id": "tok_0",
+      "roll": 6,
+      "from_square": 0,
+      "to_square": 6,
+      "from": {
+       "board": "track",
+       "position": {
+        "cell": "0"
+       }
+      },
+      "to": {
+       "board": "track",
+       "position": {
+        "cell": "6"
+       }
+      }
+     }
     },
     "images": [
      {
@@ -3220,7 +3956,11 @@
      "totalQ": 300,
      "streak": 0,
      "winner": 1,
-     "over": true
+     "over": true,
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     },
     "expected_turn": null,
     "expected_payouts": {
@@ -3273,7 +4013,11 @@
      "winner": 1,
      "over": true,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     },
     "expected_view_of_other": {
      "positions": [
@@ -3322,7 +4066,11 @@
      "winner": 1,
      "over": true,
      "question": null,
-     "legal": []
+     "legal": [],
+     "last_move": {
+      "kind": "answer",
+      "seat": 0
+     }
     }
    }
   ]
