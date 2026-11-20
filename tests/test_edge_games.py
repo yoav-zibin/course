@@ -56,18 +56,56 @@ def test_only_the_player_to_move_is_offered_targets(kind):
         assert not scene['targets'] and not scene['controls']
 
 
-def test_sim_crossing_diagonals_get_distinct_targets():
+def _zone(target):
+    """A line target's segment in scene coordinates, and its width."""
+    shape, at = target['hit_shape'], target['position']
+    return ((at['x'] + shape['from']['x'], at['y'] + shape['from']['y']),
+            (at['x'] + shape['to']['x'], at['y'] + shape['to']['y'])), shape['width']
+
+
+def _segment_gap(first, second):
+    """Shortest distance between two segments (0 when they cross)."""
+    def side(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+
+    def point_gap(p, seg):
+        (ax, ay), (bx, by) = seg
+        dx, dy = bx - ax, by - ay
+        length = dx * dx + dy * dy
+        t = max(0, min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / length)) if length else 0
+        return ((p[0] - ax - t * dx) ** 2 + (p[1] - ay - t * dy) ** 2) ** .5
+
+    (a, b), (c, d) = first, second
+    if side(a, b, c) * side(a, b, d) < 0 and side(c, d, a) * side(c, d, b) < 0:
+        return 0
+    return min(point_gap(a, second), point_gap(b, second), point_gap(c, first), point_gap(d, first))
+
+
+@pytest.mark.parametrize('kind', ('sim', 'hackenbush', 'dots_boxes'))
+def test_edge_games_use_line_targets_that_are_thick_enough_and_do_not_overlap(kind):
+    game, ui = engine(kind)
+    scene = frame(game, ui, start(game))[0]['scene']
+    targets = scene['targets']
+    assert targets and all(t['hit_shape']['kind'] == 'line' and 'hit_area' not in t for t in targets)
+    assert all(t['hit_shape']['width'] >= 32 and 'label' not in t for t in targets)
+    zones = [_zone(t) for t in targets]
+    crossings = 0
+    for i, (first, width) in enumerate(zones):
+        for second, other in zones[i + 1:]:
+            gap = _segment_gap(first, second)
+            if gap == 0:
+                crossings += 1  # Sim's diagonals genuinely cross; the nearer line wins there.
+            else:
+                assert gap >= (width + other) / 2 - 0.5, (kind, first, second, gap)
+    assert crossings == (15 if kind == 'sim' else 0)
+
+
+def test_sim_lines_each_have_their_own_target():
     game, ui = engine('sim')
     scene = frame(game, ui, start(game))[0]['scene']
     assert len(scene['targets']) == 15
-    spots = {(round(target['position']['x']), round(target['position']['y'])) for target in scene['targets']}
-    assert len(spots) == 15
-    far = min(((a['position']['x'] - b['position']['x']) ** 2 + (a['position']['y'] - b['position']['y']) ** 2) ** .5
-              for i, a in enumerate(scene['targets']) for b in scene['targets'][i + 1:])
-    assert far >= 44, far  # No two 44-unit hit boxes overlap.
-    # The three long diagonals cross at the hexagon centre, yet each keeps its own marker.
-    centre = [target for target in scene['targets'] if target['aria_label'] in ('Line 1–4', 'Line 2–5', 'Line 3–6')]
-    assert len(centre) == 3 and len({(round(t['position']['x']), round(t['position']['y'])) for t in centre}) == 3
+    assert len({t['id'] for t in scene['targets']}) == 15
+    assert {t['aria_label'] for t in scene['targets']} >= {'Line 1–4', 'Line 2–5', 'Line 3–6'}
 
 
 def test_sim_completing_own_triangle_loses_and_pays_the_other_player():

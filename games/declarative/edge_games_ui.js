@@ -27,9 +27,17 @@ const gameUI = {
     const tint = (KIND === 'hackenbush' ? ['#4f8cffcc', '#ff5d5dcc'] : [COLORS[0] + 'cc', COLORS[1] + 'cc'])[s.turn] || '#ffe27acc';
     const target = (id, board, position, label, extra = {}) =>
       targets.push(Object.assign({id, board, position, aria_label: label, color: tint, hit_area: {x: -22, y: -22, width: 44, height: 44}}, extra));
+    // Edge games: the whole line is the tap zone (a rounded line shape), drawn as a soft band over the edge.
+    // Both ends are trimmed so zones of lines that meet at a point do not overlap.
+    const lineTarget = (id, board, a, b, label, width, trim) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
+      const keep = Math.max(0, len / 2 - Math.min(trim, len * 0.3)), ux = dx / len, uy = dy / len;
+      targets.push({id, board, position: {x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2}, aria_label: label, color: tint.slice(0, 7) + '88',
+        hit_shape: {kind: 'line', from: {x: -ux * keep, y: -uy * keep}, to: {x: ux * keep, y: uy * keep}, width}});
+    };
 
     if (KIND === 'sim') {
-      const ox = 20, oy = 100, R = 170, cx = 210, cy = 210;
+      const ox = 20, oy = 100, R = 170, cx = 210, cy = 210, SIM_TRIM = 64;
       const pos = Array.from({length: 6}, (_, i) => [cx + R * Math.cos((-90 + 60 * i) * Math.PI / 180), cy + R * Math.sin((-90 + 60 * i) * Math.PI / 180)]);
       const pairs = [];
       for (let a = 0; a < 6; a++) for (let b = a + 1; b < 6; b++) pairs.push([a, b]);
@@ -39,12 +47,10 @@ const gameUI = {
           color: owner === -1 ? '#51607a' : COLORS[owner], width: owner === -1 ? 2 : 7});
       });
       pos.forEach(([x, y], i) => pieces.push({id: 'dot_' + i, type: 'dot', board: 'main', position: {x, y}}));
-      // Crossing diagonals share a midpoint, so each marker sits at its own precomputed spot along its line (GEO.sim_t).
+      // Each legal line is tappable along its length; where two diagonals cross, the nearer line wins.
       legal.forEach(move => {
         const [a, b] = pairs[move.edge];
-        const f = GEO.sim_t[move.edge];
-        target(keyOf(move), 'main', {x: pos[a][0] + (pos[b][0] - pos[a][0]) * f, y: pos[a][1] + (pos[b][1] - pos[a][1]) * f},
-          t('edge', {a: a + 1, b: b + 1}));
+        lineTarget(keyOf(move), 'main', pos[a], pos[b], t('edge', {a: a + 1, b: b + 1}), 32, SIM_TRIM);
       });
     } else if (KIND === 'dots_boxes') {
       const ox = 20, oy = 100, gap = 90, start = 30;
@@ -65,7 +71,7 @@ const gameUI = {
       labels.push({id: 'score', text: t('score', {a: s.boxes.filter(v => v === 0).length, b: s.boxes.filter(v => v === 1).length}), x: 300, y: 46, font_size: 17});
       legal.forEach(move => {
         const [a, b] = ends(move.edge);
-        target(keyOf(move), 'main', {x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2}, t('side', {n: move.edge + 1}));
+        lineTarget(keyOf(move), 'main', a, b, t('side', {n: move.edge + 1}), 32, 26);
       });
     } else if (KIND === 'paper_soccer') {
       const ox = 20, oy = 90, W = 9, H = 11;
@@ -85,7 +91,7 @@ const gameUI = {
       pieces.push({id: 'ball', type: 'ball', board: 'pitch', position: {cell: String(s.ball)}, text: '⚽'});
       legal.forEach(move => target(keyOf(move), 'pitch', {cell: String(move.to)}, t('point', {n: move.to + 1})));
     } else if (KIND === 'hackenbush') {
-      const oy = 90;
+      const oy = 90, HACK_TRIM = 24;
       paths.push({id: 'ground', points: [{x: 10, y: oy + GEO.ground_y + 8}, {x: 550, y: oy + GEO.ground_y + 8}], color: '#7d5a3a', width: 10});
       GEO.hack_edges.forEach(([a, b, colour], edge) => {
         if (!s.alive[edge]) return;
@@ -95,8 +101,7 @@ const gameUI = {
       GEO.hack_nodes.forEach(([x, y], i) => { if (y >= GEO.ground_y) pieces.push({id: 'root_' + i, type: 'knot', board: 'main', position: {x, y}}); });
       legal.forEach(move => {
         const [a, b] = GEO.hack_edges[move.edge];
-        target(keyOf(move), 'main', {x: (GEO.hack_nodes[a][0] + GEO.hack_nodes[b][0]) / 2, y: (GEO.hack_nodes[a][1] + GEO.hack_nodes[b][1]) / 2 - 0},
-          t('cut', {n: move.edge + 1}));
+        lineTarget(keyOf(move), 'main', GEO.hack_nodes[a], GEO.hack_nodes[b], t('cut', {n: move.edge + 1}), 32, HACK_TRIM);
       });
     } else {
       const seat = Number.isInteger(m.my_player_index) ? m.my_player_index : 0, other = 1 - seat;

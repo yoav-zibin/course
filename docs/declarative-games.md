@@ -786,10 +786,10 @@ patterns to copy:
 
 | Game | Target is | Pattern |
 | --- | --- | --- |
-| `sim` | one of fifteen lines between six dots | Lines cross at the hexagon's centre, so each marker sits at its own spot along its line (`sim_t`, found by search so markers stay at least 60 units apart) and crossing lines never share a hit box. Claimed lines are `paths`. |
+| `sim` | one of fifteen lines between six dots | Each legal line is a `hit_shape` line target, trimmed at both ends so lines meeting at a dot do not overlap. Where two diagonals cross, the nearer line wins the tap. Claimed lines are `paths`. |
 | `paper_soccer` | a reachable point on a graph board | Legal destinations are the free neighbours of the ball; the move adds a drawn line, so repeated lines and the pitch's walls are simply absent. The ball's trail is drawn as `paths`. |
-| `hackenbush` | one branch of your own colour | Each marker sits at the branch midpoint. A cut removes everything no longer attached to the ground, so the next scene omits those branches. |
-| `dots_boxes` | one of forty sides between a five by five grid of dots | A marker sits at each side's midpoint, and closing a box fills it with a piece and keeps the turn. Drawn sides are `paths`. |
+| `hackenbush` | one branch of your own colour | Each of your branches is a `hit_shape` line target. A cut removes everything no longer attached to the ground, so the next scene omits those branches. |
+| `dots_boxes` | one of forty sides between a five by five grid of dots | Each undrawn side is a `hit_shape` line target, and closing a box fills it with a piece and keeps the turn. Drawn sides are `paths`. |
 | `cartographers` | the anchor cell of a shape placement | Rotate/flip is a button that keeps the orientation in `local_state`; every legal anchor for that orientation is a target carrying a `preview` of the covered cells. |
 
 Keep target IDs distinct from path and piece IDs (a line's path and its target
