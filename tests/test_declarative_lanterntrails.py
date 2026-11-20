@@ -88,13 +88,15 @@ def test_the_35_tiles_are_every_pairing_of_eight_points_once_up_to_rotation():
 
 @pytest.mark.parametrize('count', [2, 3, 5, 8])
 def test_seeded_random_walks_always_reach_a_legal_end(count):
+    required_walks = 15 if count == 8 else 30
+    # Check seeded rule coverage, independently of a runner's wall-clock speed.
     report = run_random_walks(BODY.server_code, game_schemas=BODY.game_schemas(),
                               rules=GameRules(allowed_player_counts=(count,), allows_leave_mid_match=False,
                                               allows_join_mid_match=False),
-                              run_seed=40 + count, max_walks=60, budget_seconds=60, max_moves_per_walk=150,
-                              contract=BODY.unit_tests)
+                              run_seed=40 + count, max_walks=required_walks, budget_seconds=300,
+                              max_moves_per_walk=150, contract=BODY.unit_tests)
     assert report.passed, report.failures
-    assert report.walks_completed >= (15 if count == 8 else 30) and report.terminal_states == report.walks_completed
+    assert report.walks_completed == required_walks and report.terminal_states == required_walks
 
 
 def test_walk_invariants_tiles_hands_dragon_and_payouts():
