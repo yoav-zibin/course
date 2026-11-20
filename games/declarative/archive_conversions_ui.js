@@ -31,6 +31,9 @@ const gameUI = {
         scene.targets.push({id, board, position, color:'#00000000',
           hit_area:{x:-46,y:-63,width:92,height:126},
           ...(aria_label ? {aria_label} : {})});
+      } else if (mode === 'clear') {
+        scene.targets.push({id, board, position, color:'#00000000',
+          ...(aria_label ? {aria_label} : {})});
       } else if (mode === 'target') {
         scene.targets.push({id, board, position, label:String(value || '•'),
           ...(aria_label ? {aria_label} : {})});
@@ -54,8 +57,8 @@ const gameUI = {
     };
     const cardPos = i => ({x:36 + (i % 8) * 67,y:125 + Math.floor(i / 8) * 94});
     const boardCell = (i, columns) => ({cell:String(i)});
-    const handLabel = hand => Array.isArray(hand) ? hand.map(cardText).join(' ') : '';
-    if (KIND !== 'six_mens_morris' && KIND !== 'thirty_one') label('title', title, 22, 16, 25);
+    if (KIND !== 'six_mens_morris' && KIND !== 'thirty_one' && KIND !== 'kisolo')
+      label('title', title, 22, 16, 25);
     if (Number.isInteger(s.to_move) || Number.isInteger(s.toMove) ||
         Number.isInteger(s.turn) || Number.isInteger(s.turnSeat) ||
         (KIND === 'six_mens_morris' && Number.isInteger(m.turn_of_player_indices?.[0]))) {
@@ -65,7 +68,8 @@ const gameUI = {
             Number.isInteger(s.turnSeat) ? s.turnSeat : m.turn_of_player_indices[0];
       label('status', m.status === 'over' ? text('Game over') :
         (active ? text('Your turn · {name}', {name:playerName(turn)}) :
-          text('{name} to play', {name:playerName(turn)})), KIND === 'thirty_one' ? 220 : 22,
+          text('{name} to play', {name:playerName(turn)})),
+        KIND === 'thirty_one' || KIND === 'kisolo' ? 220 : 22,
         KIND === 'six_mens_morris' ? 22 : KIND === 'thirty_one' ? 55 : 52, 16);
     }
 
@@ -183,17 +187,21 @@ const gameUI = {
         22, 470, 14);
     } else if (KIND === 'kisolo') {
       const rows = s.rows || [];
+      label('title', 'Kisolo', 270, 16, 25);
+      scene.paths.push({id:'center-line',points:[{x:30,y:250},{x:590,y:250}],
+        color:'#654229',width:4});
       for (let r = 0; r < 4; r++) for (let c = 0; c < 7; c++) {
         const i = r * 7 + c, value = rows[r]?.[c] ?? 0;
-        staticPiece(`pit_${i}`, 'pit', 'main', boardCell(i,7), {text:String(value)});
+        staticPiece(`pit_${i}`, 'pit', 'main', boardCell(i,7), {text:String(value),
+          aria_label:text('Pit row {r}, column {c} · {n} seeds', {r:r + 1,c:c + 1,n:value})});
       }
       for (const pit of s.legal_pits || []) {
         const r = Math.floor(pit / 7), c = pit % 7;
-        offer({pit}, text('Move to row {r}, column {c}', {r:r + 1,c:c + 1}),
-          'main', boardCell(pit,7), 'target');
+        offer({pit}, '', 'main', boardCell(pit,7), 'clear',
+          text('Pit row {r}, column {c} · {n} seeds', {r:r + 1,c:c + 1,n:rows[r]?.[c] ?? 0}));
       }
-      label('pit-guide', `P1: ${handLabel(rows[0] || [])}  ·  P2: ${handLabel(rows[3] || [])}`,
-        22, 420, 13);
+      if (s.over && Number.isInteger(s.winner) && s.winner >= 0)
+        label('winner', text('Winner: {name}', {name:playerName(s.winner)}), 230, 420, 18);
     } else if (KIND === 'thirty_one') {
       const hand = Array.isArray(s.hand) ? s.hand : [];
       const cardType = card => /[HD]$/.test(card) ? 'red_card' : 'black_card';

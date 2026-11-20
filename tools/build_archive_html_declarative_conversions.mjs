@@ -23,6 +23,7 @@ const EXTRA_STRINGS = {
   Stand:['Plantarse','Rester','Stehen bleiben','Parar','停牌','रुकें','توقف'],
   'Take {card}':['Tomar {card}','Prendre {card}','{card} nehmen','Pegar {card}','拿取 {card}','{card} लें','خذ {card}'],
   'Select size {n} · {count} remaining':['Seleccionar tamaño {n} · quedan {count}','Choisir la taille {n} · {count} restantes','Größe {n} wählen · {count} übrig','Selecionar tamanho {n} · restam {count}','选择大小 {n} · 剩余 {count}','आकार {n} चुनें · {count} बाकी','اختر الحجم {n} · المتبقي {count}'],
+  'Pit row {r}, column {c} · {n} seeds':['Hoyo fila {r}, columna {c} · {n} semillas','Trou rangée {r}, colonne {c} · {n} graines','Mulde Reihe {r}, Spalte {c} · {n} Samen','Buraco linha {r}, coluna {c} · {n} sementes','第 {r} 行第 {c} 列的坑 · {n} 颗种子','गड्ढा पंक्ति {r}, स्तंभ {c} · {n} बीज','حفرة الصف {r}، العمود {c} · {n} بذور'],
   'Reset guess':['Reiniciar intento','Réinitialiser la proposition','Tipp zurücksetzen','Reiniciar palpite','重置猜测','अनुमान रीसेट करें','إعادة تعيين التخمين']
 };
 const ALL_STRINGS={...COPY.strings,...EXTRA_STRINGS};
@@ -69,6 +70,17 @@ const GOBBLET_UI = [
   '点击一枚备用棋子或棋盘上的棋子，再点击高亮方格。',
   'अपनी आरक्षित गोटी या बोर्ड की गोटी पर टैप करें, फिर चमकते खाने पर टैप करें।',
   'اضغط على قطعة من الاحتياط أو على اللوحة، ثم اضغط على مربع مضاء.'
+];
+
+const KISOLO_UI = [
+  'Tap a highlighted pit to sow or capture.',
+  'Toca un hoyo resaltado para sembrar o capturar.',
+  'Touchez un trou surligné pour semer ou capturer.',
+  'Tippe auf eine markierte Mulde, um zu säen oder zu schlagen.',
+  'Toque em um buraco destacado para semear ou capturar.',
+  '点击高亮的坑进行播种或吃子。',
+  'बीज बाँटने या पकड़ने के लिए चमकते गड्ढे पर टैप करें।',
+  'اضغط على حفرة مضاءة لتوزيع البذور أو أسرها.'
 ];
 
 const CUSTOM = {
@@ -238,7 +250,7 @@ function board(kind) {
     {id:'table',kind:'free',x:0,y:0,width:640,height:590,color:'#174d42',line_color:'#e2c47a'}]};
   if (kind === 'table') return {viewport:{width:640,height:720},boards:[{id:'table',...free}]};
   if (kind === 'kisolo') return {viewport:{width:620,height:530},boards:[
-    {id:'main',kind:'grid',x:26,y:110,width:560,height:280,rows:4,columns:7,color:'#a87945',alternate_color:'#c99a63',line_color:'#5c4026'}]};
+    {id:'main',kind:'grid',x:30,y:110,width:560,height:280,rows:4,columns:7,color:'#d7ad75',alternate_color:'#d7ad75',line_color:'#b98c58'}]};
   if (kind === 'gobblet') return {viewport:{width:600,height:785},boards:[
     {id:'main',kind:'grid',x:40,y:100,width:520,height:520,rows:4,columns:4,color:'#ead1a0',alternate_color:'#d5b37d',line_color:'#745033'},
     {id:'tray',kind:'free',x:40,y:650,width:520,height:110,color:'#80573c',line_color:'#4a3022'}]};
@@ -261,7 +273,7 @@ function typesFor(kind) {
     types.black_card = {shape:'card',width:92,height:126,color:'#fffdf6',text_color:'#1c2b31',border_color:'#d5c6a9'};
     types.deck = {shape:'card',width:92,height:126,color:'#982f39',text_color:'#f5d894',border_color:'#f5d894'};
   }
-  if (kind === 'kisolo') types.pit = {shape:'circle',width:66,height:54,color:COLORS.pit,text_color:'#fff7ed'};
+  if (kind === 'kisolo') types.pit = {shape:'circle',width:66,height:54,color:'#70452b',text_color:'#fff3d4',border_color:'#4d2e1d'};
   if (kind === 'gobblet') for (let size=1;size<=4;size++) for (let owner=0;owner<2;owner++)
     types[`goblet_${size}_${owner}`] = {shape:'circle',width:28 + size * 9,height:28 + size * 9,
       color:owner===0?'#d7e6f4':'#374151',text_color:owner===0?'#172033':'#ffffff',
@@ -430,7 +442,8 @@ function build(entry) {
   const rules=custom?.rules || source.rules;
   const ui=entry.kind === 'six_mens_morris' ? MORRIS_UI[0] :
     entry.kind === 'thirty_one' ? THIRTY_ONE_UI[0] :
-      entry.kind === 'gobblet' ? GOBBLET_UI[0] : custom?.ui || source.ui_instructions;
+      entry.kind === 'gobblet' ? GOBBLET_UI[0] :
+        entry.kind === 'kisolo' ? KISOLO_UI[0] : custom?.ui || source.ui_instructions;
   const description=custom?.description || source.description;
   const title=`${entry.title} (Declarative)`;
   const translations={};
@@ -450,6 +463,7 @@ function build(entry) {
       ...(entry.kind === 'six_mens_morris' ? {game_ui_rules:MORRIS_UI[LOCALES.indexOf(locale)+1]} : {}),
       ...(entry.kind === 'thirty_one' ? {game_ui_rules:THIRTY_ONE_UI[LOCALES.indexOf(locale)+1]} : {}),
       ...(entry.kind === 'gobblet' ? {game_ui_rules:GOBBLET_UI[LOCALES.indexOf(locale)+1]} : {}),
+      ...(entry.kind === 'kisolo' ? {game_ui_rules:KISOLO_UI[LOCALES.indexOf(locale)+1]} : {}),
       client_strings:translatedStrings(locale,displayName,entry.kind)};
   }
   const strings={...ENGLISH,title,...serverStrings(entry.kind).english};

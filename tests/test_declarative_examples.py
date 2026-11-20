@@ -199,6 +199,22 @@ def test_gobblet_reserves_and_covered_own_pieces_are_reachable():
         assert not frame['scene']['targets'] and not frame['scene']['controls']
 
 
+def test_kisolo_pit_targets_preserve_visible_seed_counts():
+    body = load('kisolo')
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = body.unit_tests['cases'][0]['view_of_mover']
+    m = {'type':'state_changed', 'view':view, 'status':'ongoing',
+         'acting_for_player_index':0, 'my_player_index':0, 'move_count':0}
+    frame = ui.reduce(m)
+    assert len([p for p in frame['scene']['pieces'] if p['id'].startswith('pit_')]) == 28
+    assert len(frame['scene']['targets']) == len(view['legal_pits'])
+    assert all(target.get('color') == '#00000000' and not target.get('label')
+               for target in frame['scene']['targets'])
+    for pit in view['legal_pits']:
+        assert scene_event(ui, m, frame, {'pit':pit})['make_move'] == {'pit':pit}
+    assert not ui.reduce({**m, 'acting_for_player_index':None})['scene']['targets']
+
+
 def test_morris_package_and_single_game_generator_are_consistent(tmp_path):
     prepare(load('six_mens_morris'))
     root = EXAMPLES.parents[1]
