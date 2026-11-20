@@ -10,7 +10,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from game_platform.api import create_app
-from game_platform.config import AuthConfig, PushConfig
+from game_platform.config import AuthConfig, BugReportConfig, PushConfig
 from game_platform.models import GameRules, Match, Seat
 from game_platform.push import PushNotifier
 from game_platform.senders import CodeSender
@@ -127,6 +127,7 @@ class Api:
         *,
         store: Store | None = None,
         auth_config: AuthConfig | None = None,
+        bug_report_config: BugReportConfig | None = None,
         sms_sender: CodeSender | None = None,
         email_sender: CodeSender | None = None,
         push_notifier: PushNotifier | None = None,
@@ -148,6 +149,7 @@ class Api:
             create_app(
                 platform,
                 auth_config=auth_config,
+                bug_report_config=bug_report_config,
                 sms_sender=sms_sender,
                 email_sender=email_sender,
                 push_config=push_config,

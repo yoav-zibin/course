@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import uuid
 
 import pytest
 from pydantic import ValidationError
@@ -30,6 +31,19 @@ def test_omitted_fields_take_their_defaults(tmp_path: Path) -> None:
         9000,
         True,
     )
+
+
+def test_bug_report_quota_exemptions_are_private_canonical_account_ids(tmp_path: Path) -> None:
+    identity = str(uuid.uuid4())
+    config = load_config(_write_config(tmp_path, {"bug_reports": {"unlimited_user_ids": [identity, identity]}}))
+    assert config.bug_reports.unlimited_user_ids == (identity,)
+    assert Config().bug_reports.unlimited_user_ids == ()
+
+
+@pytest.mark.parametrize("value", ["not-a-user-id", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA", "aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa", 123, None])
+def test_bug_report_exemptions_reject_noncanonical_ids(value) -> None:
+    with pytest.raises(ValidationError):
+        Config.model_validate({"bug_reports": {"unlimited_user_ids": [value]}})
 
 
 def test_retired_model_api_does_not_block_restart_or_change_active_settings(tmp_path: Path) -> None:

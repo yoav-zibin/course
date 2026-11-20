@@ -3,8 +3,9 @@
 import ipaddress
 from pathlib import Path
 from typing import Annotated, Literal
+import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
@@ -81,6 +82,23 @@ class AuthConfig(_Section):
     google: GoogleAuthConfig = GoogleAuthConfig()
     sms: SmsAuthConfig = SmsAuthConfig()
     email: EmailAuthConfig = EmailAuthConfig()
+
+
+class BugReportConfig(_Section):
+    # Private, operator-confirmed canonical account IDs, verified before being
+    # configured. These bypass account and shared-client submission quotas.
+    unlimited_user_ids: tuple[str, ...] = ()
+
+    @field_validator("unlimited_user_ids")
+    @classmethod
+    def _canonical_user_ids(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        for value in values:
+            try:
+                if str(uuid.UUID(value)) != value:
+                    raise ValueError
+            except ValueError:
+                raise ValueError("unlimited user IDs must be canonical UUIDs") from None
+        return tuple(dict.fromkeys(values))
 
 
 class PushConfig(_Section):
@@ -254,6 +272,7 @@ class Config(_Section):
     monitoring: MonitoringConfig = MonitoringConfig()
     translation: TranslationConfig = TranslationConfig()
     auth: AuthConfig = AuthConfig()
+    bug_reports: BugReportConfig = BugReportConfig()
     push: PushConfig = PushConfig()
     # Seconds the server waits before a computer opponent moves in a v2 match
     # (server-side game API), so humans can watch the game unfold. 0 moves

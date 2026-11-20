@@ -77,6 +77,9 @@
       "smtp_use_tls": true
     }
   },
+  "bug_reports": {
+    "unlimited_user_ids": []
+  },
   "push": {
     "provider": "log",
     "native_enabled": true,

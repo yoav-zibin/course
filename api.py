@@ -101,7 +101,7 @@ from game_platform.service import (
     UnauthorizedError,
     AccountDeletionInProgressError,
 )
-from game_platform.config import AuthConfig, PushConfig
+from game_platform.config import AuthConfig, BugReportConfig, PushConfig
 from game_platform.models import LinkedAccountKind
 from game_platform.oauth import ProviderError, verify_google_id_token
 from game_platform.push import vapid_public_key
@@ -2222,6 +2222,7 @@ def create_app(
     debug_tools: bool = True,
     master_password: str = "",
     auth_config: AuthConfig | None = None,
+    bug_report_config: BugReportConfig | None = None,
     push_config: PushConfig | None = None,
     sms_sender: CodeSender | None = None,
     voice_sender: CodeSender | None = None,
@@ -2269,6 +2270,7 @@ def create_app(
     app.state.public_base_url = public_base_url
     app.state.started_at = time.monotonic()
     app.state.auth_config = auth_config if auth_config is not None else AuthConfig()
+    app.state.bug_report_config = bug_report_config if bug_report_config is not None else BugReportConfig()
     app.state.push_config = push_config if push_config is not None else PushConfig()
     app.state.sms_sender = sms_sender if sms_sender is not None else LogSender()
     app.state.voice_sender = voice_sender if voice_sender is not None else LogSender()

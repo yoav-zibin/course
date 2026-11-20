@@ -178,6 +178,7 @@ def main() -> None:
             debug_tools=config.debug_tools,
             master_password=config.master_password,
             auth_config=config.auth,
+            bug_report_config=config.bug_reports,
             push_config=push_config,
             sms_sender=make_sms_sender(config.auth.sms),
             voice_sender=make_voice_sender(config.auth.sms),

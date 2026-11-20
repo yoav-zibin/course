@@ -150,26 +150,36 @@ def make_router(platform_dependency, master_dependency, caller_dependency):
         # logging context accepts X-Forwarded-For for attribution and must not
         # be used for quotas: a browser can supply its own header prefix.
         client = request.client.host if request.client else "unknown"
-        rate_keys = ["client:" + hashlib.sha256(client.encode()).hexdigest()]
-        if caller_id:
-            rate_keys.append("user:" + caller_id)
 
         def save():
-            now = dt.datetime.now(dt.timezone.utc).isoformat()
-            user = platform._store.get_user(caller_id) if caller_id else None
-            user_info = None if user is None else {
-                "id": user.id, "display_name": user.display_name, "email": user.email,
-                "locale": user.locale, "is_guest": not bool(user.linked_accounts),
-                "linked_account_kinds": [account.kind for account in user.linked_accounts],
-                "created_at": user.created_at.isoformat(), "updated_at": user.updated_at.isoformat(),
-                "token_balance": user.token_balance,
-            }
-            row = {"id": uuid.uuid4().hex, "text": report.text, "screenshot": report.screenshot,
-                   "diagnostics": clean_diagnostics(report.diagnostics), "user": user_info,
-                   "reporter_user_id": caller_id, "status": "open", "created_at": now,
-                   "updated_at": now, "resolution": "", "commit": None, "changed_by": None}
-            platform._store.create_bug_report(row, rate_keys=rate_keys)
-            return {"id": row["id"], "status": row["status"], "created_at": now}
+            # Read identity and save evidence in the same unit of work: the
+            # query backend bypasses stale caches for transaction reads.
+            with platform._lock:
+                now = dt.datetime.now(dt.timezone.utc).isoformat()
+                user = platform._store.get_user(caller_id) if caller_id else None
+                # Only authenticated, canonical server identity and private operator
+                # configuration grant this exception. Submitted diagnostics, names,
+                # email addresses and client headers cannot claim it. Empty keys
+                # bypass both quotas without consuming the shared network's slots.
+                unlimited = (user is not None and user.id == caller_id
+                             and user.replaced_by_user_id is None
+                             and caller_id in request.app.state.bug_report_config.unlimited_user_ids)
+                rate_keys = [] if unlimited else ["client:" + hashlib.sha256(client.encode()).hexdigest()]
+                if caller_id and not unlimited:
+                    rate_keys.append("user:" + caller_id)
+                user_info = None if user is None else {
+                    "id": user.id, "display_name": user.display_name, "email": user.email,
+                    "locale": user.locale, "is_guest": not bool(user.linked_accounts),
+                    "linked_account_kinds": [account.kind for account in user.linked_accounts],
+                    "created_at": user.created_at.isoformat(), "updated_at": user.updated_at.isoformat(),
+                    "token_balance": user.token_balance,
+                }
+                row = {"id": uuid.uuid4().hex, "text": report.text, "screenshot": report.screenshot,
+                       "diagnostics": clean_diagnostics(report.diagnostics), "user": user_info,
+                       "reporter_user_id": caller_id, "status": "open", "created_at": now,
+                       "updated_at": now, "resolution": "", "commit": None, "changed_by": None}
+                platform._store.create_bug_report(row, rate_keys=rate_keys)
+                return {"id": row["id"], "status": row["status"], "created_at": now}
 
         return await run_in_threadpool(save)
 
