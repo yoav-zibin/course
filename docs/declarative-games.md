@@ -111,6 +111,20 @@ the mover regardless of the rotation, and after the rotation the mover wins
 when both players have five. A full board with no five is a draw. Select it
 for publication with `--kinds pentago`.
 
+Onitama is a two-player duel on a 5-by-5 board, Red against Blue, each side
+leading one master and four students from its back rank, the master on its
+own central temple square. Five of the sixteen real movement cards (each
+with its printed offsets and red or blue stamp) are drawn deterministically:
+two per player and one neutral card, whose stamp colour decides who moves
+first. A turn moves one piece by an offset on one of the mover's two cards,
+read from the mover's own side of the board, capturing on landing, after
+which the used card swaps with the neutral card; a player whose cards give
+no legal move must instead pass one card in the same swap. Capturing the
+opponent's master, or moving your own master onto the opponent's temple
+square, wins the pot; 500 moves without a win is a draw with the pot split.
+All state is public, so the package declares `all_state_public: true`.
+Select it for publication with `--kinds onitama`.
+
 Quarto is a two-player game on a 4-by-4 board with sixteen unique pieces:
 every combination of tall/short, light/dark, round/square and solid/hollow
 (piece id 0–15 is the 4-bit attribute vector: bit0 tall, bit1 dark, bit2

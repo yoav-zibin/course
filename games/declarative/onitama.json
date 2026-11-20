@@ -1,0 +1,3903 @@
+{
+ "all_state_public": true,
+ "name": "Onitama (Declarative)",
+ "description": "Onitama: a two-player duel of masters and students on a 5x5 shrine board. Five movement cards decide every step; capture the rival master or reach their temple to win.",
+ "game_addition_request_id_and_secret": "example-only-declarative-onitama-replace-before-publishing",
+ "allowed_player_counts": [
+  2
+ ],
+ "server_code": "// Onitama (Declarative). Two players (Red = seat 0, Blue = seat 1) each lead\n// one master and four students on a 5x5 board (cells 0-24, row-major from\n// Blue's back rank at the top to Red's back rank at the bottom). Pieces are\n// encoded 0 = Red student, 1 = Red master, 2 = Blue student, 3 = Blue master,\n// -1 = empty. Red's temple is cell 22 (its own back-centre), Blue's temple is\n// cell 2; a master wins by reaching the OPPONENT's temple (Red -> 2,\n// Blue -> 22) or by capturing the opponent's master.\n//\n// CARD OFFSET TABLE (all 16 real base-game cards). Offsets are\n// [forward, right] from the CARD HOLDER's perspective: forward is toward the\n// opponent, right is the holder's own right. Board transform: Red (seat 0,\n// facing up-board) dr = -forward, dc = +right; Blue (seat 1, facing\n// down-board) dr = +forward, dc = -right. Verified against the printed cards:\n//   Tiger    (blue stamp): [2,0] [-1,0]\n//   Crab     (blue stamp): [1,0] [0,-2] [0,2]\n//   Monkey   (blue stamp): [1,-1] [1,1] [-1,-1] [-1,1]\n//   Crane    (blue stamp): [1,0] [-1,-1] [-1,1]\n//   Dragon   (red stamp):  [1,-2] [1,2] [-1,-1] [-1,1]\n//   Elephant (red stamp):  [1,-1] [1,1] [0,-1] [0,1]\n//   Mantis   (red stamp):  [1,-1] [1,1] [-1,0]\n//   Boar     (red stamp):  [1,0] [0,-1] [0,1]\n//   Frog     (red stamp):  [0,-2] [1,-1] [-1,1]\n//   Goose    (blue stamp): [1,-1] [0,-1] [0,1] [-1,1]\n//   Rooster  (red stamp):  [1,1] [0,1] [0,-1] [-1,-1]\n//   Rabbit   (blue stamp): [0,2] [1,1] [-1,-1]\n//   Ox       (blue stamp): [1,0] [0,1] [-1,0]\n//   Horse    (red stamp):  [1,0] [0,-1] [-1,0]\n//   Eel      (blue stamp): [1,-1] [-1,-1] [0,1]\n//   Cobra    (red stamp):  [1,1] [-1,1] [0,-1]\n// Eight cards carry a red stamp and eight a blue stamp, as in the real game.\n// The player whose colour matches the NEUTRAL card's stamp moves first.\nconst CARDS = {\n  tiger: { name: 'Tiger', stamp: 'blue', off: [[2, 0], [-1, 0]] },\n  crab: { name: 'Crab', stamp: 'blue', off: [[1, 0], [0, -2], [0, 2]] },\n  monkey: { name: 'Monkey', stamp: 'blue', off: [[1, -1], [1, 1], [-1, -1], [-1, 1]] },\n  crane: { name: 'Crane', stamp: 'blue', off: [[1, 0], [-1, -1], [-1, 1]] },\n  dragon: { name: 'Dragon', stamp: 'red', off: [[1, -2], [1, 2], [-1, -1], [-1, 1]] },\n  elephant: { name: 'Elephant', stamp: 'red', off: [[1, -1], [1, 1], [0, -1], [0, 1]] },\n  mantis: { name: 'Mantis', stamp: 'red', off: [[1, -1], [1, 1], [-1, 0]] },\n  boar: { name: 'Boar', stamp: 'red', off: [[1, 0], [0, -1], [0, 1]] },\n  frog: { name: 'Frog', stamp: 'red', off: [[0, -2], [1, -1], [-1, 1]] },\n  goose: { name: 'Goose', stamp: 'blue', off: [[1, -1], [0, -1], [0, 1], [-1, 1]] },\n  rooster: { name: 'Rooster', stamp: 'red', off: [[1, 1], [0, 1], [0, -1], [-1, -1]] },\n  rabbit: { name: 'Rabbit', stamp: 'blue', off: [[0, 2], [1, 1], [-1, -1]] },\n  ox: { name: 'Ox', stamp: 'blue', off: [[1, 0], [0, 1], [-1, 0]] },\n  horse: { name: 'Horse', stamp: 'red', off: [[1, 0], [0, -1], [-1, 0]] },\n  eel: { name: 'Eel', stamp: 'blue', off: [[1, -1], [-1, -1], [0, 1]] },\n  cobra: { name: 'Cobra', stamp: 'red', off: [[1, 1], [-1, 1], [0, -1]] }\n};\nconst DECK = ['tiger', 'crab', 'monkey', 'crane', 'dragon', 'elephant', 'mantis', 'boar',\n  'frog', 'goose', 'rooster', 'rabbit', 'ox', 'horse', 'eel', 'cobra'];\nconst MAX_MOVES = 500; // safety valve: 500 moves without a win is a draw, pot split\n\nfunction ownerOf(piece) { return piece < 0 ? -1 : (piece >= 2 ? 1 : 0); }\nfunction isMaster(piece) { return piece === 1 || piece === 3; }\nfunction copyState(s) { return JSON.parse(JSON.stringify(s)); }\nfunction seatOf(ctx, playerId) {\n  for (let i = 0; i < ctx.players.length; i++) if (ctx.players[i].id === playerId) return i;\n  return -1;\n}\nfunction destFor(seat, from, off) {\n  const r = Math.floor(from / 5), c = from % 5;\n  const dr = seat === 0 ? -off[0] : off[0];\n  const dc = seat === 0 ? off[1] : -off[1];\n  const nr = r + dr, nc = c + dc;\n  if (nr < 0 || nr > 4 || nc < 0 || nc > 4) return -1;\n  return nr * 5 + nc;\n}\n// Every real move (not passes) available to `seat` in state s.\nfunction realMoves(s, seat) {\n  const out = [];\n  const hand = s.hands[seat] || [];\n  for (const card of hand) {\n    const def = CARDS[card];\n    if (!def) continue;\n    for (let from = 0; from < 25; from++) {\n      if (ownerOf(s.board[from]) !== seat) continue;\n      for (const off of def.off) {\n        const to = destFor(seat, from, off);\n        if (to < 0) continue;\n        if (ownerOf(s.board[to]) === seat) continue;\n        out.push({ type: 'move', from: from, to: to, card: card });\n      }\n    }\n  }\n  return out;\n}\n// Legal moves for the side to move: real moves, or a pass of either card\n// when no real move exists (the real Onitama pass rule).\nfunction legalMoves(s) {\n  const moves = realMoves(s, s.turn);\n  if (moves.length) return moves;\n  return (s.hands[s.turn] || []).map(card => ({ type: 'pass', card: card }));\n}\nfunction payoutsFor(s, ctx) {\n  const pot = ctx.pot || 0;\n  if (pot <= 0) return {};\n  const humans = ctx.players.filter(p => p.kind === 'human' && p.active !== false);\n  if (!humans.length) return {};\n  const out = {};\n  if (!s.draw && s.winner >= 0) {\n    const w = ctx.players[s.winner];\n    if (w && w.kind === 'human' && w.active !== false) {\n      for (const p of humans) out[p.id] = 0;\n      out[w.id] = pot;\n      return out;\n    }\n  }\n  const each = Math.floor(pot / humans.length);\n  let rem = pot - each * humans.length;\n  for (const p of humans) { out[p.id] = each + (rem > 0 ? 1 : 0); if (rem > 0) rem--; }\n  return out;\n}\nfunction swapCard(s, seat, card) {\n  const idx = s.hands[seat].indexOf(card);\n  const old = s.hands[seat][idx];\n  s.hands[seat][idx] = s.neutral;\n  s.neutral = old;\n}\n\nconst game = {\n  newMatch(ctx) {\n    const deck = DECK.slice();\n    for (let i = deck.length - 1; i > 0; i--) {\n      const j = Math.floor(ctx.random() * (i + 1));\n      const t = deck[i]; deck[i] = deck[j]; deck[j] = t;\n    }\n    const board = Array(25).fill(-1);\n    board[0] = 2; board[1] = 2; board[2] = 3; board[3] = 2; board[4] = 2;\n    board[20] = 0; board[21] = 0; board[22] = 1; board[23] = 0; board[24] = 0;\n    const neutral = deck[4];\n    const start = CARDS[neutral].stamp === 'red' ? 0 : 1;\n    const s = {\n      board: board,\n      hands: [[deck[0], deck[1]], [deck[2], deck[3]]],\n      neutral: neutral,\n      turn: start, winner: -1, draw: false, moves: 0, over: false\n    };\n    return { state: s, turn: [ctx.players[start].id] };\n  },\n  applyMove(state, playerId, move, ctx) {\n    if (!state || state.over) throw new InvalidMove('game over');\n    const seat = seatOf(ctx, playerId);\n    if (seat < 0 || seat !== state.turn) throw new InvalidMove('not your turn');\n    if (!move || typeof move !== 'object' || Array.isArray(move)) throw new InvalidMove('bad move');\n    const keys = Object.keys(move).sort().join(',');\n    if (typeof move.card !== 'string' || !CARDS[move.card]) throw new InvalidMove('unknown card');\n    if (state.hands[seat].indexOf(move.card) < 0) throw new InvalidMove('card not held');\n    const s = copyState(state);\n    if (move.type === 'pass') {\n      if (keys !== 'card,type') throw new InvalidMove('bad move');\n      if (realMoves(s, seat).length) throw new InvalidMove('a move is available');\n      swapCard(s, seat, move.card);\n    } else if (move.type === 'move') {\n      if (keys !== 'card,from,to,type') throw new InvalidMove('bad move');\n      const from = move.from, to = move.to;\n      if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from > 24 || to < 0 || to > 24)\n        throw new InvalidMove('off board');\n      const piece = s.board[from];\n      if (ownerOf(piece) !== seat) throw new InvalidMove('not your piece');\n      if (ownerOf(s.board[to]) === seat) throw new InvalidMove('your own piece is there');\n      let ok = false;\n      for (const off of CARDS[move.card].off) if (destFor(seat, from, off) === to) { ok = true; break; }\n      if (!ok) throw new InvalidMove('card does not move like that');\n      const captured = s.board[to];\n      s.board[to] = piece;\n      s.board[from] = -1;\n      swapCard(s, seat, move.card);\n      if (isMaster(captured) && ownerOf(captured) === 1 - seat) { s.winner = seat; s.over = true; }\n      else if (isMaster(piece) && to === (seat === 0 ? 2 : 22)) { s.winner = seat; s.over = true; }\n    } else {\n      throw new InvalidMove('bad move');\n    }\n    s.moves++;\n    if (!s.over && s.moves >= MAX_MOVES) { s.draw = true; s.over = true; s.winner = -1; }\n    if (s.over) return { state: s, turn: null, payouts: payoutsFor(s, ctx) };\n    s.turn = 1 - seat;\n    return { state: s, turn: [ctx.players[s.turn].id] };\n  },\n  viewFor(state, playerId, ctx) {\n    const s = copyState(state);\n    const seat = seatOf(ctx, playerId);\n    const view = {\n      board: s.board, hands: s.hands, neutral: s.neutral, turn: s.turn,\n      winner: s.winner, draw: s.draw, moves: s.moves, over: s.over,\n      me: seat, legal: []\n    };\n    if (!s.over && seat === s.turn) view.legal = legalMoves(s);\n    return view;\n  },\n  randomMove(state, playerId, ctx) {\n    const options = legalMoves(state);\n    return options[Math.floor(ctx.random() * options.length)];\n  },\n  computerMove(state, playerId, ctx) {\n    const seat = state.turn;\n    const options = legalMoves(state);\n    let best = options[0], bestScore = -1e9;\n    for (const m of options) {\n      let score = ctx.random() * 1.5;\n      if (m.type === 'pass') { score -= 5; }\n      else {\n        const piece = state.board[m.from];\n        const target = state.board[m.to];\n        if (isMaster(target) && ownerOf(target) === 1 - seat) score += 1000;\n        else if (isMaster(piece) && m.to === (seat === 0 ? 2 : 22)) score += 1000;\n        else if (target >= 0) score += 100; // capture a student\n        const progress = seat === 0 ? (Math.floor(m.from / 5) - Math.floor(m.to / 5))\n                                    : (Math.floor(m.to / 5) - Math.floor(m.from / 5));\n        score += isMaster(piece) ? progress * 8 : progress * 2;\n        if (isMaster(piece)) score += 4;\n      }\n      if (score > bestScore) { bestScore = score; best = m; }\n    }\n    return best;\n  }\n};\n",
+ "declarative_ui": {
+  "format": "buildplay-ui",
+  "version": 1,
+  "viewport": {
+   "width": 600,
+   "height": 780
+  },
+  "boards": [
+   {
+    "id": "main",
+    "kind": "grid",
+    "x": 110,
+    "y": 92,
+    "width": 360,
+    "height": 360,
+    "rows": 5,
+    "columns": 5,
+    "color": "#f7e8c9",
+    "alternate_color": "#ecd9ac",
+    "line_color": "#b08968"
+   },
+   {
+    "id": "cards",
+    "kind": "free",
+    "x": 0,
+    "y": 462,
+    "width": 600,
+    "height": 300,
+    "color": "#20303f",
+    "alternate_color": "#20303f",
+    "line_color": "#3d5a73"
+   }
+  ],
+  "piece_types": {
+   "red_student": {
+    "shape": "circle",
+    "width": 46,
+    "height": 46,
+    "color": "#e0654f",
+    "text_color": "#ffffff"
+   },
+   "red_master": {
+    "shape": "circle",
+    "width": 58,
+    "height": 58,
+    "color": "#b91c1c",
+    "text_color": "#ffe9a8"
+   },
+   "blue_student": {
+    "shape": "circle",
+    "width": 46,
+    "height": 46,
+    "color": "#5b8dd9",
+    "text_color": "#ffffff"
+   },
+   "blue_master": {
+    "shape": "circle",
+    "width": 58,
+    "height": 58,
+    "color": "#1d4ed8",
+    "text_color": "#ffe9a8"
+   },
+   "panel_red": {
+    "shape": "card",
+    "width": 96,
+    "height": 160,
+    "color": "#fde8e2",
+    "text_color": "#7f1d1d"
+   },
+   "panel_blue": {
+    "shape": "card",
+    "width": 96,
+    "height": 160,
+    "color": "#e2ecfd",
+    "text_color": "#1e3a8a"
+   },
+   "panel_neutral": {
+    "shape": "card",
+    "width": 96,
+    "height": 160,
+    "color": "#f3f4f6",
+    "text_color": "#374151"
+   }
+  },
+  "strings": {
+   "title": "Onitama",
+   "red": "Red",
+   "blue": "Blue",
+   "turn": "{name} to move",
+   "your_turn": "Your turn · {name}",
+   "finished": "Game over",
+   "winner": "Winner: {name}",
+   "draw": "Draw",
+   "temple": "TEMPLE",
+   "neutral": "Neutral card",
+   "red_cards": "Red cards",
+   "blue_cards": "Blue cards",
+   "hint_card": "Tap one of your cards to choose it.",
+   "hint_piece": "Tap a highlighted piece to move.",
+   "hint_dest": "Tap a highlighted destination.",
+   "hint_pass": "No legal move — pass a card instead.",
+   "pass_card": "Pass {card}",
+   "use_card": "Use the {card} card",
+   "move_to": "Move to row {r}, column {c}",
+   "select_piece": "Select piece at row {r}, column {c}",
+   "master": "Master",
+   "student": "Student",
+   "server_game_over": "game over",
+   "server_not_your_turn": "not your turn",
+   "server_bad_move": "bad move",
+   "server_unknown_card": "unknown card",
+   "server_card_not_held": "card not held",
+   "server_move_available": "a move is available",
+   "server_off_board": "off board",
+   "server_not_your_piece": "not your piece",
+   "server_own_piece": "your own piece is there",
+   "server_card_move": "card does not move like that"
+  },
+  "ui_code": "// Onitama presentation. Pure reducer: scene + staged local selection.\n// Interaction (acting viewer only): tap one of your card panels (a target\n// over the panel), then tap a highlighted piece (origin target), then tap a\n// highlighted destination target. The destination targets are only emitted\n// for the staged (card, piece) pair, so every legal (from, to, card) move is\n// reachable and unambiguous even when both cards reach the same square.\n// When no legal move exists, a Pass button per held card emits the pass.\n// Spectators, replay and finished games get no targets or controls.\nconst SOURCE_STRINGS = {\"title\": \"Onitama\", \"red\": \"Red\", \"blue\": \"Blue\", \"turn\": \"{name} to move\", \"your_turn\": \"Your turn \\u00b7 {name}\", \"finished\": \"Game over\", \"winner\": \"Winner: {name}\", \"draw\": \"Draw\", \"temple\": \"TEMPLE\", \"neutral\": \"Neutral card\", \"red_cards\": \"Red cards\", \"blue_cards\": \"Blue cards\", \"hint_card\": \"Tap one of your cards to choose it.\", \"hint_piece\": \"Tap a highlighted piece to move.\", \"hint_dest\": \"Tap a highlighted destination.\", \"hint_pass\": \"No legal move \\u2014 pass a card instead.\", \"pass_card\": \"Pass {card}\", \"use_card\": \"Use the {card} card\", \"move_to\": \"Move to row {r}, column {c}\", \"select_piece\": \"Select piece at row {r}, column {c}\", \"master\": \"Master\", \"student\": \"Student\", \"server_game_over\": \"game over\", \"server_not_your_turn\": \"not your turn\", \"server_bad_move\": \"bad move\", \"server_unknown_card\": \"unknown card\", \"server_card_not_held\": \"card not held\", \"server_move_available\": \"a move is available\", \"server_off_board\": \"off board\", \"server_not_your_piece\": \"not your piece\", \"server_own_piece\": \"your own piece is there\", \"server_card_move\": \"card does not move like that\"};\nconst CARD_INFO = {\"tiger\": {\"name\": \"Tiger\", \"stamp\": \"blue\", \"off\": [[2, 0], [-1, 0]]}, \"crab\": {\"name\": \"Crab\", \"stamp\": \"blue\", \"off\": [[1, 0], [0, -2], [0, 2]]}, \"monkey\": {\"name\": \"Monkey\", \"stamp\": \"blue\", \"off\": [[1, -1], [1, 1], [-1, -1], [-1, 1]]}, \"crane\": {\"name\": \"Crane\", \"stamp\": \"blue\", \"off\": [[1, 0], [-1, -1], [-1, 1]]}, \"dragon\": {\"name\": \"Dragon\", \"stamp\": \"red\", \"off\": [[1, -2], [1, 2], [-1, -1], [-1, 1]]}, \"elephant\": {\"name\": \"Elephant\", \"stamp\": \"red\", \"off\": [[1, -1], [1, 1], [0, -1], [0, 1]]}, \"mantis\": {\"name\": \"Mantis\", \"stamp\": \"red\", \"off\": [[1, -1], [1, 1], [-1, 0]]}, \"boar\": {\"name\": \"Boar\", \"stamp\": \"red\", \"off\": [[1, 0], [0, -1], [0, 1]]}, \"frog\": {\"name\": \"Frog\", \"stamp\": \"red\", \"off\": [[0, -2], [1, -1], [-1, 1]]}, \"goose\": {\"name\": \"Goose\", \"stamp\": \"blue\", \"off\": [[1, -1], [0, -1], [0, 1], [-1, 1]]}, \"rooster\": {\"name\": \"Rooster\", \"stamp\": \"red\", \"off\": [[1, 1], [0, 1], [0, -1], [-1, -1]]}, \"rabbit\": {\"name\": \"Rabbit\", \"stamp\": \"blue\", \"off\": [[0, 2], [1, 1], [-1, -1]]}, \"ox\": {\"name\": \"Ox\", \"stamp\": \"blue\", \"off\": [[1, 0], [0, 1], [-1, 0]]}, \"horse\": {\"name\": \"Horse\", \"stamp\": \"red\", \"off\": [[1, 0], [0, -1], [-1, 0]]}, \"eel\": {\"name\": \"Eel\", \"stamp\": \"blue\", \"off\": [[1, -1], [-1, -1], [0, 1]]}, \"cobra\": {\"name\": \"Cobra\", \"stamp\": \"red\", \"off\": [[1, 1], [-1, 1], [0, -1]]}};\nconst gameUI = {\n  reduce(message, localState) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const s = m.view || m.state || {};\n    const strings = Object.assign({}, SOURCE_STRINGS, m.strings || {});\n    const t = (key, args) => String(strings[key] || SOURCE_STRINGS[key] || key).replace(/\\{(\\w+)\\}/g,\n      (_, k) => String((args || {})[k] === undefined ? '' : (args || {})[k]));\n    const active = m.status === 'ongoing' && !m.replay &&\n      m.acting_for_player_index !== null && m.acting_for_player_index !== undefined;\n    const mySeat = (m.my_player_index === 0 || m.my_player_index === 1) ? m.my_player_index : -1;\n    const legal = active ? (s.legal || []) : [];\n    const moves = legal.filter(x => x.type === 'move');\n    const passes = legal.filter(x => x.type === 'pass');\n    const playerName = i => {\n      const p = (m.players || [])[i];\n      return p && p.name ? p.name : t(i === 0 ? 'red' : 'blue');\n    };\n    // --- staged selection, retained only for the same move and viewer ---\n    let selCard = null, selFrom = null;\n    if (localState && localState.mc === m.move_count && localState.vw === mySeat) {\n      selCard = localState.card || null;\n      selFrom = typeof localState.from === 'number' ? localState.from : null;\n    }\n    if (!moves.some(x => x.card === selCard)) { selCard = null; selFrom = null; }\n    if (selCard !== null && !moves.some(x => x.card === selCard && x.from === selFrom)) selFrom = null;\n    let makeMove = null;\n    if (message.type === 'ui_event' && active && message.event && message.event.type === 'tap') {\n      const id = String(message.event.id || '');\n      if (id.indexOf('pass_') === 0) {\n        const cid = id.slice(5);\n        if (passes.some(x => x.card === cid)) makeMove = { type: 'pass', card: cid };\n      } else if (id.indexOf('card_') === 0) {\n        const cid = id.slice(5);\n        if (moves.some(x => x.card === cid)) { selCard = cid; selFrom = null; }\n      } else if (id.indexOf('from_') === 0) {\n        const cell = parseInt(id.slice(5), 10);\n        if (selCard && moves.some(x => x.card === selCard && x.from === cell)) selFrom = cell;\n      } else if (id.indexOf('to_') === 0) {\n        const cell = parseInt(id.slice(3), 10);\n        const found = moves.find(x => x.card === selCard && x.from === selFrom && x.to === cell);\n        if (found) makeMove = { type: 'move', from: found.from, to: found.to, card: found.card };\n      }\n    }\n    // --- scene ---\n    const pieces = [], targets = [], controls = [], labels = [];\n    labels.push({ id: 'title', text: t('title'), x: 24, y: 14, font_size: 25 });\n    const over = s.over || m.status === 'over';\n    if (over) {\n      labels.push({ id: 'status', text: t('finished'), x: 24, y: 46, font_size: 17 });\n      if (s.draw) labels.push({ id: 'winner', text: t('draw'), x: 24, y: 70, font_size: 15 });\n      else if (s.winner === 0 || s.winner === 1)\n        labels.push({ id: 'winner', text: t('winner', { name: playerName(s.winner) }), x: 24, y: 70, font_size: 15 });\n    } else {\n      const nm = playerName(s.turn);\n      labels.push({ id: 'status', text: active && mySeat === s.turn ? t('your_turn', { name: nm }) : t('turn', { name: nm }), x: 24, y: 46, font_size: 17 });\n      if (active && passes.length)\n        labels.push({ id: 'hint', text: t('hint_pass'), x: 24, y: 70, font_size: 14 });\n      else if (active && moves.length)\n        labels.push({ id: 'hint', text: t(!selCard ? 'hint_card' : selFrom === null ? 'hint_piece' : 'hint_dest'), x: 24, y: 70, font_size: 14 });\n    }\n    labels.push({ id: 'temple_top', text: t('temple'), x: 256, y: 95, font_size: 10 });\n    labels.push({ id: 'temple_bottom', text: t('temple'), x: 256, y: 383, font_size: 10 });\n    // Board pieces. Board cell for index i is String(i) on the 5x5 grid.\n    (s.board || []).forEach((v, cell) => {\n      if (v < 0) return;\n      const seat = v >= 2 ? 1 : 0, master = v % 2 === 1;\n      pieces.push({\n        id: 'piece_' + cell,\n        type: master ? (seat === 0 ? 'red_master' : 'blue_master') : (seat === 0 ? 'red_student' : 'blue_student'),\n        board: 'main', position: { cell: String(cell) }, text: master ? 'M' : 'S',\n        aria_label: (seat === 0 ? t('red') : t('blue')) + ' ' + (master ? t('master') : t('student')),\n        selected: selFrom === cell, actions: []\n      });\n    });\n    // Card panels: Red's two, the neutral card, Blue's two.\n    const hands = s.hands || [[], []];\n    const slots = [\n      { key: 'r0', card: hands[0][0], seat: 0, x: 16 },\n      { key: 'r1', card: hands[0][1], seat: 0, x: 128 },\n      { key: 'n', card: s.neutral, seat: s.turn, x: 252 },\n      { key: 'b0', card: hands[1][0], seat: 1, x: 376 },\n      { key: 'b1', card: hands[1][1], seat: 1, x: 488 }\n    ];\n    labels.push({ id: 'head_red', text: t('red_cards'), x: 16, y: 470, font_size: 14 });\n    labels.push({ id: 'head_neutral', text: t('neutral'), x: 252, y: 470, font_size: 14 });\n    labels.push({ id: 'head_blue', text: t('blue_cards'), x: 376, y: 470, font_size: 14 });\n    for (const slot of slots) {\n      if (!slot.card || !CARD_INFO[slot.card]) continue;\n      const info = CARD_INFO[slot.card];\n      pieces.push({\n        id: 'panel_' + slot.key, type: slot.key === 'n' ? 'panel_neutral' : slot.seat === 0 ? 'panel_red' : 'panel_blue',\n        board: 'cards', position: { x: slot.x, y: 30 }, text: '', actions: []\n      });\n      labels.push({ id: 'name_' + slot.key, text: info.name, x: slot.x + 8, y: 498, font_size: 15 });\n      // Mini offset diagram, drawn as it acts on the board for its holder:\n      // the holder's forward is up for Red and down for Blue.\n      const grid = [['·', '·', '·', '·', '·'], ['·', '·', '·', '·', '·'], ['·', '·', '◎', '·', '·'],\n        ['·', '·', '·', '·', '·'], ['·', '·', '·', '·', '·']];\n      for (const off of info.off) {\n        const dr = slot.seat === 0 ? -off[0] : off[0];\n        const dc = slot.seat === 0 ? off[1] : -off[1];\n        const gr = 2 + dr, gc = 2 + dc;\n        if (gr >= 0 && gr < 5 && gc >= 0 && gc < 5) grid[gr][gc] = '●';\n      }\n      grid.forEach((row, i) => labels.push({\n        id: 'grid_' + slot.key + '_' + i, text: row.join(' '),\n        x: slot.x + 13, y: 528 + i * 16, font_size: 13\n      }));\n      labels.push({\n        id: 'stamp_' + slot.key,\n        text: (info.stamp === 'red' ? t('red') : t('blue')) + ' ●',\n        x: slot.x + 8, y: 606, font_size: 11, color: info.stamp === 'red' ? '#e0654f' : '#5b8dd9'\n      });\n    }\n    // Interaction targets and controls, acting viewer only.\n    if (active && moves.length) {\n      const cardIds = [];\n      for (const mv of moves) if (!cardIds.includes(mv.card)) cardIds.push(mv.card);\n      for (const cid of cardIds) {\n        const slot = slots.find(sl => sl.card === cid && sl.seat === s.turn);\n        if (!slot) continue;\n        targets.push({\n          id: 'card_' + cid, board: 'cards', position: { x: slot.x + 48, y: 110 },\n          label: selCard === cid ? '◉' : '◆', aria_label: t('use_card', { card: CARD_INFO[cid].name })\n        });\n      }\n      if (selCard) {\n        const froms = [];\n        for (const mv of moves) if (mv.card === selCard && !froms.includes(mv.from)) froms.push(mv.from);\n        for (const from of froms) targets.push({\n          id: 'from_' + from, board: 'main', position: { cell: String(from) },\n          label: selFrom === from ? '◉' : '◇',\n          aria_label: t('select_piece', { r: Math.floor(from / 5) + 1, c: from % 5 + 1 })\n        });\n        if (selFrom !== null) for (const mv of moves) {\n          if (mv.card !== selCard || mv.from !== selFrom) continue;\n          targets.push({\n            id: 'to_' + mv.to, board: 'main', position: { cell: String(mv.to) }, label: '●',\n            aria_label: t('move_to', { r: Math.floor(mv.to / 5) + 1, c: mv.to % 5 + 1 })\n          });\n        }\n      }\n    }\n    if (active && passes.length) for (const p of passes)\n      controls.push({ id: 'pass_' + p.card, kind: 'button', label: t('pass_card', { card: CARD_INFO[p.card].name }) });\n    const scene = { pieces, targets, controls, labels };\n    const out = { scene, local_state: { mc: m.move_count, vw: mySeat, card: selCard, from: selFrom } };\n    if (makeMove) out.make_move = makeMove;\n    return out;\n  }\n};\n"
+ },
+ "rules": "Onitama for two players, Red (first seat) against Blue, on a 5x5 board. Each side has one master and four students, starting on its back rank with the master on its own temple square in the centre. Five of the sixteen movement cards are drawn at random: two for each player and one neutral card; the player whose colour matches the neutral card's stamp (red or blue) moves first. On your turn, move one of your pieces by one of the offsets shown on one of your two cards, read from your own side of the board: forward is toward your opponent. You may land on an empty square or capture an opponent piece, but never on your own piece or off the board. The card you used is then swapped with the neutral card. If neither of your cards gives any of your pieces a legal move, you must instead pass: swap one of your cards with the neutral card without moving. Win by capturing the opponent's master, or by moving your own master onto the opponent's temple square. The winner takes the pot. If 500 moves pass without a win, the game is a draw and the pot is split.",
+ "ui_instructions": "Board on top with both temple squares marked; masters are the larger pieces marked M, students S. Below the board are Red's two cards, the neutral card and Blue's two cards, each showing its name, its stamp colour and a mini diagram of its moves (centre dot is the piece, filled dots are where it can go, drawn as the card acts for its holder). On your turn tap one of your cards, then tap a highlighted piece, then tap a highlighted destination. If you have no legal move, use the Pass button for one of your cards. Only the player to move sees targets and buttons.",
+ "tutorial": {
+  "text": "Move a piece with one of your two cards, then swap that card with the neutral card. Capture the opponent's master, or move your master onto their temple square, to win.",
+  "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><p>Move a piece with one of your two cards, then swap that card with the neutral card. Capture the opponent's master, or move your master onto their temple square, to win.</p>"
+ },
+ "images": [
+  {
+   "caption": "Cover",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#20303f\"/><rect x=\"250\" y=\"75\" width=\"300\" height=\"300\" fill=\"#f7e8c9\"/><rect x=\"370\" y=\"75\" width=\"60\" height=\"60\" fill=\"#e9c46a\"/><rect x=\"370\" y=\"315\" width=\"60\" height=\"60\" fill=\"#e9c46a\"/><circle cx=\"280\" cy=\"105\" r=\"20\" fill=\"#5b8dd9\"/><circle cx=\"340\" cy=\"105\" r=\"20\" fill=\"#5b8dd9\"/><circle cx=\"400\" cy=\"105\" r=\"26\" fill=\"#1d4ed8\"/><circle cx=\"400\" cy=\"105\" r=\"12\" fill=\"#bfdbfe\"/><circle cx=\"460\" cy=\"105\" r=\"20\" fill=\"#5b8dd9\"/><circle cx=\"520\" cy=\"105\" r=\"20\" fill=\"#5b8dd9\"/><circle cx=\"280\" cy=\"345\" r=\"20\" fill=\"#e0654f\"/><circle cx=\"340\" cy=\"345\" r=\"20\" fill=\"#e0654f\"/><circle cx=\"400\" cy=\"345\" r=\"26\" fill=\"#b91c1c\"/><circle cx=\"400\" cy=\"345\" r=\"12\" fill=\"#fecaca\"/><circle cx=\"460\" cy=\"345\" r=\"20\" fill=\"#e0654f\"/><circle cx=\"520\" cy=\"345\" r=\"20\" fill=\"#e0654f\"/><rect x=\"90\" y=\"150\" width=\"110\" height=\"150\" rx=\"8\" fill=\"#fde8e2\"/><rect x=\"600\" y=\"150\" width=\"110\" height=\"150\" rx=\"8\" fill=\"#e2ecfd\"/></svg>"
+  },
+  {
+   "caption": "Opening board",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Onitama opening</text></svg>"
+  },
+  {
+   "caption": "Movement cards",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Five cards in play</text></svg>"
+  },
+  {
+   "caption": "Capture",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Capturing a student</text></svg>"
+  },
+  {
+   "caption": "Temple win",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Master on the temple</text></svg>"
+  }
+ ],
+ "unit_tests": {
+  "state_schema": {
+   "type": "object",
+   "required": [
+    "board",
+    "hands",
+    "neutral",
+    "turn",
+    "winner",
+    "draw",
+    "moves",
+    "over"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "board": {
+     "type": "array",
+     "minItems": 25,
+     "maxItems": 25,
+     "items": {
+      "type": "integer",
+      "minimum": -1,
+      "maximum": 3
+     }
+    },
+    "hands": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 2,
+     "items": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+       "type": "string",
+       "enum": [
+        "tiger",
+        "crab",
+        "monkey",
+        "crane",
+        "dragon",
+        "elephant",
+        "mantis",
+        "boar",
+        "frog",
+        "goose",
+        "rooster",
+        "rabbit",
+        "ox",
+        "horse",
+        "eel",
+        "cobra"
+       ]
+      }
+     }
+    },
+    "neutral": {
+     "type": "string",
+     "enum": [
+      "tiger",
+      "crab",
+      "monkey",
+      "crane",
+      "dragon",
+      "elephant",
+      "mantis",
+      "boar",
+      "frog",
+      "goose",
+      "rooster",
+      "rabbit",
+      "ox",
+      "horse",
+      "eel",
+      "cobra"
+     ]
+    },
+    "turn": {
+     "enum": [
+      0,
+      1
+     ]
+    },
+    "winner": {
+     "enum": [
+      -1,
+      0,
+      1
+     ]
+    },
+    "draw": {
+     "type": "boolean"
+    },
+    "moves": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 500
+    },
+    "over": {
+     "type": "boolean"
+    }
+   }
+  },
+  "view_schema": {
+   "type": "object",
+   "required": [
+    "board",
+    "hands",
+    "neutral",
+    "turn",
+    "winner",
+    "draw",
+    "moves",
+    "over",
+    "me",
+    "legal"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "board": {
+     "type": "array",
+     "minItems": 25,
+     "maxItems": 25,
+     "items": {
+      "type": "integer",
+      "minimum": -1,
+      "maximum": 3
+     }
+    },
+    "hands": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 2,
+     "items": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+       "type": "string",
+       "enum": [
+        "tiger",
+        "crab",
+        "monkey",
+        "crane",
+        "dragon",
+        "elephant",
+        "mantis",
+        "boar",
+        "frog",
+        "goose",
+        "rooster",
+        "rabbit",
+        "ox",
+        "horse",
+        "eel",
+        "cobra"
+       ]
+      }
+     }
+    },
+    "neutral": {
+     "type": "string",
+     "enum": [
+      "tiger",
+      "crab",
+      "monkey",
+      "crane",
+      "dragon",
+      "elephant",
+      "mantis",
+      "boar",
+      "frog",
+      "goose",
+      "rooster",
+      "rabbit",
+      "ox",
+      "horse",
+      "eel",
+      "cobra"
+     ]
+    },
+    "turn": {
+     "enum": [
+      0,
+      1
+     ]
+    },
+    "winner": {
+     "enum": [
+      -1,
+      0,
+      1
+     ]
+    },
+    "draw": {
+     "type": "boolean"
+    },
+    "moves": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 500
+    },
+    "over": {
+     "type": "boolean"
+    },
+    "me": {
+     "enum": [
+      -1,
+      0,
+      1
+     ]
+    },
+    "legal": {
+     "type": "array",
+     "maxItems": 64,
+     "items": {
+      "type": "object",
+      "required": [
+       "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "type": {
+        "enum": [
+         "move",
+         "pass"
+        ]
+       },
+       "from": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 24
+       },
+       "to": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 24
+       },
+       "card": {
+        "type": "string",
+        "enum": [
+         "tiger",
+         "crab",
+         "monkey",
+         "crane",
+         "dragon",
+         "elephant",
+         "mantis",
+         "boar",
+         "frog",
+         "goose",
+         "rooster",
+         "rabbit",
+         "ox",
+         "horse",
+         "eel",
+         "cobra"
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
+  "move_schema": {
+   "oneOf": [
+    {
+     "type": "object",
+     "required": [
+      "type",
+      "from",
+      "to",
+      "card"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "type": {
+       "const": "move"
+      },
+      "from": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "to": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 24
+      },
+      "card": {
+       "type": "string",
+       "enum": [
+        "tiger",
+        "crab",
+        "monkey",
+        "crane",
+        "dragon",
+        "elephant",
+        "mantis",
+        "boar",
+        "frog",
+        "goose",
+        "rooster",
+        "rabbit",
+        "ox",
+        "horse",
+        "eel",
+        "cobra"
+       ]
+      }
+     }
+    },
+    {
+     "type": "object",
+     "required": [
+      "type",
+      "card"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "type": {
+       "const": "pass"
+      },
+      "card": {
+       "type": "string",
+       "enum": [
+        "tiger",
+        "crab",
+        "monkey",
+        "crane",
+        "dragon",
+        "elephant",
+        "mantis",
+        "boar",
+        "frog",
+        "goose",
+        "rooster",
+        "rabbit",
+        "ox",
+        "horse",
+        "eel",
+        "cobra"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "cases": [
+   {
+    "name": "Opening move from the dealt cards",
+    "description": "The dealt opening position: the starting player moves a piece with one of their two cards, and the used card swaps with the neutral card.",
+    "kind": "initial",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "board": [
+      2,
+      2,
+      3,
+      2,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      0,
+      1,
+      0,
+      0
+     ],
+     "hands": [
+      [
+       "goose",
+       "mantis"
+      ],
+      [
+       "rabbit",
+       "crab"
+      ]
+     ],
+     "neutral": "ox",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 0,
+     "over": false
+    },
+    "view_of_mover": {
+     "board": [
+      2,
+      2,
+      3,
+      2,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      0,
+      1,
+      0,
+      0
+     ],
+     "hands": [
+      [
+       "goose",
+       "mantis"
+      ],
+      [
+       "rabbit",
+       "crab"
+      ]
+     ],
+     "neutral": "ox",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 0,
+     "over": false,
+     "me": 1,
+     "legal": [
+      {
+       "type": "move",
+       "from": 1,
+       "to": 5,
+       "card": "rabbit"
+      },
+      {
+       "type": "move",
+       "from": 2,
+       "to": 6,
+       "card": "rabbit"
+      },
+      {
+       "type": "move",
+       "from": 3,
+       "to": 7,
+       "card": "rabbit"
+      },
+      {
+       "type": "move",
+       "from": 4,
+       "to": 8,
+       "card": "rabbit"
+      },
+      {
+       "type": "move",
+       "from": 0,
+       "to": 5,
+       "card": "crab"
+      },
+      {
+       "type": "move",
+       "from": 1,
+       "to": 6,
+       "card": "crab"
+      },
+      {
+       "type": "move",
+       "from": 2,
+       "to": 7,
+       "card": "crab"
+      },
+      {
+       "type": "move",
+       "from": 3,
+       "to": 8,
+       "card": "crab"
+      },
+      {
+       "type": "move",
+       "from": 4,
+       "to": 9,
+       "card": "crab"
+      }
+     ]
+    },
+    "view_of_other": {
+     "board": [
+      2,
+      2,
+      3,
+      2,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      0,
+      1,
+      0,
+      0
+     ],
+     "hands": [
+      [
+       "goose",
+       "mantis"
+      ],
+      [
+       "rabbit",
+       "crab"
+      ]
+     ],
+     "neutral": "ox",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 0,
+     "over": false,
+     "me": 0,
+     "legal": []
+    },
+    "player_id": "u2",
+    "other_player_id": "u1",
+    "move": {
+     "type": "move",
+     "from": 0,
+     "to": 5,
+     "card": "crab"
+    },
+    "expected_state": {
+     "board": [
+      -1,
+      2,
+      3,
+      2,
+      2,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      0,
+      1,
+      0,
+      0
+     ],
+     "hands": [
+      [
+       "goose",
+       "mantis"
+      ],
+      [
+       "rabbit",
+       "ox"
+      ]
+     ],
+     "neutral": "crab",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 1,
+     "over": false
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "expected_view_of_mover": {
+     "board": [
+      -1,
+      2,
+      3,
+      2,
+      2,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      0,
+      1,
+      0,
+      0
+     ],
+     "hands": [
+      [
+       "goose",
+       "mantis"
+      ],
+      [
+       "rabbit",
+       "ox"
+      ]
+     ],
+     "neutral": "crab",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 1,
+     "over": false,
+     "me": 1,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "board": [
+      -1,
+      2,
+      3,
+      2,
+      2,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      0,
+      1,
+      0,
+      0
+     ],
+     "hands": [
+      [
+       "goose",
+       "mantis"
+      ],
+      [
+       "rabbit",
+       "ox"
+      ]
+     ],
+     "neutral": "crab",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 1,
+     "over": false,
+     "me": 0,
+     "legal": [
+      {
+       "type": "move",
+       "from": 21,
+       "to": 15,
+       "card": "goose"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 16,
+       "card": "goose"
+      },
+      {
+       "type": "move",
+       "from": 23,
+       "to": 17,
+       "card": "goose"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 18,
+       "card": "goose"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 16,
+       "card": "mantis"
+      },
+      {
+       "type": "move",
+       "from": 21,
+       "to": 15,
+       "card": "mantis"
+      },
+      {
+       "type": "move",
+       "from": 21,
+       "to": 17,
+       "card": "mantis"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 16,
+       "card": "mantis"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 18,
+       "card": "mantis"
+      },
+      {
+       "type": "move",
+       "from": 23,
+       "to": 17,
+       "card": "mantis"
+      },
+      {
+       "type": "move",
+       "from": 23,
+       "to": 19,
+       "card": "mantis"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 18,
+       "card": "mantis"
+      }
+     ]
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: mover</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: spectator</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: mover</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: spectator</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Capturing a student",
+    "description": "Red uses Monkey to move a student diagonally from the centre onto a Blue student, capturing it; Monkey then swaps with the neutral Tiger.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 7,
+     "over": false
+    },
+    "view_of_mover": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 7,
+     "over": false,
+     "me": 0,
+     "legal": [
+      {
+       "type": "move",
+       "from": 12,
+       "to": 6,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 8,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 7,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 11,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 13,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 15,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 21,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 17,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 21,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 23,
+       "card": "boar"
+      }
+     ]
+    },
+    "view_of_other": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 7,
+     "over": false,
+     "me": 1,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "move",
+     "from": 12,
+     "to": 6,
+     "card": "monkey"
+    },
+    "expected_state": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "tiger",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "monkey",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 8,
+     "over": false
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "tiger",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "monkey",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 8,
+     "over": false,
+     "me": 0,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "tiger",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "monkey",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 8,
+     "over": false,
+     "me": 1,
+     "legal": [
+      {
+       "type": "move",
+       "from": 2,
+       "to": 7,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 4,
+       "to": 9,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 2,
+       "to": 8,
+       "card": "frog"
+      }
+     ]
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: mover</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: spectator</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: mover</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: spectator</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Used card swaps with the neutral card",
+    "description": "Red moves the master forward with Boar; Boar becomes the neutral card and Red receives Eel.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "board": [
+      2,
+      -1,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "boar",
+       "crane"
+      ],
+      [
+       "frog",
+       "goose"
+      ]
+     ],
+     "neutral": "eel",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 3,
+     "over": false
+    },
+    "view_of_mover": {
+     "board": [
+      2,
+      -1,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "boar",
+       "crane"
+      ],
+      [
+       "frog",
+       "goose"
+      ]
+     ],
+     "neutral": "eel",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 3,
+     "over": false,
+     "me": 0,
+     "legal": [
+      {
+       "type": "move",
+       "from": 17,
+       "to": 12,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 17,
+       "to": 16,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 17,
+       "to": 18,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 19,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 23,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 17,
+       "to": 12,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 17,
+       "to": 21,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 17,
+       "to": 23,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 19,
+       "card": "crane"
+      }
+     ]
+    },
+    "view_of_other": {
+     "board": [
+      2,
+      -1,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "boar",
+       "crane"
+      ],
+      [
+       "frog",
+       "goose"
+      ]
+     ],
+     "neutral": "eel",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 3,
+     "over": false,
+     "me": 1,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "move",
+     "from": 17,
+     "to": 12,
+     "card": "boar"
+    },
+    "expected_state": {
+     "board": [
+      2,
+      -1,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "eel",
+       "crane"
+      ],
+      [
+       "frog",
+       "goose"
+      ]
+     ],
+     "neutral": "boar",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 4,
+     "over": false
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "board": [
+      2,
+      -1,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "eel",
+       "crane"
+      ],
+      [
+       "frog",
+       "goose"
+      ]
+     ],
+     "neutral": "boar",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 4,
+     "over": false,
+     "me": 0,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "board": [
+      2,
+      -1,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "eel",
+       "crane"
+      ],
+      [
+       "frog",
+       "goose"
+      ]
+     ],
+     "neutral": "boar",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 4,
+     "over": false,
+     "me": 1,
+     "legal": [
+      {
+       "type": "move",
+       "from": 0,
+       "to": 2,
+       "card": "frog"
+      },
+      {
+       "type": "move",
+       "from": 0,
+       "to": 6,
+       "card": "frog"
+      },
+      {
+       "type": "move",
+       "from": 3,
+       "to": 9,
+       "card": "frog"
+      },
+      {
+       "type": "move",
+       "from": 0,
+       "to": 6,
+       "card": "goose"
+      },
+      {
+       "type": "move",
+       "from": 0,
+       "to": 1,
+       "card": "goose"
+      },
+      {
+       "type": "move",
+       "from": 3,
+       "to": 9,
+       "card": "goose"
+      },
+      {
+       "type": "move",
+       "from": 3,
+       "to": 4,
+       "card": "goose"
+      },
+      {
+       "type": "move",
+       "from": 3,
+       "to": 2,
+       "card": "goose"
+      }
+     ]
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: mover</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: spectator</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: mover</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: spectator</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Passing a card when no move exists",
+    "description": "All five Red pieces sit on the far rank and neither Boar nor Crab can move any of them (every destination is off the board or occupied by a Red piece), so Red must pass: Boar swaps with the neutral Dragon without moving.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "board": [
+      0,
+      0,
+      1,
+      0,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      2,
+      2,
+      3,
+      2,
+      2
+     ],
+     "hands": [
+      [
+       "boar",
+       "crab"
+      ],
+      [
+       "monkey",
+       "tiger"
+      ]
+     ],
+     "neutral": "dragon",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 20,
+     "over": false
+    },
+    "view_of_mover": {
+     "board": [
+      0,
+      0,
+      1,
+      0,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      2,
+      2,
+      3,
+      2,
+      2
+     ],
+     "hands": [
+      [
+       "boar",
+       "crab"
+      ],
+      [
+       "monkey",
+       "tiger"
+      ]
+     ],
+     "neutral": "dragon",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 20,
+     "over": false,
+     "me": 0,
+     "legal": [
+      {
+       "type": "pass",
+       "card": "boar"
+      },
+      {
+       "type": "pass",
+       "card": "crab"
+      }
+     ]
+    },
+    "view_of_other": {
+     "board": [
+      0,
+      0,
+      1,
+      0,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      2,
+      2,
+      3,
+      2,
+      2
+     ],
+     "hands": [
+      [
+       "boar",
+       "crab"
+      ],
+      [
+       "monkey",
+       "tiger"
+      ]
+     ],
+     "neutral": "dragon",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 20,
+     "over": false,
+     "me": 1,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "pass",
+     "card": "boar"
+    },
+    "expected_state": {
+     "board": [
+      0,
+      0,
+      1,
+      0,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      2,
+      2,
+      3,
+      2,
+      2
+     ],
+     "hands": [
+      [
+       "dragon",
+       "crab"
+      ],
+      [
+       "monkey",
+       "tiger"
+      ]
+     ],
+     "neutral": "boar",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 21,
+     "over": false
+    },
+    "expected_turn": [
+     "u2"
+    ],
+    "expected_view_of_mover": {
+     "board": [
+      0,
+      0,
+      1,
+      0,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      2,
+      2,
+      3,
+      2,
+      2
+     ],
+     "hands": [
+      [
+       "dragon",
+       "crab"
+      ],
+      [
+       "monkey",
+       "tiger"
+      ]
+     ],
+     "neutral": "boar",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 21,
+     "over": false,
+     "me": 0,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "board": [
+      0,
+      0,
+      1,
+      0,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      2,
+      2,
+      3,
+      2,
+      2
+     ],
+     "hands": [
+      [
+       "dragon",
+       "crab"
+      ],
+      [
+       "monkey",
+       "tiger"
+      ]
+     ],
+     "neutral": "boar",
+     "turn": 1,
+     "winner": -1,
+     "draw": false,
+     "moves": 21,
+     "over": false,
+     "me": 1,
+     "legal": [
+      {
+       "type": "move",
+       "from": 20,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 21,
+       "to": 17,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 21,
+       "to": 15,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 23,
+       "to": 19,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 23,
+       "to": 17,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 15,
+       "card": "tiger"
+      },
+      {
+       "type": "move",
+       "from": 21,
+       "to": 16,
+       "card": "tiger"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 17,
+       "card": "tiger"
+      },
+      {
+       "type": "move",
+       "from": 23,
+       "to": 18,
+       "card": "tiger"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 19,
+       "card": "tiger"
+      }
+     ]
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: mover</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: spectator</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: mover</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: spectator</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Offset that is not on the card",
+    "description": "Red tries to move the centre student straight right with Monkey, which only moves diagonally; the move is rejected with InvalidMove.",
+    "kind": "intermediate",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 7,
+     "over": false
+    },
+    "view_of_mover": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 7,
+     "over": false,
+     "me": 0,
+     "legal": [
+      {
+       "type": "move",
+       "from": 12,
+       "to": 6,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 8,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 7,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 11,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 13,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 15,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 21,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 17,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 21,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 23,
+       "card": "boar"
+      }
+     ]
+    },
+    "view_of_other": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 7,
+     "over": false,
+     "me": 1,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "move",
+     "from": 12,
+     "to": 13,
+     "card": "monkey"
+    },
+    "expected_error": "InvalidMove",
+    "turn": [
+     "u1"
+    ],
+    "expected_state": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 7,
+     "over": false
+    },
+    "expected_turn": [
+     "u1"
+    ],
+    "expected_view_of_mover": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 7,
+     "over": false,
+     "me": 0,
+     "legal": [
+      {
+       "type": "move",
+       "from": 12,
+       "to": 6,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 8,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 7,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 11,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 13,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 15,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 21,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 17,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 21,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 23,
+       "card": "boar"
+      }
+     ]
+    },
+    "expected_view_of_other": {
+     "board": [
+      -1,
+      -1,
+      3,
+      -1,
+      2,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 7,
+     "over": false,
+     "me": 1,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: mover</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: spectator</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: mover</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: spectator</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Capturing the master wins",
+    "description": "Red uses Monkey to capture the Blue master diagonally; the game ends and Red wins.",
+    "kind": "terminal",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "board": [
+      2,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 30,
+     "over": false
+    },
+    "view_of_mover": {
+     "board": [
+      2,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 30,
+     "over": false,
+     "me": 0,
+     "legal": [
+      {
+       "type": "move",
+       "from": 12,
+       "to": 6,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 8,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 16,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 18,
+       "card": "monkey"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 7,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 11,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 12,
+       "to": 13,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 17,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 21,
+       "card": "boar"
+      },
+      {
+       "type": "move",
+       "from": 22,
+       "to": 23,
+       "card": "boar"
+      }
+     ]
+    },
+    "view_of_other": {
+     "board": [
+      2,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "monkey",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "tiger",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 30,
+     "over": false,
+     "me": 1,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "move",
+     "from": 12,
+     "to": 6,
+     "card": "monkey"
+    },
+    "expected_state": {
+     "board": [
+      2,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "tiger",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "monkey",
+     "turn": 0,
+     "winner": 0,
+     "draw": false,
+     "moves": 31,
+     "over": true
+    },
+    "expected_turn": null,
+    "expected_payouts": {},
+    "expected_view_of_mover": {
+     "board": [
+      2,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "tiger",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "monkey",
+     "turn": 0,
+     "winner": 0,
+     "draw": false,
+     "moves": 31,
+     "over": true,
+     "me": 0,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "board": [
+      2,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      1,
+      -1,
+      -1
+     ],
+     "hands": [
+      [
+       "tiger",
+       "boar"
+      ],
+      [
+       "crane",
+       "frog"
+      ]
+     ],
+     "neutral": "monkey",
+     "turn": 0,
+     "winner": 0,
+     "draw": false,
+     "moves": 31,
+     "over": true,
+     "me": 1,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: mover</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: spectator</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: mover</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: spectator</text></svg>"
+     }
+    ]
+   },
+   {
+    "name": "Master reaches the temple and wins",
+    "description": "Red uses Crane to move the master straight forward onto the empty Blue temple square (cell 2); the game ends and Red wins.",
+    "kind": "terminal",
+    "ctx": {
+     "players": [
+      {
+       "id": "u1",
+       "kind": "human",
+       "display_name": "Alice",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      },
+      {
+       "id": "u2",
+       "kind": "human",
+       "display_name": "Bob",
+       "picture_url": "",
+       "max_loss": 0,
+       "active": true
+      }
+     ],
+     "pot": 0,
+     "move_count": 0,
+     "seed": 11
+    },
+    "state": {
+     "board": [
+      2,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      -1,
+      1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "crane",
+       "frog"
+      ],
+      [
+       "boar",
+       "goose"
+      ]
+     ],
+     "neutral": "monkey",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 12,
+     "over": false
+    },
+    "view_of_mover": {
+     "board": [
+      2,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      -1,
+      1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "crane",
+       "frog"
+      ],
+      [
+       "boar",
+       "goose"
+      ]
+     ],
+     "neutral": "monkey",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 12,
+     "over": false,
+     "me": 0,
+     "legal": [
+      {
+       "type": "move",
+       "from": 7,
+       "to": 2,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 7,
+       "to": 11,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 7,
+       "to": 13,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 20,
+       "to": 15,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 19,
+       "card": "crane"
+      },
+      {
+       "type": "move",
+       "from": 7,
+       "to": 5,
+       "card": "frog"
+      },
+      {
+       "type": "move",
+       "from": 7,
+       "to": 1,
+       "card": "frog"
+      },
+      {
+       "type": "move",
+       "from": 7,
+       "to": 13,
+       "card": "frog"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 22,
+       "card": "frog"
+      },
+      {
+       "type": "move",
+       "from": 24,
+       "to": 18,
+       "card": "frog"
+      }
+     ]
+    },
+    "view_of_other": {
+     "board": [
+      2,
+      -1,
+      -1,
+      -1,
+      2,
+      -1,
+      -1,
+      1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "crane",
+       "frog"
+      ],
+      [
+       "boar",
+       "goose"
+      ]
+     ],
+     "neutral": "monkey",
+     "turn": 0,
+     "winner": -1,
+     "draw": false,
+     "moves": 12,
+     "over": false,
+     "me": 1,
+     "legal": []
+    },
+    "player_id": "u1",
+    "other_player_id": "u2",
+    "move": {
+     "type": "move",
+     "from": 7,
+     "to": 2,
+     "card": "crane"
+    },
+    "expected_state": {
+     "board": [
+      2,
+      -1,
+      1,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "monkey",
+       "frog"
+      ],
+      [
+       "boar",
+       "goose"
+      ]
+     ],
+     "neutral": "crane",
+     "turn": 0,
+     "winner": 0,
+     "draw": false,
+     "moves": 13,
+     "over": true
+    },
+    "expected_turn": null,
+    "expected_payouts": {},
+    "expected_view_of_mover": {
+     "board": [
+      2,
+      -1,
+      1,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "monkey",
+       "frog"
+      ],
+      [
+       "boar",
+       "goose"
+      ]
+     ],
+     "neutral": "crane",
+     "turn": 0,
+     "winner": 0,
+     "draw": false,
+     "moves": 13,
+     "over": true,
+     "me": 0,
+     "legal": []
+    },
+    "expected_view_of_other": {
+     "board": [
+      2,
+      -1,
+      1,
+      -1,
+      2,
+      -1,
+      -1,
+      -1,
+      3,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1,
+      0,
+      -1,
+      -1,
+      -1,
+      0
+     ],
+     "hands": [
+      [
+       "monkey",
+       "frog"
+      ],
+      [
+       "boar",
+       "goose"
+      ]
+     ],
+     "neutral": "crane",
+     "turn": 0,
+     "winner": 0,
+     "draw": false,
+     "moves": 13,
+     "over": true,
+     "me": 1,
+     "legal": []
+    },
+    "images": [
+     {
+      "caption": "Before: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: mover</text></svg>"
+     },
+     {
+      "caption": "Before: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">Before: spectator</text></svg>"
+     },
+     {
+      "caption": "After: mover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: mover</text></svg>"
+     },
+     {
+      "caption": "After: spectator",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#20303f\"/><rect x=\"60\" y=\"60\" width=\"280\" height=\"280\" fill=\"#f7e8c9\"/><circle cx=\"200\" cy=\"116\" r=\"24\" fill=\"#1d4ed8\"/><circle cx=\"200\" cy=\"284\" r=\"24\" fill=\"#b91c1c\"/><text x=\"30\" y=\"36\" fill=\"#ffffff\">After: spectator</text></svg>"
+     }
+    ]
+   }
+  ]
+ },
+ "translations": {
+  "ar": {
+   "client_strings": {
+    "blue": "الأزرق",
+    "blue_cards": "بطاقات الأزرق",
+    "draw": "تعادل",
+    "finished": "انتهت المباراة",
+    "hint_card": "انقر إحدى بطاقتيك لاختيارها.",
+    "hint_dest": "انقر وجهة مظللة.",
+    "hint_pass": "لا حركة قانونية — مرّر بطاقة بدلًا من ذلك.",
+    "hint_piece": "انقر قطعة مظللة لتحريكها.",
+    "master": "الأستاذ",
+    "move_to": "انتقل إلى الصف {r}، العمود {c}",
+    "neutral": "البطاقة المحايدة",
+    "pass_card": "مرّر {card}",
+    "red": "الأحمر",
+    "red_cards": "بطاقات الأحمر",
+    "select_piece": "اختر القطعة في الصف {r}، العمود {c}",
+    "student": "التلميذ",
+    "temple": "المعبد",
+    "title": "Onitama",
+    "turn": "دور {name}",
+    "use_card": "استخدم بطاقة {card}",
+    "winner": "الفائز: {name}",
+    "your_turn": "دورك · {name}",
+    "server_game_over": "انتهت المباراة",
+    "server_not_your_turn": "ليس دورك",
+    "server_bad_move": "حركة غير صالحة",
+    "server_unknown_card": "بطاقة غير معروفة",
+    "server_card_not_held": "لا تملك هذه البطاقة",
+    "server_move_available": "توجد حركة متاحة",
+    "server_off_board": "خارج اللوح",
+    "server_not_your_piece": "تلك القطعة ليست لك",
+    "server_own_piece": "هناك قطعة لك",
+    "server_card_move": "لا تتحرك البطاقة هكذا"
+   },
+   "display_name": "Onitama (تصريحي)",
+   "game_logic_rules": "Onitama للاعبين، الأحمر (المقعد الأول) ضد الأزرق، على لوح 5x5. لكل طرف أستاذ واحد وأربعة تلاميذ يبدأون في الصف الخلفي، والأستاذ على خانة معبده المركزية. تُسحب خمس من بطاقات الحركة الست عشرة: بطاقتان لكل لاعب وبطاقة محايدة واحدة؛ واللاعب الذي يطابق لونه ختم البطاقة المحايدة (أحمر أو أزرق) يتحرك أولًا. في دورك، حرّك إحدى قطعك بإحدى إزاحات إحدى بطاقتيك، مقروءة من جهتك من اللوح: الأمام يعني نحو الخصم. يمكنك النزول على خانة فارغة أو أسر قطعة للخصم، لكن لا على قطعتك ولا خارج اللوح. ثم تُبدَّل البطاقة المستخدمة بالبطاقة المحايدة. إذا لم تمنح أي من بطاقتيك أي حركة قانونية لأي من قطعك، فيجب أن تمرر: بدّل إحدى بطاقتيك بالبطاقة المحايدة دون تحريك. افوز بأسر أستاذ الخصم، أو بتحريك أستاذك إلى خانة معبد الخصم. الفائز يأخذ الرهان كله. إذا مرت 500 حركة دون فوز، تنتهي المباراة بالتعادل ويُقسَّم الرهان.",
+   "game_ui_rules": "اللوح في الأعلى مع علامة على خانتي المعبد؛ الأساتذة هم القطع الأكبر المعلّمة M والتلاميذ S. أسفل اللوح توجد بطاقتا الأحمر والبطاقة المحايدة وبطاقتا الأزرق، وكل بطاقة تُظهر اسمها ولون ختمها ورسمًا مصغرًا لحركاتها (النقطة المركزية هي القطعة والنقاط المملوءة هي الوجهات، مرسومة كما تعمل البطاقة لحاملها). في دورك انقر إحدى بطاقتيك، ثم قطعة مظللة، ثم وجهة مظللة. إذا لم تكن لديك حركة قانونية، استخدم زر التمرير لإحدى بطاقتيك. لا يرى الأهداف والأزرار إلا اللاعب صاحب الدور.",
+   "short_description": "Onitama: مبارزة بين لاعبين من الأساتذة والتلاميذ على لوح ضريح 5x5. خمس بطاقات حركة تقرر كل خطوة؛ اسقط أستاذ الخصم أو صل إلى معبده لتفوز.",
+   "tutorial_strings": {
+    "Move a piece with one of your two cards, then swap that card with the neutral card. Capture the opponent's master, or move your master onto their temple square, to win.": "حرّك قطعة بإحدى بطاقتيك، ثم بدّل تلك البطاقة بالبطاقة المحايدة. اسقط أستاذ الخصم، أو حرّك أستاذك إلى خانة معبده، لتفوز."
+   }
+  },
+  "de": {
+   "client_strings": {
+    "blue": "Blau",
+    "blue_cards": "Karten von Blau",
+    "draw": "Unentschieden",
+    "finished": "Spiel vorbei",
+    "hint_card": "Tippe auf eine deiner Karten, um sie zu wählen.",
+    "hint_dest": "Tippe auf ein markiertes Zielfeld.",
+    "hint_pass": "Kein legaler Zug — passe stattdessen eine Karte.",
+    "hint_piece": "Tippe auf eine markierte Figur.",
+    "master": "Meister",
+    "move_to": "Auf Reihe {r}, Spalte {c} ziehen",
+    "neutral": "Neutrale Karte",
+    "pass_card": "{card} passen",
+    "red": "Rot",
+    "red_cards": "Karten von Rot",
+    "select_piece": "Figur auf Reihe {r}, Spalte {c} wählen",
+    "student": "Schüler",
+    "temple": "TEMPEL",
+    "title": "Onitama",
+    "turn": "{name} ist am Zug",
+    "use_card": "Karte {card} verwenden",
+    "winner": "Gewinner: {name}",
+    "your_turn": "Du bist am Zug · {name}",
+    "server_game_over": "Spiel vorbei",
+    "server_not_your_turn": "nicht dein Zug",
+    "server_bad_move": "ungültiger Zug",
+    "server_unknown_card": "unbekannte Karte",
+    "server_card_not_held": "Karte nicht auf der Hand",
+    "server_move_available": "ein Zug ist verfügbar",
+    "server_off_board": "außerhalb des Bretts",
+    "server_not_your_piece": "nicht deine Figur",
+    "server_own_piece": "dort steht deine eigene Figur",
+    "server_card_move": "so zieht diese Karte nicht"
+   },
+   "display_name": "Onitama (Deklarativ)",
+   "game_logic_rules": "Onitama für zwei Spieler, Rot (erster Sitz) gegen Blau, auf einem 5x5-Brett. Jede Seite hat einen Meister und vier Schüler, die in ihrer hinteren Reihe beginnen, der Meister auf seinem zentralen Tempelfeld. Fünf der sechzehn Bewegungskarten werden gezogen: zwei für jeden Spieler und eine neutrale Karte; der Spieler, dessen Farbe zum Stempel der neutralen Karte passt (Rot oder Blau), zieht zuerst. Bewege in deinem Zug eine deiner Figuren um eines der Felder auf einer deiner beiden Karten, gelesen von deiner Brettseite: vorwärts heißt zum Gegner. Du darfst auf einem leeren Feld landen oder eine gegnerische Figur schlagen, aber nie auf einer eigenen Figur oder außerhalb des Bretts. Die benutzte Karte wird danach mit der neutralen Karte getauscht. Wenn keine deiner Karten irgendeiner deiner Figuren einen legalen Zug gibt, musst du passen: Tausche eine deiner Karten mit der neutralen Karte, ohne zu ziehen. Es gewinnt, wer den gegnerischen Meister schlägt oder seinen eigenen Meister auf das Tempelfeld des Gegners zieht. Der Gewinner erhält den Pot. Vergehen 500 Züge ohne Sieg, ist die Partie unentschieden und der Pot wird geteilt.",
+   "game_ui_rules": "Brett oben mit beiden markierten Tempelfeldern; Meister sind die größeren Figuren mit M, Schüler mit S. Unter dem Brett liegen die zwei Karten von Rot, die neutrale Karte und die zwei Karten von Blau, jede mit Name, Stempelfarbe und einem Mini-Diagramm ihrer Züge (der Mittelpunkt ist die Figur, gefüllte Punkte sind die Ziele, gezeichnet so, wie die Karte für ihren Besitzer wirkt). Tippe in deinem Zug auf eine deiner Karten, dann auf eine markierte Figur, dann auf ein markiertes Zielfeld. Hast du keinen legalen Zug, nutze die Passen-Schaltfläche für eine deiner Karten. Nur der Spieler am Zug sieht Ziele und Schaltflächen.",
+   "short_description": "Onitama: ein Zwei-Spieler-Duell von Meistern und Schülern auf einem 5x5-Schreinbrett. Fünf Bewegungskarten bestimmen jeden Schritt; schlage den gegnerischen Meister oder erreiche seinen Tempel, um zu gewinnen.",
+   "tutorial_strings": {
+    "Move a piece with one of your two cards, then swap that card with the neutral card. Capture the opponent's master, or move your master onto their temple square, to win.": "Bewege eine Figur mit einer deiner beiden Karten und tausche diese Karte dann mit der neutralen Karte. Schlage den gegnerischen Meister oder ziehe deinen Meister auf sein Tempelfeld, um zu gewinnen."
+   }
+  },
+  "es": {
+   "client_strings": {
+    "blue": "Azul",
+    "blue_cards": "Cartas de Azul",
+    "draw": "Empate",
+    "finished": "Fin de la partida",
+    "hint_card": "Toca una de tus cartas para elegirla.",
+    "hint_dest": "Toca un destino resaltado.",
+    "hint_pass": "Sin movimiento legal: pasa una carta.",
+    "hint_piece": "Toca una pieza resaltada para moverla.",
+    "master": "Maestro",
+    "move_to": "Mover a la fila {r}, columna {c}",
+    "neutral": "Carta neutral",
+    "pass_card": "Pasar {card}",
+    "red": "Rojo",
+    "red_cards": "Cartas de Rojo",
+    "select_piece": "Seleccionar la pieza de la fila {r}, columna {c}",
+    "student": "Alumno",
+    "temple": "TEMPLO",
+    "title": "Onitama",
+    "turn": "Turno de {name}",
+    "use_card": "Usar la carta {card}",
+    "winner": "Ganador: {name}",
+    "your_turn": "Tu turno · {name}",
+    "server_game_over": "fin de la partida",
+    "server_not_your_turn": "no es tu turno",
+    "server_bad_move": "jugada no válida",
+    "server_unknown_card": "carta desconocida",
+    "server_card_not_held": "no tienes esa carta",
+    "server_move_available": "hay un movimiento disponible",
+    "server_off_board": "fuera del tablero",
+    "server_not_your_piece": "esa pieza no es tuya",
+    "server_own_piece": "ahí hay una pieza tuya",
+    "server_card_move": "la carta no se mueve así"
+   },
+   "display_name": "Onitama (Declarativo)",
+   "game_logic_rules": "Onitama para dos jugadores, Rojo (primer asiento) contra Azul, en un tablero de 5x5. Cada bando tiene un maestro y cuatro alumnos, que empiezan en su fila trasera con el maestro en su casilla templo central. Se roban cinco de las dieciséis cartas de movimiento: dos para cada jugador y una carta neutral; el jugador cuyo color coincide con el sello de la carta neutral (rojo o azul) mueve primero. En tu turno, mueve una de tus piezas según uno de los desplazamientos de una de tus dos cartas, leídos desde tu lado del tablero: hacia adelante es hacia tu oponente. Puedes aterrizar en una casilla vacía o capturar una pieza rival, pero nunca en una pieza tuya ni fuera del tablero. La carta usada se intercambia entonces con la carta neutral. Si ninguna de tus cartas da un movimiento legal a ninguna de tus piezas, debes pasar: intercambia una de tus cartas con la neutral sin mover. Gana quien capture al maestro rival o mueva su propio maestro a la casilla templo del oponente. El ganador se lleva el bote. Si pasan 500 movimientos sin victoria, la partida es empate y el bote se reparte.",
+   "game_ui_rules": "Tablero en la parte superior con ambas casillas templo marcadas; los maestros son las piezas más grandes con la letra M y los alumnos con la S. Debajo del tablero están las dos cartas de Rojo, la carta neutral y las dos de Azul, cada una con su nombre, el color de su sello y un mini diagrama de sus movimientos (el punto central es la pieza y los puntos rellenos son los destinos, dibujados tal como la carta actúa para quien la tiene). En tu turno toca una de tus cartas, luego una pieza resaltada y después un destino resaltado. Si no tienes ningún movimiento legal, usa el botón Pasar con una de tus cartas. Solo el jugador al que le toca mover ve destinos y botones.",
+   "short_description": "Onitama: un duelo de dos jugadores entre maestros y alumnos en un tablero santuario de 5x5. Cinco cartas de movimiento deciden cada paso; captura al maestro rival o llega a su templo para ganar.",
+   "tutorial_strings": {
+    "Move a piece with one of your two cards, then swap that card with the neutral card. Capture the opponent's master, or move your master onto their temple square, to win.": "Mueve una pieza con una de tus dos cartas y luego intercambia esa carta con la carta neutral. Captura al maestro rival, o mueve tu maestro a su casilla templo, para ganar."
+   }
+  },
+  "fr": {
+   "client_strings": {
+    "blue": "Bleu",
+    "blue_cards": "Cartes de Bleu",
+    "draw": "Match nul",
+    "finished": "Partie terminée",
+    "hint_card": "Touchez une de vos cartes pour la choisir.",
+    "hint_dest": "Touchez une destination en surbrillance.",
+    "hint_pass": "Aucun déplacement légal : passez une carte.",
+    "hint_piece": "Touchez une pièce en surbrillance pour la déplacer.",
+    "master": "Maître",
+    "move_to": "Aller à la rangée {r}, colonne {c}",
+    "neutral": "Carte neutre",
+    "pass_card": "Passer {card}",
+    "red": "Rouge",
+    "red_cards": "Cartes de Rouge",
+    "select_piece": "Sélectionner la pièce rangée {r}, colonne {c}",
+    "student": "Élève",
+    "temple": "TEMPLE",
+    "title": "Onitama",
+    "turn": "À {name} de jouer",
+    "use_card": "Utiliser la carte {card}",
+    "winner": "Gagnant : {name}",
+    "your_turn": "Votre tour · {name}",
+    "server_game_over": "partie terminée",
+    "server_not_your_turn": "pas votre tour",
+    "server_bad_move": "coup invalide",
+    "server_unknown_card": "carte inconnue",
+    "server_card_not_held": "vous n'avez pas cette carte",
+    "server_move_available": "un coup est disponible",
+    "server_off_board": "hors du plateau",
+    "server_not_your_piece": "cette pièce n'est pas la vôtre",
+    "server_own_piece": "une de vos pièces est là",
+    "server_card_move": "la carte ne se déplace pas ainsi"
+   },
+   "display_name": "Onitama (Déclaratif)",
+   "game_logic_rules": "Onitama pour deux joueurs, Rouge (premier siège) contre Bleu, sur un plateau de 5x5. Chaque camp a un maître et quatre élèves, qui commencent sur sa rangée arrière avec le maître sur sa case temple centrale. Cinq des seize cartes de mouvement sont tirées : deux pour chaque joueur et une carte neutre ; le joueur dont la couleur correspond au sceau de la carte neutre (rouge ou bleu) joue en premier. À votre tour, déplacez une de vos pièces selon l'un des déplacements d'une de vos deux cartes, lus de votre côté du plateau : avancer signifie aller vers l'adversaire. Vous pouvez arriver sur une case vide ou capturer une pièce adverse, mais jamais sur une de vos pièces ni hors du plateau. La carte utilisée est ensuite échangée avec la carte neutre. Si aucune de vos cartes ne donne de déplacement légal à aucune de vos pièces, vous devez passer : échangez une de vos cartes avec la carte neutre sans bouger. Gagne qui capture le maître adverse ou amène son propre maître sur la case temple de l'adversaire. Le gagnant remporte le pot. Si 500 coups passent sans victoire, la partie est nulle et le pot est partagé.",
+   "game_ui_rules": "Plateau en haut avec les deux cases temple marquées ; les maîtres sont les plus grandes pièces marquées M, les élèves S. Sous le plateau se trouvent les deux cartes de Rouge, la carte neutre et les deux cartes de Bleu, chacune avec son nom, la couleur de son sceau et un mini schéma de ses déplacements (le point central est la pièce, les points pleins sont les destinations, dessinés tels que la carte agit pour son détenteur). À votre tour, touchez une de vos cartes, puis une pièce en surbrillance, puis une destination en surbrillance. Si vous n'avez aucun déplacement légal, utilisez le bouton Passer pour une de vos cartes. Seul le joueur dont c'est le tour voit les destinations et les boutons.",
+   "short_description": "Onitama : un duel de deux joueurs entre maîtres et élèves sur un plateau sanctuaire de 5x5. Cinq cartes de mouvement décident de chaque pas ; capturez le maître adverse ou atteignez son temple pour gagner.",
+   "tutorial_strings": {
+    "Move a piece with one of your two cards, then swap that card with the neutral card. Capture the opponent's master, or move your master onto their temple square, to win.": "Déplacez une pièce avec l'une de vos deux cartes, puis échangez cette carte avec la carte neutre. Capturez le maître adverse, ou amenez votre maître sur sa case temple, pour gagner."
+   }
+  },
+  "hi": {
+   "client_strings": {
+    "blue": "नीला",
+    "blue_cards": "नीले के कार्ड",
+    "draw": "ड्रॉ",
+    "finished": "खेल समाप्त",
+    "hint_card": "चुनने के लिए अपने किसी कार्ड पर टैप करो।",
+    "hint_dest": "हाइलाइट किए गंतव्य पर टैप करो।",
+    "hint_pass": "कोई वैध चाल नहीं — इसके बजाय एक कार्ड पास करो।",
+    "hint_piece": "चलने के लिए हाइलाइट किए मोहरे पर टैप करो।",
+    "master": "गुरु",
+    "move_to": "पंक्ति {r}, स्तंभ {c} पर चलो",
+    "neutral": "तटस्थ कार्ड",
+    "pass_card": "{card} पास करो",
+    "red": "लाल",
+    "red_cards": "लाल के कार्ड",
+    "select_piece": "पंक्ति {r}, स्तंभ {c} का मोहरा चुनो",
+    "student": "शिष्य",
+    "temple": "मंदिर",
+    "title": "Onitama",
+    "turn": "{name} की चाल",
+    "use_card": "{card} कार्ड का उपयोग करो",
+    "winner": "विजेता: {name}",
+    "your_turn": "तुम्हारी बारी · {name}",
+    "server_game_over": "खेल समाप्त",
+    "server_not_your_turn": "तुम्हारी बारी नहीं",
+    "server_bad_move": "अमान्य चाल",
+    "server_unknown_card": "अज्ञात कार्ड",
+    "server_card_not_held": "यह कार्ड तुम्हारे पास नहीं",
+    "server_move_available": "एक चाल उपलब्ध है",
+    "server_off_board": "बोर्ड से बाहर",
+    "server_not_your_piece": "वह मोहरा तुम्हारा नहीं",
+    "server_own_piece": "वहाँ तुम्हारा अपना मोहरा है",
+    "server_card_move": "यह कार्ड ऐसे नहीं चलता"
+   },
+   "display_name": "Onitama (घोषणात्मक)",
+   "game_logic_rules": "Onitama दो खिलाड़ियों के लिए है, लाल (पहली सीट) बनाम नीला, 5x5 बोर्ड पर। हर पक्ष के पास एक गुरु और चार शिष्य होते हैं, जो अपनी पिछली पंक्ति से शुरू करते हैं और गुरु अपने केंद्रीय मंदिर खाने पर होता है। सोलह चाल कार्डों में से पाँच निकाले जाते हैं: हर खिलाड़ी को दो और एक तटस्थ कार्ड; जिस खिलाड़ी का रंग तटस्थ कार्ड की मुहर (लाल या नीला) से मेल खाता है, वह पहले चलता है। अपनी बारी पर, अपने बोर्ड-पक्ष से पढ़ते हुए, अपने दो कार्डों में से किसी एक के विस्थापन से अपनी कोई एक मोहरा चलाओ: आगे का अर्थ है प्रतिद्वंद्वी की ओर। तुम खाली खाने पर उतर सकते हो या प्रतिद्वंद्वी का मोहरा मार सकते हो, लेकिन अपने मोहरे पर या बोर्ड से बाहर कभी नहीं। इस्तेमाल किया गया कार्ड फिर तटस्थ कार्ड से बदल दिया जाता है। यदि तुम्हारा कोई कार्ड तुम्हारे किसी मोहरे को कोई वैध चाल नहीं देता, तो तुम्हें पास करना होगा: बिना चले अपना एक कार्ड तटस्थ कार्ड से बदल दो। प्रतिद्वंद्वी के गुरु को मारकर, या अपने गुरु को प्रतिद्वंद्वी के मंदिर खाने पर ले जाकर जीतो। विजेता पूरा पॉट लेता है। यदि 500 चालों तक कोई न जीते, तो खेल ड्रॉ होता है और पॉट बँट जाता है।",
+   "game_ui_rules": "बोर्ड ऊपर है और दोनों मंदिर खाने चिह्नित हैं; गुरु M अंकित बड़े मोहरे हैं, शिष्य S। बोर्ड के नीचे लाल के दो कार्ड, तटस्थ कार्ड और नीले के दो कार्ड हैं, हर एक पर उसका नाम, उसकी मुहर का रंग और उसकी चालों का छोटा चित्र है (बीच का बिंदु मोहरा है, भरे बिंदु गंतव्य हैं, वैसे ही बनाए गए जैसे कार्ड उसके धारक के लिए काम करता है)। अपनी बारी पर अपने एक कार्ड पर, फिर किसी हाइलाइट किए मोहरे पर, फिर किसी हाइलाइट किए गंतव्य पर टैप करो। यदि कोई वैध चाल न हो, तो अपने किसी कार्ड के लिए पास बटन का उपयोग करो। लक्ष्य और बटन केवल चलने वाले खिलाड़ी को दिखते हैं।",
+   "short_description": "Onitama: 5x5 मंदिर बोर्ड पर गुरुओं और शिष्यों का दो-खिलाड़ी द्वंद्व। पाँच चाल कार्ड हर कदम तय करते हैं; प्रतिद्वंद्वी के गुरु को मारो या उसके मंदिर तक पहुँचो और जीत जाओ।",
+   "tutorial_strings": {
+    "Move a piece with one of your two cards, then swap that card with the neutral card. Capture the opponent's master, or move your master onto their temple square, to win.": "अपने दो कार्डों में से किसी एक से कोई मोहरा चलाओ, फिर उस कार्ड को तटस्थ कार्ड से बदल दो। प्रतिद्वंद्वी के गुरु को मारो, या अपने गुरु को उसके मंदिर खाने पर ले जाओ, और जीत जाओ।"
+   }
+  },
+  "pt": {
+   "client_strings": {
+    "blue": "Azul",
+    "blue_cards": "Cartas do Azul",
+    "draw": "Empate",
+    "finished": "Fim da partida",
+    "hint_card": "Toque numa das suas cartas para a escolher.",
+    "hint_dest": "Toque num destino destacado.",
+    "hint_pass": "Sem movimento legal — passe uma carta.",
+    "hint_piece": "Toque numa peça destacada para a mover.",
+    "master": "Mestre",
+    "move_to": "Mover para a linha {r}, coluna {c}",
+    "neutral": "Carta neutra",
+    "pass_card": "Passar {card}",
+    "red": "Vermelho",
+    "red_cards": "Cartas do Vermelho",
+    "select_piece": "Selecionar a peça da linha {r}, coluna {c}",
+    "student": "Aluno",
+    "temple": "TEMPLO",
+    "title": "Onitama",
+    "turn": "Vez de {name}",
+    "use_card": "Usar a carta {card}",
+    "winner": "Vencedor: {name}",
+    "your_turn": "A sua vez · {name}",
+    "server_game_over": "fim da partida",
+    "server_not_your_turn": "não é a sua vez",
+    "server_bad_move": "jogada inválida",
+    "server_unknown_card": "carta desconhecida",
+    "server_card_not_held": "não tem essa carta",
+    "server_move_available": "há um movimento disponível",
+    "server_off_board": "fora do tabuleiro",
+    "server_not_your_piece": "essa peça não é sua",
+    "server_own_piece": "está lá uma peça sua",
+    "server_card_move": "a carta não se move assim"
+   },
+   "display_name": "Onitama (Declarativo)",
+   "game_logic_rules": "Onitama para dois jogadores, Vermelho (primeiro assento) contra Azul, num tabuleiro de 5x5. Cada lado tem um mestre e quatro alunos, que começam na sua fila de trás com o mestre na sua casa templo central. Cinco das dezesseis cartas de movimento são sorteadas: duas para cada jogador e uma carta neutra; o jogador cuja cor combina com o selo da carta neutra (vermelho ou azul) joga primeiro. Na sua vez, mova uma das suas peças por um dos deslocamentos de uma das suas duas cartas, lidos do seu lado do tabuleiro: para a frente é em direção ao oponente. Pode pousar numa casa vazia ou capturar uma peça adversária, mas nunca numa peça sua nem fora do tabuleiro. A carta usada é então trocada com a carta neutra. Se nenhuma das suas cartas der um movimento legal a nenhuma das suas peças, deve passar: troque uma das suas cartas com a neutra sem mover. Vence quem capturar o mestre adversário ou mover o seu próprio mestre para a casa templo do oponente. O vencedor leva o pote. Se passarem 500 movimentos sem vitória, a partida é empate e o pote é dividido.",
+   "game_ui_rules": "Tabuleiro no topo com as duas casas templo marcadas; os mestres são as peças maiores marcadas M, os alunos S. Abaixo do tabuleiro estão as duas cartas do Vermelho, a carta neutra e as duas do Azul, cada uma com o seu nome, a cor do seu selo e um mini diagrama dos seus movimentos (o ponto central é a peça, os pontos cheios são os destinos, desenhados tal como a carta atua para quem a tem). Na sua vez toque numa das suas cartas, depois numa peça destacada e depois num destino destacado. Se não tiver nenhum movimento legal, use o botão Passar para uma das suas cartas. Só o jogador a jogar vê destinos e botões.",
+   "short_description": "Onitama: um duelo de dois jogadores entre mestres e alunos num tabuleiro santuário de 5x5. Cinco cartas de movimento decidem cada passo; capture o mestre rival ou alcance o templo dele para vencer.",
+   "tutorial_strings": {
+    "Move a piece with one of your two cards, then swap that card with the neutral card. Capture the opponent's master, or move your master onto their temple square, to win.": "Mova uma peça com uma das suas duas cartas e depois troque essa carta com a carta neutra. Capture o mestre adversário, ou mova o seu mestre para a casa templo dele, para vencer."
+   }
+  },
+  "zh": {
+   "client_strings": {
+    "blue": "蓝方",
+    "blue_cards": "蓝方的牌",
+    "draw": "平局",
+    "finished": "对局结束",
+    "hint_card": "点按你的一张牌来选择它。",
+    "hint_dest": "点按一个高亮目的地。",
+    "hint_pass": "没有合法移动——改为跳过一张牌。",
+    "hint_piece": "点按一枚高亮棋子来移动它。",
+    "master": "师父",
+    "move_to": "移动到第 {r} 行第 {c} 列",
+    "neutral": "中立牌",
+    "pass_card": "跳过 {card}",
+    "red": "红方",
+    "red_cards": "红方的牌",
+    "select_piece": "选择第 {r} 行第 {c} 列的棋子",
+    "student": "徒弟",
+    "temple": "神殿",
+    "title": "Onitama",
+    "turn": "轮到 {name}",
+    "use_card": "使用 {card} 牌",
+    "winner": "胜者:{name}",
+    "your_turn": "你的回合 · {name}",
+    "server_game_over": "对局结束",
+    "server_not_your_turn": "还没轮到你",
+    "server_bad_move": "无效移动",
+    "server_unknown_card": "未知卡牌",
+    "server_card_not_held": "你没有这张牌",
+    "server_move_available": "有可行的移动",
+    "server_off_board": "超出棋盘",
+    "server_not_your_piece": "那不是你的棋子",
+    "server_own_piece": "那里是你自己的棋子",
+    "server_card_move": "这张牌不能这样移动"
+   },
+   "display_name": "Onitama(声明式)",
+   "game_logic_rules": "Onitama 双人对局,红方(0 号座位)对蓝方,在 5x5 棋盘上进行。每方有一名师父和四名徒弟,起始时位于己方底线,师父站在中央的己方神殿格上。从十六张移动牌中抽出五张:每位玩家两张,一张中立牌;颜色与中立牌印章(红或蓝)一致的玩家先行。在你的回合,从你棋盘一侧的角度,使用你两张牌之一上的一个位移移动你的一枚棋子:向前即朝向对手。你可以落在空格上或吃掉对方棋子,但不能落在自己的棋子上,也不能出界。用过的牌随后与中立牌交换。如果你的两张牌都不能让任何棋子合法移动,你必须跳过:将你的一张牌与中立牌交换而不移动。吃掉对方师父,或把自己的师父移到对方神殿格上,即可获胜。胜者赢得奖池。若 500 步无人获胜,则为平局,奖池平分。",
+   "game_ui_rules": "棋盘在上方,两个神殿格均有标记;师父是标有 M 的较大棋子,徒弟标有 S。棋盘下方是红方的两张牌、中立牌和蓝方的两张牌,每张都显示名称、印章颜色以及移动小图(中心点是棋子,实心点是可到达的位置,按持牌者使用该牌的方式绘制)。在你的回合,依次点按你的一张牌、一枚高亮棋子、一个高亮目的地。若没有合法移动,使用某张牌的跳过按钮。只有轮到行动的玩家能看到目标和按钮。",
+   "short_description": "Onitama:在 5x5 神社棋盘上进行的双人师徒对决。五张移动牌决定每一步;吃掉对方的师父或到达对方的神殿即可获胜。",
+   "tutorial_strings": {
+    "Move a piece with one of your two cards, then swap that card with the neutral card. Capture the opponent's master, or move your master onto their temple square, to win.": "用你的两张牌之一移动一枚棋子,然后将该牌与中立牌交换。吃掉对方的师父,或把你的师父移到对方的神殿格上,即可获胜。"
+   }
+  }
+ }
+}
