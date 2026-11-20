@@ -813,13 +813,33 @@ def test_seed_resume_does_not_reset_existing_user(store):
     assert store.get_user(user.id).token_balance == 17
 
 
-def test_match_writes_omit_retired_visibility_and_matchmaking_metadata(store):
+def test_match_writes_preserve_legacy_privacy_but_omit_retired_matchmaking_metadata(store):
     api = api_for(store)
     owner = api.new_user("owner")
     match_id = api.new_match(owner=owner, game_id=api.new_game(owner=owner))
-    raw = store.raw_get(store.ref("matches", match_id))
-    assert not {"private", "joinable", "matchmaking_player_count"} & raw.keys()
-    assert not {"private", "matchmaking_player_count"} & json.loads(raw["json"]).keys()
+    ref = store.ref("matches", match_id)
+
+    def assert_metadata(private):
+        raw = ref.get().to_dict()
+        payload = json.loads(raw["json"])
+        assert raw["private"] is private and payload["private"] is private
+        for record in (raw, payload):
+            assert not {"joinable", "matchmaking_player_count"} & record.keys()
+
+    assert_metadata(False)  # New online matches remain public.
+    store.put_match(replace(store.get_match(match_id), private=True))
+    cold = QueryStore(store.client, namespace=store.namespace)
+    try:
+        legacy = cold.get_match(match_id)
+        assert legacy.private is True
+        cold.put_match(legacy)  # Rewriting an old match must retain its audience.
+        assert_metadata(True)
+        restarted = api_for(cold)
+        restarted.passwords_by_user_id = api.passwords_by_user_id
+        assert restarted.request("GET", f"/matches/{match_id}").status_code == 404
+        assert restarted.ok("GET", f"/matches/{match_id}", as_user=owner)["private"] is True
+    finally:
+        cold.close()
 
 
 def test_payout_ledger_and_lost_response_retry_are_atomic(store):
