@@ -12,6 +12,7 @@
     "audit": "playwright test -c playwright.audit.config.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.0"
+    "@playwright/test": "^1.49.0",
+    "esbuild": "^0.28.2"
   }
 }

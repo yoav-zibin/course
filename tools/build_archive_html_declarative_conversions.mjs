@@ -4,10 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import {fileURLToPath} from 'node:url';
+import {transformSync} from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'games', 'declarative');
 const UI = fs.readFileSync(path.join(OUT, 'archive_conversions_ui.js'), 'utf8').replace(/\r\n?/g, '\n');
+const COMPACT_UI = transformSync(UI, {minifyWhitespace:true, target:'es2020'}).code;
 const COPY = JSON.parse(fs.readFileSync(path.join(OUT, 'locales', 'html_conversions.json'), 'utf8'));
 const ARCHIVE_SERVER = JSON.parse(fs.readFileSync(path.join(OUT, 'locales', 'archive_server_strings.json'), 'utf8'));
 const LOCALES = ['es', 'fr', 'de', 'pt', 'zh', 'hi', 'ar'];
@@ -586,7 +588,7 @@ function build(entry) {
     ...(entry.kind === 'dos' ? {assets:dosAssets()} :
       entry.kind === 'gobblet' ? {assets:gobbletAssets()} :
         ['thirty_one','mau_mau'].includes(entry.kind) ? {assets:softCardAssets()} : {}),
-    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n`+UI};
+    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n`+(entry.kind === 'kisolo' ? COMPACT_UI : UI)};
   const tutorial=custom ? {text:rules,html:`<meta name="viewport" content="width=device-width,initial-scale=1"><main><h1>How to play</h1><p>${rules}</p><p>${ui}</p></main>`} : source.tutorial;
   if(custom) {
     for(const locale of LOCALES) {

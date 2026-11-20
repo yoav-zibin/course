@@ -374,6 +374,10 @@ def test_gobblet_reserves_and_covered_own_pieces_are_reachable():
         assert not frame['scene']['targets'] and not frame['scene']['controls']
 
 
+def test_kisolo_package_fits_the_authoring_limit():
+    prepare(load('kisolo'))
+
+
 def test_kisolo_pit_targets_preserve_visible_seed_counts():
     body = load('kisolo')
     ui = DeclarativeLogic(body.declarative_ui)
