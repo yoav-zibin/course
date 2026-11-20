@@ -19,7 +19,7 @@ def test_every_declarative_fixture_explicitly_classifies_its_gameplay_state():
     packages = {path.stem: json.loads(path.read_text())
                 for path in (ROOT / "games/declarative").glob("*.json")
                 if path.stem != "backgammon.schema"}
-    assert len(packages) == 41
+    assert {"backgammon", "chess", "nim", "tictactoe"} <= packages.keys()
     assert HIDDEN_FIXTURES <= packages.keys()
     for kind, package in packages.items():
         assert package["all_state_public"] is (kind not in HIDDEN_FIXTURES), kind

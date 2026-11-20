@@ -55,8 +55,8 @@ def test_payout_and_pot_cannot_be_saved_separately_then_credited_again(tmp_path,
         store.snapshots.clear()
         credit = platform._credit_tokens
 
-        def pause_after_credit(user_id, amount):
-            credit(user_id, amount)
+        def pause_after_credit(user_id, amount, **ledger_fields):
+            credit(user_id, amount, **ledger_fields)
             if user_id == alice and amount:
                 first_credit.set()
                 assert release_payout.wait(5), "test never released payout"
