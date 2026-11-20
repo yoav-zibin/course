@@ -17,7 +17,7 @@
     "motion": {
       "move_ms": 440,
       "turn_pause_ms": 650,
-      "animate_own": true
+      "animate_own": false
     },
     "boards": [
       {

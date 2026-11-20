@@ -3367,7 +3367,7 @@
     "motion": {
       "move_ms": 650,
       "turn_pause_ms": 0,
-      "animate_own": true
+      "animate_own": false
     },
     "boards": [
       {

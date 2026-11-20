@@ -30,7 +30,7 @@ const gameUI = {
       legal.forEach(move=>targets.push({id:keyOf(move),board:'main',position:{cell:String(move.pit)},label:t('sow',{n:move.pit+1})}));
     }else{
       s.board.forEach((value,cell)=>{
-        if(KIND==='memory')pieces.push({id:'card_'+cell,type:value===-1?'back':value%2?'red-card':'black-card',board:'main',position:{x:120+(cell%4)*120,y:215+Math.floor(cell/4)*96},text:value===-1?'':['◆','●','▲','✦','☀','♣','♥','★'][value],face:value===-1?'back':'front',scale:s.matched.includes(cell)?0.86:1,opacity:s.matched.includes(cell)?0.6:1,actions:legal.some(move=>move.cell===cell)?['tap']:[],animation:{kind:'move',key:`memory-${cell}-${value}`,duration_ms:520}});
+        if(KIND==='memory')pieces.push({id:'card_'+cell,type:value===-1?'back':value%2?'red-card':'black-card',board:'main',position:{x:120+(cell%4)*120,y:215+Math.floor(cell/4)*96},text:value===-1?'':['◆','●','▲','✦','☀','♣','♥','★'][value],face:value===-1?'back':'front',scale:s.matched.includes(cell)?0.86:1,opacity:s.matched.includes(cell)?0.6:1,actions:legal.some(move=>move.cell===cell)?['tap']:[],animation:{kind:'move',key:`memory-${cell}-${value}`,duration_ms:180}});
         else if(value!==-1)pieces.push({id:'piece_'+cell,type:'p'+value,board:'main',position:{cell:String(cell)},text:KIND==='tictactoe'?(value===0?'X':'O'):'',rotation:KIND==='domineering'&&value===1?90:0});
       });
       if(KIND!=='memory')legal.forEach(move=>targets.push({id:keyOf(move),board:'main',position:{cell:String(KIND==='connect4'?move.column:move.cell)},label:t('cell',{n:(KIND==='connect4'?move.column:move.cell)+1})}));
