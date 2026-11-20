@@ -12,11 +12,11 @@ function HeaderGlyph({kind}:{kind:'bell'|'account'|'focus'}){
   </Svg>;
 }
 
-function HeaderButton({label,hint,disabled,onPress,children,testID}:{label:string;hint?:string;disabled?:boolean;onPress:()=>void;children:ReactNode;testID:string}){
+function HeaderButton({label,hint,disabled,onPress,children,testID,narrow}:{label:string;hint?:string;disabled?:boolean;onPress:()=>void;children:ReactNode;testID:string;narrow:boolean}){
   const description=useId();
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint} {...(Platform.OS==='web'&&hint?{'aria-describedby':description}:{})} accessibilityState={{disabled:Boolean(disabled)}} disabled={disabled} testID={testID}
     onPress={()=>{recordDiagnosticEvent('press',{label});onPress();}}
-    style={({pressed,focused}:any)=>[s.button,disabled&&{opacity:.5},pressed&&{opacity:.8},focused&&{outlineColor:colors.blue,outlineStyle:'solid',outlineWidth:2}]}>{children}{Platform.OS==='web'&&hint&&<Text nativeID={description} style={s.description}>{hint}</Text>}</Pressable>;
+    style={({pressed,focused}:any)=>[s.button,narrow&&{width:34},disabled&&{opacity:.5},pressed&&{opacity:.8},focused&&{outlineColor:colors.blue,outlineStyle:'solid',outlineWidth:2}]}>{children}{Platform.OS==='web'&&hint&&<Text nativeID={description} style={s.description}>{hint}</Text>}</Pressable>;
 }
 
 function Avatar({uri}:{uri?:string}){
@@ -29,9 +29,9 @@ function amount(value:number,locale:string,compact=false){
   catch{return String(value);}
 }
 
-export function PortalHeader({width,locale,baseUrl,account,balance,unread,ready,gameVisible,navigation,onHome,onAccount,onNotifications,onFocus}:{
-  width:number;locale:string;baseUrl:string;account:Account|null;balance:number;unread:number;ready:boolean;gameVisible:boolean;navigation?:ReactNode;
-  onHome:()=>void;onAccount:()=>void;onNotifications:()=>void;onFocus:()=>void;
+export function PortalHeader({width,locale,baseUrl,account,balance,unread,ready,gameVisible,gamesLabel,matchesLabel,selected,onGames,onMatches,onAccount,onNotifications,onFocus}:{
+  width:number;locale:string;baseUrl:string;account:Account|null;balance:number;unread:number;ready:boolean;gameVisible:boolean;gamesLabel:string;matchesLabel:string;selected:'games'|'matches';
+  onGames:()=>void;onMatches:()=>void;onAccount:()=>void;onNotifications:()=>void;onFocus:()=>void;
 }){
   const narrow=width<380,compact=width<600&&Math.abs(balance)>=1000,exactBalance=amount(balance,locale);
   // Short K/M/B/T units keep balances readable in locales whose compact
@@ -40,25 +40,30 @@ export function PortalHeader({width,locale,baseUrl,account,balance,unread,ready,
   let avatar:string|undefined;
   try{if(account?.picture_url)avatar=new URL(account.picture_url,baseUrl).href;}catch{/* A malformed or unavailable picture uses the profile icon. */}
   return <View testID="portal-header" style={[s.header,narrow&&s.narrow]}>
-    <Pressable accessibilityRole="link" accessibilityLabel={copyText('BuildPlay home')} onPress={onHome} style={s.home}>
-      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.75} style={[s.brand,narrow&&s.smallBrand]}>BuildPlay<Text style={{color:colors.accent}}>●</Text></Text>
-    </Pressable>
-    {navigation&&<View style={s.navigation}>{navigation}</View>}
+    <View style={[s.navigation,narrow&&{gap:3}]}>{[
+      {key:'games',label:gamesLabel,onPress:onGames},{key:'matches',label:matchesLabel,onPress:onMatches},
+    ].map(link=><Pressable key={link.key} testID={`header-${link.key}`} accessibilityRole="button" accessibilityLabel={link.label} accessibilityState={{selected:selected===link.key}} {...(Platform.OS==='web'&&selected===link.key?{'aria-current':'page' as const}:{})}
+      onPress={()=>{recordDiagnosticEvent('press',{label:link.label});link.onPress();}}
+      style={({pressed,focused}:any)=>[s.navButton,narrow&&s.smallNavButton,selected===link.key&&s.selected,pressed&&{opacity:.8},focused&&{outlineColor:colors.blue,outlineStyle:'solid',outlineWidth:2}]}>
+      <Text numberOfLines={1} style={[s.navText,narrow&&s.smallNavText,selected===link.key&&{color:colors.accent}]}>{link.label}</Text>
+    </Pressable>)}</View>
     <View style={s.spacer}/>
     {account&&<Text testID="header-token-balance" accessibilityLabel={`${exactBalance} ${copyText('tokens')}`} numberOfLines={1} style={[s.balance,narrow&&s.smallBalance]}>{visibleBalance} ✦</Text>}
-    {account&&<HeaderButton label={copyText('Notifications')} hint={unread>0?copyText('Unread notifications: {v0}',{v0:amount(unread,locale)}):undefined} testID="header-notifications" onPress={onNotifications}>
+    {account&&<HeaderButton narrow={narrow} label={copyText('Notifications')} hint={unread>0?copyText('Unread notifications: {v0}',{v0:amount(unread,locale)}):undefined} testID="header-notifications" onPress={onNotifications}>
       <HeaderGlyph kind="bell"/>
       {unread>0&&<View pointerEvents="none" style={s.badge} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Text style={s.badgeText}>{unread>99?'99+':amount(unread,locale)}</Text></View>}
     </HeaderButton>}
-    {gameVisible&&<HeaderButton label={copyText('Focus mode')} testID="header-focus" onPress={onFocus}><HeaderGlyph kind="focus"/></HeaderButton>}
-    <HeaderButton label={account?copyText('Account menu'):copyText('Log in')} hint={account?.display_name} disabled={!ready} testID="header-account" onPress={onAccount}><Avatar uri={avatar}/></HeaderButton>
+    {gameVisible&&<HeaderButton narrow={narrow} label={copyText('Focus mode')} testID="header-focus" onPress={onFocus}><HeaderGlyph kind="focus"/></HeaderButton>}
+    <HeaderButton narrow={narrow} label={account?copyText('Account menu'):copyText('Log in')} hint={account?.display_name} disabled={!ready} testID="header-account" onPress={onAccount}><Avatar uri={avatar}/></HeaderButton>
   </View>;
 }
 
 const s=StyleSheet.create({
-  header:{minHeight:74,paddingLeft:50,paddingRight:12,paddingVertical:12,borderBottomWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',gap:6,flexWrap:'nowrap'},
-  narrow:{gap:3,paddingRight:8},home:{flexShrink:0},brand:{fontSize:25,fontWeight:'800',letterSpacing:-1,color:colors.text,direction:'ltr'},smallBrand:{fontSize:17},
-  navigation:{flexShrink:1,minWidth:0,marginHorizontal:10},spacer:{flex:1,minWidth:0},balance:{color:colors.accent,fontSize:13,flexShrink:1,direction:'ltr'},smallBalance:{fontSize:11,maxWidth:54},
+  header:{minHeight:64,paddingLeft:50,paddingRight:12,paddingVertical:10,borderBottomWidth:1,borderColor:colors.border,backgroundColor:colors.surface,flexDirection:'row',alignItems:'center',gap:4,flexWrap:'nowrap'},
+  narrow:{gap:3,paddingRight:8},
+  navigation:{flexDirection:'row',alignItems:'center',gap:4,flexShrink:1,minWidth:0},navButton:{minHeight:40,paddingHorizontal:8,borderWidth:1,borderColor:colors.border,borderRadius:8,alignItems:'center',justifyContent:'center',flexShrink:1,minWidth:0},smallNavButton:{paddingHorizontal:4},
+  navText:{fontSize:14,fontWeight:'700',color:colors.text},smallNavText:{fontSize:12},selected:{borderColor:colors.accent,backgroundColor:'#26321c'},
+  spacer:{flex:1,minWidth:0},balance:{color:colors.accent,fontSize:13,flexShrink:1,direction:'ltr'},smallBalance:{fontSize:11,maxWidth:38},
   button:{width:40,height:40,flexShrink:0,borderRadius:8,borderWidth:1,borderColor:colors.border,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center'},
   avatar:{width:30,height:30,borderRadius:15},badge:{position:'absolute',right:-3,top:-4,minWidth:15,height:15,borderRadius:8,paddingHorizontal:3,alignItems:'center',justifyContent:'center',backgroundColor:colors.accent},badgeText:{fontSize:9,lineHeight:13,fontWeight:'800',color:colors.ink},
   description:{position:'absolute',width:1,height:1,overflow:'hidden',opacity:0},

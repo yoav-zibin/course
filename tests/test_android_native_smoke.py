@@ -132,21 +132,21 @@ def test_native_draft_must_keep_keyboard_focus_after_controlled_updates():
     assert value.find(tree, "Local smoke draft", editable=True, focused=True) is not None
 
 
-def test_default_bug_control_floats_beside_logo_without_covering_it_or_reserving_a_row():
+def test_default_bug_control_floats_beside_navigation_without_covering_it_or_reserving_a_row():
     value = driver()
     bug = ET.Element("node", {"bounds": "[15,70][123,166]"})
     value.wait = lambda *args, **options: bug
-    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="BuildPlay home" bounds="[150,110][570,210]"/></hierarchy>''')
-    value.assert_bug_control("home", clear_logo=True)
-    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="BuildPlay home" bounds="[60,110][500,210]"/></hierarchy>''')
+    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="Games" bounds="[150,110][570,210]"/></hierarchy>''')
+    value.assert_bug_control("home", clear_navigation=True)
+    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="Games" bounds="[60,110][500,210]"/></hierarchy>''')
     with pytest.raises(RuntimeError, match="covers"):
-        value.assert_bug_control("home", clear_logo=True)
-    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="BuildPlay home" bounds="[150,180][570,280]"/></hierarchy>''')
+        value.assert_bug_control("home", clear_navigation=True)
+    value.dump = lambda: ET.fromstring('''<hierarchy><node content-desc="Games" bounds="[150,180][570,280]"/></hierarchy>''')
     with pytest.raises(RuntimeError, match="separate header row"):
-        value.assert_bug_control("home", clear_logo=True)
+        value.assert_bug_control("home", clear_navigation=True)
     bug.set("bounds", "[400,70][508,166]")
     with pytest.raises(RuntimeError, match="top left"):
-        value.assert_bug_control("home", clear_logo=True)
+        value.assert_bug_control("home", clear_navigation=True)
     value.assert_bug_control("account-modal")
     bug.set("bounds", "[1000,70][1108,166]")
     with pytest.raises(RuntimeError, match="outside"):

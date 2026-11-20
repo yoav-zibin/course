@@ -1,14 +1,14 @@
 import {test,expect,Page,APIRequestContext} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {E2E_ADMIN_HEADERS,uniqueName} from './helpers';
+import {createGame,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
 import sharedCopy from '../src/platform/ui-copy.json';
 
 const fixture=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/tictactoe.json'),'utf8'));
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Portal acceptance tests require a disposable loopback server.');});
 async function account(request:APIRequestContext,name:string){const response=await request.post('/users',{data:{display_name:name}});expect(response.ok()).toBeTruthy();return response.json();}
 async function restore(page:Page,user:any){await page.addInitScript(user=>{localStorage.setItem('game-platform.accounts.v1',JSON.stringify([user]));localStorage.setItem('game-platform.current-account.v1',user.id);},user);}
-async function game(request:APIRequestContext,name:string){const payload=structuredClone(fixture);payload.name=name;payload.game_addition_request_id_and_secret=`shared-${Date.now()}-${Math.random()}-secret`;const response=await request.post('/games/declarative',{data:payload});expect(response.ok(),await response.text()).toBeTruthy();return response.json();}
+async function game(request:APIRequestContext,name:string){const id=await createGame(request,name);const response=await request.get(`/games/${id}`);expect(response.ok(),await response.text()).toBeTruthy();return response.json();}
 
 test('host controls and the offline starter game retain all eight languages without changing saves',async({page,request})=>{
   test.setTimeout(120000);
@@ -96,9 +96,9 @@ test('online matches have human-only public controls and stay selected after rel
   await expect(page.getByText('Computer opponents',{exact:true})).toHaveCount(0);
   await expect(page.getByText('Who can join?',{exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Find an open match',exact:true})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Practice with computers',exact:true})).toBeVisible();
+  await expect(page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true})).toBeVisible();
   const creation=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/matches');
-  await page.getByRole('button',{name:/^Create match/}).click();
+  await page.getByTestId('play-online').getByRole('button',{name:'Invite your friends to play',exact:true}).click();
   expect((await creation).postDataJSON()).toEqual({game_id:created.id,bet_per_player:0,turn_seconds:null});
   await expect(page.getByRole('button',{name:'Share match',exact:true})).toBeVisible();
   await expect(page).toHaveURL(/#match=/);
@@ -122,10 +122,10 @@ test('online matches have human-only public controls and stay selected after rel
 
 test('browser Back from a local match restores its game detail screen and play controls',async({page,request})=>{
   const created=await game(request,uniqueName('History game'));await page.goto(`/portal#game=${created.id}`);
-  await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
+  await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   await expect(page).toHaveURL(/#match=local-/);await page.goBack();
   await expect(page).toHaveURL(new RegExp(`#game=${created.id}$`));await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
+  await expect(page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
 });
 
 test('full localized instructions remain available between public turns, at game end and read-only replay',async({page,request})=>{
@@ -138,7 +138,7 @@ test('full localized instructions remain available between public turns, at game
   await expect(page.locator('html')).toHaveAttribute('lang','en');await page.getByRole('button',{name:'Close dialog',exact:true}).click();
   await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
   await expect(page.getByTestId('game-instructions')).not.toContainText(created.translations.ar.game_logic_rules);
-  await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();
   await expect(page.getByTestId('game-stage')).toBeVisible();
   const helpButton=page.getByRole('button',{name:'How to play',exact:true});
   const helpBounds=await helpButton.boundingBox(),boardBounds=await page.getByTestId('game-stage').boundingBox();
@@ -165,12 +165,12 @@ test('full localized instructions remain available between public turns, at game
 
 test('a delayed browser Back response cannot replace newer Invites navigation',async({page,request})=>{
   const created=await game(request,uniqueName('Delayed history game'));await page.goto(`/portal#game=${created.id}`);
-  await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
+  await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
   let release!:()=>void,started!:()=>void;
   const held=new Promise<void>(resolve=>{release=resolve;}),requested=new Promise<void>(resolve=>{started=resolve;});
   await page.route(`**/games/${created.id}`,async route=>{started();await held;await route.continue();});
   await page.goBack();await requested;
-  await page.getByRole('button',{name:'Invites',exact:true}).click();await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Matches',exact:true}).click();await page.getByRole('button',{name:'Invites',exact:true}).click();await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
   const response=page.waitForResponse(response=>new URL(response.url()).pathname===`/games/${created.id}`);
   release();await (await response).finished();
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
@@ -215,9 +215,10 @@ for(const savedLayout of ['hamburger','left'])test(`navigation stays directly ac
   await page.goto('/portal');
   await expect(page.getByRole('button',{name:'Navigation menu',exact:true})).toHaveCount(0);
   await expect(page.getByText('☰',{exact:true})).toHaveCount(0);
-  for(const name of ['Games','Matches','Invites'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(1);
+  for(const name of ['Games','Matches'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(1);
+  await expect(page.getByRole('button',{name:'Invites',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'On this device',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Invites',exact:true}).click();
+  await page.getByRole('button',{name:'Matches',exact:true}).click();await page.getByRole('button',{name:'Invites',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Log in',exact:true}).click();
   await expect(page.getByRole('button',{name:'Close dialog',exact:true})).toBeVisible();
@@ -261,7 +262,7 @@ test('a full legacy browser cache is evicted automatically while durable saves a
     };
   });
   await page.goto(`/portal#game=${created.id}`);
-  await expect(page.getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
+  await expect(page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
   await expect(page.getByText(/Could not save downloaded data|Saved data needs attention/)).toHaveCount(0);
   const preserved=await page.evaluate(()=>{
     const legacy=JSON.parse(localStorage.getItem('game-platform.portal.v1.visitor')!);
@@ -277,7 +278,7 @@ test('a full legacy browser cache is evicted automatically while durable saves a
   expect(preserved.saved.responses['/games/preserved/versions/7'].server_code).toBe('exact saved rules');
   expect(preserved.credentials).toBe('[]');expect(preserved.selection).toBe('visitor');expect(preserved.other).toBe('protected other account bytes');
   await page.evaluate(async()=>{if('serviceWorker'in navigator)await navigator.serviceWorker.ready;});await context.setOffline(true);
-  await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
   await page.reload();await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();

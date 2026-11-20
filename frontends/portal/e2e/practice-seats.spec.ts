@@ -1,5 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 
+test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Practice checks require a disposable loopback server.');});
+
 // A private host fixture: one round in seat order, with a private viewer marker.
 // This exercises the ordinary local controls, never a production game or audit.
 const fixture={id:'practice-seat-fixture',version:1,name:'Practice seat fixture',description:'Local player-count and seat regression fixture.',allowed_player_counts:[2,4],renderer_type:'declarative',all_state_public:false,
@@ -18,6 +20,48 @@ async function savedMatch(page:Page,id:string){
   },id);
 }
 
+async function randomSeat(page:Page,value:number){
+  // Only host selection is deterministic; sandboxed game randomness is intact.
+  await page.addInitScript(value=>{if(window===window.top)Math.random=()=>value;},value);
+}
+
+test('game details order the three play cards and keep variable player counts independent',async({page})=>{
+  await page.route(url=>/^\/games\/practice-seat-fixture(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:fixture}));
+  await page.goto('/portal#game=practice-seat-fixture');
+  const cards=page.locator('[data-testid="play-computer"], [data-testid="play-online"], [data-testid="play-pass"]');
+  await expect(cards).toHaveCount(3);
+  expect(await cards.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-testid')))).toEqual(['play-computer','play-online','play-pass']);
+  for(const [id,title] of [['play-computer','Play against the computer'],['play-online','Invite your friends to play'],['play-pass','Pass and play']]){
+    await expect(page.getByTestId(id).getByRole('heading',{name:title,exact:true})).toBeVisible();
+    await expect(page.getByTestId(id).getByRole('button',{name:title,exact:true})).toBeVisible();
+  }
+  const computer=page.getByTestId('play-computer'),pass=page.getByTestId('play-pass');
+  await expect(page.getByText('Your seat against computers',{exact:true})).toHaveCount(0);
+  await computer.getByRole('button',{name:'Players: 4',exact:true}).click();
+  await expect(computer.getByRole('button',{name:'Players: 4',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(computer.getByRole('button',{name:'Players: 2',exact:true})).toHaveAttribute('aria-pressed','false');
+  await expect(pass.getByRole('button',{name:'Players: 2',exact:true})).toHaveAttribute('aria-pressed','true');
+  await pass.getByRole('button',{name:'Players: 4',exact:true}).click();
+  await computer.getByRole('button',{name:'Players: 2',exact:true}).click();
+  await expect(pass.getByRole('button',{name:'Players: 4',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(computer.getByRole('button',{name:'Players: 2',exact:true})).toHaveAttribute('aria-pressed','true');
+});
+
+test('fixed-count and solo details hide player selectors and solo omits computer play',async({page})=>{
+  const fixed={...fixture,id:'practice-fixed',allowed_player_counts:[2]},solo={...fixture,id:'practice-solo',allowed_player_counts:[1]};
+  await page.route(url=>/^\/games\/practice-(?:fixed|solo)(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:new URL(route.request().url()).pathname.includes('practice-solo')?solo:fixed}));
+  await page.goto('/portal#game=practice-fixed');
+  await expect(page.getByTestId('play-computer')).toBeVisible();await expect(page.getByTestId('play-pass')).toBeVisible();
+  await expect(page.getByRole('button',{name:/^Players: /})).toHaveCount(0);
+  await page.goto('/portal#game=practice-solo');
+  await expect(page.getByTestId('play-computer')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/^Players: /})).toHaveCount(0);
+  const local=page.getByTestId('play-pass');
+  await expect(local.getByRole('heading',{name:'Play on this device',exact:true})).toBeVisible();
+  await local.getByRole('button',{name:'Start local game',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Advance',exact:true})).toBeVisible();
+});
+
 test('computer batch playback keeps the full host queue outside the twelve-entry reducer history',async({page})=>{
   const batch={...fixture,id:'practice-batch',server_code:`const game={
     newMatch(ctx){return {state:{n:0,seat:0,left:0},turn:[ctx.players[0].id]};},
@@ -25,9 +69,10 @@ test('computer batch playback keeps the full host queue outside the twelve-entry
     viewFor(s,id){return {...s,private_for:id};},computerMove(){return {go:true};}
   };`,declarative_ui:{...fixture.declarative_ui,motion:{move_ms:120},ui_code:`const gameUI={reduce(message){const m=message.type==='ui_event'?message.state_changed:message;return {scene:{pieces:[{id:'token',type:'token',board:'board',position:{x:40+(m.view.n%8)*40,y:140},aria_label:'Batch token',actions:[]}],labels:[{id:'step',x:10,y:30,text:'Accepted step '+m.view.n},{id:'history',x:10,y:65,text:'Reducer history '+m.presentation_history.length}],controls:m.acting_for_player_index===0?[{id:'advance',kind:'button',label:'Advance'}]:[]},...(message.type==='ui_event'?{make_move:{go:true}}:{})};}};`}};
   await page.emulateMedia({reducedMotion:'no-preference'});
+  await randomSeat(page,0);
   await page.route(url=>/^\/games\/practice-batch(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:batch}));
-  await page.goto('/portal#game=practice-batch');await page.getByRole('button',{name:'Players: 4',exact:true}).click();
-  await page.getByRole('button',{name:'Practice with computers',exact:true}).click();
+  await page.goto('/portal#game=practice-batch');const computer=page.getByTestId('play-computer');await computer.getByRole('button',{name:'Players: 4',exact:true}).click();
+  await computer.getByRole('button',{name:'Play against the computer',exact:true}).click();
   await expect(page.getByText('Accepted step 0',{exact:true})).toBeVisible();
   await page.evaluate(()=>{
     (window as any).__batchPaint=[];
@@ -44,8 +89,8 @@ test('computer batch playback keeps the full host queue outside the twelve-entry
 
 test('pass-and-play replay keeps each private hand attributed to its frame viewer after reload',async({page},info)=>{
   await page.route(url=>/^\/games\/practice-seat-fixture(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:fixture}));
-  await page.goto('/portal#game=practice-seat-fixture');await page.getByRole('button',{name:'Players: 4',exact:true}).click();
-  await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
+  await page.goto('/portal#game=practice-seat-fixture');const pass=page.getByTestId('play-pass');await pass.getByRole('button',{name:'Players: 4',exact:true}).click();
+  await pass.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
   const id=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
   for(let seat=0;seat<4;seat++){
     if(seat){
@@ -70,14 +115,15 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
   await page.screenshot({path:info.outputPath('pass-replay-private-view.png'),fullPage:true});
 });
 
-for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer practice retains human seat ${humanSeat+1} of ${count} through play, reload, history and rematch`,async({page},info)=>{
+for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer practice retains randomly chosen seat ${humanSeat+1} of ${count} through replay and chooses again for a rematch`,async({page},info)=>{
+  await randomSeat(page,humanSeat===0?0:0.999999);
   await page.route(url=>/^\/games\/practice-seat-fixture(?:\/versions\/1)?$/.test(url.pathname),route=>route.fulfill({json:fixture}));
   await page.goto('/portal#game=practice-seat-fixture');
   await expect(page.getByRole('heading',{name:fixture.name,exact:true})).toBeVisible();
-  await page.getByRole('button',{name:`Players: ${count}`,exact:true}).click();
-  const choice=page.getByRole('button',{name:`Your seat against computers: Player ${humanSeat+1}`,exact:true});
-  await choice.click();const bounds=(await choice.boundingBox())!;expect(Math.min(bounds.width,bounds.height)).toBeGreaterThanOrEqual(32);
-  await page.getByRole('button',{name:'Practice with computers',exact:true}).click();
+  const computer=page.getByTestId('play-computer');
+  await computer.getByRole('button',{name:`Players: ${count}`,exact:true}).click();
+  await expect(page.getByRole('button',{name:/^Your seat against computers:/})).toHaveCount(0);
+  await computer.getByRole('button',{name:'Play against the computer',exact:true}).click();
   await expect(page).toHaveURL(/#match=local-/);const id=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
   await expect(page.getByText(`Your seat ${humanSeat+1}`,{exact:true})).toBeVisible();
   const opened=await savedMatch(page,id);expect(opened.players).toHaveLength(count);expect(opened.players[humanSeat]).toMatchObject({kind:'human',user_id:'visitor'});
@@ -88,11 +134,19 @@ for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer pract
   await page.reload();await expect(page.getByTestId('match-outcome')).toHaveText(humanSeat===count-1?'You won':'You lost');
   expect((await savedMatch(page,id)).players[humanSeat].kind).toBe('human');
   await page.getByRole('button',{name:'← Previous',exact:true}).click();await expect(page.getByText(`Replay · move ${count-1} of ${count}`,{exact:true})).toBeVisible();
+  await expect(page.getByText(`Your seat ${humanSeat+1}`,{exact:true})).toBeVisible();
+  await expect(page.getByText(`Hand belongs to local-player-${humanSeat}`,{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Advance',exact:true})).toHaveCount(0);expect((await savedMatch(page,id)).move_count).toBe(count);
-  await page.getByRole('button',{name:'Live board',exact:true}).click();await page.getByRole('button',{name:'Play again',exact:true}).click();
+  await page.getByRole('button',{name:'Live board',exact:true}).click();
+  const rematchSeat=humanSeat===0?count-1:0;
+  await page.evaluate(value=>{Math.random=()=>value;},rematchSeat===0?0:0.999999);
+  await page.getByRole('button',{name:'Play again',exact:true}).click();
   await expect(page).not.toHaveURL(new RegExp(`#match=${id}$`));await expect(page.getByRole('button',{name:'Advance',exact:true})).toBeVisible();
   const nextId=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!,next=await savedMatch(page,nextId);
-  expect(next.players).toEqual(opened.players);expect(next.move_count).toBe(humanSeat);
+  expect(next.players).toHaveLength(count);expect(next.players.filter((player:any)=>player.kind==='human')).toHaveLength(1);
+  expect(next.players[rematchSeat]).toMatchObject({kind:'human',user_id:'visitor'});expect(next.move_count).toBe(rematchSeat);
+  await expect(page.getByText(`Your seat ${rematchSeat+1}`,{exact:true})).toBeVisible();
+  await expect(page.getByText(`Hand belongs to local-player-${rematchSeat}`,{exact:true})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath('computer-practice-seat.png'),fullPage:true});
 });

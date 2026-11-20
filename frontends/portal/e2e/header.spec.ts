@@ -1,6 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import copy from '../src/platform/ui-copy.json';
-import {createUser} from './helpers';
+import {createGame,createUser,uniqueName} from './helpers';
 
 const hugeBalance=9_876_543_210_123;
 function notificationPage(count:number){
@@ -17,8 +17,8 @@ const translated=(source:string,locale:string)=>locale==='en'?source:(copy as Re
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Header checks require a disposable loopback server.');});
 
 async function singleLine(page:Page){
-  const header=page.getByTestId('portal-header'),logo=page.getByRole('link').filter({hasText:'BuildPlay'});
-  const controls=[logo,page.getByTestId('header-token-balance'),page.getByTestId('header-notifications'),page.getByTestId('header-focus'),page.getByTestId('header-account')];
+  const header=page.getByTestId('portal-header');
+  const controls=[page.getByTestId('header-games'),page.getByTestId('header-matches'),page.getByTestId('header-token-balance'),page.getByTestId('header-notifications'),page.getByTestId('header-focus'),page.getByTestId('header-account')];
   const headerBox=(await header.boundingBox())!,boxes=[];
   expect(headerBox.height).toBeLessThanOrEqual(75);
   for(const control of controls){
@@ -31,7 +31,7 @@ async function singleLine(page:Page){
   }
   const bug=(await page.getByTestId('bug-report-button').boundingBox())!;
   for(const box of boxes)expect(box.x+box.width<=bug.x||bug.x+bug.width<=box.x||box.y+box.height<=bug.y||bug.y+bug.height<=box.y).toBe(true);
-  expect(await logo.evaluate(node=>{const text=node.firstElementChild as HTMLElement;return text.scrollWidth<=text.clientWidth+1;})).toBe(true);
+  for(const control of [page.getByTestId('header-games'),page.getByTestId('header-matches')])expect(await control.evaluate(node=>{const text=node.firstElementChild as HTMLElement;return text.scrollWidth<=text.clientWidth+1;})).toBe(true);
   expect(await page.getByTestId('header-token-balance').evaluate(node=>node.scrollWidth<=node.clientWidth+1)).toBe(true);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   return boxes;
@@ -100,6 +100,32 @@ test('header icons open inbox, account, focus and the bug form with avatar and k
   await expect(page.getByTestId('portal-header')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Report a bug or request a feature',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Exit focus mode',exact:true}).click();await expect(account).toBeVisible();
-  await page.getByRole('link',{name:'BuildPlay home',exact:true}).click();await expect(focus).toHaveCount(0);
+  await page.getByRole('button',{name:'Games',exact:true}).click();await expect(focus).toHaveCount(0);
   await page.screenshot({path:info.outputPath('header-avatar-actions.png')});
+});
+
+test('Games and Matches share one header row and replace the redundant game return control',async({page,request})=>{
+  const name=uniqueName('Compact navigation game'),id=await createGame(request,name);
+  for(const width of [320,390,1440]){
+    await page.setViewportSize({width,height:844});await page.goto(`/portal#game=${id}`);
+    await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+    const header=page.getByTestId('portal-header');
+    await expect(header.getByRole('button',{name:'Games',exact:true})).toHaveCount(1);
+    await expect(header.getByRole('button',{name:'Matches',exact:true})).toHaveCount(1);
+    await expect(header.getByRole('button',{name:'Invites',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('link',{name:'BuildPlay home',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:/←.*(?:All games|Games)/})).toHaveCount(0);
+    const games=(await page.getByTestId('header-games').boundingBox())!,matches=(await page.getByTestId('header-matches').boundingBox())!;
+    expect(Math.abs(games.y-matches.y)).toBeLessThan(1);
+    expect((await header.boundingBox())!.height).toBeLessThanOrEqual(65);
+    await page.getByTestId('header-games').click();
+    await expect(page).toHaveURL(/#games$/);await expect(page.getByRole('textbox',{name:'Search games',exact:true})).toBeVisible();
+    await page.goBack();await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+    await page.getByTestId('header-matches').click();
+    await expect(page).toHaveURL(/#matches$/);await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Invites',exact:true}).click();
+    await expect(page).toHaveURL(/#invites$/);await expect(page.getByRole('heading',{name:'Invites',exact:true})).toBeVisible();
+    await expect(page.getByTestId('header-matches')).toHaveAttribute('aria-current','page');
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  }
 });

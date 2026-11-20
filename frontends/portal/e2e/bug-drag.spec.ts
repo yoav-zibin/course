@@ -22,9 +22,9 @@ async function drag(page:Page,control:Locator,x:number,y:number,touch:boolean) {
 test('floating bug control drags without reporting and keeps its position over dialogs',async({page,isMobile})=>{
   await page.goto('/portal');
   const control=page.getByRole('button',{name:label,exact:true});await expect(control).toBeVisible();
-  const initial=(await control.boundingBox())!,brand=(await page.getByRole('link',{name:'BuildPlay home',exact:true}).boundingBox())!;
-  expect(brand.y).toBeLessThan(initial.y+initial.height);
-  expect(brand.x).toBeGreaterThanOrEqual(initial.x+initial.width);
+  const initial=(await control.boundingBox())!,games=(await page.getByTestId('header-games').boundingBox())!;
+  expect(games.y).toBeLessThan(initial.y+initial.height);
+  expect(games.x).toBeGreaterThanOrEqual(initial.x+initial.width);
   await drag(page,control,240,270,isMobile);
   await expect(page.getByRole('textbox',{name:'Bug or feature request',exact:true})).toHaveCount(0);
   await expect.poll(async()=>(await control.boundingBox())!.x).toBeGreaterThan(150);

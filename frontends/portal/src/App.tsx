@@ -3,7 +3,6 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, AppState, BackHandler, Linking, Platform, ScrollView, StyleSheet, View, useWindowDimensions} from 'react-native';
 import {SafeAreaProvider, SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {StatusBar} from 'expo-status-bar';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {usePortal} from './core';
 import {Button, Card, Copy, Notice, Row, Title, colors} from './ui/components';
 import {Context, Screen, text} from './ui/context';
@@ -37,7 +36,6 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const observedNotifications = useRef<{scope:string; ids:Set<string>; initialized:boolean}>({scope:'',ids:new Set(),initialized:false});
   const [appSession,setAppSession] = useState('');
   const [pendingInvite,setPendingInvite]=useState(''),[invitePreview,setInvitePreview]=useState<any>(null);
-  const [layout, setLayout] = useState<'top'|'left'>('top');
   const knownPasswords=useRef(new Set<string>());
   const notificationScope = useRef(''); notificationScope.current = JSON.stringify([p.baseUrl,p.account?.id]);
   for(const saved of p.accounts)knownPasswords.current.add(saved.password);
@@ -99,8 +97,6 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   useEffect(() => {void run(async () => {
     const initialUrl=Platform.OS==='web'?window.location.href:(await Linking.getInitialURL())??null;
     await p.actions.bootstrap(undefined,localOnly,initialUrl??undefined);
-    const savedLayout = await AsyncStorage.getItem('buildplay.navigation.v2');
-    if (savedLayout === 'left') setLayout(savedLayout);
     if (Platform.OS === 'web') installWebApp();
     const receive = async (raw: string | null) => {
       if (!raw) return;
@@ -166,13 +162,6 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   },[p.ready,p.baseUrl,p.locale]);
   useEffect(()=>{if(p.storageError)reportClientIssue('storage_error',p.storageError);},[p.storageError]);
 
-  const links: {key: Screen; label: string; icon: string}[] = [
-    {key:'games',label:t('ui.portal.nav_games','Games'),icon:'◇'}, {key:'matches',label:t('ui.portal.nav_matches','Matches'),icon:'▦'},
-    {key:'invites',label:t('ui.invite.title','Invites'),icon:'↗'},
-  ];
-  const side = width >= 1000 && layout === 'left';
-  const inlineNavigation=width>=1280&&!side;
-  const tabs = <Row style={side ? {flexDirection:'column',alignItems:'stretch'} : {gap:6,flexWrap:'nowrap'}}>{links.map(link => <Button key={link.key} label={link.label} secondary compact selected={screen === link.key} onPress={() => navigate(link.key)}>{link.icon}  {link.label}{link.key==='matches' && p.myMatches.length ? ` · ${p.myMatches.length}` : ''}</Button>)}</Row>;
   const gameVisible = p.selectedMatch !== null;
   // New destinations start at the top; updates within a match keep its position.
   const contentKey = gameVisible ? `match:${p.selectedMatch!.id}` : screen === 'games' && p.selectedGameId ? `game:${p.selectedGameId}` : screen;
@@ -180,12 +169,11 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>setAccount(true),navigate,openGame,openMatch}}>
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
-      {!focus&&<PortalHeader width={width} locale={p.locale} baseUrl={p.baseUrl} account={p.account} balance={p.profile?.token_balance??p.account?.token_balance??0} unread={p.unreadNotifications} ready={p.ready} gameVisible={gameVisible} navigation={inlineNavigation?tabs:undefined}
-        onHome={()=>navigate('games')} onAccount={()=>setAccount(true)} onNotifications={()=>setInbox(true)} onFocus={toggleFocus}/>}
-      {!focus&&!side&&!inlineNavigation&&<ScrollView horizontal style={s.mobileTabs} contentContainerStyle={{gap:6,paddingHorizontal:12,paddingVertical:8}}>{links.map(link=><Button key={link.key} secondary compact selected={screen===link.key} onPress={()=>navigate(link.key)}>{link.label}</Button>)}</ScrollView>}
+      {!focus&&<PortalHeader width={width} locale={p.locale} baseUrl={p.baseUrl} account={p.account} balance={p.profile?.token_balance??p.account?.token_balance??0} unread={p.unreadNotifications} ready={p.ready} gameVisible={gameVisible}
+        gamesLabel={t('ui.portal.nav_games','Games')} matchesLabel={t('ui.portal.nav_matches','Matches')} selected={screen==='games'?'games':'matches'}
+        onGames={()=>navigate('games')} onMatches={()=>navigate('matches')} onAccount={()=>setAccount(true)} onNotifications={()=>setInbox(true)} onFocus={toggleFocus}/>}
       <AccountDeletionBanner/>
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
-        {!focus&&side && <View style={s.sidebar}>{tabs}</View>}
         <ScrollView key={contentKey} style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},focus&&{paddingTop:42}]} keyboardShouldPersistTaps="handled">
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
@@ -215,6 +203,5 @@ export default function App() {
 }
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},
-  mobileTabs:{maxHeight:58,flexGrow:0,backgroundColor:colors.surface}, sidebar:{width:230,backgroundColor:colors.surface,padding:18,gap:12,borderRightWidth:1,borderColor:colors.border},
   content:{width:'100%',maxWidth:1240,alignSelf:'center',gap:22,flexGrow:1},loading:{minHeight:300,alignItems:'center',justifyContent:'center',gap:20},
 });

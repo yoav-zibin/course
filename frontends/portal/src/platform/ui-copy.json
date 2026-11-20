@@ -1799,15 +1799,6 @@
     "hi": "कंप्यूटर के साथ खेलें",
     "ar": "العب ضد الحواسيب"
   },
-  "No local matches yet. Choose a game and select Pass and play or Practice with computers.": {
-    "es": "Todavía no hay partidas locales. Elige un juego y selecciona Pasa y juega o Practica con ordenadores.",
-    "fr": "Aucune partie locale pour le moment. Choisissez un jeu, puis Jouer à tour de rôle ou S’entraîner contre l’ordinateur.",
-    "de": "Noch keine lokalen Partien. Wähle ein Spiel und dann Weitergeben und spielen oder Gegen Computer üben.",
-    "pt": "Ainda não há partidas locais. Escolha um jogo e selecione Passe e jogue ou Praticar com computadores.",
-    "zh": "还没有本地对局。选择游戏，然后选择传递设备游玩或与电脑练习。",
-    "hi": "अभी कोई स्थानीय मैच नहीं है। खेल चुनें, फिर बारी-बारी खेलना या कंप्यूटर के साथ अभ्यास चुनें।",
-    "ar": "لا توجد مباريات محلية بعد. اختر لعبة ثم اللعب بالتناوب أو التدريب مع الكمبيوتر."
-  },
   "Preserved previous app data": {
     "es": "Datos conservados de la aplicación anterior",
     "fr": "Données conservées de l’ancienne application",
@@ -3265,5 +3256,50 @@
     "zh": "代币交易记录将永久保留，即使账户或对局已被删除。记录包含用户ID、代币数量和初始余额、每次变动的原因和时间，以及适用时的对局ID，不包含姓名或登录信息。",
     "hi": "खाते या मैच को मिटाने के बाद भी टोकन लेन-देन के रिकॉर्ड स्थायी रूप से रखे जाते हैं। इनमें उपयोगकर्ता आईडी, टोकन की मात्रा और शुरुआती शेष राशि, हर बदलाव का कारण और समय, तथा जहाँ लागू हो मैच की आईडी होती है। इनमें नाम या लॉगिन विवरण नहीं होते।",
     "ar": "تُحفظ سجلات معاملات الرموز بشكل دائم، حتى بعد حذف الحساب أو المباراة. وهي تتضمن معرّفات المستخدمين ومبالغ الرموز والأرصدة الأولية وسبب كل حركة ووقتها ومعرّفات المباريات عند الاقتضاء. ولا تتضمن الأسماء أو بيانات تسجيل الدخول."
+  },
+  "Play against the computer": {
+    "es": "Juega contra el ordenador",
+    "fr": "Jouer contre l’ordinateur",
+    "de": "Gegen den Computer spielen",
+    "pt": "Jogar contra o computador",
+    "zh": "与电脑对战",
+    "hi": "कंप्यूटर के विरुद्ध खेलें",
+    "ar": "العب ضد الكمبيوتر"
+  },
+  "Invite your friends to play": {
+    "es": "Invita a tus amigos a jugar",
+    "fr": "Inviter des amis à jouer",
+    "de": "Freunde zum Spielen einladen",
+    "pt": "Convidar amigos para jogar",
+    "zh": "邀请好友一起玩",
+    "hi": "अपने दोस्तों को खेलने के लिए आमंत्रित करें",
+    "ar": "ادعُ أصدقاءك للعب"
+  },
+  "Play on this device, even offline after downloading the game. Your seat is chosen randomly for each new match.": {
+    "es": "Juega en este dispositivo, incluso sin conexión después de descargar el juego. Tu posición se elige al azar en cada nueva partida.",
+    "fr": "Jouez sur cet appareil, même hors ligne après avoir téléchargé le jeu. Votre place est choisie au hasard à chaque nouvelle partie.",
+    "de": "Spiele auf diesem Gerät, nach dem Herunterladen auch offline. Dein Platz wird für jede neue Partie zufällig gewählt.",
+    "pt": "Jogue neste dispositivo, mesmo offline após baixar o jogo. Sua posição é escolhida aleatoriamente em cada nova partida.",
+    "zh": "在此设备上游玩，下载游戏后也可离线进行。每局新对局都会随机分配你的位置。",
+    "hi": "गेम डाउनलोड करने के बाद इस डिवाइस पर ऑफ़लाइन भी खेलें। हर नए मैच में आपकी जगह यादृच्छिक रूप से चुनी जाती है।",
+    "ar": "العب على هذا الجهاز، حتى دون اتصال بعد تنزيل اللعبة. يُختار مقعدك عشوائيًا في كل مباراة جديدة."
+  },
+  "Share one device and take turns with friends. Pass the device to the next player when your turn ends. Matches are saved on this device and can be played offline after downloading the game.": {
+    "es": "Comparte un dispositivo y juega por turnos con amigos. Pasa el dispositivo al siguiente jugador cuando termine tu turno. Las partidas se guardan en este dispositivo y puedes jugar sin conexión después de descargar el juego.",
+    "fr": "Partagez un appareil et jouez à tour de rôle avec vos amis. Passez l’appareil au joueur suivant à la fin de votre tour. Les parties sont enregistrées sur cet appareil et restent jouables hors ligne après avoir téléchargé le jeu.",
+    "de": "Teile ein Gerät mit Freunden und spielt abwechselnd. Gib das Gerät nach deinem Zug an die nächste Person weiter. Partien werden auf diesem Gerät gespeichert und können nach dem Herunterladen des Spiels auch offline gespielt werden.",
+    "pt": "Compartilhe um dispositivo e jogue por turnos com amigos. Passe o dispositivo ao próximo jogador quando seu turno terminar. As partidas ficam salvas neste dispositivo e podem ser jogadas offline após baixar o jogo.",
+    "zh": "与好友共用一台设备，轮流游玩。回合结束后，将设备交给下一位玩家。对局保存在此设备上，下载游戏后也可离线进行。",
+    "hi": "एक ही डिवाइस पर दोस्तों के साथ बारी-बारी से खेलें। अपनी बारी समाप्त होने पर डिवाइस अगले खिलाड़ी को दें। मैच इसी डिवाइस पर सहेजे जाते हैं और गेम डाउनलोड करने के बाद ऑफ़लाइन भी खेले जा सकते हैं।",
+    "ar": "شارك جهازًا واحدًا مع أصدقائك والعبوا بالتناوب. مرّر الجهاز إلى اللاعب التالي عند انتهاء دورك. تُحفظ المباريات على هذا الجهاز ويمكن لعبها دون اتصال بعد تنزيل اللعبة."
+  },
+  "No local matches yet. Choose a game to play on this device.": {
+    "es": "Todavía no hay partidas locales. Elige un juego para jugar en este dispositivo.",
+    "fr": "Aucune partie locale pour le moment. Choisissez un jeu pour jouer sur cet appareil.",
+    "de": "Noch keine lokalen Partien. Wähle ein Spiel für dieses Gerät.",
+    "pt": "Ainda não há partidas locais. Escolha um jogo para jogar neste dispositivo.",
+    "zh": "暂无本地对局。选择一款游戏，在此设备上游玩。",
+    "hi": "अभी कोई स्थानीय मैच नहीं है। इस डिवाइस पर खेलने के लिए कोई गेम चुनें।",
+    "ar": "لا توجد مباريات محلية بعد. اختر لعبة للعب على هذا الجهاز."
   }
 }

@@ -204,19 +204,19 @@ class NativeSmoke:
             arguments.extend(["-a", "android.intent.action.VIEW", "-d", "buildplay://portal#local"])
         self.command(*arguments)
 
-    def assert_bug_control(self, stage: str, *, clear_logo: bool = False):
+    def assert_bug_control(self, stage: str, *, clear_navigation: bool = False):
         node = self.wait(self.BUG_BUTTON, clickable=True, scroll=False)
         box = bounds(node)
         if box is None or box[0] < 0 or box[1] < 0 or box[2] > self.width or box[3] > self.height:
             raise RuntimeError(f"Bug control is outside the screen during {stage}")
-        if clear_logo:
+        if clear_navigation:
             if box[0] > self.width * .2 or box[1] > self.height * .2:
                 raise RuntimeError("Default bug control is not at the top left")
-            logo = self.find(self.dump(), "BuildPlay home")
-            logo_box = bounds(logo) if logo is not None else None
-            if logo_box is None or intersection(box, logo_box) is not None:
-                raise RuntimeError("Bug control covers the BuildPlay logo")
-            if logo_box[1] >= box[3]:
+            navigation = self.find(self.dump(), "Games")
+            navigation_box = bounds(navigation) if navigation is not None else None
+            if navigation_box is None or intersection(box, navigation_box) is not None:
+                raise RuntimeError("Bug control covers the Games navigation")
+            if navigation_box[1] >= box[3]:
                 raise RuntimeError("Bug control still reserves a separate header row")
         elif getattr(self, "bug_drag_origin", None) is not None and abs(box[0] - self.bug_drag_origin[0]) < self.width * .05:
             raise RuntimeError(f"Chosen bug control position was reset during {stage}")
@@ -256,7 +256,7 @@ class NativeSmoke:
         presses Send report, creates an account, or changes saved credentials.
         Capturing the current window and editing a draft work fully offline.
         """
-        self.assert_bug_control("home", clear_logo=True)
+        self.assert_bug_control("home", clear_navigation=True)
         self.drag_bug_control()
         self.tap_node(self.wait(("Account menu", "Log in"), clickable=True))
         self.wait("Close dialog")

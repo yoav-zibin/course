@@ -18,7 +18,7 @@ test('match focus entry leaves account controls reachable and keeps a visible ex
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
   await expect(page.getByRole('button',{name:'Close dialog',exact:true})).toHaveCount(0);
   await enter.click();
-  await expect(page.getByRole('link',{name:'BuildPlay home',exact:true})).toHaveCount(0);
+  await expect(page.getByTestId('header-games')).toHaveCount(0);
   await expect(enter).toHaveCount(0);
   const exit=page.getByRole('button',{name:'Exit focus mode',exact:true});
   await expect(exit).toBeVisible();
@@ -26,7 +26,7 @@ test('match focus entry leaves account controls reachable and keeps a visible ex
   await expect(page.getByRole('button',{name:'Report a bug or request a feature',exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath('focus-controls.png')});
   await exit.click();
-  await expect(page.getByRole('link',{name:'BuildPlay home',exact:true})).toBeVisible();
+  await expect(page.getByTestId('header-games')).toBeVisible();
   await expect(account).toBeVisible();await expect(enter).toBeVisible();
   expect(page.url()).toBe(matchUrl);
 });

@@ -150,7 +150,7 @@ test('captures before opening, sends real screenshot with recent diagnostics, an
   await expect.poll(()=>bug.evaluate(node=>{const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
   await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
-  await page.getByRole('button',{name:'Focus mode',exact:true}).click();await expect(page.getByRole('link',{name:'BuildPlay home'})).toHaveCount(0);await expect(bug).toBeVisible();
+  await page.getByRole('button',{name:'Focus mode',exact:true}).click();await expect(page.getByTestId('portal-header')).toHaveCount(0);await expect(bug).toBeVisible();
   await page.evaluate(()=>{const pane=document.createElement('div');pane.id='scroll-screenshot-proof';pane.style.cssText='position:fixed;left:60px;top:100px;width:100px;height:80px;overflow:auto;z-index:2147483646';pane.innerHTML='<div style="height:1000px;background:black"></div><div style="height:80px;background:rgb(255,0,255)"></div>';document.body.appendChild(pane);pane.scrollTop=1000;});
   await page.evaluate(()=>console.error('Visible diagnostic marker password=do-not-copy'));
   const capture=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/bug-reports');

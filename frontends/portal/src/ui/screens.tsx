@@ -48,26 +48,29 @@ export function Catalog() {
 export function GameDetail() {
   const {p,run,openAccount,openMatch} = useApp(),t=useText();
   const game=p.selectedGame;
-  const [humans,setHumans]=useState(2),[humanSeat,setHumanSeat]=useState(0),[stake,setStake]=useState(0),[speed,setSpeed]=useState(0);
-  useEffect(()=>{if(game){const min=Math.min(...game.allowed_player_counts);setHumans(min);setHumanSeat(0);}},[game?.id]);
+  const [computerPlayers,setComputerPlayers]=useState(2),[passPlayers,setPassPlayers]=useState(2),[stake,setStake]=useState(0),[speed,setSpeed]=useState(0);
+  useEffect(()=>{if(game){const min=Math.min(...game.allowed_player_counts),counts=game.allowed_player_counts.filter(count=>count>1);setComputerPlayers(counts.length?Math.min(...counts):min);setPassPlayers(min);}},[game?.id]);
   if(!game)return <Empty>{copyText("Loading game…")}</Empty>;
   const solo=game.allowed_player_counts.length===1&&game.allowed_player_counts[0]===1;
-  const start=async(local=false,computer=false)=>{let match;if(local){match=await p.actions.startPractice(game.id,{humans:computer?1:humans,computers:computer?humans-1:0,humanSeat:computer?humanSeat:0});}else{if(!p.account){openAccount();return;}match=await p.actions.createMatch({game_id:game.id,bet_per_player:solo?0:stake,turn_seconds:solo||!speed?null:speed});}await openMatch(match.id);};
+  const computerCounts=game.allowed_player_counts.filter(count=>count>1);
+  const start=async(mode:'computer'|'online'|'pass')=>{let match;if(mode!=='online'){const computer=mode==='computer',players=computer?computerPlayers:passPlayers;match=await p.actions.startPractice(game.id,{humans:computer?1:players,computers:computer?players-1:0,humanSeat:computer?Math.floor(Math.random()*players):0});}else{if(!p.account){openAccount();return;}match=await p.actions.createMatch({game_id:game.id,bet_per_player:solo?0:stake,turn_seconds:solo||!speed?null:speed});}await openMatch(match.id);};
   return <>
-    <Row><Button secondary compact onPress={()=>p.actions.clearGame()}>← {t('ui.portal.back_to_games','All games')}</Button></Row>
-    <Card style={{borderTopWidth:3,borderTopColor:colors.purple}}><Title>{game.name}</Title><Copy muted>{game.description}</Copy><Copy small style={{color:colors.blue}}>{game.allowed_player_counts.join(', ')} {copyText("players · v")}{game.version}</Copy></Card>
+    <Card style={{borderTopWidth:3,borderTopColor:colors.purple}}><Title>{game.name}</Title><Copy muted>{game.description}</Copy><Copy small style={{color:colors.blue}}>{game.allowed_player_counts.join(', ')} {copyText("players")}</Copy></Card>
     <Title small>{t('ui.portal.choose_play_mode','How would you like to play?')}</Title>
     <View style={s.columns}>
-      <Card style={s.column}><Title small>{t('ui.portal.online_play','Play online')}</Title><Copy muted>{t('ui.portal.online_hint','Create a match for friends. Everyone shares the same match across devices.')}</Copy>
+      {!solo&&<Card testID="play-computer" style={s.column}><Title small>{copyText('Play against the computer')}</Title><Copy muted>{copyText('Play on this device, even offline after downloading the game. Your seat is chosen randomly for each new match.')}</Copy>
+        {computerCounts.length>1&&<Choices label={t('ui.match.players','Players')} value={computerPlayers} options={computerCounts.map(value=>({value,label:String(value)}))} onChange={setComputerPlayers}/>}
+        <Button onPress={()=>run(()=>start('computer'))}>{copyText('Play against the computer')}</Button>
+        {!p.network&&!game.server_code&&<Copy small muted>{copyText('Connect once to download this game before playing offline.')}</Copy>}
+      </Card>}
+      <Card testID="play-online" style={s.column}><Title small>{solo?t('ui.portal.online_play','Play online'):copyText('Invite your friends to play')}</Title><Copy muted>{t('ui.portal.online_hint','Create a match for friends. Everyone shares the same match across devices.')}</Copy>
         {!solo && <><Choices label={t('ui.stakes.entry_per_player','Tokens per person')} value={stake} options={[0,1,5,10,50,100].map(value=>({value,label:value?`${value} ✦`:t('ui.stakes.free','Free')}))} onChange={setStake}/><Choices label={t('ui.speed.clock','Time per move')} value={speed} options={[{value:0,label:t('ui.speed.none','No clock')},...[60,180,300,600].map(value=>({value,label:`${value/60} min`}))]} onChange={setSpeed}/></>}
         {stake>0&&<Copy small muted>{copyText("Paid matches use your existing wallet and human players. Tokens are collected when the match starts.")}</Copy>}
-        <Button disabled={!p.network} onPress={()=>run(()=>start())}>{t('ui.portal.create_match','Create match')}</Button>
+        <Button disabled={!p.network} onPress={()=>run(()=>start('online'))}>{solo?t('ui.portal.create_match','Create match'):copyText('Invite your friends to play')}</Button>
       </Card>
-      <Card style={s.column}><Title small>{t('ui.practice.on_device','Play on this device')}</Title><Copy muted>{t('ui.practice.explainer','Play a downloaded game offline. Local matches stay on this device and do not change online matches.')}</Copy>
-        {!solo&&<Choices label={t('ui.match.players','Players')} value={humans} options={game.allowed_player_counts.map(value=>({value,label:String(value)}))} onChange={value=>{setHumans(value);setHumanSeat(seat=>Math.min(seat,value-1));}}/>}
-        <Button onPress={()=>run(()=>start(true,false))}>{solo?t('ui.practice.start','Start local game'):t('ui.practice.pass','Pass and play')}</Button>
-        {!solo&&<Choices label={copyText('Your seat against computers')} value={humanSeat} options={Array.from({length:humans},(_,index)=>({value:index,label:text(p,'ui.match.player_n','Player {number}',{number:index+1})}))} onChange={setHumanSeat}/>}
-        {!solo&&<Button secondary onPress={()=>run(()=>start(true,true))}>{t('ui.practice.computer','Practice with computers')}</Button>}
+      <Card testID="play-pass" style={s.column}><Title small>{solo?t('ui.practice.on_device','Play on this device'):t('ui.practice.pass','Pass and play')}</Title><Copy muted>{solo?t('ui.practice.explainer','Play a downloaded game offline. Local matches stay on this device and do not change online matches.'):copyText('Share one device and take turns with friends. Pass the device to the next player when your turn ends. Matches are saved on this device and can be played offline after downloading the game.')}</Copy>
+        {game.allowed_player_counts.length>1&&<Choices label={t('ui.match.players','Players')} value={passPlayers} options={game.allowed_player_counts.map(value=>({value,label:String(value)}))} onChange={setPassPlayers}/>}
+        <Button onPress={()=>run(()=>start('pass'))}>{solo?t('ui.practice.start','Start local game'):t('ui.practice.pass','Pass and play')}</Button>
         {!p.network&&!game.server_code&&<Copy small muted>{copyText("Connect once to download this game before playing offline.")}</Copy>}
       </Card>
     </View>
@@ -83,9 +86,9 @@ function MatchCard({match,local=false}: {match: Match;local?: boolean}) {
 }
 
 export function Matches() {
-  const {p,run,openAccount,openMatch}=useApp(),t=useText();const [link,setLink]=useState('');
+  const {p,run,openAccount,openMatch,navigate}=useApp(),t=useText();const [link,setLink]=useState('');
   const groups=[{title:copyText("Your turn"),matches:p.myMatches.filter(m=>m.status==='ongoing'&&m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{title:copyText("Ongoing"),matches:p.myMatches.filter(m=>m.status==='ongoing'&&!m.players.some(x=>x.user_id===p.account?.id&&m.turn_of_player_indices?.includes(x.player_index)))},{title:copyText("Waiting for players"),matches:p.myMatches.filter(m=>m.status==='waiting_for_players')},{title:copyText("Finished"),matches:p.myMatches.filter(m=>m.status==='over')}];
-  return <><Title>{t('ui.portal.nav_matches','Matches')}</Title><Copy muted>{t('ui.matches.subtitle','Jump back into your matches or open an invitation.')}</Copy>
+  return <><Row><Title>{t('ui.portal.nav_matches','Matches')}</Title><View style={{flex:1}}/><Button secondary compact onPress={()=>navigate('invites')}>{t('ui.invite.title','Invites')}</Button></Row><Copy muted>{t('ui.matches.subtitle','Jump back into your matches or open an invitation.')}</Copy>
     {!p.account&&<Button onPress={openAccount}>{t('ui.auth.log_in','Log in to see your matches')}</Button>}
     <Card><Field label={t('ui.match.paste_link','Open a match or invite link')} value={link} onChangeText={setLink} autoCapitalize="none" autoCorrect={false}/><Button secondary disabled={!link.trim()} onPress={()=>run(async()=>{const url=new URL(link,p.baseUrl);if(!['https:','http:','buildplay:'].includes(url.protocol)||(['https:','http:'].includes(url.protocol)&&url.origin!==new URL(p.baseUrl).origin))throw new Error('Use a match link from this server.');const hash=new URLSearchParams(url.hash.slice(1));const invite=hash.get('invite')||url.searchParams.get('invite'),id=hash.get('match')||url.searchParams.get('match');if(invite)await p.actions.acceptInvite(invite);else if(id)await openMatch(id);else throw new Error('This link has no match or invite.');})}>{t('ui.action.open','Open link')}</Button></Card>
     {groups.map(group=><View key={group.title} style={{gap:12}}><Title small>{group.title} · {group.matches.length}</Title>{group.matches.map(match=><MatchCard key={match.id} match={match}/>)}{!group.matches.length&&<Empty>{copyText("No matches here yet.")}</Empty>}</View>)}
@@ -95,8 +98,8 @@ export function Matches() {
 
 export function LocalMatches() {
   const {p,run,openMatch}=useApp(),t=useText();
-  const start=async(computers:number)=>{const match=await p.actions.startPractice('bundled-tictactoe',{humans:2-computers,computers});await openMatch(match.id);};
-  return <><Title>{t('ui.practice.local_matches','On this device')}</Title><Copy muted>{copyText("Local games are saved here, including after you close the app. Download a game once to play without internet.")}</Copy><Card><Title small>{copyText("Tic-tac-toe")}</Title><Copy muted>{copyText("A bundled game, ready to play offline on a fresh installation.")}</Copy><Row><Button onPress={()=>run(()=>start(0))}>{copyText("Pass and play")}</Button><Button secondary onPress={()=>run(()=>start(1))}>{copyText("Practice with a computer")}</Button></Row></Card>{p.localMatches.map(match=><MatchCard key={match.id} match={match} local/>)}{!p.localMatches.length&&<Empty>{copyText("No local matches yet. Choose a game and select Pass and play or Practice with computers.")}</Empty>}
+  const start=async(computers:number)=>{const match=await p.actions.startPractice('bundled-tictactoe',{humans:2-computers,computers,humanSeat:computers?Math.floor(Math.random()*2):0});await openMatch(match.id);};
+  return <><Title>{t('ui.practice.local_matches','On this device')}</Title><Copy muted>{copyText("Local games are saved here, including after you close the app. Download a game once to play without internet.")}</Copy><Card><Title small>{copyText("Tic-tac-toe")}</Title><Copy muted>{copyText("A bundled game, ready to play offline on a fresh installation.")}</Copy><Row><Button onPress={()=>run(()=>start(0))}>{copyText("Pass and play")}</Button><Button secondary onPress={()=>run(()=>start(1))}>{copyText("Practice with a computer")}</Button></Row></Card>{p.localMatches.map(match=><MatchCard key={match.id} match={match} local/>)}{!p.localMatches.length&&<Empty>{copyText("No local matches yet. Choose a game to play on this device.")}</Empty>}
     {p.archived.length>0&&<Card><Title small>{copyText("Preserved previous app data")}</Title><Copy muted>{copyText("Saved games and pending branches from the previous app are preserved for review. Retired HTML moves cannot be submitted to current online matches.")}</Copy><Copy small>{p.archived.length} {copyText("saved records")}</Copy><Button secondary onPress={()=>run(async()=>{await Clipboard.setStringAsync(JSON.stringify(p.archived,null,2));})}>{copyText("Copy preserved data")}</Button></Card>}
   </>;
 }

@@ -54,7 +54,7 @@ test('full storage still opens remote matches and game details without changing 
   await page.goto(`/portal#game=${gameId}`);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
-  await expect(page.getByRole('button',{name:/^Create match/})).toBeEnabled();
+  await expect(page.getByTestId('play-online').getByRole('button',{name:'Invite your friends to play',exact:true})).toBeEnabled();
   expect(downloads).toContainEqual({path:`/games/${gameId}`,status:200});
   await expect(page.getByRole('alert').filter({hasText:/quota|Could not save downloaded data|Saved data needs attention/i})).toHaveCount(0);
   expect(await page.evaluate(()=>(window as any).__quotaDeniedWrites as number)).toBeGreaterThan(deniedAfterMatch);
