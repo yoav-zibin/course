@@ -3382,5 +3382,14 @@
     "zh": "观看对局",
     "hi": "मैच देखें",
     "ar": "مشاهدة المباراة"
+  },
+  "Game name unavailable": {
+    "es": "Nombre del juego no disponible",
+    "fr": "Nom du jeu indisponible",
+    "de": "Spielname nicht verfügbar",
+    "pt": "Nome do jogo indisponível",
+    "zh": "游戏名称不可用",
+    "hi": "गेम का नाम उपलब्ध नहीं है",
+    "ar": "اسم اللعبة غير متاح"
   }
 }

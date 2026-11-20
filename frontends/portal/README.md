@@ -39,6 +39,18 @@ builds and CI artifacts. Generated `android/`, `ios/` and web bundles are ignore
 - Online actions send `{move, expected_move_count}`. Each saved action keeps its
   original `Idempotency-Key`. A missing reply is reconciled with filtered history
   before retrying. One pending online action pauses further input for that match.
+- Signed-in sessions download all personal match pages in the background. Ongoing
+  matches where it is your turn come first, followed by other ongoing matches,
+  waiting rooms and finished matches. Downloads include each filtered match view,
+  its exact game package with embedded graphics and translations, player names,
+  and up to twelve recent history frames. Compact game names restore independently
+  of catalog pagination or searches, even after a larger package is evicted.
+  Downloads retry on later refreshes and stop when the account or server changes.
+- Offline match downloads have a 20 MB best-effort cache budget, separate from
+  the 1 MB catalog/other-response budget. Actual device quota can be smaller;
+  lower-priority downloads are evicted first. Local games, queued moves, conflicts
+  and their dependencies retain their existing protections. A downloaded online
+  match can accept your current move offline and sync it after reconnecting.
 - Local pass-and-play and computer practice use downloaded pinned rules and a
   separate local state/seed. They work offline. Bundled Tic-tac-toe is available
   on a fresh installation. Games declaring `all_state_public: true` keep the board

@@ -4,7 +4,7 @@ import { redactedArchive } from './redaction';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 export {utf8Size} from '../platform/recoverable-cache';
 import {originEvictions} from '../platform/origin-cache';
-import {protectedResponsePaths} from './cache-policy';
+import {protectedResponsePaths,responseRetentionPriorities} from './cache-policy';
 import {apiOrigin,DEFAULT_API_ORIGIN} from '../platform/credential-vault';
 export const LEGACY_ORIGIN_KEY='game-platform.portal.origin.v1';
 export interface StorageAdapter { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem?(key: string): Promise<void>; keys(): Promise<string[]>; exclusive<T>(name: string, run: () => Promise<T>): Promise<T> }
@@ -15,7 +15,7 @@ export function equal(a: any, b: any): boolean {
   const keys = Object.keys(a); return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) && equal(a[key], b[key]));
 }
 export function requestId(): string { return globalThis.crypto?.randomUUID?.() ?? `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`; }
-const RECOVERABLE_BUDGET = 1_000_000, QUOTA_RETRIES = 8;
+const RECOVERABLE_BUDGET = 1_000_000, MATCH_BUDGET = 20_000_000, QUOTA_RETRIES = 8;
 function validRecency(value: unknown): number { return Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : 0; }
 function touchResponse(data: AccountData, path: string): void {
   const entries = data.responseRecency && typeof data.responseRecency === 'object' && !Array.isArray(data.responseRecency) ? data.responseRecency : {};
@@ -42,8 +42,10 @@ export function migrateLegacy(raw: any): AccountData {
 }
 export class AccountRepository {
   private activeGames = new Map<string,{id: string; version?: number}>();
+  private matchUsers = new Map<string,string>();
   constructor(public backend = '', public adapter: StorageAdapter = storage) {}
   protectGame(id: string, gameId: string | null, version?: number) { if (gameId) this.activeGames.set(id,{id:gameId,version}); else this.activeGames.delete(id); }
+  prioritizeMatches(id: string, userId = id) { this.matchUsers.set(id,userId); }
   key(id: string) { const scope = !this.backend || this.backend === 'https://buildplay.fun' ? '' : `${encodeURIComponent(this.backend)}.`; return `buildplay.shared.v1.${scope}${id}`; }
   lock<T>(id: string, run: () => Promise<T>): Promise<T> { return this.adapter.exclusive(this.key(id), run); }
   async read(id: string): Promise<AccountData> {
@@ -74,23 +76,25 @@ export class AccountRepository {
   async write(id: string, data: AccountData): Promise<void> {
     // One atomic replacement commits queue+snapshot together on every platform.
     this.trim(data,id);
-    let candidates: {key: string; at: number; bytes?: number; evict: () => Promise<void>}[] | null = null;
+    let candidates: {key: string; at: number; priority?: number; bytes?: number; evict: () => Promise<void>}[] | null = null;
     for (let attempt=0;;attempt++) {
       try {await this.adapter.setItem(this.key(id), JSON.stringify(data));return;}
       catch (error) {
         if (!isQuotaError(error) || attempt >= QUOTA_RETRIES) throw error;
         if (!candidates) {
           const pinned = protectedResponsePaths(data,this.activeGames.get(id));
-          candidates = Object.keys(data.responses).filter(path => !pinned.has(path)).map(path => ({key:path,at:validRecency(data.responseRecency?.[path]),bytes:utf8Size(JSON.stringify(data.responses[path])),evict:async()=>{delete data.responses[path];if(data.responseRecency)delete data.responseRecency[path];}}));
+          const priorities = responseRetentionPriorities(data,this.matchUsers.get(id) || id);
+          candidates = Object.keys(data.responses).filter(path => !pinned.has(path)).map(path => ({key:path,priority:priorities.get(path) || 0,at:validRecency(data.responseRecency?.[path]),bytes:utf8Size(JSON.stringify(data.responses[path])),evict:async()=>{delete data.responses[path];if(data.responseRecency)delete data.responseRecency[path];}}));
           candidates.push(...await originEvictions(this.adapter,this.key(id)));
-          candidates.sort((a,b) => a.at-b.at || a.key.localeCompare(b.key));
+          candidates.sort((a,b) => (a.priority || 0)-(b.priority || 0) || a.at-b.at || a.key.localeCompare(b.key));
         }
         if (!candidates.length) throw error;
         const batch = [];let freed=0;
         const target=32768*2**attempt;
         // Retry before removing the newest remaining cache entry. Small old
         // metadata must not consume every retry before reaching a large cache.
-        while(candidates.length&&(batch.length===0||(freed<target&&candidates.length>1))){const candidate=candidates.shift()!;batch.push(candidate);freed+=candidate.bytes||1;}
+        const priority = candidates[0].priority || 0;
+        while(candidates.length&&(batch.length===0||(freed<target&&candidates.length>1&&(candidates[0].priority || 0)===priority))){const candidate=candidates.shift()!;batch.push(candidate);freed+=candidate.bytes||1;}
         for (const candidate of batch) await candidate.evict();
       }
     }
@@ -108,6 +112,12 @@ export class AccountRepository {
       // A slow poll cannot roll an accepted move backwards, and an ordinary GET
       // cannot replace the base beneath an unresolved durable action.
       if (matchId && previous && (data.queues[matchId]?.length || data.conflicts[matchId] || previous.move_count > value?.move_count)) value=previous;
+      // Tabs and foreground/background downloads can start from different name
+      // dictionaries. Merge while holding the shared storage lock so a later
+      // writer cannot discard names another download has already persisted.
+      if (path === '/portal/match-games' && value && typeof value === 'object' && !Array.isArray(value)) {
+        value = {...(previous && typeof previous === 'object' && !Array.isArray(previous) ? previous : {}),...value};
+      }
       data.responses[path] = value; touchResponse(data,path);
       try {await this.write(id,data);} catch (error) {
         // A replaceable download may be served from memory. Durable mutation
@@ -153,12 +163,20 @@ export class AccountRepository {
   }
   trim(data: AccountData, id?: string) {
     const pinned = protectedResponsePaths(data,id ? this.activeGames.get(id) : undefined);
-    let bytes = utf8Size(JSON.stringify(data.responses));
-    const paths = Object.keys(data.responses).filter(path => !pinned.has(path)).sort((a,b) => validRecency(data.responseRecency?.[a])-validRecency(data.responseRecency?.[b]) || a.localeCompare(b));
-    for (const path of paths) {
-      if (bytes <= RECOVERABLE_BUDGET) break;
-      bytes -= utf8Size(JSON.stringify(data.responses[path])) + utf8Size(JSON.stringify(path)) + 2;
-      delete data.responses[path]; if (data.responseRecency) delete data.responseRecency[path];
+    const priorities = responseRetentionPriorities(data,id ? this.matchUsers.get(id) || id : undefined);
+    const paths = Object.keys(data.responses);
+    // Match packages need substantially more room than catalog/search responses.
+    // Actual device quota still wins, using the same priority order in write().
+    for (const matches of [false,true]) {
+      const entries = paths.filter(path => priorities.has(path) === matches);
+      let bytes = entries.reduce((total,path) => total+utf8Size(JSON.stringify(data.responses[path]))+utf8Size(JSON.stringify(path))+2,2);
+      entries.sort((a,b) => (priorities.get(a) || 0)-(priorities.get(b) || 0) || validRecency(data.responseRecency?.[a])-validRecency(data.responseRecency?.[b]) || a.localeCompare(b));
+      for (const path of entries) {
+        if (bytes <= (matches ? MATCH_BUDGET : RECOVERABLE_BUDGET)) break;
+        if (pinned.has(path)) continue;
+        bytes -= utf8Size(JSON.stringify(data.responses[path])) + utf8Size(JSON.stringify(path)) + 2;
+        delete data.responses[path]; if (data.responseRecency) delete data.responseRecency[path];
+      }
     }
   }
 }

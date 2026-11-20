@@ -2,7 +2,8 @@ import { useSyncExternalStore } from 'react';
 import { PortalApi, ApiError,InactiveSignInError } from './api';
 import {setDiagnosticScope} from './diagnostics';
 import { AccountRepository, emptyAccountData, equal, requestId } from './repository';
-import {protectedResponsePaths} from './cache-policy';
+import {protectedResponsePaths, matchRetentionPriority} from './cache-policy';
+import {isValidDownloadedGame, presentationHistoryPath} from './offline-match-data';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
 import { syncAccount } from './sync';
 import {handsTurnToOpponent, pendingNotifications} from './notifications';
@@ -18,7 +19,7 @@ import type { Account, AccountData, Game, Match, LocalMatch, ListKind, PortalSta
 export * from './types';
 export { t } from '../platform/i18n';
 
-const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, accounts: [], profile: null, deletionUpdating: false, profiles: {}, authConfig: {}, games: [], popularGames: [], recentGames: [], myMatches: [], savedGames: [], notifications: [], notificationCursor: null, unreadNotifications: 0, notificationPrompt: false, notificationPromptReady: false, localMatches: [], selectedMatch: null, selected: null, selectedGame: null, game: null, selectedGameId: null, history: null, replayIndex: null, pending: 0, conflicts: {}, archived: [], network: isOnline(), loading: false, error: null, storageError: null, locale: 'en', query: '', cursors: {} });
+const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, accounts: [], profile: null, deletionUpdating: false, profiles: {}, authConfig: {}, games: [], popularGames: [], recentGames: [], myMatches: [], matchGames: {}, savedGames: [], notifications: [], notificationCursor: null, unreadNotifications: 0, notificationPrompt: false, notificationPromptReady: false, localMatches: [], selectedMatch: null, selected: null, selectedGame: null, game: null, selectedGameId: null, history: null, replayIndex: null, pending: 0, conflicts: {}, archived: [], network: isOnline(), loading: false, error: null, storageError: null, locale: 'en', query: '', cursors: {} });
 const listPaths: Record<ListKind, string> = { games: '/games', myMatches: '/matches', savedGames: '/users/me/saved-games' };
 const unique = <T extends { id?: string; token?: string }>(values: T[]): T[] => [...new Map(values.map(v => [v.id || v.token, v])).values()];
 const savedList = <T>(value: unknown): T[] => Array.isArray(value) ? value : [];
@@ -38,6 +39,9 @@ export class PortalStore {
   private accountSelectionWrites: Promise<void> = Promise.resolve();
   private paginated = false;
   private refreshPromise: Promise<void> | null = null;
+  private offlineDownloadPromise: Promise<void> | null = null;
+  private offlineDownloadScope = '';
+  private offlineDownloadAfter = 0;
   private syncPromise: Promise<void> | null = null;
   private notificationPromise: Promise<void> | null = null;
   private dismissedNotificationIds = new Set<string>();
@@ -58,8 +62,26 @@ export class PortalStore {
   getSnapshot = () => this.state;
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
   private patch(update: Partial<PortalState>) { if (Object.hasOwn(update, 'selectedMatch')) update.selected = update.selectedMatch; if (Object.hasOwn(update, 'game')) update.selectedGame = update.game; this.state = { ...this.state, ...update }; setDiagnosticScope(JSON.stringify([this.state.baseUrl, this.identity()])); this.listeners.forEach(fn => fn()); }
-  private localize() { this.patch({ locale: getLocale(), games: this.state.games.map(localizeGame), savedGames: this.state.savedGames.map(localizeGame), popularGames: this.state.popularGames.map(localizeGame), recentGames: this.state.recentGames.map(localizeGame), game: this.state.game ? localizeGame(this.state.game) : null }); }
+  private localize() { this.patch({ locale: getLocale(), matchGames:this.downloadedGameNames(), games: this.state.games.map(localizeGame), savedGames: this.state.savedGames.map(localizeGame), popularGames: this.state.popularGames.map(localizeGame), recentGames: this.state.recentGames.map(localizeGame), game: this.state.game ? localizeGame(this.state.game) : null }); }
   private identity() { return this.state.account?.id || 'visitor'; }
+  private turnIdentity() { return this.state.profile?.id || this.state.account?.canonical_user_id || this.identity(); }
+  private downloadedGameNames(): Record<string, Game> {
+    const names = {...this.data.responses['/portal/match-games']};
+    for (const [path, game] of Object.entries(this.data.responses)) {
+      if (/^\/games\/[^/]+\/versions\/\d+$/.test(path) && game?.id && game?.name) names[`${game.id}@${game.version}`] = game;
+    }
+    names[`${bundled.id}@${bundled.version}`] = bundled;
+    return Object.fromEntries(Object.entries(names).filter(([,game]) => game && typeof (game as Game).name === 'string').map(([key,game]) => [key,localizeGame(game as Game)]));
+  }
+  private async rememberMatchGame(game: Game) {
+    if (!game?.id || !game.name || !Number.isSafeInteger(game.version)) return;
+    const translations = Object.fromEntries(Object.entries(game.translations || {}).map(([locale, value]: [string, any]) =>
+      [locale,Object.fromEntries(['name','display_name'].filter(key => typeof value?.[key] === 'string').map(key => [key,value[key]]))]));
+    const metadata = {id:game.id,version:game.version,name:game._sourceText?.name || game.name,description:'',allowed_player_counts:game.allowed_player_counts || [],translations};
+    const key = `${game.id}@${game.version}`, names = this.data.responses['/portal/match-games'] || {};
+    if (!equal(names[key],metadata)) await this.cache('/portal/match-games',{...names,[key]:metadata});
+    this.patch({matchGames:this.downloadedGameNames()});
+  }
   private capture() { const epoch = this.generation, account = this.identity(), base = this.state.baseUrl; return () => { if (epoch !== this.generation || account !== this.identity() || base !== this.state.baseUrl) throw new Error('Account changed; refresh to continue.'); }; }
   private async perform<T>(run: () => Promise<T>, loading = true): Promise<T> {
     // Bootstrap adopts its origin and initial account within this operation.
@@ -82,6 +104,12 @@ export class PortalStore {
     const next = selected ? data.local[selected.id] || data.responses[`/matches/${selected.id}`] || selected : null;
     // Restore an absent profile, without replacing confirmed edits with older cached data.
     const ownProfile = this.state.account ? data.responses[`/users/${encodeURIComponent(this.state.account.id)}`] : undefined;
+    const profiles: Record<string, any> = {};
+    for (const [path,value] of Object.entries(data.responses)) {
+      if (/^\/users\/[^/?]+$/.test(path) && value?.id) profiles[value.id] = value;
+      else if (path.startsWith('/users?ids=') && Array.isArray(value)) for (const profile of value) if (profile?.id) profiles[profile.id] = profile;
+    }
+    this.patch({matchGames:this.downloadedGameNames(),profiles:{...profiles,...this.state.profiles}});
     this.patch({ ...(ownProfile && !this.state.profile && !this.state.deletionUpdating ? {profile: ownProfile, account: {...this.state.account!, canonical_user_id: ownProfile.id}} : {}), localMatches: Object.values(data.local), conflicts: data.conflicts, archived: [...data.archivedMatches, ...data.archives], pending: Object.values(data.queues).reduce((n, q) => n + q.length, 0), selectedMatch: this.decorate(next), myMatches: this.state.myMatches.map(m => this.decorate(data.responses[`/matches/${m.id}`] || m)!) });
   }
   private mergeVolatile(data: AccountData) {
@@ -102,6 +130,7 @@ export class PortalStore {
     const previous=this.data.responses[path];
     value=preserve(previous,value);
     this.repository.protectGame(id,this.state.selectedGameId,this.state.game?.version);
+    this.repository.prioritizeMatches(id,this.turnIdentity());
     try {
       const saved=await this.repository.cacheData(id,path,value);guard();value=saved.value;
       // A later request can finish while storage is awaiting its lock. Keep a
@@ -145,14 +174,111 @@ export class PortalStore {
     if (!Array.isArray(items)) throw new Error('Invalid list response');
     if (!this.paginated && kind === 'games' && this.state.query) items = items.filter((g: Game) => `${g.name} ${g.description}`.toLowerCase().includes(this.state.query.toLowerCase()));
     const preserveTail = !more && this.paginated && this.state[kind].length > 50;
-    if (more) items = unique([...(this.state[kind] as any[]), ...items]);
+    if (more || kind === 'myMatches') items = unique([...(this.state[kind] as any[]), ...items]);
     else if (preserveTail) items = unique([...items, ...(this.state[kind] as any[]).slice(50)]);
     if (kind === 'myMatches') items = items.map((m: Match) => this.decorate(m));
     if (kind === 'games' || kind === 'savedGames') items = items.map(localizeGame);
     if (kind === 'myMatches') { const archived = new Set(this.data.archivedMatches.map(item => item.id)); items = items.filter((m: Match) => !archived.has(m.id)); }
     this.patch({ [kind]: items, cursors: { ...this.state.cursors, [kind]: preserveTail ? this.state.cursors[kind] : result.next_cursor || null } });
     // Stable aliases restore useful lists when the next launch is offline.
-    await this.cache(listPaths[kind], items);
+    await this.cache(listPaths[kind], kind === 'myMatches' ? this.matchSummaries(items) : items);
+  }
+  private matchSummaries(matches: Match[]) {
+    return matches.map(({state: _state, pending: _pending, conflict: _conflict, ...summary}) => summary);
+  }
+  private async saveMatchIndex(matches: Match[], complete = false) {
+    const hidden = new Set(this.data.archivedMatches.map(item => item.id));
+    const combined = new Map((complete ? [] : this.state.myMatches).map(match => [match.id,match]));
+    // A match disappearing from a server page must not hide a pending action.
+    for (const id of new Set([...Object.keys(this.data.queues),...Object.keys(this.data.conflicts)])) {
+      const match = this.data.responses[`/matches/${encodeURIComponent(id)}`];
+      if (match) combined.set(id,match);
+    }
+    for (const match of matches) {
+      const saved = this.data.responses[`/matches/${encodeURIComponent(match.id)}`];
+      combined.set(match.id,saved && (this.data.queues[match.id]?.length || this.data.conflicts[match.id] || saved.move_count > match.move_count) ? saved : match);
+    }
+    const items = [...combined.values()].filter(match => !hidden.has(match.id)).sort((a,b) => matchRetentionPriority(b,this.turnIdentity())-matchRetentionPriority(a,this.turnIdentity()));
+    this.patch({myMatches:items.map(match => this.decorate(match)!),...(complete ? {cursors:{...this.state.cursors,myMatches:null}} : {})});
+    await this.cache('/matches',this.matchSummaries(items));
+  }
+  /** Downloads use the same account-scoped cache and pending-action guards as
+   * opening a match, without changing the selected screen or blocking it. */
+  private startOfflineDownloads() {
+    if (this.localOnly || !this.state.account || !isOnline() || !this.state.network) return;
+    const scope = JSON.stringify([this.state.baseUrl,this.identity(),this.generation]);
+    if (scope === this.offlineDownloadScope && (this.offlineDownloadPromise || Date.now() < this.offlineDownloadAfter)) return;
+    this.offlineDownloadScope = scope;
+    this.offlineDownloadAfter = Date.now()+60000;
+    const guard = this.capture();
+    const pending = this.downloadOwnMatches(guard).catch(() => {
+      // Optional downloads never turn a working online view into an error.
+      if (scope === this.offlineDownloadScope) this.offlineDownloadAfter = Date.now()+15000;
+    }).finally(() => {if (this.offlineDownloadPromise === pending) this.offlineDownloadPromise = null;});
+    this.offlineDownloadPromise = pending;
+  }
+  private async downloadOwnMatches(guard: () => void) {
+    const all = new Map<string,Match>();
+    let failed = false;
+    const statuses = this.paginated ? ['ongoing','waiting_for_players','over'] : ['all'];
+    const download = async (match: Match) => {
+      guard(); if (!isOnline()) throw new TypeError('Offline');
+      if (this.data.archivedMatches.some(item => item.id === match.id)) return;
+      let snapshot: Match;
+      try {
+        snapshot = Object.hasOwn(match,'state') ? await this.cache(`/matches/${encodeURIComponent(match.id)}`,match) : await this.read(`/matches/${encodeURIComponent(match.id)}`);
+        guard();
+        const cached = this.exactPackage(snapshot.game_id,snapshot.game_version);
+        const game = isValidDownloadedGame(cached,snapshot.game_id,snapshot.game_version) ? cached : await this.pinnedGame(snapshot.game_id,snapshot.game_version); guard();
+        await this.rememberMatchGame(game);guard();
+        if (!isValidDownloadedGame(game,snapshot.game_id,snapshot.game_version)) throw new Error('Incomplete downloaded game');
+      } catch (error) {guard();failed=true;if (!isOnline() || !this.state.network) throw error;return;}
+      // Recent filtered history restores animation/dice presentation offline.
+      // Full replay histories are fetched only when the player requests them.
+      const historyPath = presentationHistoryPath(snapshot,this.paginated);
+      if (historyPath && !Object.hasOwn(this.data.responses,historyPath)) try {await this.read(historyPath);guard();} catch {guard();failed=true;}
+    };
+    for (const status of statuses) {
+      const matches: Match[] = [], cursors = new Set<string>();
+      let cursor: string | null = null;
+      do {
+        guard();if (!isOnline()) throw new TypeError('Offline');
+        const query = new URLSearchParams({status,limit:'100'});
+        if (cursor) query.set('cursor',cursor);
+        const result = await this.request('GET',this.paginated ? `/v2/matches?${query}` : '/matches');guard();
+        const items = this.paginated ? result.items : result;
+        if (!Array.isArray(items)) throw new Error('Invalid match list');
+        for (const match of items) {
+          if (typeof match?.id !== 'string' || typeof match.game_id !== 'string' || !Number.isSafeInteger(match.game_version) || !Array.isArray(match.players)) continue;
+          all.set(match.id,match);matches.push(match);
+        }
+        await this.saveMatchIndex([...all.values()]);guard();
+        cursor = this.paginated ? result.next_cursor || null : null;
+        if (cursor && cursors.has(cursor)) throw new Error('Repeated match cursor');
+        if (cursor) cursors.add(cursor);
+      } while (cursor);
+      // See every ongoing page before ordering: your turn always comes before
+      // somebody else's turn, even when the server returned it on a later page.
+      matches.sort((a,b) => matchRetentionPriority(b,this.turnIdentity())-matchRetentionPriority(a,this.turnIdentity()));
+      for (const match of matches) {await download(match);guard();}
+      const ids = [...new Set(matches.flatMap(match => match.players.map(player => player.user_id).filter((id): id is string => !!id)))];
+      for (let start=0;start<ids.length;start+=100) {
+        guard();
+        try {
+          const profiles = await this.request('GET',`/users?ids=${encodeURIComponent(ids.slice(start,start+100).join(','))}`);guard();
+          if (Array.isArray(profiles)) for (const profile of profiles) {
+            if (typeof profile?.id !== 'string') continue;
+            if (profile.id === this.identity() || profile.id === this.turnIdentity()) continue;
+            await this.cache(`/users/${encodeURIComponent(profile.id)}`,profile);guard();
+            this.patch({profiles:{...this.state.profiles,[profile.id]:profile}});
+          }
+        } catch {guard();failed=true;}
+      }
+    }
+    await this.saveMatchIndex([...all.values()],true);guard();
+    // A later ordinary refresh retries partial downloads without discarding any
+    // already usable snapshot, package, or compact game-name metadata.
+    this.offlineDownloadAfter = Date.now()+(failed ? 15000 : 60000);
   }
   async bootstrap(baseUrl?: string, localOnly = false, initialUrl?:string): Promise<void> {
     if (this.bootstrapPromise) return this.bootstrapPromise;
@@ -189,7 +315,7 @@ export class PortalStore {
       if (this.localOnly) { this.patch({ network: false }); return; }
       if (this.state.account && isOnline()) await this.sync().catch(() => {});
       guard();
-      if (this.state.selectedMatch) { await this.refreshMatch(); return; }
+      if (this.state.selectedMatch) { this.startOfflineDownloads();await this.refreshMatch(); return; }
       const jobs: Promise<any>[] = [this.list('games'), this.read('/auth/config').then(authConfig => { guard(); this.patch({ authConfig }); }), this.read('/games/popular').then(popularGames => { guard(); this.patch({ popularGames: popularGames.map(localizeGame) }); })];
       if (this.state.account) jobs.push(this.refreshNotifications(), this.list('myMatches'), this.list('savedGames'), this.read('/users/me/recent-games').then(recentGames => { guard(); this.patch({ recentGames: recentGames.map(localizeGame) }); }), this.refreshProfile());
       const results = await Promise.allSettled(jobs); guard();
@@ -197,6 +323,7 @@ export class PortalStore {
       const first = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
       if (first && !this.state.games.length) this.patch({ error: first.reason?.message || 'Could not refresh' });
       await this.loadProfiles().catch(() => {});
+      guard();this.startOfflineDownloads();
     })().finally(() => { if (this.refreshPromise === pending) this.refreshPromise = null; });
     this.refreshPromise = pending; return pending;
   }
@@ -289,6 +416,7 @@ export class PortalStore {
   async refreshMatch() {
     const selected = this.state.selectedMatch; if (!selected) return;
     const guard = this.capture(); const token = this.selection;
+    this.startOfflineDownloads();
     await this.claimDailyLogin().catch(() => {}); guard(); if (token !== this.selection) return;
     if (this.data.local[selected.id]) { await this.reloadData(); return; }
     let match: Match;
@@ -303,9 +431,30 @@ export class PortalStore {
   }
   private async pinnedGame(id: string, version?: number): Promise<Game> {
     if (id === bundled.id) return localizeGame(bundled as Game);
+    const guard = this.capture();
     const path = version === undefined ? `/games/${encodeURIComponent(id)}` : `/games/${encodeURIComponent(id)}/versions/${version}`;
-    const cached = version !== undefined && this.data.responses[path];
-    const game = cached ? await this.cached(path) : await this.read(path); if (!game?.declarative_ui) throw new Error('This game uses an earlier renderer. Its saved data is preserved in the archive.');
+    const cached = version !== undefined && isValidDownloadedGame(this.data.responses[path],id,version);
+    let game: Game;
+    if (cached) game = await this.cached(path);
+    else {
+      // Verify identity and completeness before saving: a partial response or a
+      // different version must never become an immutable offline package.
+      try {
+        if (this.localOnly || !isOnline() || Date.now() < this.retryAfter) throw new TypeError('Offline');
+        game = await this.request('GET',path);guard();
+        this.retryAfter = 0;this.patch({network:isOnline()});
+      } catch (error) {
+        guard();if (error instanceof ApiError && error.status < 500) throw error;
+        this.retryAfter = Date.now()+10000;this.patch({network:false});
+        const previous = this.data.responses[path];
+        if (!isValidDownloadedGame(previous,id,version ?? previous?.version)) throw error;
+        game = await this.cached(path);guard();
+      }
+      if (!game?.declarative_ui) throw new Error('This game uses an earlier renderer. Its saved data is preserved in the archive.');
+      if (!isValidDownloadedGame(game,id,version ?? game.version)) throw new Error('The downloaded game package is incomplete or has the wrong version.');
+      await this.cache(path,game);
+    }
+    await this.rememberMatchGame(game);
     if (!cached) await this.cache(`/games/${game.id}/versions/${game.version}`, game);
     let presentation = game.declarative_ui;
     if (game.id === '5f5293c3-2a3a-4eec-b631-9debf59be0ca') { try { presentation = await (await import('../game/presentation')).presentationForGame(game); } catch { /* preserve pinned original on unavailable digest */ } }

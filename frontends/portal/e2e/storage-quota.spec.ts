@@ -23,6 +23,10 @@ test('full storage still opens remote matches and game details without changing 
   await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
   const original=await sharedSaves(page);
   expect(Object.values(original).some(value=>Object.values(JSON.parse(value!).local).some((saved:any)=>saved.move_count===1))).toBe(true);
+  const prefetchedPackage=Object.values(original).some(value=>{
+    const game=JSON.parse(value!).responses?.[`/games/${gameId}/versions/${match.game_version}`];
+    return game?.id===gameId&&game.version===match.game_version&&!!game.server_code&&!!game.declarative_ui;
+  });
   // Bootstrap and a real local move have finished. Only the shared game store
   // is now full; account credentials and unrelated browser storage still work.
   await page.evaluate(()=>{
@@ -44,7 +48,9 @@ test('full storage still opens remote matches and game details without changing 
   await expect(page.getByTestId('game-stage')).toBeVisible();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   expect(downloads).toContainEqual({path:`/matches/${match.id}`,status:200});
-  expect(downloads).toContainEqual({path:`/games/${gameId}/versions/${match.game_version}`,status:200});
+  // Automatic match downloads can already have saved the exact package before
+  // quota pressure begins. Opening still works when either source supplies it.
+  expect(prefetchedPackage||downloads.some(item=>item.path===`/games/${gameId}/versions/${match.game_version}`&&item.status===200)).toBe(true);
   await expect(page.getByText('Loading the match’s saved game version…',{exact:true})).toHaveCount(0);
   await expect(page.getByRole('alert').filter({hasText:/quota|Could not save downloaded data|Saved data needs attention/i})).toHaveCount(0);
   expect(await sharedSaves(page)).toEqual(original);
