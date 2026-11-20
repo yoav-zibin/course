@@ -182,6 +182,34 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     for(const [id,end] of ends)if(!same(end,position(spec,pieces.get(id))))fail();
     return animations;
   }
+  function validateSceneAnimations(spec, scene, animations) {
+    if(animations===undefined)return [];
+    finiteJSON(animations);
+    const fail=()=>{throw new Error('Invalid scene animations');};
+    if(!Array.isArray(animations)||animations.length>128)fail();
+    const pieces=new Map((scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>[piece.id,piece]));
+    const seen=new Set();
+    for(const animation of animations){
+      knownObject(animation,['piece_id','key','from','duration_ms','delay_ms'],['piece_id','key','from']);
+      if(!isId(animation.piece_id)||!isId(animation.key)||!pieces.has(animation.piece_id)||seen.has(animation.piece_id))fail();
+      seen.add(animation.piece_id);
+      for(const key of ['duration_ms','delay_ms'])if(key in animation&&(!Number.isInteger(animation[key])||animation[key]<0||animation[key]>5000))fail();
+      const from=animation.from;
+      knownObject(from,['board','position','rotation','scale','opacity']);
+      if(!['position','rotation','scale','opacity'].some(key=>Object.hasOwn(from,key)))fail();
+      if('board' in from&&(!isId(from.board)||!Object.hasOwn(from,'position')))fail();
+      if('rotation' in from&&(typeof from.rotation!=='number'||Math.abs(from.rotation)>100000))fail();
+      if('scale' in from&&(typeof from.scale!=='number'||from.scale<=0||from.scale>100))fail();
+      if('opacity' in from&&(typeof from.opacity!=='number'||from.opacity<0||from.opacity>1))fail();
+      if('position' in from){
+        const at=from.position;knownObject(at,['cell','x','y']);
+        if('cell' in at){if(!isId(at.cell)||'x' in at||'y' in at)fail();}
+        else checkPoint(at);
+        position(spec,{board:from.board??pieces.get(animation.piece_id).board,position:at});
+      }
+    }
+    return animations;
+  }
   // Older v1 packages treated every piece as tappable. An explicit empty list
   // lets new packages mark decoration precisely; destinations also declare move.
   function pieceActions(piece) {
@@ -231,4 +259,4 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
       minY:top-marginY,maxY:Math.max(top,bounds.y+bounds.height-height)+marginY};
   }
 
-module.exports={finiteJSON,validateSpec,validateScene,validateMoveAnimations,knownObject,assetURI,boardCell,position,pieceActions,contentBounds,cameraLimits};
+module.exports={finiteJSON,validateSpec,validateScene,validateMoveAnimations,validateSceneAnimations,knownObject,assetURI,boardCell,position,pieceActions,contentBounds,cameraLimits};

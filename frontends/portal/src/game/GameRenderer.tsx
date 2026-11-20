@@ -5,10 +5,11 @@ import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable
 import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgXml, Text as SvgText } from 'react-native-svg';
 import G from './SceneGroup';
 import type { Board, Control, GameSpec, Json, Piece, Point, Scene, StateMessage, Target, UIEvent } from './types';
-import { assetURI, boardCell, cameraLimits, contentBounds, finiteJSON, knownObject, pieceActions, position, validateMoveAnimations, validateScene, validateSpec } from './validation';
+import { assetURI, boardCell, cameraLimits, contentBounds, finiteJSON, knownObject, pieceActions, position, validateMoveAnimations, validateScene, validateSceneAnimations, validateSpec } from './validation';
 import { animateUpdate, canMove, historyChanges, hitPiece, hitTarget, pieceName, pieceSize, presentationSteps, targetBox, validEvent } from './interactions';
 import { runPresentation } from './runtime';
 import { animateLastMove, moveTracks, trackPosition, type MoveTrack } from './moveAnimations';
+import { animateSceneUpdate, sceneTracks, sceneTransform, type SceneTrack } from './sceneAnimations';
 
 export type GameRendererProps = {
   spec: unknown;
@@ -45,7 +46,7 @@ type Gesture = {
   first: Point; last: Point; camera: Camera; piece?: string; target?: string; moved: boolean;
   kind: 'press' | 'pan' | 'pinch'; distance?: number; anchor?: Point; touch: boolean;
 };
-type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];moves?:Map<string,MoveTrack>;started?:number};
+type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
 
 function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
@@ -65,6 +66,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const alive = useRef(true), revision = useRef(0), renderedRevision = useRef(-1), sent = useRef(false);
   const local = useRef<Json>(null), latest = useRef<StateMessage | null>(null), lastPaint = useRef<StateMessage | null>(null);
   const sceneRef = useRef<Scene>({}), queue = useRef(Promise.resolve());
+  const animationKeys = useRef(new Map<string,string>());
   const selectedRef = useRef<string | null>(null), previewRef = useRef<string | null>(null);
   const gesture = useRef<Gesture | null>(null), lastGesture = useRef(0), motionUntil = useRef(0);
   const [motionBusy,setMotionBusy]=useState(false), motionTimer=useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -121,26 +123,30 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const apply = useCallback(async (input: unknown, atRevision: number, stateChange: boolean) => {
     const result = await runPresentation(spec.ui_code,input,local.current);
     if (!alive.current || atRevision !== revision.current) return;
-    knownObject(result,['scene','local_state','make_move','last_move_animations'],['scene']); finiteJSON(result);
+    knownObject(result,['scene','local_state','make_move','last_move_animations','animations'],['scene']); finiteJSON(result);
     const next = validateScene(spec,result.scene);
     const animations = validateMoveAnimations(spec,next,result.last_move_animations);
+    const explicit = result.animations!==undefined;
+    const requested = validateSceneAnimations(spec,next,result.animations);
     if (result.make_move !== undefined && (stateChange || !canMove(latest.current,sent.current))) throw new Error(copyText("Only a current player interaction may submit a move"));
+    const tracks = explicit?sceneTracks(spec,next,requested,animationKeys.current):undefined;
     local.current = result.local_state === undefined ? null : copy(result.local_state);
     renderedRevision.current=atRevision;
     const changed = JSON.stringify(next)!==JSON.stringify(sceneRef.current);
-    const animate = stateChange && !current.current.reducedMotion && (animations === null
-      ? animateUpdate(lastPaint.current,latest.current!)
-      : animateLastMove(lastPaint.current,latest.current!));
-    if (changed || animate && animations?.length) {
+    const animate = !current.current.reducedMotion && (explicit
+      ? !!tracks?.size && (stateChange?animateSceneUpdate(lastPaint.current,latest.current!):!!lastPaint.current&&canMove(latest.current,sent.current))
+      : stateChange && (animations===null?animateUpdate(lastPaint.current,latest.current!):animateLastMove(lastPaint.current,latest.current!)));
+    if (changed || animate && (tracks?.size || animations?.length)) {
       const before=sceneRef.current;
       sceneRef.current=next;
-      const replay=animate&&animations===null&&(Boolean(latest.current?.replay)||spec.motion?.scene_transitions===true);
-      const moves=animations===null?undefined:moveTracks(spec,animations);
+      const replay=animate&&!explicit&&animations===null&&(Boolean(latest.current?.replay)||spec.motion?.scene_transitions===true);
+      const moves=explicit||animations===null?undefined:moveTracks(spec,animations);
       const started=Date.now();
-      setDisplay(old=>({scene:next,previous:before,animate,serial:old.serial+1,replay,ghosts:replay?historyChanges(before,next).removed:[],moves,started}));
+      setDisplay(old=>({scene:next,previous:before,animate,serial:old.serial+1,replay,ghosts:replay?historyChanges(before,next).removed:[],moves,tracks,started}));
       if(animate){
-        const movement=animations===null?spec.motion?.move_ms??1440:Math.max(0,...[...moves!.values()].map(track=>track.duration));
-        const duration=Math.max(movement,...(next.pieces||[]).filter(p=>animations===null||p.animation?.kind!=='move').map(p=>(p.animation?.duration_ms??(p.animation?.kind==='roll'?spec.motion?.roll_ms??650:0))+(p.animation?.delay_ms||0)))+(spec.motion?.roll_settle_ms??0)+(spec.motion?.turn_pause_ms??0);
+        const movement=explicit?0:animations===null?spec.motion?.move_ms??1440:Math.max(0,...[...moves!.values()].map(track=>track.duration));
+        const duration=explicit?Math.max(0,...[...tracks!.values()].map(track=>track.duration+track.delay)):
+          Math.max(movement,...(next.pieces||[]).filter(p=>animations===null||p.animation?.kind!=='move').map(p=>(p.animation?.duration_ms??(p.animation?.kind==='roll'?spec.motion?.roll_ms??650:0))+(p.animation?.delay_ms||0)))+(spec.motion?.roll_settle_ms??0)+(spec.motion?.turn_pause_ms??0);
         motionUntil.current=Date.now()+duration;setMotionBusy(true);callbacks.current.onAnimationStateChange?.(true);
         if(motionTimer.current)clearTimeout(motionTimer.current);
         motionTimer.current=setTimeout(()=>{if(alive.current){setMotionBusy(false);setDisplay(old=>({...old,ghosts:[]}));callbacks.current.onAnimationStateChange?.(false);}},duration);
@@ -184,7 +190,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     const atRevision=revision.current;
     const input={type:'ui_event',event:copy(event),state_changed:copy(latest.current)};
     queue.current=queue.current.catch(()=>{}).then(async()=>{
-      if(atRevision!==revision.current||!canMove(latest.current,sent.current)||!validEvent(sceneRef.current,event))return;
+      if(atRevision!==revision.current||Date.now()<motionUntil.current||!canMove(latest.current,sent.current)||!validEvent(sceneRef.current,event))return;
       await apply(input,atRevision,false);
     }).catch(report);
   },[apply,report]);
@@ -384,8 +390,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         {spec.boards.map(board=><BoardGraphic key={board.id} board={board} spec={spec}/>)}
         {display.scene.paths?.map(path=><Polyline key={path.id} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>)}
         {[...(display.scene.pieces||[])].sort((a,b)=>(a.z||0)-(b.z||0)).filter(piece=>!piece.hidden&&piece.id!==drag?.id).map(piece=><PieceGraphic key={piece.id} piece={piece} previous={display.previous.pieces?.find(old=>old.id===piece.id)}
-          spec={spec} animate={display.animate&&!reducedMotion} serial={display.serial} effect={replayEffects.get(piece.id)} enabled={active} selected={piece.selected||piece.id===selected}
-          inferMovement={display.moves===undefined} moveTrack={display.moves?.get(piece.id)} started={display.started}
+          spec={spec} animate={display.animate&&!reducedMotion&&(display.tracks===undefined||display.tracks.has(piece.id))} serial={display.serial} effect={replayEffects.get(piece.id)} enabled={active} selected={piece.selected||piece.id===selected}
+          inferMovement={display.moves===undefined&&display.tracks===undefined} moveTrack={display.moves?.get(piece.id)} sceneTrack={display.tracks?.get(piece.id)} started={display.started}
           onPress={()=>activatePiece(piece)}/>) }
         {!reducedMotion&&display.ghosts.map(piece=><PieceGraphic key={`history-ghost-${piece.id}`} piece={piece} previous={piece} spec={spec} animate={true} serial={display.serial} effect="exit" enabled={false}/>)}
         {previewTarget?.preview?.map((cell,index)=>{
@@ -455,14 +461,14 @@ const BoardGraphic=memo(function BoardGraphic({board,spec}:{board:Board;spec:Gam
   </G>;
 });
 
-const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,started}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:()=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;started?:number}) {
+const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:()=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number}) {
   const [frameState,setFrameState]=useState({serial:-1,phase:1});
   const newEffect=previous?.animation?.key!==piece.animation?.key;
   const next=position(spec,piece),before=previous?position(spec,previous):next,type=spec.piece_types[piece.type],size=pieceSize(spec,piece);
   const moved=!!previous&&(before.x!==next.x||before.y!==next.y||(previous.rotation||0)!==(piece.rotation||0)||(previous.scale??1)!==(piece.scale??1));
-  const needsAnimation=animate&&(!!moveTrack||!!effect||inferMovement&&moved||newEffect&&!!piece.animation&&piece.animation.kind!=='move');
-  const duration=moveTrack?.duration??(effect?(spec.motion?.move_ms??1440):piece.animation?.duration_ms??(piece.animation?.kind==='roll'?spec.motion?.roll_ms??650:spec.motion?.move_ms??1440));
-  const delay=moveTrack||effect?0:piece.animation?.delay_ms??0;
+  const needsAnimation=animate&&(sceneTrack?sceneTrack.duration+sceneTrack.delay>0:!!moveTrack||!!effect||inferMovement&&moved||newEffect&&!!piece.animation&&piece.animation.kind!=='move');
+  const duration=sceneTrack?.duration??moveTrack?.duration??(effect?(spec.motion?.move_ms??1440):piece.animation?.duration_ms??(piece.animation?.kind==='roll'?spec.motion?.roll_ms??650:spec.motion?.move_ms??1440));
+  const delay=sceneTrack?.delay??(moveTrack||effect?0:piece.animation?.delay_ms??0);
   useEffect(()=>{
     if(!needsAnimation)return;
     let cancelled=false,frame=0;const start=(started??Date.now())+delay;
@@ -470,18 +476,19 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
     frame=requestAnimationFrame(tick);return()=>{cancelled=true;cancelAnimationFrame(frame);};
   },[serial,needsAnimation,duration,delay,started]);
   const p=!needsAnimation?1:frameState.serial===serial?frameState.phase:0,eased=spec.motion?.easing==='ease-in-out-quad'?(p<.5?2*p*p:1-(-2*p+2)**2/2):1-(1-p)**3;
-  const at=animate&&moveTrack?trackPosition(moveTrack,p*duration,spec.motion?.easing):inferMovement?{x:before.x+(next.x-before.x)*eased,y:before.y+(next.y-before.y)*eased}:next;
+  const authored=animate&&sceneTrack?sceneTransform(sceneTrack,eased):undefined;
+  const at=authored??(animate&&moveTrack?trackPosition(moveTrack,p*duration,spec.motion?.easing):inferMovement?{x:before.x+(next.x-before.x)*eased,y:before.y+(next.y-before.y)*eased}:next);
   const x=at.x,y=at.y;
-  const rotation=inferMovement?(previous?.rotation||0)+((piece.rotation||0)-(previous?.rotation||0))*eased:piece.rotation||0;
-  const scale=inferMovement?(previous?.scale??1)+((piece.scale??1)-(previous?.scale??1))*eased:piece.scale??1;
+  const rotation=authored?.rotation??(inferMovement?(previous?.rotation||0)+((piece.rotation||0)-(previous?.rotation||0))*eased:piece.rotation||0);
+  const scale=authored?.scale??(inferMovement?(previous?.scale??1)+((piece.scale??1)-(previous?.scale??1))*eased:piece.scale??1);
   const actions=pieceActions(piece),outline=selected?'#b8ff67':enabled&&actions.length?'#79d5ff':'transparent';
-  const roll=animate&&newEffect&&piece.animation?.kind==='roll'?(1-p)*360:0;
-  const notice=piece.animation?.kind==='notice'?(animate&&newEffect&&p>.02&&p<.96?1:0):1;
+  const roll=!sceneTrack&&animate&&newEffect&&piece.animation?.kind==='roll'?(1-p)*360:0;
+  const notice=!sceneTrack&&piece.animation?.kind==='notice'?(animate&&newEffect&&p>.02&&p<.96?1:0):1;
   const fade=effect==='enter'?p:effect==='change'?.25+.75*p:effect==='exit'?(p<.65?1-p/.65*.2:.8*(1-(p-.65)/.35)):1;
   const accessibleName=`${playerText(pieceName(piece))}${enabled&&actions.length?`: ${actions.map(a=>copyText(labels[a])).join(', ')}`:''}`;
   const accessibility:Record<string,unknown>=effect==='exit'?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:'history-ghost',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
     accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length?onPress:undefined};
-  return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale})`} opacity={(piece.opacity??1)*notice*fade} {...accessibility}>
+  return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale})`} opacity={(authored?.opacity??piece.opacity??1)*notice*fade} {...accessibility}>
     {type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:type.shape==='hex'?<Polygon points={Array.from({length:6},(_,i)=>`${Math.cos((i*60+30)*Math.PI/180)*size.width/2},${Math.sin((i*60+30)*Math.PI/180)*size.height/2}`).join(' ')} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:((type.shape!=='text'&&type.shape!=='image')||piece.face==='back')?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={type.shape==='card'?7:4} fill={piece.face==='back'?'#324a88':type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
     <Asset spec={spec} id={piece.face==='back'?type.back_asset:piece.asset||type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
     {(piece.face==='back'||piece.text!==undefined)&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{piece.face==='back'?'◆':playerText(piece.text||'')}</SvgText>}

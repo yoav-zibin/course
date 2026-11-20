@@ -22,7 +22,10 @@ game, follow the partial-update instructions below.
    including the source, intermediate stops and destination needed for replay.
    Implement optional `gameUI.getLastMoveAnimations(view, scene)` to return
    ordered piece paths; see [the move-animation contract](docs/declarative-games.md#describe-the-last-moves-paths).
-   The portal animates opponent moves and applies your own moves immediately.
+   The portal animates opponent moves and applies your own moves immediately
+   by default. Return optional `animations` alongside `scene` to animate a
+   local interaction or your own accepted move, such as turning a Twist Five
+   plate; see [explicit scene animations](docs/declarative-games.md#animate-your-own-turn-and-local-interactions).
    Games without this function keep the existing default animations.
 4. Review scenes in `/static/declarative-test.html`; validate them with
    `POST /games/declarative/validate`. Include phone/tablet, spectators, covered

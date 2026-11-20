@@ -1,0 +1,122 @@
+{
+  "scope": "isolated TestClient API authoring flow on FakeFirestore-backed QueryStore; no game creation or publication",
+  "game": "Twist Five",
+  "base_url": "http://testserver",
+  "package_file_sha256": "4ff1943dcb329cfacb5153bae0287ec6aa522545cb47d26a2aa26df4d5973e5e",
+  "server_code_sha256": "e34942eac9e0b6079f8da9ab140f502a7eef1c9a683d8ca5b2adb62e21d6cacd",
+  "ui_code_sha256": "29798bdc544b283ab4aaa22e1f9d779677a6a07756c99744f1354966208dc648",
+  "submission_id": "9d0480f6d2255a439f66c9c26f3122e0",
+  "inputs_hash": "f5892c5883c4a1b2c911b075f48ce355cbca7fdf42c0e1186b874d6a19c3af0f",
+  "sessions": [
+    {
+      "mode": "pass_and_play",
+      "config": {
+        "num_players": 2,
+        "resolution": "iPhone 16 Pro Max (phone)",
+        "orientation": "vertical",
+        "human_player_index": null
+      },
+      "session_id": "scene-animations-twistfive-local-0",
+      "moves_verified": 20
+    },
+    {
+      "mode": "against_computers",
+      "config": {
+        "num_players": 2,
+        "resolution": "Samsung Galaxy S25 Ultra (phone)",
+        "orientation": "horizontal",
+        "human_player_index": 0
+      },
+      "session_id": "scene-animations-twistfive-local-1",
+      "moves_verified": 35
+    },
+    {
+      "mode": "against_computers",
+      "config": {
+        "num_players": 2,
+        "resolution": "iPad Air 11-inch (tablet)",
+        "orientation": "vertical",
+        "human_player_index": 1
+      },
+      "session_id": "scene-animations-twistfive-local-2",
+      "moves_verified": 20
+    },
+    {
+      "mode": "multiplayer",
+      "config": {
+        "num_players": 2,
+        "resolution": "Samsung Galaxy Tab S10 (tablet)",
+        "orientation": "horizontal",
+        "human_player_index": null
+      },
+      "session_id": "scene-animations-twistfive-local-3",
+      "moves_verified": 26
+    },
+    {
+      "mode": "multiplayer",
+      "config": {
+        "num_players": 2,
+        "resolution": "MacBook Air 13-inch (laptop)",
+        "orientation": "vertical",
+        "human_player_index": null
+      },
+      "session_id": "scene-animations-twistfive-local-4",
+      "moves_verified": 20
+    }
+  ],
+  "server_check": {
+    "passed": true,
+    "walks_completed": 69,
+    "moves_made": 1108,
+    "states_visited": 1091,
+    "terminal_states": 69,
+    "duration_ms": 24632
+  },
+  "complete": true,
+  "steps": {
+    "step1": {
+      "done": true,
+      "submission_id": "9d0480f6d2255a439f66c9c26f3122e0",
+      "game_name": "Twist Five",
+      "created_at": "2026-11-20T20:06:56.904721+00:00"
+    },
+    "step2": {
+      "done": true
+    },
+    "step3": {
+      "done": true,
+      "verified": 1,
+      "required": 1,
+      "missing": []
+    },
+    "step5": {
+      "done": true,
+      "verified": 2,
+      "required": 1,
+      "missing": [],
+      "missing_resolutions": [],
+      "missing_orientations": []
+    },
+    "step4": {
+      "done": true,
+      "configs": 2,
+      "required_configs": 2,
+      "missing": []
+    },
+    "complete": true
+  },
+  "gaps": [],
+  "tested_client_code_sha256": "ba65c245d34d8aced749df86b2c59d70029bd492ecc0a58473e696df8c86679e",
+  "normalized_payload_sha256": "7cac05948c890433f6be60a6828bc358143bb3707ef6832c960947d7d7223bae",
+  "no_game_created": true,
+  "no_game_patched": true,
+  "portal_validation": {
+    "typecheck": "passed",
+    "web_build": "passed",
+    "new_desktop_and_mobile_cases": 20,
+    "existing_move_animation_cases": 16,
+    "focused_typescript_tests": 14,
+    "focused_python_contract_tests": 100,
+    "focused_twistfive_tests": 13
+  }
+}

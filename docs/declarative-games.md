@@ -218,7 +218,7 @@ source hash, preserved variant rules and native event examples.
 ```js
 var gameUI = {
   reduce: function (message, localState) {
-    // Return { scene, local_state?, make_move? } using only JSON data.
+    // Return { scene, animations?, local_state?, make_move? } using only JSON data.
   },
   getLastMoveAnimations: function (view, scene) {
     // Optional: return ordered paths for the last accepted move, or null.
@@ -306,8 +306,8 @@ around the piece center. Uniform `scale` multiplies its dimensions.
 
 Keep the same piece ID when that physical piece moves. Without an explicit
 `motion` policy, for multiplayer and computer matches, the portal animates opponent and computer moves over 1,440 ms.
-The viewer's own moves update immediately, including pieces captured by that
-move. The host uses `state_changed.last_move_player_index`, rather than the next
+Without explicit response `animations`, the viewer's own moves update immediately,
+including pieces captured by that move. The host uses `state_changed.last_move_player_index`, rather than the next
 turn, to identify the actor. Unknown actors update immediately. If a snapshot
 combines an own move with computer replies, the portal first applies the last
 own position immediately using viewer-filtered history, then animates the
@@ -322,6 +322,61 @@ still a complete snapshot; animation timing and transforms belong to the host.
 For games whose server stores counts rather than individual pieces,
 presentation `local_state` can reconcile identities, as Backgammon does for
 moves, captures, bar entry and bearing off.
+
+### Animate your own turn and local interactions
+
+A reducer can return `animations` alongside its complete `scene` to explicitly
+request animation of a local interaction or an accepted move, including your
+own turn. The final board position belongs in `scene`; each animation declares
+the starting transforms for one visible piece. For example, a Twist Five plate
+and its marble artwork can turn together around their shared center:
+
+```js
+return {
+  scene: {
+    pieces: [
+      {id: 'plate', type: 'plate', board: 'main', position: {x: 105, y: 105}, rotation: 90},
+      {id: 'marble', type: 'marble', board: 'main', position: {x: 105, y: 105}, rotation: 90}
+    ]
+  },
+  animations: [
+    {piece_id: 'plate', key: 'turn:7', from: {rotation: 0}, duration_ms: 600},
+    {piece_id: 'marble', key: 'turn:7', from: {rotation: 0}, duration_ms: 600}
+  ]
+};
+```
+
+Entries run in parallel. Optional `delay_ms` staggers their starts. Each entry
+requires `piece_id`, an event `key`, and `from` containing at least one of
+`position`, `rotation`, `scale` or `opacity`. The final values come from the
+referenced scene piece. Unspecified starting transforms equal those final
+values; the host does not infer them from a previous scene. Rotation uses
+degrees around the piece center, so use a common center for artwork that
+should turn as a rigid plate. Position is board-relative; an optional `from.board`
+is allowed only with `from.position` and otherwise defaults to the piece's final
+board. Positions accept `{x,y}` or `{cell}`. Starting opacity is 0–1, scale is
+greater than 0 and at most 100, and rotation is between -100,000 and 100,000.
+
+There may be at most 128 entries, referencing distinct visible final scene
+pieces. Keys use the normal 1–80 character identifier alphabet. Keep each
+piece's key stable for the same visual event and change it for a new animation;
+a repeated key does not replay. `duration_ms` and `delay_ms` are integers from
+0 to 5,000. Duration defaults to `motion.move_ms` or 1,440 ms, and delay defaults
+to 0.
+
+This field is supported on `ui_event` and `state_changed` responses. A current
+player's local interactions can animate without submitting a move. Accepted
+own and opponent moves may animate on consecutive forward updates. Initial
+rendering, reloads, reduced-motion settings, backward history and skipped
+history settle immediately and consume their event keys, preventing delayed
+replay of an old event. Animations never authorize moves or replace validation.
+
+If `animations` is present, it replaces automatic movement and
+`last_move_animations` for that response. Return `animations: []` for an
+immediate scene update. Omit `animations` to retain normal opponent-only
+movement behavior, including the last-move hook below. A static
+`motion.animate_own` flag remains ignored; opt in explicitly on the reducer
+responses that should animate.
 
 ### Describe the last move's paths
 
@@ -376,8 +431,8 @@ position. All boards and cells must exist.
 Omit the function or return `null`/`undefined` to keep the host's existing
 position-difference animations, including for older pinned rules that do not
 retain last-move data. Return `[]` to explicitly request no positional motion
-for an action. With declared paths the host animates only a known opponent's
-forward, adjacent move. Your own moves update immediately, even with
+for an action. When response `animations` is omitted, declared paths animate
+only a known opponent's forward, adjacent move. Your own moves update immediately, even with
 `motion.animate_own:true`; initial/reconnect snapshots, skipped history,
 backward history and reduced-motion settings also settle immediately. Legacy
 games retain the behavior described above.
@@ -485,8 +540,9 @@ controls authoritative randomness. It carries no executable code.
 Packages may set `motion:{move_ms,roll_ms,roll_settle_ms,turn_pause_ms,animate_own,scene_transitions,easing}`.
 Each timing is an integer from 0 to 5000 milliseconds; `easing` is `ease-out` or
 `ease-in-out-quad`. Omitted timings retain host defaults. `animate_own` remains
-accepted for compatibility and is ignored during live play: moves made on this
-device, including pass and play, update immediately. `roll_settle_ms` keeps an opponent's roll
+accepted for compatibility and is ignored during live play. Without explicit
+response `animations`, moves made on this device, including pass and play,
+update immediately. `roll_settle_ms` keeps an opponent's roll
 readable before accepting another action. `turn_pause_ms` adds a pause after a
 turn change. Reduced motion and initial/reconnect snapshots bypass these delays.
 Hosts preserve each viewer-filtered accepted action when a computer finishes

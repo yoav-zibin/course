@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://buildplay.fun/games/declarative/schema",
   "title": "BuildPlay Declarative UI v1",
-  "description": "Portable JSON scene contract. The reducer is pure ES2020 JavaScript defining gameUI.reduce(message, localState). No game HTML or browser APIs are required. Geometry uses viewport logical units; positions are relative to a board. Grid cell IDs are row-major decimal strings. Hex, graph and track boards provide explicit cells. Reference and size checks also apply at submission/runtime. Optional gameUI.getLastMoveAnimations(view, scene) supplies ordered piece paths from the last accepted move in the filtered view.",
+  "description": "Portable JSON scene contract. The reducer is pure ES2020 JavaScript defining gameUI.reduce(message, localState). No game HTML or browser APIs are required. Geometry uses viewport logical units; positions are relative to a board. Grid cell IDs are row-major decimal strings. Hex, graph and track boards provide explicit cells. Reference and size checks also apply at submission/runtime. Optional gameUI.getLastMoveAnimations(view, scene) supplies ordered piece paths from the last accepted move in the filtered view. Reducer responses may opt into explicit scene animations for local interactions and accepted moves.",
   "type": "object",
   "properties": {
     "format": {
@@ -43,7 +43,7 @@
     },
     "motion": {
       "type": "object",
-      "description": "Optional host animation policy in milliseconds for opponent moves. Live own moves always update immediately. Timings never authorize or compute moves.",
+      "description": "Optional timing policy. Automatic movement animates opponent moves; explicit response animations can opt into own-turn and local interaction animation. Timings never authorize or compute moves.",
       "properties": {
         "move_ms": {
           "type": "integer",
@@ -67,7 +67,7 @@
         },
         "animate_own": {
           "type": "boolean",
-          "description": "Accepted for compatibility only; ignored during live play. The viewer's own moves always update immediately."
+          "description": "Accepted for compatibility only; ignored during live play. Use explicit response animations to opt into own-turn animation."
         },
         "scene_transitions": {
           "type": "boolean",
@@ -1011,6 +1011,14 @@
               "maxItems": 128
             }
           ]
+        },
+        "animations": {
+          "type": "array",
+          "description": "Optional explicit per-response animations from declared transforms to the final scene, running in parallel. May animate local interactions and accepted own moves; overrides automatic opponent animation for this response. [] updates immediately. Repeated per-piece keys do not replay; initial/reload, reduced motion and unsafe history jumps settle immediately and consume keys.",
+          "items": {
+            "$ref": "#/$defs/sceneAnimation"
+          },
+          "maxItems": 128
         }
       },
       "required": [
@@ -1175,7 +1183,7 @@
           "minimum": 0
         },
         "last_move_player_index": {
-          "description": "Actor of the last accepted move, independent of whose turn is next. Unknown or no move is null. During live play, hosts animate only known opponent actors and the viewer's own moves update immediately. Legacy inferred history animations may show every actor; game-declared paths animate only forward adjacent opponent moves.",
+          "description": "Actor of the last accepted move, independent of whose turn is next. Unknown or no move is null. During live play, hosts animate only known opponent actors and the viewer's own moves update immediately unless the reducer explicitly returns animations. Legacy inferred history animations may show every actor; game-declared paths animate only forward adjacent opponent moves.",
           "type": [
             "integer",
             "null"
@@ -1333,6 +1341,100 @@
       "required": [
         "piece_id",
         "path"
+      ],
+      "additionalProperties": false
+    },
+    "sceneAnimationFrom": {
+      "type": "object",
+      "description": "Explicit starting transforms. Omitted properties equal the final scene piece; board is allowed only with position.",
+      "properties": {
+        "board": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "position": {
+          "$ref": "#/$defs/position"
+        },
+        "rotation": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "position"
+          ]
+        },
+        {
+          "required": [
+            "rotation"
+          ]
+        },
+        {
+          "required": [
+            "scale"
+          ]
+        },
+        {
+          "required": [
+            "opacity"
+          ]
+        }
+      ],
+      "dependentRequired": {
+        "board": [
+          "position"
+        ]
+      }
+    },
+    "sceneAnimation": {
+      "type": "object",
+      "properties": {
+        "piece_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "from": {
+          "$ref": "#/$defs/sceneAnimationFrom"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        }
+      },
+      "required": [
+        "piece_id",
+        "key",
+        "from"
       ],
       "additionalProperties": false
     }

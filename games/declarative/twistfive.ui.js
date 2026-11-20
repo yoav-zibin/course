@@ -172,6 +172,31 @@ var gameUI = {
       paths.push({id: 'win-line', points: [{x: a.x + 75, y: a.y + 135}, {x: b.x + 75, y: b.y + 135}], color: '#ff5d8f', width: 10});
     }
     result.scene = {pieces: pieces, targets: targets, labels: labels, controls: controls, paths: paths};
+    if (!event) {
+      // The final scene contains the accepted position. Explicit, parallel
+      // transforms let this plate and its marbles turn together even when the
+      // viewer made the move. The public last move supplies the starting angle
+      // without borrowing earlier local state or changing authoritative rules.
+      result.animations = [];
+      var last = view.last;
+      if (last && Number.isInteger(last.quadrant) && last.quadrant >= 0 && last.quadrant < 4 &&
+          DIRECTIONS.indexOf(last.direction) >= 0) {
+        var turned = last.quadrant, center = plateCenter(turned);
+        var before = view.plates[turned] - (last.direction === 'clockwise' ? 90 : -90);
+        var animationKey = 'twist:' + newest + ':' + turned + ':' + view.plates[turned];
+        pieces.forEach(function (piece) {
+          if (piece.id === 'plate-art-' + turned || piece.id.indexOf('marble-') === 0 &&
+              piece.position.x === center.x && piece.position.y === center.y) {
+            result.animations.push({piece_id: piece.id, key: animationKey,
+              from: {rotation: before}, duration_ms: 600});
+          } else if (piece.id === 'last-ring' && plateOf(newestCell) === turned || piece.type === 'win_ring') {
+            // A final-hole highlight appears once its marble reaches that hole.
+            result.animations.push({piece_id: piece.id, key: animationKey,
+              from: {opacity: 0}, duration_ms: 0, delay_ms: 600});
+          }
+        });
+      }
+    }
     result.local_state = result.make_move ? {key: key, pending: null} : local;
     return result;
   }

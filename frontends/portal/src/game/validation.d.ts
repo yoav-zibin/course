@@ -1,9 +1,10 @@
-import type { Board, GameSpec, MoveAnimation, Piece, PieceAction, Point, Scene } from './types';
+import type { Board, GameSpec, MoveAnimation, Piece, PieceAction, Point, Scene, SceneAnimation } from './types';
 export function finiteJSON(value: unknown, depth?: number): void;
 export function knownObject(value: unknown, allowed: string[], required?: string[]): void;
 export function validateSpec(spec: unknown): GameSpec;
 export function validateScene(spec: GameSpec, scene: unknown): Scene;
 export function validateMoveAnimations(spec: GameSpec, scene: Scene, animations: unknown): MoveAnimation[] | null;
+export function validateSceneAnimations(spec: GameSpec, scene: Scene, animations: unknown): SceneAnimation[];
 export function assetURI(asset?: {uri: string}): string | null;
 export function boardCell(board: Board, cell: string): Point;
 export function position(spec: GameSpec, item: {board: string; position: unknown}): Point & {board: Board};

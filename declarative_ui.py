@@ -188,7 +188,39 @@ def validate_response(spec, response):
         if "min" in control and "max" in control and control["min"] > control["max"]:
             raise DeclarativeUIError("Control min must not exceed max")
     validate_move_animations(spec, scene, response.get("last_move_animations"))
+    validate_scene_animations(spec, scene, response.get("animations", []))
     return response
+
+
+def validate_scene_animations(spec, scene, animations):
+    """Validate explicit per-response animation references after schema validation."""
+    boards = {board["id"]: board for board in spec["boards"]}
+    pieces = {piece["id"]: piece for piece in scene.get("pieces", []) if not piece.get("hidden")}
+    seen = set()
+    for animation in animations:
+        piece_id = animation["piece_id"]
+        if piece_id not in pieces or piece_id in seen:
+            raise DeclarativeUIError("Scene animation must reference a unique visible final scene piece")
+        seen.add(piece_id)
+        start = animation["from"]
+        if "position" not in start:
+            continue
+        board = boards.get(start.get("board", pieces[piece_id]["board"]))
+        if board is None:
+            raise DeclarativeUIError("Scene animation references an unknown board")
+        at = start["position"]
+        if "cell" not in at:
+            continue
+        cell = at["cell"]
+        if board.get("cells"):
+            exists = any(other["id"] == cell for other in board["cells"])
+        elif board["kind"] == "grid":
+            exists = (cell.isascii() and cell.isdigit() and str(int(cell)) == cell
+                      and int(cell) < board["rows"] * board["columns"])
+        else:
+            exists = False
+        if not exists:
+            raise DeclarativeUIError("Scene animation references an unknown board cell")
 
 
 def validate_move_animations(spec, scene, animations):
