@@ -33,6 +33,7 @@ test('online matches use the shared navigation and retain their public game thro
 
   for(const viewport of viewports){
     await page.setViewportSize(viewport);
+    await expect(page.getByTestId('game-stage')).toBeVisible();
     await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);
     await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);
