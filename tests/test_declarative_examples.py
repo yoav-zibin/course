@@ -176,6 +176,29 @@ def test_thirty_one_direct_pile_and_card_actions_and_revealed_hands():
     assert {label['text'] for label in labels} >= {'A · 31', 'B · 30.5'}
 
 
+def test_gobblet_reserves_and_covered_own_pieces_are_reachable():
+    body = load('gobblet')
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = body.unit_tests['cases'][1]['view_of_mover']
+    m = {'type':'state_changed', 'view':view, 'status':'ongoing',
+         'players':[{'name':'A'}, {'name':'B'}], 'acting_for_player_index':0,
+         'my_player_index':0, 'move_count':2}
+    initial = ui.reduce(m)
+    assert not initial['scene']['controls']
+    assert {t['id'] for t in initial['scene']['targets'] if t['id'].startswith('reserve_')} == {
+        'reserve_1','reserve_2','reserve_3','reserve_4'}
+    selected = ui.reduce({'type':'ui_event', 'event':{'type':'tap', 'id':'reserve_4'},
+                          'state_changed':m}, initial['local_state'])
+    assert not any(t['id'] == 'source_0' for t in selected['scene']['targets'])
+    for move in ({'place':{'size':4,'cell':0}}, {'place':{'size':4,'cell':5}},
+                 {'move':{'from':0,'to':5}}):
+        assert scene_event(ui, m, initial, move)['make_move'] == move
+    for waiting in ({'acting_for_player_index':None}, {'replay':{'index':0,'total':2}},
+                    {'status':'over'}):
+        frame = ui.reduce({**m, **waiting})
+        assert not frame['scene']['targets'] and not frame['scene']['controls']
+
+
 def test_morris_package_and_single_game_generator_are_consistent(tmp_path):
     prepare(load('six_mens_morris'))
     root = EXAMPLES.parents[1]

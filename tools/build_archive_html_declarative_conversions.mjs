@@ -22,6 +22,7 @@ const EXTRA_STRINGS = {
   Knock:['Tocar','Frapper','Klopfen','Bater','敲牌','नॉक करें','اطرق'],
   Stand:['Plantarse','Rester','Stehen bleiben','Parar','停牌','रुकें','توقف'],
   'Take {card}':['Tomar {card}','Prendre {card}','{card} nehmen','Pegar {card}','拿取 {card}','{card} लें','خذ {card}'],
+  'Select size {n} · {count} remaining':['Seleccionar tamaño {n} · quedan {count}','Choisir la taille {n} · {count} restantes','Größe {n} wählen · {count} übrig','Selecionar tamanho {n} · restam {count}','选择大小 {n} · 剩余 {count}','आकार {n} चुनें · {count} बाकी','اختر الحجم {n} · المتبقي {count}'],
   'Reset guess':['Reiniciar intento','Réinitialiser la proposition','Tipp zurücksetzen','Reiniciar palpite','重置猜测','अनुमान रीसेट करें','إعادة تعيين التخمين']
 };
 const ALL_STRINGS={...COPY.strings,...EXTRA_STRINGS};
@@ -57,6 +58,17 @@ const THIRTY_ONE_UI = [
   '点击牌堆或弃牌堆抽牌，然后点击手牌弃牌。使用按钮敲牌或停牌。',
   'पत्ता लेने के लिए ढेर या छोड़े गए पत्तों पर टैप करें, फिर छोड़ने के लिए अपने हाथ के पत्ते पर टैप करें। नॉक करने या रुकने के लिए बटन दबाएँ।',
   'اضغط على رزمة السحب أو كومة الرمي لسحب ورقة، ثم اضغط على ورقة من يدك لرميها. استخدم الزر للطرق أو التوقف.'
+];
+
+const GOBBLET_UI = [
+  'Tap one of your reserve pieces or a piece on the board, then tap a highlighted square.',
+  'Toca una ficha de tu reserva o del tablero y luego una casilla resaltada.',
+  'Touchez une pièce de votre réserve ou du plateau, puis une case surlignée.',
+  'Tippe auf einen deiner Vorratssteine oder einen Stein auf dem Brett und dann auf ein markiertes Feld.',
+  'Toque em uma peça da reserva ou do tabuleiro e depois em uma casa destacada.',
+  '点击一枚备用棋子或棋盘上的棋子，再点击高亮方格。',
+  'अपनी आरक्षित गोटी या बोर्ड की गोटी पर टैप करें, फिर चमकते खाने पर टैप करें।',
+  'اضغط على قطعة من الاحتياط أو على اللوحة، ثم اضغط على مربع مضاء.'
 ];
 
 const CUSTOM = {
@@ -227,8 +239,9 @@ function board(kind) {
   if (kind === 'table') return {viewport:{width:640,height:720},boards:[{id:'table',...free}]};
   if (kind === 'kisolo') return {viewport:{width:620,height:530},boards:[
     {id:'main',kind:'grid',x:26,y:110,width:560,height:280,rows:4,columns:7,color:'#a87945',alternate_color:'#c99a63',line_color:'#5c4026'}]};
-  if (kind === 'gobblet') return {viewport:{width:600,height:680},boards:[
-    {id:'main',kind:'grid',x:40,y:100,width:520,height:520,rows:4,columns:4,color:'#dbe4ef',alternate_color:'#a8b7c9',line_color:'#475569'}]};
+  if (kind === 'gobblet') return {viewport:{width:600,height:785},boards:[
+    {id:'main',kind:'grid',x:40,y:100,width:520,height:520,rows:4,columns:4,color:'#ead1a0',alternate_color:'#d5b37d',line_color:'#745033'},
+    {id:'tray',kind:'free',x:40,y:650,width:520,height:110,color:'#80573c',line_color:'#4a3022'}]};
   if (kind === 'chutes_ladders') return {viewport:{width:620,height:720},boards:[
     {id:'main',kind:'grid',x:20,y:112,width:560,height:560,rows:10,columns:10,color:'#f3e8c8',alternate_color:'#e2d3a8',line_color:'#718096'}]};
   if (kind === 'dots_boxes') return {viewport:{width:620,height:710},boards:[{id:'main',...free}]};
@@ -416,7 +429,8 @@ function build(entry) {
   const custom=CUSTOM[entry.kind];
   const rules=custom?.rules || source.rules;
   const ui=entry.kind === 'six_mens_morris' ? MORRIS_UI[0] :
-    entry.kind === 'thirty_one' ? THIRTY_ONE_UI[0] : custom?.ui || source.ui_instructions;
+    entry.kind === 'thirty_one' ? THIRTY_ONE_UI[0] :
+      entry.kind === 'gobblet' ? GOBBLET_UI[0] : custom?.ui || source.ui_instructions;
   const description=custom?.description || source.description;
   const title=`${entry.title} (Declarative)`;
   const translations={};
@@ -435,6 +449,7 @@ function build(entry) {
     translations[locale]={...old,display_name:displayName,
       ...(entry.kind === 'six_mens_morris' ? {game_ui_rules:MORRIS_UI[LOCALES.indexOf(locale)+1]} : {}),
       ...(entry.kind === 'thirty_one' ? {game_ui_rules:THIRTY_ONE_UI[LOCALES.indexOf(locale)+1]} : {}),
+      ...(entry.kind === 'gobblet' ? {game_ui_rules:GOBBLET_UI[LOCALES.indexOf(locale)+1]} : {}),
       client_strings:translatedStrings(locale,displayName,entry.kind)};
   }
   const strings={...ENGLISH,title,...serverStrings(entry.kind).english};

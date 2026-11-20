@@ -246,26 +246,41 @@ const gameUI = {
           `goblet_${goblet[0]}_${goblet[1]}`, 'main', boardCell(cell,4),
           {text:String(goblet[0]),z:level}));
       });
+      if (Number.isInteger(m.my_player_index)) {
+        for (let size = 1; size <= 4; size++) {
+          const count = s.reserves?.[seat]?.[size - 1] || 0;
+          if (!count) continue;
+          const position = {x:65 + (size - 1) * 130,y:55};
+          staticPiece(`reserve_art_${size}`, `goblet_${size}_${seat}`, 'tray', position,
+            {text:String(count),scale:selectedSize === size ? 1.1 : 1});
+          if (active && moves.some(move => move.place?.size === size))
+            scene.targets.push({id:`reserve_${size}`,board:'tray',position,color:'#00000000',
+              hit_area:{x:-45,y:-45,width:90,height:90},
+              aria_label:text('Select size {n} · {count} remaining', {n:size,count})});
+        }
+      }
       if (active) {
-        for (let size = 1; size <= 4; size++) if ((s.reserves?.[seat]?.[size - 1] || 0) > 0)
-          scene.controls.push({id:`reserve_${size}`,kind:'button',
-            label:text('Play {card}',{card:`${size} · ${s.reserves[seat][size - 1]}`})});
         for (let cell = 0; cell < 16; cell++) {
           const top = (board[cell] || []).slice(-1)[0];
-          if (top && top[1] === seat && moves.some(move => move.move?.from === cell))
+          const isDestination = moves.some(move =>
+            (move.place && move.place.size === selectedSize && move.place.cell === cell) ||
+            (move.move && move.move.from === selectedFrom && move.move.to === cell));
+          if (!isDestination && top && top[1] === seat && moves.some(move => move.move?.from === cell))
             scene.targets.push({id:`source_${cell}`,board:'main',position:boardCell(cell,4),
-              label:'◇',aria_label:text('Select piece at row {r}, column {c}',
+              color:'#00000000',aria_label:text('Select piece at row {r}, column {c}',
                 {r:Math.floor(cell / 4) + 1,c:cell % 4 + 1})});
         }
         moves.forEach(move => {
           if (move.place && selectedSize === move.place.size)
-            offer(move, String(move.place.size), 'main', boardCell(move.place.cell,4), 'target');
+            offer(move, '•', 'main', boardCell(move.place.cell,4), 'target',
+              text('Move to row {r}, column {c}',
+                {r:Math.floor(move.place.cell / 4) + 1,c:move.place.cell % 4 + 1}));
           if (move.move && selectedFrom === move.move.from)
-            offer(move, '•', 'main', boardCell(move.move.to,4), 'target');
+            offer(move, '•', 'main', boardCell(move.move.to,4), 'target',
+              text('Move to row {r}, column {c}',
+                {r:Math.floor(move.move.to / 4) + 1,c:move.move.to % 4 + 1}));
         });
       }
-      label('reserves', (s.reserves || []).map((counts,i) =>
-        `${playerName(i)} · ${counts.join('/')}`).join('   '), 22, 505, 14);
     } else if (KIND === 'chutes_ladders') {
       const position = value => {
         const row = Math.floor((value - 1) / 10), offset = (value - 1) % 10;
