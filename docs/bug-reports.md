@@ -48,6 +48,10 @@ diagnostics. The frontend trims the aggregate snapshot below the API limit.
 API metadata can also contain request/response size, request IDs and server
 timing. The history lasts only for the current app session; it is not stored in
 browser local storage or uploaded before the user sends a report.
+Recoverable cache failures enter these logs without cached values or raw storage
+error text. Repeated failures are limited per operation and diagnostic session.
+Old cache entries are reclaimed automatically; a failed cache write leaves the
+download usable in memory without showing a storage error to the player.
 The screenshot retains its original capture timestamp; diagnostics refresh on
 submission, so retrying a failed send includes its API failure and visible error.
 

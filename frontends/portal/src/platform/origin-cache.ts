@@ -1,6 +1,7 @@
 import {protectedResponsePaths} from '../core/cache-policy';
 import type {AccountData} from '../core/types';
 import {translationEvictions,utf8Size} from './recoverable-cache';
+import {reportCacheFailure} from './cache-diagnostics';
 
 interface OriginStorage {
   getItem(key: string): Promise<string | null>;
@@ -14,7 +15,7 @@ const DELETED = '__portal_offline_deleted__';
 const record = (value: any): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 const time = (value: unknown): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 const blank = (): AccountData => ({version:1,responses:{},queues:{},conflicts:{},local:{},archives:[],archivedMatches:[],selectedId:null});
-const optional = (run:()=>Promise<void>) => async () => {try {await run();} catch { /* The caller retries the real write; no reclaimed space is assumed. */ }};
+const optional = (run:()=>Promise<void>) => async () => {try {await run();} catch(error) {reportCacheFailure('eviction',error);}};
 
 async function json(storage: OriginStorage, key: string): Promise<any> {
   const text = await storage.getItem(key);

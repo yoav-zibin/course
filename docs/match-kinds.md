@@ -46,6 +46,13 @@ unsynced single-player history and conflict branches must not be evicted to make
 room for those recoverable caches. Clearing app or browser data before sync can
 lose pending work; acknowledged cloud saves can be downloaded again.
 
+Cache writes automatically reclaim older recoverable downloads under quota
+pressure. Optional downloads, navigation and access-time updates must not evict
+the exact rules or history required by pending saves. If caching still fails,
+keep the downloaded response usable in memory and record a bounded diagnostic
+error instead of interrupting navigation or online play with a cache warning.
+This fallback does not acknowledge a failed durable game or move write.
+
 An owner can explicitly remove a pending or conflicted single-player copy after
 confirming the action. Keep its complete saved branch and pending intents in the
 protected recovery archive, stop retrying that copy and hide it from this

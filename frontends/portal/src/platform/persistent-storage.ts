@@ -1,3 +1,5 @@
+import {reportCacheFailure} from './cache-diagnostics';
+
 export interface LegacyStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
@@ -28,8 +30,13 @@ export function createPersistentStorage(legacy: LegacyStorage, native: Persisten
     if (current === DELETED_VALUE) return null;
     if (current !== null) { if (typeof current !== 'string') throw new Error('Saved native data has an invalid format'); return current; }
     const original = await legacy.getItem(key);
-    if (original !== null) await native.setPersistentItem(key, original);
-    return original; // Do not report migration success before the atomic copy.
+    if (original !== null) {
+      try {await native.setPersistentItem(key, original);}
+      catch (error) {reportCacheFailure('migration',error);}
+    }
+    // The retained original is still readable if the optional copy failed.
+    // No marker is written, so a later read retries the atomic migration.
+    return original;
   });
   const setItem = (key: string, value: string): Promise<void> => serial(key, () => native ? native.setPersistentItem(key, value) : legacy.setItem(key, value));
   const removeItem = (key: string): Promise<void> => serial(key, () => native ? native.setPersistentItem(key, DELETED_VALUE) : legacy.removeItem(key));

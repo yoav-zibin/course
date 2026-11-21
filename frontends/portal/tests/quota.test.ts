@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {AccountRepository,emptyAccountData,utf8Size,type StorageAdapter} from '../src/core/repository';
 import {I18N_RECENCY_KEY,isQuotaError,touchTranslationCache} from '../src/platform/recoverable-cache';
+import {diagnosticSnapshot,setDiagnosticScope} from '../src/core/diagnostics';
 
 class QuotaStorage implements StorageAdapter {
   values=new Map<string,string>(); limit=Infinity; writes=0; removals:string[]=[]; failure:Error|null=null; failAfter=Infinity;
@@ -18,6 +19,18 @@ class QuotaStorage implements StorageAdapter {
   private active=false;
   async exclusive<T>(_name:string,run:()=>Promise<T>){assert.equal(this.active,false,'quota cleanup must never nest native/global locks');this.active=true;try{return await run();}finally{this.active=false;}}
   size(){return [...this.values].reduce((n,[key,value])=>n+utf8Size(key)+utf8Size(value),0);}
+}
+function pendingOnlyData(){
+  const data=emptyAccountData();
+  const match={id:'pending',game_id:'old-game',game_version:7,status:'ongoing',cloud_pending:true,local_revision:1,
+    logicState:{private:'keep pending state'},moves:[{move_number:1,new_state:{exact:true}}]};
+  data.local.pending=match as any;data.responses['/matches/pending']=match;
+  data.responses['/games/old-game/versions/7']={id:'old-game',version:7,server_code:'exact pinned rules'+'x'.repeat(100000)};
+  data.responses['/matches/pending/history']={moves:[{move_number:1,new_state:{exact:true}}]};
+  data.queues.pending=[{requestId:'keep-retry-key',body:{move:{cell:2},expected_move_count:1},baseState:{exact:true},baseTurn:[0]}];
+  data.conflicts.pending={message:'keep this review branch'};
+  data.archives=[{id:'recovery',kind:'removed-single-player-save',match:{...match,id:'recovery'},moves:[{requestId:'keep-recovery-key'}]}];
+  return data;
 }
 test('cached reads and writes advance monotonic recency and trim the least recently used response',async()=>{
   const storage=new QuotaStorage(),repo=new AccountRepository('',storage),now=Date.now;Date.now=()=>100;
@@ -72,12 +85,31 @@ test('optional oversized downloads remain usable without pretending a durable wr
   await assert.rejects(repo.mutate('alice',data=>{data.local.local={practiceSeed:42,moves:[{exact:true}]} as any;data.queues.pending=[{requestId:'keep-request-id'} as any];}),isQuotaError);
   assert.equal(storage.values.get(repo.key('alice')),original);
 });
-test('retries stop on a different write error and never prune for a non-quota failure',async()=>{
+test('optional downloads survive non-quota write failures without pruning or exposing payloads in logs',async()=>{
+  setDiagnosticScope('quota-repository-unavailable');
   const storage=new QuotaStorage(),repo=new AccountRepository('',storage);await repo.cache('alice','/old-one','a'.repeat(100));await repo.cache('alice','/old-two','b'.repeat(100));
-  const original=storage.values.get(repo.key('alice'));storage.failure=new Error('storage permission denied');storage.failAfter=storage.writes+1;
-  await assert.rejects(repo.cache('alice','/new','x'),/permission denied/);assert.equal(storage.values.get(repo.key('alice')),original);assert.deepEqual(storage.removals,[]);
+  const original=storage.values.get(repo.key('alice'));storage.failure=new Error('storage permission denied: error-secret-never-log');storage.failAfter=storage.writes+1;
+  const value={download:'response-payload-never-log'};
+  assert.deepEqual(await repo.cache('alice','/new',value),value);assert.equal(storage.values.get(repo.key('alice')),original);assert.deepEqual(storage.removals,[]);
   storage.limit=storage.size()+1;storage.failAfter=storage.writes+2;const attempts=storage.writes;
-  await assert.rejects(repo.cache('alice','/new','x'.repeat(200)),/permission denied/);assert.equal(storage.writes-attempts,2);assert.equal(storage.values.get(repo.key('alice')),original);
+  assert.equal(await repo.cache('alice','/new','x'.repeat(200)),'x'.repeat(200));assert.equal(storage.writes-attempts,2);assert.equal(storage.values.get(repo.key('alice')),original);
+  const logs=JSON.stringify(diagnosticSnapshot().logs);assert.match(logs,/Device cache could not be saved/);assert.match(logs,/unavailable/);
+  assert.doesNotMatch(logs,/error-secret-never-log|response-payload-never-log|storage permission denied/);
+});
+test('a cache write at exact storage capacity cannot sacrifice a pending package for optional metadata',async()=>{
+  setDiagnosticScope('quota-repository-pinned-cache');
+  const storage=new QuotaStorage(),repo=new AccountRepository('',storage);await repo.write('alice',pendingOnlyData());
+  const original=storage.values.get(repo.key('alice'));storage.limit=storage.size();
+  assert.deepEqual(await repo.cache('alice','/optional-new',{small:true}),{small:true});
+  assert.equal(storage.values.get(repo.key('alice')),original,'failed optional persistence keeps every original pending dependency byte');
+  const saved=await repo.read('alice');assert.ok(saved.responses['/games/old-game/versions/7']);assert.equal(saved.queues.pending[0].requestId,'keep-retry-key');
+  assert.match(JSON.stringify(diagnosticSnapshot().logs),/quota/);
+});
+test('a cache hit at exact storage capacity keeps pinned rules and recovery data instead of persisting recency',async()=>{
+  const storage=new QuotaStorage(),repo=new AccountRepository('',storage);await repo.write('alice',pendingOnlyData());
+  const original=storage.values.get(repo.key('alice'));storage.limit=storage.size();
+  await repo.touch('alice','/games/old-game/versions/7');
+  assert.equal(storage.values.get(repo.key('alice')),original,'an optional recency write must not evict the cache hit or pending history');
 });
 test('translation recency is monotonic on reads/writes and metadata failures are optional',async()=>{
   const storage=new QuotaStorage(),key='game-platform.i18n-bundle.v1:en',now=Date.now;Date.now=()=>20;

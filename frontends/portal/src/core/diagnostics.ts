@@ -5,6 +5,7 @@ const logs: Entry[] = [], apiCalls: Entry[] = [], events: Entry[] = [], pages: E
 const secrets = new Set<string>();
 const newSessionId = () => `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 let sessionId = newSessionId(), scope: string | null = null;
+export const diagnosticSessionId = () => sessionId;
 /** A report belongs to the current account and API origin. Keep knowledge of
  * old credentials for redaction, but never include another account's activity. */
 export function setDiagnosticScope(next: string) {

@@ -1,5 +1,6 @@
 import * as storage from './storage';
-import {touchTranslationCache} from './recoverable-cache';
+import {isQuotaError,touchTranslationCache,translationEvictions} from './recoverable-cache';
+import {reportCacheFailure} from './cache-diagnostics';
 import sharedCopy from './ui-copy.json';
 let locale = 'en';
 let messages: Record<string, string> = {};
@@ -66,8 +67,20 @@ function translateTutorial(source:unknown,table:unknown):unknown {
   // One literal pass: translated output must never become another source key.
   return source.replace(new RegExp(pattern,'g'),key=>values[key] as string);
 }
-async function cacheGet(key: string) { try { const text = await storage.getItem(key); if (!text) return null; const value = JSON.parse(text); await touchTranslationCache(storage,key); return value; } catch { return null; } }
-async function cacheSet(key: string, value: any) { try { await storage.setItem(key, JSON.stringify(value)); await touchTranslationCache(storage,key); } catch { /* translations are recoverable */ } }
+async function cacheGet(key: string) { try { const text = await storage.getItem(key); if (!text) return null; const value = JSON.parse(text); await touchTranslationCache(storage,key); return value; } catch(error) { reportCacheFailure('translation-read',error);return null; } }
+async function cacheSet(key: string, value: any) {
+  let candidates:Awaited<ReturnType<typeof translationEvictions>>|null=null;
+  for(;;){
+    try {await storage.setItem(key,JSON.stringify(value));await touchTranslationCache(storage,key);return;}
+    catch(error){
+      if(!isQuotaError(error)){reportCacheFailure('translation-write',error);return;}
+      candidates??=(await translationEvictions(storage)).filter(entry=>entry.key!==key).sort((a,b)=>a.at-b.at||a.key.localeCompare(b.key));
+      const oldest=candidates.shift();
+      if(!oldest){reportCacheFailure('translation-write',error);return;}
+      try{await storage.removeItem(oldest.key);}catch(cleanupError){reportCacheFailure('eviction',cleanupError);}
+    }
+  }
+}
 function adopt(value: any) { bundle = value; messages = value.catalog?.messages ?? value.messages ?? {}; direction = value.direction ?? value.catalog?.direction ?? 'ltr'; listeners.forEach(fn => fn()); }
 export async function configureI18n(base: string, preferred?: string, localOnly = false): Promise<void> {
   baseUrl = base; offlineOnly = localOnly;
@@ -80,7 +93,7 @@ export async function setLocale(value: string): Promise<boolean> {
   const request = ++localeRequest, base = baseUrl, localOnly = offlineOnly;
   const current = () => request === localeRequest;
   locale = value; direction = locales.find(item => item.code === value)?.direction ?? 'ltr';
-  await storage.setItem('game-platform.locale.v1', value).catch(() => {});
+  await storage.setItem('game-platform.locale.v1', value).catch(error => reportCacheFailure('locale',error));
   if (!current()) return false;
   const key = `game-platform.i18n-bundle.v1:${value}`;
   const saved = await cacheGet(key); if (!current()) return false;

@@ -6,6 +6,7 @@ import {protectedResponsePaths, matchRetentionPriority} from './cache-policy';
 import {gameSearchPrefix,gameSuggestions} from './game-search';
 import {isValidDownloadedGame, presentationHistoryPath} from './offline-match-data';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
+import {reportCacheFailure} from '../platform/cache-diagnostics';
 import { syncAccount } from './sync';
 import {RetryableSyncCompatibilityError} from './sync-compatibility';
 import {hiddenMatchIds, hydrateSinglePlayer, localRevision, needsCloudSave, REMOVED_SAVED_MATCH, removedSavedMatch, savedMatchBranch, singlePlayerKind} from './single-player';
@@ -29,6 +30,9 @@ const unique = <T extends { id?: string; token?: string }>(values: T[]): T[] => 
 const savedList = <T>(value: unknown): T[] => Array.isArray(value) ? value : [];
 const localHumanSeat = (match: Match) => match.players.find(player => player.kind === 'human' && player.active !== false)?.player_index ?? 0;
 const LOCAL_COMPUTER_MOVE_LIMIT = 200;
+class RemovedSavedMatchError extends Error {
+  constructor(){super(copyText('This saved copy was removed from this device. Its recovery data is available in Preserved previous app data.'));}
+}
 
 export class PortalStore {
   constructor(private rulesExecutor: (game: { server_code: string; game_schemas?: unknown }, name: string, args: unknown[], ctx: unknown, seed: number | string, now: number) => Promise<any> = async (...args) => (await import('../game/runtime')).executeGame(...args), private loginBrowser: (baseUrl: string) => Promise<any> = browserLogin, private writeCurrentAccount: (id: string, base?: string) => Promise<void> = (id, base) => storage.setItem(currentAccountKey(base), id)) {}
@@ -62,7 +66,6 @@ export class PortalStore {
   private syncCompatibilityRetryAfter = 0;
   private api = new PortalApi('', getLocale);
   private repository = new AccountRepository();
-  private cacheErrorPath: string | null = null;
   private volatileResponses = new Map<string,Map<string,any>>();
   getSnapshot = () => this.state;
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
@@ -137,7 +140,7 @@ export class PortalStore {
     let bytes=[...pending.values()].reduce((n,item)=>n+utf8Size(JSON.stringify(item)),0);
     for(const [key,item]of pending){if(pending.size<=64&&bytes<=1000000)break;if(key===path||pinned.has(key))continue;pending.delete(key);delete this.data.responses[key];bytes-=utf8Size(JSON.stringify(item));}
   }
-  private async reloadData() { const id = this.identity(); const guard = this.capture(); try { const data = await this.repository.read(id); guard(); this.publishData(data); } catch (error) { guard(); this.patch({ storageError: `Saved data is unavailable: ${(error as Error).message}. Existing saves were kept.` }); } }
+  private async reloadData() { const id = this.identity(); const guard = this.capture(); try { const data = await this.repository.read(id); guard(); this.publishData(data); } catch (error) { guard(); if(isQuotaError(error))reportCacheFailure('read',error);else this.patch({ storageError: `Saved data is unavailable: ${(error as Error).message}. Existing saves were kept.` }); } }
   private async cache(path: string, value: any) {
     const id=this.identity(), guard=this.capture(), matchId=/^\/matches\/([^/]+)$/.exec(path)?.[1], matchPath=!!matchId;
     const preserve=(previous:any,next:any)=>matchPath&&previous&&(this.data.queues[matchId!]?.length||this.data.conflicts[matchId!]||previous.move_count>next?.move_count)?previous:next;
@@ -156,8 +159,7 @@ export class PortalStore {
       this.data.local=saved.data.local;
       if (matchId && this.data.local[matchId]) this.patch({localMatches:Object.values(this.data.local).map(match => this.decorate(match) as LocalMatch)});
       this.rememberVolatile(path,value,persisted);
-      if(this.cacheErrorPath===path&&equal(persisted,value)&&this.state.storageError?.startsWith('Could not save downloaded data:')){this.cacheErrorPath=null;this.patch({storageError:null});}
-    } catch(error) {guard();value=preserve(this.data.responses[path],value);this.rememberVolatile(path,value,this.data.responses[path]);this.cacheErrorPath=path;this.patch({storageError:`Could not save downloaded data: ${(error as Error).message}`});}
+    } catch(error) {guard();value=preserve(this.data.responses[path],value);this.rememberVolatile(path,value,this.data.responses[path]);reportCacheFailure('download',error);}
     guard();this.data.responses[path]=value;return value;
   }
   private async cached(path: string): Promise<any> {const value=this.data.responses[path],guard=this.capture();await this.repository.touch(this.identity(),path);guard();return this.data.responses[path]??value;}
@@ -342,7 +344,7 @@ export class PortalStore {
       this.api = new PortalApi(base, getLocale, localOnly ? async () => { throw new Error('This test launch runs entirely on this device.'); } : fetch); this.repository = new AccountRepository(base); this.patch({ baseUrl: base, network: !localOnly && isOnline() });
       let accounts: Account[];
       try { accounts = await loadAccounts(base); accounts = await importNativeLegacy(base || 'https://buildplay.fun', this.repository, accounts); await saveAccounts(accounts, base); await finishNativeImport(base || 'https://buildplay.fun'); }
-      catch (error) { accounts = await loadAccounts(base).catch(() => []); this.patch({ storageError: `Saved data needs attention: ${(error as Error).message}. Existing saves were kept.` }); }
+      catch (error) { accounts = await loadAccounts(base).catch(() => []); if(isQuotaError(error))reportCacheFailure('migration',error);else this.patch({ storageError: `Saved data needs attention: ${(error as Error).message}. Existing saves were kept.` }); }
       const id = await loadCurrentAccount(base).catch(() => null);
       // Only old installs without a selection may restore their first login.
       // An explicit visitor marker or a removed selected account stays out.
@@ -548,8 +550,8 @@ export class PortalStore {
     this.patch({ selectedMatch: null, selectedGameId: id, game: null, history: null, replayIndex: null });
     // Remembering the last open view is optional. A full device must still
     // display downloaded content without discarding saved games or moves.
-    try { await this.repository.mutate(owner, data => { guard(); if (token === this.selection) data.selectedId = null; }); }
-    catch (error) { guard(); if (!isQuotaError(error)) throw error; }
+    try { await this.repository.mutate(owner, data => { guard(); if (token === this.selection) data.selectedId = null; },{optionalCache:true}); }
+    catch (error) { guard(); reportCacheFailure('selection',error); }
     guard(); if (token !== this.selection) return;
     const game = await this.pinnedGame(id); guard(); if (token === this.selection) this.patch({ selectedGameId: id, game }); return game;
   }
@@ -569,7 +571,7 @@ export class PortalStore {
     if (inviteToken) this.selectedInvite = {matchId: id, token: inviteToken};
     else if (this.selectedInvite?.matchId !== id) this.selectedInvite = null;
     const token = ++this.selection; const guard = this.capture(); await this.reloadData();
-    if(removedSavedMatch(this.data,id))throw new Error(copyText('This saved copy was removed from this device. Its recovery data is available in Preserved previous app data.'));
+    if(removedSavedMatch(this.data,id))throw new RemovedSavedMatchError();
     const fetched = initialMatch || this.data.local[id] || (this.data.creations?.[id] ? this.data.responses[`/matches/${id}`] : await this.read(`/matches/${encodeURIComponent(id)}`)); guard(); if (token !== this.selection) return;
     if (initialMatch?.single_player_state) {
       await this.cache(`/matches/${encodeURIComponent(id)}`,initialMatch); guard();
@@ -577,10 +579,10 @@ export class PortalStore {
     const match = this.data.local[id] || fetched;
     const packageMatches = this.state.game?.id === match.game_id && this.state.game.version === match.game_version;
     try { await this.repository.mutate(this.identity(), data => { guard(); if (token === this.selection) {
-      if(removedSavedMatch(data,id))throw new Error(copyText('This saved copy was removed from this device. Its recovery data is available in Preserved previous app data.'));
+      if(removedSavedMatch(data,id))throw new RemovedSavedMatchError();
       data.selectedId = id; if(!data.local[id])data.responses[`/matches/${id}`]=match;
-    } }); }
-    catch (error) { guard(); if (!isQuotaError(error)) throw error; }
+    } },{optionalCache:true}); }
+    catch (error) { guard(); if(error instanceof RemovedSavedMatchError)throw error;reportCacheFailure('selection',error); }
     guard(); if (token !== this.selection) return;
     this.patch({ selectedMatch: this.decorate(match), game: packageMatches ? this.state.game : null, selectedGameId: match.game_id, replayIndex: null, history: null });
     this.repository.protectGame(this.identity(),match.game_id,match.game_version);
@@ -589,7 +591,7 @@ export class PortalStore {
     await this.loadProfiles().catch(() => {});
     if (token === this.selection) await this.recoverPresentation(match).catch(() => {});
   }
-  clearMatch() { this.selectedInvite = null; ++this.selection; this.patch({ selectedMatch: null, history: null, replayIndex: null }); void this.repository.mutate(this.identity(), data => { data.selectedId = null; }).catch(() => {}); }
+  clearMatch() { this.selectedInvite = null; ++this.selection; this.patch({ selectedMatch: null, history: null, replayIndex: null }); void this.repository.mutate(this.identity(), data => { data.selectedId = null; },{optionalCache:true}).catch(error => reportCacheFailure('selection',error)); }
   clearGame() { this.clearMatch(); this.repository.protectGame(this.identity(),null);this.patch({ selectedGameId: null, game: null }); }
   private writeSelection(id:string,guard:()=>void) {
     const write=this.accountSelectionWrites.then(async()=>{
@@ -780,7 +782,7 @@ export class PortalStore {
       if (!isOnline() || this.data.queues[match.id]?.length || this.data.conflicts[match.id] || !/quota|storage|disk|denied|unavailable/i.test(`${(error as Error).name} ${(error as Error).message}`) || /pending action|another window/.test((error as Error).message)) throw error;
       // Storage-denied browsers may still play online. This is one fresh POST;
       // uncertainty freezes play until a subsequent authoritative GET.
-      this.patch({ storageError: 'Device storage unavailable; this online action cannot be queued for offline retry.' });
+      reportCacheFailure('online-action',error);
       try { const updated = await this.api.request<Match>('POST', `/matches/${encodeURIComponent(match.id)}/moves`, entry.body, account, entry.requestId); guard(); await this.cache(`/matches/${match.id}`, updated); this.patch({ selectedMatch: this.decorate(updated) }); await this.refreshProfile().catch(() => {}); guard(); await this.offerNotificationPrompt(match, updated); return; }
       catch (requestError) { guard(); this.data.conflicts[match.id] = { message: 'The outcome of this unsaved action is unknown. Refresh the match before trying again.' }; this.patch({ selectedMatch: this.decorate(match) }); throw requestError; }
     }

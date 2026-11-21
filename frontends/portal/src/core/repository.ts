@@ -2,6 +2,7 @@ import * as storage from '../platform/storage';
 import type { AccountData, LocalMatch } from './types';
 import { redactedArchive } from './redaction';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
+import {reportCacheFailure} from '../platform/cache-diagnostics';
 export {utf8Size} from '../platform/recoverable-cache';
 import {originEvictions} from '../platform/origin-cache';
 import {protectedResponsePaths,responseRetentionPriorities} from './cache-policy';
@@ -95,7 +96,7 @@ export class AccountRepository {
     }
     return migrateLegacy(raw);
   }
-  async write(id: string, data: AccountData): Promise<void> {
+  async write(id: string, data: AccountData, options: {optionalCache?: boolean} = {}): Promise<void> {
     // One atomic replacement commits queue+snapshot together on every platform.
     this.trim(data,id);
     type Candidate = {key: string; at: number; priority?: number; bytes?: number; evict: () => Promise<void>};
@@ -139,10 +140,10 @@ export class AccountRepository {
         if (attempt > 200) throw error;
         if (!candidates) candidates = await buildStage();
         while (!candidates.length) {
-          // Nothing sheddable remains: the durable core alone exceeds the
-          // device quota. Propagate the original failure; the previously
-          // stored copy is untouched because the write never succeeded.
-          if (stage >= 3) throw error;
+          // Optional downloads/access times must not displace the rules or
+          // history required by saved work. Durable writes can use the final
+          // recovery stage; failed writes leave the stored copy untouched.
+          if (stage >= (options.optionalCache ? 2 : 3)) throw error;
           stage++; candidates = await buildStage();
         }
         const batch = [];let freed=0;
@@ -155,8 +156,8 @@ export class AccountRepository {
       }
     }
   }
-  async mutate<T>(id: string, update: (data: AccountData) => T | Promise<T>): Promise<T> {
-    return this.lock(id, async () => { const data = await this.read(id); const result = await update(data); await this.write(id, data); return result; });
+  async mutate<T>(id: string, update: (data: AccountData) => T | Promise<T>, options: {optionalCache?: boolean} = {}): Promise<T> {
+    return this.lock(id, async () => { const data = await this.read(id); const result = await update(data); await this.write(id, data,options); return result; });
   }
   async cache(id: string, path: string, value: any): Promise<any> {
     return (await this.cacheData(id,path,value)).value;
@@ -177,18 +178,18 @@ export class AccountRepository {
       data.responses[path] = value;
       if (matchId) hydrateSinglePlayer(data,value);
       touchResponse(data,path);
-      try {await this.write(id,data);} catch (error) {
+      try {await this.write(id,data,{optionalCache:true});} catch (error) {
         // A replaceable download may be served from memory. Durable mutation
         // callers still receive write failures and never lose their old save.
-        if (!isQuotaError(error)) throw error;
+        reportCacheFailure('download',error);
         const persisted = await this.read(id); return {value,data:persisted};
       }
       return {value,data};
     });
   }
   async touch(id: string, path: string): Promise<void> {
-    try {await this.lock(id,async()=>{const data=await this.read(id);if(!Object.hasOwn(data.responses,path))return;touchResponse(data,path);await this.write(id,data);});}
-    catch { /* Recency is optional even when the cached value remains readable. */ }
+    try {await this.lock(id,async()=>{const data=await this.read(id);if(!Object.hasOwn(data.responses,path))return;touchResponse(data,path);await this.write(id,data,{optionalCache:true});});}
+    catch (error) {reportCacheFailure('recency',error);}
   }
   async preserveMergedAccounts(targetId: string, sourceIds: string[]): Promise<void> {
     const sources: { id: string; data: AccountData }[] = [];
