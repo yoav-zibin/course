@@ -1,6 +1,6 @@
 """What a browser sees when it opens an API address (the branded pages in api.py)."""
 
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, login_google_admin
 
 BROWSER = {"Accept": "text/html,application/xhtml+xml"}
 
@@ -28,8 +28,9 @@ def test_the_health_check_shows_its_json_in_a_browser(api: Api) -> None:
 
 
 def test_admin_routes_and_the_api_description_show_their_json_in_a_browser(api: Api) -> None:
+    login_google_admin(api.client)
     for path in ("/admin/game-input-metrics", "/openapi.json"):
-        response = _get(api, path, auth=("test-admin", api.client.app.state.master_password))
+        response = _get(api, path)
         assert response.status_code == 200, path
         assert response.headers["content-type"].startswith("application/json"), path
 

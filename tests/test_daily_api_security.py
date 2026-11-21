@@ -72,11 +72,20 @@ def test_unicode_body_master_preserves_the_game_secret():
     assert again.status_code == 200, again.text
 
 
-@pytest.mark.parametrize("path,method", [("/admin/stats", "GET"), ("/browse", "GET"), ("/v2/admin/users", "GET"), ("/game-proposals", "GET"), ("/game-proposals/anything", "DELETE")])
+@pytest.mark.parametrize("path,method", [("/admin/stats", "GET"), ("/v2/admin/users", "GET"), ("/game-proposals", "GET"), ("/game-proposals/anything", "DELETE")])
 def test_unconfigured_master_disables_protected_operations(path, method):
     client = TestClient(create_app())
     for auth in (None, ("admin", ""), ("admin", "anything")):
         assert client.request(method, path, auth=auth).status_code == 503
+
+
+def test_unconfigured_admin_page_redirects_to_google_signin_without_accepting_basic():
+    client = TestClient(create_app(master_password=MASTER))
+    for auth in (None, ("admin", ""), ("admin", MASTER)):
+        response = client.get("/browse", auth=auth, follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/admin/login?next=%2Fbrowse"
+        assert "www-authenticate" not in response.headers
 
 
 def test_batch_cannot_access_master_password_admin_collections():
