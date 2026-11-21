@@ -3,6 +3,7 @@ import copy from '../src/platform/ui-copy.json';
 import policy from '../src/platform/privacy-policy.json';
 import {createUser,loginAs,uniqueName} from './helpers';
 const retention=policy.blocks.find(block=>block.text.startsWith('Your account data is kept'))!.text;
+const updated=policy.blocks.find(block=>block.text.startsWith('Last updated:'))!.text;
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Privacy dialog tests require a disposable loopback server.');
@@ -22,7 +23,9 @@ test('Privacy opens from the bottom of the profile and preserves the profile dra
   const content=page.getByTestId('privacy-policy-content');
   await expect(content).toBeVisible();
   await expect(page.getByRole('heading',{name:'Privacy Policy for BuildPlay',exact:true})).toBeVisible();
-  await expect(content).toContainText('Last updated: November 20, 2026.');
+  await expect(content).toContainText(updated);
+  await expect(content).toContainText('Unexpected client errors automatically send recent diagnostics and your account identity when available, without a screenshot, dialog or action from you.');
+  await expect(content).toContainText('Automatic reports have rate limits and duplicate suppression.');
   await expect(content).toContainText('OpenAI Codex');
   await expect(content).toContainText('are removed when account deletion completes.');
   await expect(content).toContainText('You can undo the request for 24 hours');
