@@ -51,9 +51,15 @@ test('Flipside Lords: a full game against the computer, with a tile flip, ends w
   const actions=page.getByRole('button',{name:/^(Capture on|Strike|Move to|Command the) /});
   let flipped=false,turns=0,draws=0;
   for(;turns<120;turns++){
-    await expect.poll(async()=>(await outcome.isVisible())||(await mine.count())>0&&await mine.first().isEnabled(),{timeout:60000}).toBe(true);
+    // A computer move can replace every troop button with a noninteractive
+    // piece as the match ends. Inspect one immediate snapshot so a button
+    // disappearing between count() and isEnabled() cannot wait past the result.
+    await expect.poll(async()=>(await outcome.isVisible())||await mine.evaluateAll(
+      nodes=>nodes.some(node=>!node.matches(':disabled,[aria-disabled="true"]')),
+    ),{timeout:60000}).toBe(true);
     if(await outcome.isVisible())break;
     await page.waitForTimeout(300);
+    if(await outcome.isVisible())break;
     if(!flipped){
       // Look at a tile's other side with the host's flip tool, then back.
       await press(page,/ of (Ivory|Walnut) · Ana \(.*\) on [A-F][1-6]: /,isMobile);
