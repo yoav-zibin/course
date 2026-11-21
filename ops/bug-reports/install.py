@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the authorized hourly player bug-report check for an existing Codex thread."""
+"""Install the authorized daily player bug-report batch for an existing Codex thread."""
 
 import argparse
 import json
@@ -13,6 +13,15 @@ import uuid
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = ROOT.parent.parent
 UNIT = "buildplay-bug-reports"
+DAILY_CALENDAR = "*-*-* 00:00:00 UTC"
+
+
+def timer_unit():
+    return (
+        "[Unit]\nDescription=Review player bug reports daily as one batch\n\n"
+        "[Timer]\nOnCalendar=" + DAILY_CALENDAR + "\nPersistent=true\nUnit=" + UNIT +
+        ".service\n\n[Install]\nWantedBy=timers.target\n"
+    )
 
 
 def unit_path(path):
@@ -114,21 +123,19 @@ def main():
     service = directory / (UNIT + ".service")
     timer = directory / (UNIT + ".timer")
     service.write_text(
-        "[Unit]\nDescription=Check player bug reports and queue Codex repairs\n"
+        "[Unit]\nDescription=Check player bug reports and queue a daily Codex repair batch\n"
         "Wants=network-online.target codex-remote-control.service\n"
         "After=network-online.target codex-remote-control.service\n\n"
         "[Service]\nType=oneshot\nWorkingDirectory=" + str(REPOSITORY).replace("%", "%%") + "\n"
         "ExecStart=/usr/bin/python3 " + unit_path(ROOT / "review.py") +
         " --state-dir " + unit_path(state) + " watch\nTimeoutStartSec=300\nUMask=0077\n"
     )
-    timer.write_text(
-        "[Unit]\nDescription=Check player bug reports every hour\n\n"
-        "[Timer]\nOnCalendar=*-*-* *:00:00 UTC\nPersistent=true\nUnit=" + UNIT +
-        ".service\n\n[Install]\nWantedBy=timers.target\n"
-    )
+    timer.write_text(timer_unit())
     subprocess.run(["systemd-analyze", "--user", "verify", str(service), str(timer)], check=True)
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "--user", "enable", "--now", UNIT + ".timer"], check=True)
+    # An already active timer must reload its next trigger after a reinstall.
+    subprocess.run(["systemctl", "--user", "restart", UNIT + ".timer"], check=True)
     subprocess.run(["systemctl", "--user", "list-timers", UNIT + ".timer", "--no-pager"], check=True)
 
 

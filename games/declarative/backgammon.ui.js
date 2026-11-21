@@ -392,6 +392,14 @@ const gameUI = {
       animation:{kind:'notice',key:notice.id+':'+m.move_count,duration_ms:notice.duration,delay_ms:notice.delay}});
     const out = {scene: {pieces, targets, controls, labels}, local_state: {stacks, move_count:m.move_count, roll, help, hint, options, motion_events: motionEvents, motion_move_count: m.move_count,
       opening_events: openingEvents, opening_faces: openingFaces, opening: !!s.opening, notices, notice_count:m.move_count}};
+    if (!setup && !help) {
+      // Keep moving and captured checkers above board artwork using the
+      // existing piece-order contract, which older installed hosts accept.
+      // Local dialogs rebuild ordinary stacks so checkers never cover their
+      // panels while help or setup owns the interaction.
+      const moving = new Set((gameUI.getLastMoveAnimations(s, out.scene) || []).map(entry => entry.piece_id));
+      for (const piece of pieces) if (moving.has(piece.id)) piece.z = 100000;
+    }
     if (message.type === 'ui_event' && active && setup && message.event.type === 'tap' && message.event.id === 'start_game')
       out.make_move = {action:'configure',difficulty:options.difficulty,goal:options.goal,cube_enabled:options.cube_enabled};
     if (message.type === 'ui_event' && active && !setup && !help) {

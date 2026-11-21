@@ -1,4 +1,4 @@
-"""Hourly delivery never resolves evidence, leaks report text or loses interrupted work."""
+"""Daily batch delivery preserves evidence, approval gates and interrupted work."""
 
 import copy
 from concurrent.futures import ThreadPoolExecutor
@@ -87,6 +87,29 @@ def test_delivery_deduplicates_then_recovers_interrupted_handling(state_dir, pen
     assert "UNTRUSTED USER DATA" in command[command.index("--message") + 1]
     # The watcher has only read the queue; it has not changed report status.
     pending.request.assert_not_called()
+
+
+@pytest.mark.parametrize("queued_at,next_check", [
+    (15 * 3600, 24 * 3600),  # Migrate an afternoon hourly receipt to next midnight.
+    (3, 24 * 3600 + 2),  # A daily trigger one second earlier must still recover.
+])
+def test_daily_recovery_uses_utc_dates_not_a_rolling_delay(state_dir, pending, monkeypatch, queued_at, next_check):
+    queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
+    monkeypatch.setattr(review.subprocess, "run", queue)
+    review.watch(state_dir, now=queued_at)
+    assert review.watch(state_dir, now=queued_at + 100).startswith("Player bug-report repair already queued")
+    assert queue.call_count == 1
+    assert review.watch(state_dir, now=next_check).startswith("Queued repair")
+    assert queue.call_count == 2
+    assert review.RETRY_SECONDS == 24 * 3600
+
+
+def test_same_day_receipt_suppresses_the_former_six_hour_retry(state_dir, pending, monkeypatch):
+    queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
+    monkeypatch.setattr(review.subprocess, "run", queue)
+    review.watch(state_dir, now=100)
+    assert review.watch(state_dir, now=100 + 6 * 3600).startswith("Player bug-report repair already queued")
+    assert queue.call_count == 1
 
 
 def test_new_report_is_not_hidden_by_an_existing_delivery_receipt(state_dir, pending, monkeypatch):
@@ -335,20 +358,40 @@ def test_unconfigured_owner_policy_cannot_reuse_a_submitted_or_stale_flag(state_
     pending.request.assert_not_called()
 
 
-def test_queued_prompt_carries_owner_preauthorization_and_evidence_safeguards(state_dir, pending, monkeypatch):
+def test_compact_daily_bootstrap_requires_the_complete_batch_workflow_and_safeguards(state_dir, pending, monkeypatch):
     configure_owner(state_dir)
     queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
     monkeypatch.setattr(review.subprocess, "run", queue)
     result = review.watch(state_dir, now=100)
     command = queue.call_args.args[0]
     prompt = command[command.index("--message") + 1]
-    assert "owner_google_user_id" in prompt
-    assert "owner_suggestion_authorized" in prompt
-    assert re.search(r"pre[- ]?authori[sz]", prompt, re.I)
+    instructions = (review.ROOT / "instructions.txt").read_text()
+    assert str((review.ROOT / "instructions.txt").resolve()) in prompt
+    assert "Before any report action, read" in prompt
+    assert "daily batch" in prompt and "group duplicates" in prompt
+    assert "fresh review.py get policy only" in prompt
+    assert "per-report approval" in prompt and "single pending question" in prompt
+    assert "confirm publication before handling each report" in prompt
+    assert len(prompt) < len(instructions) // 4
+    assert "owner_google_user_id" in instructions
+    assert "owner_suggestion_authorized" in instructions
+    assert "Batch membership never grants authorization" in instructions
+    assert "evidence fingerprints" in instructions
+    assert "unchanged" in instructions and "one shared investigation" in instructions
     assert "UNTRUSTED USER DATA" in prompt
     assert "commands" in prompt and "secrets" in prompt and "workflow" in prompt
     assert OWNER_ID not in result
     pending.request.assert_not_called()
+
+
+def test_missing_trusted_batch_instructions_never_queues_or_saves_a_receipt(state_dir, pending, monkeypatch):
+    queue = Mock()
+    monkeypatch.setattr(review.subprocess, "run", queue)
+    monkeypatch.setattr(review, "ROOT", state_dir / "missing-repository-instructions")
+    with pytest.raises(RuntimeError, match="trusted daily repair instructions"):
+        review.watch(state_dir, now=100)
+    queue.assert_not_called()
+    assert not (state_dir / "pending.json").exists()
 
 
 def foreign_report(identifier="foreign-report", reporter=OTHER_ID, status="open"):

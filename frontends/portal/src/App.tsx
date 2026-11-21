@@ -28,6 +28,7 @@ import {PortalHeader} from './ui/PortalHeader';
 
 function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnType<typeof usePortal>;boardVisible:boolean;matchMenuOpen:boolean;onCloseMatchMenu:()=>void}) {
   const {width} = useWindowDimensions();
+  const fittedBoard=boardVisible&&!matchMenuOpen&&!p.selectedMatch?.awaitingHandoff;
   const localOnly=useRef(readLocalUiTest()).current;
   const [screen, setScreen] = useState<Screen>('games');
   const [account, setAccount] = useState(false);
@@ -47,7 +48,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnTyp
   for(const saved of p.accounts)knownPasswords.current.add(saved.password);
   rememberDiagnosticSecrets(knownPasswords.current);
   useEffect(()=>recordDiagnosticPage({screen,gameId:p.selectedGameId,matchId:p.selectedMatch?.id,matchMenuOpen}),[screen,p.selectedGameId,p.selectedMatch?.id,matchMenuOpen]);
-  useEffect(()=>{const frame=requestAnimationFrame(()=>content.current?.scrollTo({y:0,animated:false}));return()=>cancelAnimationFrame(frame);},[matchMenuOpen]);
+  useEffect(()=>{const frame=requestAnimationFrame(()=>content.current?.scrollTo({x:0,y:0,animated:false}));return()=>cancelAnimationFrame(frame);},[matchMenuOpen,fittedBoard]);
   const t = (key: string, fallback: string) => text(p,key,fallback);
   const run = useCallback(async (task: () => Promise<unknown>) => {try { await task(); } catch (error) {setNotice(error instanceof Error ? error.message : String(error));}}, []);
   const routeBase = Platform.OS === 'web' ? window.location.origin : process.env.EXPO_PUBLIC_API_URL || 'https://buildplay.fun';
@@ -195,7 +196,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnTyp
         onGames={()=>navigate('games')} onMatches={()=>navigate('matches')} onAccount={()=>setAccount(true)} onNotifications={()=>setInbox(true)}/>}
       {showDetails&&<AccountDeletionBanner/>}
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
-        <ScrollView ref={content} key={contentKey} style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},boardVisible&&matchMenuOpen&&{paddingBottom:64}]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={content} key={contentKey} style={{flex:1,minWidth:0}} scrollEnabled={!fittedBoard} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},boardVisible&&matchMenuOpen&&{paddingBottom:64},fittedBoard&&{height:'100%',maxWidth:'100%',gap:0}]} keyboardShouldPersistTaps="handled">
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
           {showDetails&&(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {copyText('pending saves')}. {p.pending ? copyText('Your progress is saved locally and will sync to the cloud when connected.') : copyText('Downloaded single-player games keep working offline; progress syncs when you reconnect.')}</Notice>}

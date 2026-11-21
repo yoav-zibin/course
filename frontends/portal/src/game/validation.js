@@ -86,10 +86,11 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     if("move_targets" in item&&(!Array.isArray(item.move_targets)||item.move_targets.length>2048||item.move_targets.some(value=>!isId(value))||new Set(item.move_targets).size!==item.move_targets.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
     if("actions" in item&&(!Array.isArray(item.actions)||item.actions.some(action=>!["tap","move","rotate","flip","scale"].includes(action))||new Set(item.actions).size!==item.actions.length||item.actions.includes("move")&&!item.move_targets?.length))throw new Error(t("ui.declarative.error.invalid_move_targets", {}, "Invalid move targets"));
     if("animation" in item){
-      knownObject(item.animation,["kind","key","duration_ms","delay_ms"],["kind","key"]);
+      knownObject(item.animation,["kind","key","duration_ms","delay_ms","z"],["kind","key"]);
       if(!["roll","move","notice","pulse"].includes(item.animation.kind))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
       if(!isId(item.animation.key))throw new Error(t("ui.declarative.error.invalid_ui_identifier", {}, "Invalid UI identifier"));
       for(const key of ["duration_ms","delay_ms"])if(key in item.animation&&(!Number.isInteger(item.animation[key])||item.animation[key]<0||item.animation[key]>5000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
+      if('z' in item.animation&&(typeof item.animation.z!=='number'||Math.abs(item.animation.z)>1000000))throw new Error(t("ui.declarative.error.invalid_numeric_geometry", {}, "Invalid numeric geometry"));
     }
     if("hit_area" in item){
       knownObject(item.hit_area,["x","y","width","height"],["x","y","width","height"]);
@@ -178,9 +179,10 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     let duration=0;
     const same=(a,b)=>Math.abs(a.x-b.x)<.000001&&Math.abs(a.y-b.y)<.000001;
     for(const animation of animations){
-      knownObject(animation,['piece_id','path','duration_ms'],['piece_id','path']);
+      knownObject(animation,['piece_id','path','duration_ms','z'],['piece_id','path']);
       if(!isId(animation.piece_id)||!pieces.has(animation.piece_id)||!Array.isArray(animation.path)||animation.path.length<2||animation.path.length>64)fail();
       if('duration_ms' in animation&&(!Number.isInteger(animation.duration_ms)||animation.duration_ms<0||animation.duration_ms>5000))fail();
+      if('z' in animation&&(typeof animation.z!=='number'||Math.abs(animation.z)>1000000))fail();
       duration+=animation.duration_ms??spec.motion?.move_ms??1440;
       if(duration>30000)fail();
       const points=animation.path.map(point=>{
@@ -205,10 +207,11 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     const pieces=new Map((scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>[piece.id,piece]));
     const seen=new Set();
     for(const animation of animations){
-      knownObject(animation,['piece_id','key','from','duration_ms','delay_ms'],['piece_id','key','from']);
+      knownObject(animation,['piece_id','key','from','duration_ms','delay_ms','z'],['piece_id','key','from']);
       if(!isId(animation.piece_id)||!isId(animation.key)||!pieces.has(animation.piece_id)||seen.has(animation.piece_id))fail();
       seen.add(animation.piece_id);
       for(const key of ['duration_ms','delay_ms'])if(key in animation&&(!Number.isInteger(animation[key])||animation[key]<0||animation[key]>5000))fail();
+      if('z' in animation&&(typeof animation.z!=='number'||Math.abs(animation.z)>1000000))fail();
       const from=animation.from;
       knownObject(from,['board','position','rotation','scale','opacity']);
       if(!['position','rotation','scale','opacity'].some(key=>Object.hasOwn(from,key)))fail();

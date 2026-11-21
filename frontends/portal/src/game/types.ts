@@ -28,7 +28,7 @@ export type Piece = {
   asset?: string; rotation?: number; scale?: number; opacity?: number; z?: number;
   face?: 'front' | 'back'; move_targets?: string[]; selected?: boolean; hidden?: boolean;
   draggable?: boolean; actions?: PieceAction[];
-  animation?: { kind: 'roll' | 'move' | 'notice' | 'pulse'; key: string; duration_ms?: number; delay_ms?: number };
+  animation?: { kind: 'roll' | 'move' | 'notice' | 'pulse'; key: string; duration_ms?: number; delay_ms?: number; z?:number };
 };
 export type HitShape =
   | { kind: 'line'; from: Point; to: Point; width: number }
@@ -50,12 +50,12 @@ export type Scene = {
 };
 export type MoveAnimationPoint = { board: string; position: Position };
 export type MoveAnimation = {
-  piece_id: string; path: MoveAnimationPoint[]; duration_ms?: number;
+  piece_id: string; path: MoveAnimationPoint[]; duration_ms?: number; z?:number;
 };
 export type SceneAnimation = {
   piece_id: string; key: string;
   from: { board?: string; position?: Position; rotation?: number; scale?: number; opacity?: number };
-  duration_ms?: number; delay_ms?: number;
+  duration_ms?: number; delay_ms?: number; z?:number;
 };
 export type StateMessage = {
   type: 'state_changed'; status: string; move_count?: number; my_player_index?: number | null;

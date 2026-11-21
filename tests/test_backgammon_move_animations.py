@@ -41,6 +41,9 @@ def final_endpoints(frame):
     endings = {}
     for animation in frame['last_move_animations']:
         piece = animation['piece_id']
+        # Existing Piece.z works on installed hosts predating animation.z.
+        assert pieces[piece]['z'] == 100000
+        assert set(animation) <= {'piece_id', 'path', 'duration_ms'}
         if piece in endings:
             assert animation['path'][0] == endings[piece]
         endings[piece] = animation['path'][-1]
@@ -99,3 +102,27 @@ def test_nonchecker_commands_replace_move_metadata_and_legacy_views_fall_back(ga
     legacy = copy.deepcopy(changed)
     legacy['view'].pop('last_move')
     assert ui.reduce(legacy)['last_move_animations'] is None
+    assert all(piece.get('z', 0) < 100000 for piece in ui.reduce(legacy)['scene']['pieces'])
+
+
+def test_movers_hits_and_stack_settling_draw_above_board_decoration(games):
+    _, frame, _ = apply(games, {9: 1}, {8: 1, 6: 1, 23: 13}, [1, 1, 1, 1], 9, 5)
+    animated = {entry['piece_id'] for entry in frame['last_move_animations']}
+    assert animated
+    for piece in frame['scene']['pieces']:
+        assert (piece.get('z', 0) == 100000) == (piece['id'] in animated)
+    assert {piece['type'] for piece in frame['scene']['pieces'] if piece['id'] in animated} <= {'p0', 'p1', 'p0_off', 'p1_off'}
+
+
+def test_help_panel_keeps_control_after_an_animated_move(games):
+    changed, _, _ = apply(games, {9: 1}, {8: 1, 23: 14}, [1, 2], 9, 8)
+    changed['my_player_index'] = changed['acting_for_player_index'] = 0
+    assert changed['view']['cur'] == 0
+    ui = games[1]
+    frame = ui.reduce(changed)
+    help_frame = ui.reduce({'type': 'ui_event', 'state_changed': changed,
+                            'event': {'type': 'tap', 'id': 'help'}}, frame['local_state'])
+    panel = next(piece for piece in help_frame['scene']['pieces'] if piece['id'] == 'help_panel')
+    checkers = [piece for piece in help_frame['scene']['pieces'] if piece['id'].startswith('checker_')]
+    assert checkers and all(piece['z'] < panel['z'] for piece in checkers)
+    assert not help_frame['scene']['targets']

@@ -2,7 +2,7 @@ import type { GameSpec, Piece, Point, Scene, SceneAnimation, StateMessage } from
 import { position } from './validation';
 
 type Transform = Point & {rotation:number;scale:number;opacity:number};
-export type SceneTrack = {from:Transform;to:Transform;duration:number;delay:number};
+export type SceneTrack = {from:Transform;to:Transform;duration:number;delay:number;z?:number};
 
 // Explicit animations also cover accepted own moves, while reloads and jumps
 // settle immediately. Local UI interactions are checked by the host separately.
@@ -35,7 +35,8 @@ export function sceneTracks(spec:GameSpec,scene:Scene,animations:SceneAnimation[
     }
     for(const key of ['rotation','scale','opacity'] as const)
       if(animation.from[key]!==undefined)from[key]=animation.from[key];
-    tracks.set(piece.id,{from,to,duration:animation.duration_ms??spec.motion?.move_ms??1440,delay:animation.delay_ms??0});
+    tracks.set(piece.id,{from,to,duration:animation.duration_ms??spec.motion?.move_ms??1440,delay:animation.delay_ms??0,
+      ...(animation.z!==undefined?{z:animation.z}:{})});
   }
   return tracks;
 }

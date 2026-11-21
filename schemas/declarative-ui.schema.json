@@ -632,6 +632,12 @@
               "minLength": 1,
               "maxLength": 80,
               "pattern": "^[A-Za-z0-9_.:-]+$"
+            },
+            "z": {
+              "type": "number",
+              "minimum": -1000000,
+              "maximum": 1000000,
+              "description": "Temporary painter order during playback. Defaults to 100001 above stationary artwork and scene decorations. Values through 100000 draw inline with pieces; larger values draw in the animation overlay. Resting Piece.z is restored after playback."
             }
           },
           "required": [
@@ -1372,6 +1378,12 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 5000
+        },
+        "z": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000,
+          "description": "Temporary painter order during playback. Defaults to 100001 above stationary artwork and scene decorations. Values through 100000 draw inline with pieces; larger values draw in the animation overlay. Resting Piece.z is restored after playback."
         }
       },
       "required": [
@@ -1465,6 +1477,12 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 5000
+        },
+        "z": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000,
+          "description": "Temporary painter order during playback. Defaults to 100001 above stationary artwork and scene decorations. Values through 100000 draw inline with pieces; larger values draw in the animation overlay. Resting Piece.z is restored after playback."
         }
       },
       "required": [

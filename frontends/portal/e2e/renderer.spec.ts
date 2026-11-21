@@ -221,16 +221,33 @@ test('fitted native scenes retain instructions inside the complete declared view
   await expect(label).toBeInViewport();
 });
 
-test('short-screen height fitting preserves 32px physical bodies and destinations',async({page,request})=>{
-  const pkg={format:'buildplay-ui',version:1,viewport:{width:1120,height:1100},boards:[{id:'table',kind:'zone',x:0,y:0,width:1120,height:1100}],
+test('dense boards start completely fitted and intentional zoom enlarges pieces and destinations',async({page,request})=>{
+  const pkg={format:'buildplay-ui',version:1,viewport:{width:1120,height:1100,camera_controls:true},boards:[{id:'table',kind:'zone',x:0,y:0,width:1120,height:1100}],
     piece_types:{domino:{shape:'rect',width:224,height:112}},
     ui_code:`const gameUI={reduce(){return {scene:{pieces:[{id:'tile',type:'domino',board:'table',position:{x:300,y:700},aria_label:'Physical domino',actions:['move'],move_targets:['end']}],targets:[{id:'end',board:'table',position:{x:800,y:700},label:'Legal end',hit_area:{width:224,height:112,x:-112,y:-56}}]}}}};`};
   for(const viewport of [{width:320,height:480},{width:480,height:320},{width:844,height:390}]){
     await page.setViewportSize(viewport);await mount(page,request,pkg);
-    const body=page.getByRole('button',{name:/Physical domino/}).locator('rect').first();await expect(body).toBeAttached();
-    await expect.poll(async()=>{const box=(await body.boundingBox())!;return Math.min(box.width,box.height);}).toBeGreaterThanOrEqual(31.99);
-    const target=(await page.getByRole('button',{name:'Legal end',exact:true}).locator('rect').first().boundingBox())!;
-    expect(Math.min(target.width,target.height)).toBeGreaterThanOrEqual(31.99);
+    const canvas=page.getByLabel('Game board. Use pieces and highlighted destinations.'),body=page.getByRole('button',{name:/Physical domino/}).locator('rect').first();await expect(body).toBeAttached();
+    await expect(canvas.locator('svg').first()).toHaveAttribute('viewBox','0 0 1120 1100');
+    const frame=(await canvas.boundingBox())!,piece=(await body.boundingBox())!,target=(await page.getByRole('button',{name:'Legal end',exact:true}).locator('rect').first().boundingBox())!;
+    expect(frame.y+frame.height).toBeLessThanOrEqual(viewport.height+1);
+    for(const item of [piece,target]){expect(item.x).toBeGreaterThanOrEqual(frame.x-1);expect(item.y).toBeGreaterThanOrEqual(frame.y-1);expect(item.x+item.width).toBeLessThanOrEqual(frame.x+frame.width+1);expect(item.y+item.height).toBeLessThanOrEqual(frame.y+frame.height+1);}
+    await page.getByRole('button',{name:'Zoom in',exact:true}).click();
+    await expect.poll(async()=>{const box=(await body.boundingBox())!;return Math.min(box.width,box.height);}).toBeGreaterThan(Math.min(piece.width,piece.height)*1.2);
+    await page.getByRole('button',{name:'Reset board view',exact:true}).click();await expect(canvas.locator('svg').first()).toHaveAttribute('viewBox','0 0 1120 1100');
+  }
+});
+
+test('keyboard zoom can hand off to pointer panning over inactive destinations without move authority',async({page,request})=>{
+  for(const my_player_index of [0,null]){
+    await mount(page,request,spec(),state({my_player_index,acting_for_player_index:null}));
+    const canvas=page.getByLabel('Game board. Use pieces and highlighted destinations.'),svg=canvas.locator('svg').first();
+    await canvas.focus();await page.keyboard.press('+');const before=await svg.getAttribute('viewBox');
+    const target=page.getByRole('button',{name:'Place here',exact:true});await expect(target).toHaveAttribute('aria-disabled','true');
+    const box=(await target.boundingBox())!;
+    await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
+    await page.mouse.move(box.x+box.width/2-35,box.y+box.height/2-20,{steps:5});await page.mouse.up();
+    await expect(svg).not.toHaveAttribute('viewBox',before!);expect(await moves(page)).toEqual([]);
   }
 });
 

@@ -1,6 +1,6 @@
 import {recordDiagnosticLog,recordDiagnosticEvent} from '../core/diagnostics';
 import {copyText,playerText} from '../platform/i18n';
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgXml, Text as SvgText } from 'react-native-svg';
 import G from './SceneGroup';
@@ -10,6 +10,8 @@ import { animateUpdate, canMove, historyChanges, hitPiece, hitTarget, pieceName,
 import { runPresentation } from './runtime';
 import { animateLastMove, moveTracks, trackPosition, type MoveTrack } from './moveAnimations';
 import { animateSceneUpdate, sceneTracks, sceneTransform, type SceneTrack } from './sceneAnimations';
+import {dragPosition} from './dragPosition';
+import {pieceAnimation,STATIC_PIECE_Z_MAX} from './pieceAnimations';
 
 export type GameRendererProps = {
   spec: unknown;
@@ -22,6 +24,7 @@ export type GameRendererProps = {
   onAnimationStateChange?: (busy:boolean)=>void;
   onScene?: (scene:Scene,message:StateMessage)=>void;
   showToolbar?: boolean;
+  frameHeight?: number;
 };
 
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -46,10 +49,11 @@ type Camera = {zoom: number; x: number; y: number};
 type Gesture = {
   first: Point; last: Point; camera: Camera; piece?: string; target?: string; moved: boolean;
   kind: 'press' | 'pan' | 'pinch'; distance?: number; anchor?: Point; touch: boolean;
+  grab:Point;toolbarPiece:string|null;toolbarPreview:string|null;
 };
 type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
 
-function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true}: GameRendererProps & {spec: GameSpec}) {
+function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,frameHeight}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
@@ -61,36 +65,40 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const setDrag = (value: typeof drag) => { dragRef.current=value;setDragState(value); };
   const [camera, setCamera] = useState<Camera>({zoom: 1, x: 0, y: 0});
   const [width, setWidth] = useState(400);
+  const [canvasHeight, setCanvasHeight] = useState(300);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [,setPaintTick]=useState(0);
+  const [,setGestureTick]=useState(0);
   const dimensions = useWindowDimensions();
   const callbacks = useRef({onMove,onError,onAnimationStateChange,onScene}); callbacks.current = {onMove,onError,onAnimationStateChange,onScene};
   const alive = useRef(true), revision = useRef(0), renderedRevision = useRef(-1), sent = useRef(false);
   const local = useRef<Json>(null), latest = useRef<StateMessage | null>(null), lastPaint = useRef<StateMessage | null>(null);
   const sceneRef = useRef<Scene>({}), queue = useRef(Promise.resolve());
   const animationKeys = useRef(new Map<string,string>());
+  const paintOrder=useRef(new Map<string,number>());
   const selectedRef = useRef<string | null>(null), previewRef = useRef<string | null>(null);
   const gesture = useRef<Gesture | null>(null), lastGesture = useRef(0), motionUntil = useRef(0);
+  const endGesture=()=>{gesture.current=null;setGestureTick(value=>value+1);};
   const [motionBusy,setMotionBusy]=useState(false), motionTimer=useRef<ReturnType<typeof setTimeout> | null>(null);
-  const canvas = useRef<React.ComponentRef<typeof View>>(null), origin = useRef({x:0,y:0});
+  const canvas = useRef<React.ComponentRef<typeof View>>(null), surface=useRef<React.ComponentRef<typeof View>>(null), origin = useRef({x:0,y:0});
+  const fittedGeometry=useRef('');
   const bounds = useMemo(()=>contentBounds(spec,display.scene),[spec,display.scene]);
-  const smallestObject = useMemo(()=>Math.min(Infinity,
-    ...(display.scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>{const size=pieceSize(spec,piece);return Math.min(size.width,size.height)*(piece.scale??1);}),
-    ...(display.scene.targets||[]).map(target=>targetThickness(spec,target)),
-  ),[spec,display.scene]);
   const widthFittedHeight=width*bounds.height/bounds.width;
-  // A short screen may scroll a taller canvas rather than shrink physical
-  // objects below 32px. Width remains bounded by the actual native viewport;
-  // packages that cannot meet 32px at that width still need a layout repair.
-  const minimumHeight=Number.isFinite(smallestObject)&&smallestObject>0?32*bounds.height/smallestObject:0;
-  const height=Math.max(220,Math.min(widthFittedHeight,Math.max(Math.min(680,dimensions.height*.7),minimumHeight)));
+  // A measured frame fits the board below its controls in the actual safe-area
+  // space. Do not enlarge a dense overview into a scrolling or clipped canvas;
+  // the player can intentionally zoom in for larger pieces and destinations.
+  const framed=frameHeight!==undefined&&frameHeight>0;
+  const height=framed?canvasHeight:Math.max(1,Math.min(widthFittedHeight,dimensions.height));
   const limits = cameraLimits(bounds,camera.zoom);
   const view = {x: bounds.x + (bounds.width-limits.width)/2 + camera.x,
     y: bounds.y + (bounds.height-limits.height)/2 + camera.y, width:limits.width,height:limits.height};
-  const current = useRef({camera,view,width,height,bounds,display,selected,preview,reducedMotion});
-  current.current={camera,view,width,height,bounds,display,selected,preview,reducedMotion};
+  const current = useRef({camera,view,width,height,bounds,display,selected,preview,reducedMotion,framed,frameHeight,windowHeight:dimensions.height});
+  current.current={camera,view,width,height,bounds,display,selected,preview,reducedMotion,framed,frameHeight,windowHeight:dimensions.height};
   const active = canMove(latest.current,sent.current) && renderedRevision.current === revision.current && !busy && !motionBusy;
   const select = (id: string | null) => {selectedRef.current=id;setSelected(id);};
   const showPreview = (id: string | null) => {previewRef.current=id;setPreview(id);};
+
+  useLayoutEffect(()=>{fitGeometry();},[width,frameHeight,dimensions.width,dimensions.height]);
 
   const report = useCallback((reason: unknown) => {
     if (!alive.current) return;
@@ -116,7 +124,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     if(Platform.OS!=='web')return;
     // Piece controls and account dialogs live outside the SVG canvas. Escape
     // must cancel a held piece there too, without taking over the dialog key.
-    const cancel=(event:KeyboardEvent)=>{if(event.key==='Escape'){gesture.current=null;setDrag(null);select(null);showPreview(null);}};
+    const cancel=(event:KeyboardEvent)=>{if(event.key==='Escape'){endGesture();setDrag(null);select(null);showPreview(null);}};
     window.addEventListener('keydown',cancel,true);
     return()=>window.removeEventListener('keydown',cancel,true);
   },[]);
@@ -165,7 +173,13 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
 
   const messageJSON = JSON.stringify(message);
   const historyJSON = JSON.stringify(presentationHistory??null);
+  const lastHistoryJSON=useRef(historyJSON);
   useEffect(()=>{
+    // Compatibility hosts can redeliver an identical snapshot while a finger
+    // is down. Re-arm rejected submissions normally, but do not cancel a held
+    // piece when neither authority nor history has changed.
+    if(gesture.current&&!sent.current&&messageJSON===JSON.stringify(latest.current)&&historyJSON===lastHistoryJSON.current)return;
+    lastHistoryJSON.current=historyJSON;
     const incoming=copy(message);latest.current=incoming;
     revision.current++;const atRevision=revision.current;
     sent.current=false;select(null);showPreview(null);gesture.current=null;setDrag(null);
@@ -196,12 +210,29 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     }).catch(report);
   },[apply,report]);
 
+  function fitGeometry() {
+    const c=current.current;
+    const rect=(surface.current as unknown as {getBoundingClientRect?:()=>{width:number;height:number}})?.getBoundingClientRect?.();
+    const key=`${rect?.width||c.width}:${c.framed?rect?.height||c.frameHeight:Platform.OS==='web'?window.innerHeight:c.windowHeight}:${c.framed}`;
+    if(fittedGeometry.current===key)return;
+    fittedGeometry.current=key;
+    // Compare the physical frame, not delayed layout notifications. A stale
+    // notification after rotation must not cancel the first new tap or drag.
+    c.camera={zoom:1,x:0,y:0};c.view={x:c.bounds.x,y:c.bounds.y,width:c.bounds.width,height:c.bounds.height};
+    setCamera(c.camera);gesture.current=null;setDrag(null);select(null);showPreview(null);
+  }
   function boardPoint(at: Point): Point {
-    const c=current.current, scale=Math.min(c.width/c.view.width,c.height/c.view.height);
+    // Layout notifications can lag a rotation by a frame. Hit testing must use
+    // the same physical rectangle as the SVG the player is touching right now.
+    const c=current.current;
+    const rect=(canvas.current as unknown as {getBoundingClientRect?:()=>{width:number;height:number}})?.getBoundingClientRect?.();
+    if(rect?.width&&rect.height){c.width=rect.width;c.height=rect.height;}
+    const scale=Math.min(c.width/c.view.width,c.height/c.view.height);
     return {x:c.view.x+(at.x-(c.width-c.view.width*scale)/2)/scale,
       y:c.view.y+(at.y-(c.height-c.view.height*scale)/2)/scale};
   }
   function measureOrigin() {
+    fitGeometry();
     // Fabric and RN Web both provide a synchronous viewport rectangle. Waiting
     // for measureInWindow here would use the previous position on the first tap
     // after the surrounding match page scrolls.
@@ -211,8 +242,10 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   }
   function setSafeCamera(next: Camera) {
     if(spec.viewport.camera_enabled===false)return;
-    const box=current.current.bounds,l=cameraLimits(box,next.zoom);
-    setCamera({zoom:clamp(next.zoom,.25,6),x:clamp(next.x,l.minX-box.x-(box.width-l.width)/2,l.maxX-box.x-(box.width-l.width)/2),
+    const zoom=clamp(next.zoom,.25,6);
+    if(zoom<=1){setCamera({zoom,x:0,y:0});return;}
+    const box=current.current.bounds,l=cameraLimits(box,zoom);
+    setCamera({zoom,x:clamp(next.x,l.minX-box.x-(box.width-l.width)/2,l.maxX-box.x-(box.width-l.width)/2),
       y:clamp(next.y,l.minY-box.y-(box.height-l.height)/2,l.maxY-box.y-(box.height-l.height)/2)});
   }
   function zoomTo(zoom: number, at?: Point) {
@@ -245,33 +278,44 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const claimGesture=(event:GestureResponderEvent)=>{
     measureOrigin();
     const e=event.nativeEvent,c=current.current;
-    if((e.touches?.length||0)>1||c.camera.zoom!==1)return true;
+    if((e.touches?.length||0)>1||c.camera.zoom>1)return true;
     const point=actions.current.boardPoint({x:e.pageX-origin.current.x,y:e.pageY-origin.current.y}),scene=sceneRef.current;
     const chosen=scene.pieces?.find(piece=>piece.id===selectedRef.current);
     // At the fitted view, empty board space belongs to the containing native
     // scroll view. A piece/destination still owns its complete drag gesture.
-    return canMove(latest.current,sent.current)&&Boolean(hitPiece(spec,scene,point)||hitTarget(spec,scene,point,chosen));
+    return Date.now()>=motionUntil.current&&renderedRevision.current===revision.current&&
+      canMove(latest.current,sent.current)&&Boolean(hitPiece(spec,scene,point,paintOrder.current)||hitTarget(spec,scene,point,chosen));
   };
   const responders = useMemo(()=>PanResponder.create({
     // Native SVG's own touchable group would otherwise claim the responder
     // before the board can distinguish a drag from a two-finger camera gesture.
     onStartShouldSetPanResponderCapture:claimGesture,
     onStartShouldSetPanResponder:claimGesture,
-    onMoveShouldSetPanResponder:event=>(event.nativeEvent.touches?.length||0)>1||current.current.camera.zoom!==1,
+    onMoveShouldSetPanResponder:event=>(event.nativeEvent.touches?.length||0)>1||current.current.camera.zoom>1,
     onPanResponderTerminationRequest:()=>false,
     onPanResponderGrant:event=>{
       measureOrigin();
       const e=event.nativeEvent, at={x:e.pageX-origin.current.x,y:e.pageY-origin.current.y};
       const point=actions.current.boardPoint(at), scene=sceneRef.current;
-      const piece=canMove(latest.current,sent.current)?hitPiece(spec,scene,point):undefined;
-      if(Platform.OS==='web'&&piece){
-        const target=event.target as unknown as {closest?:(selector:string)=>{focus?:()=>void}|null};
-        target?.closest?.('[role="button"]')?.focus?.();
-      }
+      const mayMove=canMove(latest.current,sent.current)&&Date.now()>=motionUntil.current&&renderedRevision.current===revision.current;
+      const piece=mayMove?hitPiece(spec,scene,point,paintOrder.current):undefined;
       const selectedPiece=scene.pieces?.find(p=>p.id===selectedRef.current);
-      const target=canMove(latest.current,sent.current)?hitTarget(spec,scene,point,selectedPiece):undefined;
+      const target=mayMove?hitTarget(spec,scene,point,selectedPiece):undefined;
+      if(Platform.OS==='web'){
+        // Focus before RN Web grants the board its responder. Letting the
+        // browser focus a destination afterward would blur the keyboard-focused
+        // canvas and terminate this pointer gesture before release. This also
+        // applies to panning over an inactive piece; focus grants no move rights.
+        const node=event.target as unknown as {closest?:(selector:string)=>{focus?:()=>void}|null};
+        node?.closest?.('[role="button"]')?.focus?.();
+      }
+      const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height);
+      const center=piece?position(spec,piece):point;
+      const native=e as unknown as {pointerType?:string;type?:string};
       gesture.current={kind:'press',first:at,last:at,camera:current.current.camera,piece:piece?.id,target:target?.id,moved:false,
-        touch:Platform.OS!=='web'||(e as unknown as {pointerType?:string}).pointerType==='touch'};
+        grab:{x:(center.x-point.x)*scale,y:(center.y-point.y)*scale},
+        toolbarPiece:selectedRef.current,toolbarPreview:previewRef.current,
+        touch:Platform.OS!=='web'||native.pointerType==='touch'||native.type?.startsWith('touch')===true};
       // A legal destination may contain another movable piece. Preserve the
       // source for a tap there; a subsequent drag can still pick up that piece.
       const selectedDestination=target&&selectedPiece?.move_targets?.includes(target.id);
@@ -312,19 +356,18 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       if(piece?.move_targets?.length&&g.moved&&canMove(latest.current,sent.current)){
         if(selectedRef.current!==piece.id)actions.current.select(piece.id);
         const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height),size=pieceSize(spec,piece);
-        const lifted={x:clamp(at.x,size.width*scale/2+8,c.width-size.width*scale/2-8),
-          y:clamp(at.y-(g.touch?Math.min(54,size.height*scale*.6+22):0),size.height*scale/2+8,c.height-size.height*scale/2-8)};
+        const lifted=dragPosition(at,g.grab,{width:size.width*scale,height:size.height*scale},c,g.touch);
         const point=actions.current.boardPoint(lifted),target=hitTarget(spec,sceneRef.current,point,piece,16/scale);
         setDrag({id:piece.id,at:target?position(spec,target):point,target:target?.id});actions.current.showPreview(target?.id||null);
       }else if(g.moved&&!g.piece&&(!g.target||
-        spec.viewport.camera_controls===true&&current.current.camera.zoom!==1)){
+        spec.viewport.camera_controls===true&&current.current.camera.zoom>1)){
         g.kind='pan';
         const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height);
         actions.current.setSafeCamera({...g.camera,x:g.camera.x-dx/scale,y:g.camera.y-dy/scale});
       }
     },
     onPanResponderRelease:event=>{
-      const g=gesture.current;gesture.current=null;lastGesture.current=Date.now();
+      const g=gesture.current;endGesture();lastGesture.current=Date.now();
       if(!g){setDrag(null);return;}
       const at={x:event.nativeEvent.pageX-origin.current.x,y:event.nativeEvent.pageY-origin.current.y};
       if(g.kind==='pinch'||g.kind==='pan'){setDrag(null);return;}
@@ -344,20 +387,45 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       // A placement's declared artwork can itself be clicked, and selected
       // pieces always use the matching legal destination.
       if(target&&target.id===g.target&&(!piece||chosen?.move_targets?.includes(target.id)))actions.current.activateTarget(target,g.touch);
-      else if(piece&&hitPiece(spec,scene,point)?.id===piece.id)actions.current.activatePiece(piece);
+      else if(piece&&hitPiece(spec,scene,point,paintOrder.current)?.id===piece.id)actions.current.activatePiece(piece);
       else if(target&&target.id===g.target)actions.current.activateTarget(target,g.touch);
     },
-    onPanResponderTerminate:()=>{gesture.current=null;setDrag(null);actions.current.select(null);actions.current.showPreview(null);},
+    onPanResponderTerminate:()=>{endGesture();setDrag(null);actions.current.select(null);actions.current.showPreview(null);},
   }),[spec]);
 
   const selectedPiece=display.scene.pieces?.find(piece=>piece.id===selected);
   const selectedActions=selectedPiece?pieceActions(selectedPiece):[];
   const replayEffects=display.replay?historyChanges(display.previous,display.scene).effects:new Map<string,'enter'|'change'>();
   const previewTarget=display.scene.targets?.find(target=>target.id===preview);
+  // Selecting a drag source must not introduce a footer and resize the canvas
+  // underneath the pointer. Keep the pre-gesture controls until release.
+  const toolsPiece=gesture.current?display.scene.pieces?.find(piece=>piece.id===gesture.current!.toolbarPiece):selectedPiece;
+  const toolsActions=toolsPiece?pieceActions(toolsPiece):[];
+  const toolsPreview=gesture.current?display.scene.targets?.find(target=>target.id===gesture.current!.toolbarPreview):previewTarget;
+  const now=Date.now();
+  const paint=(display.scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>{
+    const previous=display.previous.pieces?.find(old=>old.id===piece.id);
+    const options={animate:display.animate&&!reducedMotion&&(display.tracks===undefined||display.tracks.has(piece.id)),
+      effect:replayEffects.get(piece.id),inferMovement:display.moves===undefined&&display.tracks===undefined,
+      moveTrack:display.moves?.get(piece.id),sceneTrack:display.tracks?.get(piece.id),pulseEnabled:!reducedMotion};
+    const motion=pieceAnimation(spec,piece,previous,{...options,elapsed:now-(display.started??now)});
+    return {piece,previous,options,z:motion.layerActive?motion.z:piece.z??0,
+      end:Number.isFinite(motion.layerTransition)?(display.started??now)+motion.layerTransition:Infinity};
+  }).sort((a,b)=>a.z-b.z||(a.piece.z??0)-(b.piece.z??0));
+  paintOrder.current=new Map(paint.map((item,index)=>[item.piece.id,index]));
+  const paintEnd=Math.min(Infinity,...paint.map(item=>item.end));
+  useEffect(()=>{
+    if(!Number.isFinite(paintEnd))return;
+    const timer=setTimeout(()=>setPaintTick(value=>value+1),Math.max(1,paintEnd-Date.now()+1));
+    return()=>clearTimeout(timer);
+  },[paintEnd]);
+  const renderPiece=(item:typeof paint[number])=><PieceGraphic key={`piece:${item.piece.id}`} piece={item.piece} previous={item.previous}
+    spec={spec} {...item.options} serial={display.serial} enabled={active} selected={item.piece.selected||item.piece.id===selected}
+    started={display.started} concealed={item.piece.id===drag?.id} onPress={()=>activatePiece(item.piece)}/>;
   const keyboard=(event: {key:string;shiftKey?:boolean;preventDefault():void;target?:{tagName?:string}})=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(event.target?.tagName||''))return;
     const key=event.key.toLowerCase();
-    if(key==='escape'){gesture.current=null;setDrag(null);select(null);showPreview(null);return;}
+    if(key==='escape'){endGesture();setDrag(null);select(null);showPreview(null);return;}
     if(key==='r'&&selectedActions.includes('rotate')){event.preventDefault();transform({type:'rotate',id:'',delta:event.shiftKey?-90:90});}
     else if(key==='f'&&selectedActions.includes('flip')){event.preventDefault();transform({type:'flip',id:''});}
     else if(spec.viewport.camera_enabled!==false){
@@ -372,7 +440,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     event.preventDefault();measureOrigin();zoomTo(camera.zoom*(event.deltaY<0?1.15:1/1.15),{x:event.clientX-origin.current.x,y:event.clientY-origin.current.y});
   }}:{};
 
-  return <View style={styles.container}>
+  const canvasWebStyle=Platform.OS==='web'&&(framed||camera.zoom>1)?{...styles.canvas,touchAction:'none'}:undefined;
+  return <View ref={surface} style={[styles.container,framed&&{height:frameHeight,minHeight:0}]}>
     {showToolbar&&<View style={styles.toolbar}>
       <Text style={styles.status} accessibilityLiveRegion="polite">{message.replay?copyText("Reviewing match"):busy?copyText("Sending move…"):message.status!=='ongoing'?copyText("Game finished"):active?copyText("Your turn"):copyText("Waiting for a move")}</Text>
       {spec.viewport.camera_controls===true&&spec.viewport.camera_enabled!==false&&<View style={styles.row}>
@@ -383,44 +452,44 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     </View>}
     {!ready&&<ActivityIndicator accessibilityLabel={copyText("Loading game board")} color="#91d7c4" style={styles.loading}/>}
     {!!error&&<Text accessibilityRole="alert" style={styles.error}>{playerText(error)}</Text>}
-    <View style={styles.controls}>{display.scene.controls?.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>
-    <View ref={canvas} collapsable={false} focusable style={[styles.canvas,{height}]} {...webProps} {...responders.panHandlers}
-      onLayout={event=>{setWidth(event.nativeEvent.layout.width);measureOrigin();}}
+    {!!display.scene.controls?.length&&<View style={styles.controls}>{display.scene.controls.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>}
+    <View ref={canvas} collapsable={false} focusable style={[styles.canvas,framed?{flex:1,minHeight:0}:{height},canvasWebStyle]} {...webProps} {...responders.panHandlers}
+      onLayout={event=>{setWidth(event.nativeEvent.layout.width);setCanvasHeight(event.nativeEvent.layout.height);measureOrigin();}}
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
       <Svg width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
-        {spec.boards.map(board=><BoardGraphic key={board.id} board={board} spec={spec}/>)}
-        {display.scene.paths?.map(path=><Polyline key={path.id} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>)}
-        {[...(display.scene.pieces||[])].sort((a,b)=>(a.z||0)-(b.z||0)).filter(piece=>!piece.hidden&&piece.id!==drag?.id).map(piece=><PieceGraphic key={piece.id} piece={piece} previous={display.previous.pieces?.find(old=>old.id===piece.id)}
-          spec={spec} animate={display.animate&&!reducedMotion&&(display.tracks===undefined||display.tracks.has(piece.id))} serial={display.serial} effect={replayEffects.get(piece.id)} enabled={active} selected={piece.selected||piece.id===selected}
-          inferMovement={display.moves===undefined&&display.tracks===undefined} moveTrack={display.moves?.get(piece.id)} sceneTrack={display.tracks?.get(piece.id)} started={display.started}
-          pulseEnabled={!reducedMotion}
-          onPress={()=>activatePiece(piece)}/>) }
-        {!reducedMotion&&display.ghosts.map(piece=><PieceGraphic key={`history-ghost-${piece.id}`} piece={piece} previous={piece} spec={spec} animate={true} serial={display.serial} effect="exit" enabled={false}/>)}
-        {previewTarget?.preview?.map((cell,index)=>{
-          const point=position(spec,{board:previewTarget.board,position:cell.position}),size=targetBox(spec,{...previewTarget,position:cell.position,hit_area:undefined,hit_shape:undefined});
+        {[
+        ...spec.boards.map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
+        ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
+        ...paint.filter(item=>item.z<=STATIC_PIECE_Z_MAX).map(renderPiece),
+        ...(previewTarget?.preview||[]).map((cell,index)=>{
+          const target=previewTarget!;
+          const point=position(spec,{board:target.board,position:cell.position}),size=targetBox(spec,{...target,position:cell.position,hit_area:undefined,hit_shape:undefined});
           return <G key={`preview-${index}`} transform={`translate(${point.x} ${point.y}) rotate(${cell.rotation||0})`} opacity={.7} pointerEvents="none">
-            <Rect x={-size.width/2+1} y={-size.height/2+1} width={size.width-2} height={size.height-2} fill={cell.color||previewTarget.color||'#b8ef5b'} rx={4}/>
+            <Rect x={-size.width/2+1} y={-size.height/2+1} width={size.width-2} height={size.height-2} fill={cell.color||target.color||'#b8ef5b'} rx={4}/>
             <Asset spec={spec} id={cell.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
             {!!cell.text&&<SvgText textAnchor="middle" alignmentBaseline="central" fontSize={Math.min(size.width,size.height)*.42} fill="#102330">{playerText(cell.text)}</SvgText>}
           </G>;
-        })}
-        {display.scene.targets?.map(target=><TargetGraphic key={target.id} target={target} spec={spec}
+        }),
+        ...(display.scene.targets||[]).map(target=><TargetGraphic key={`target:${target.id}`} target={target} spec={spec}
           enabled={active&&(!selectedPiece?.move_targets?.length||selectedPiece.move_targets.includes(target.id))}
-          selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>) }
-        {drag&&display.scene.pieces?.filter(piece=>piece.id===drag.id).map(piece=><PieceGraphic key={`drag-${piece.id}`} piece={{...piece,position:{x:drag.at.x-(spec.boards.find(b=>b.id===piece.board)?.x||0),y:drag.at.y-(spec.boards.find(b=>b.id===piece.board)?.y||0)}}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true}/>) }
-        {display.scene.labels?.map(label=><SvgText key={label.id} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>)}
+          selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>),
+        ...(display.scene.labels||[]).map(label=><SvgText key={`label:${label.id}`} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>),
+        ...(!reducedMotion?display.ghosts:[]).map(piece=><PieceGraphic key={`history-ghost:${piece.id}`} piece={piece} previous={piece} spec={spec} animate={true} serial={display.serial} effect="exit" enabled={false}/>),
+        ...paint.filter(item=>item.z>STATIC_PIECE_Z_MAX).map(renderPiece),
+        ...(drag?display.scene.pieces?.filter(piece=>piece.id===drag.id)||[]:[]).map(piece=><PieceGraphic key={`drag:${piece.id}`} piece={{...piece,position:{x:drag!.at.x-(spec.boards.find(b=>b.id===piece.board)?.x||0),y:drag!.at.y-(spec.boards.find(b=>b.id===piece.board)?.y||0)}}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true} dragged/>),
+        ]}
       </Svg>
     </View>
-    <View style={styles.tools}>
-      {selectedPiece&&<Text style={styles.selectedLabel} accessibilityLiveRegion="polite">{playerText(pieceName(selectedPiece))}{selectedPiece.move_targets?.length?copyText(" · choose a highlighted destination"):''}</Text>}
+    {Boolean(toolsPiece||toolsPreview?.preview?.length)&&<View style={styles.tools}>
+      {toolsPiece&&<Text style={styles.selectedLabel} accessibilityLiveRegion="polite">{playerText(pieceName(toolsPiece))}{toolsPiece.move_targets?.length?copyText(" · choose a highlighted destination"):''}</Text>}
       <View style={styles.row}>
-        {selectedActions.includes('rotate')&&<><Tool label={copyText("Rotate counterclockwise")} text="↺" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:-90})}/><Tool label={copyText("Rotate clockwise")} text="↻" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:90})}/></>}
-        {selectedActions.includes('flip')&&<Tool label={copyText("Flip piece")} text="⇋" disabled={!active} onPress={()=>transform({type:'flip',id:''})}/>}
-        {selectedActions.includes('scale')&&<><Tool label={copyText("Make piece smaller")} text="↙" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1/1.1})}/><Tool label={copyText("Make piece larger")} text="↗" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1.1})}/></>}
-        {selectedPiece&&<Tool label={copyText("Cancel selection")} text={copyText("Cancel")} onPress={()=>{select(null);showPreview(null);setDrag(null);}}/>}
+        {toolsActions.includes('rotate')&&<><Tool label={copyText("Rotate counterclockwise")} text="↺" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:-90})}/><Tool label={copyText("Rotate clockwise")} text="↻" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:90})}/></>}
+        {toolsActions.includes('flip')&&<Tool label={copyText("Flip piece")} text="⇋" disabled={!active} onPress={()=>transform({type:'flip',id:''})}/>}
+        {toolsActions.includes('scale')&&<><Tool label={copyText("Make piece smaller")} text="↙" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1/1.1})}/><Tool label={copyText("Make piece larger")} text="↗" disabled={!active} onPress={()=>transform({type:'scale',id:'',factor:1.1})}/></>}
+        {toolsPiece&&<Tool label={copyText("Cancel selection")} text={copyText("Cancel")} onPress={()=>{select(null);showPreview(null);setDrag(null);}}/>}
       </View>
-      {previewTarget?.preview?.length? <Text accessibilityLiveRegion="polite" style={styles.preview}>{copyText("Preview:")} {playerText(previewTarget.aria_label||previewTarget.label||copyText('placement'))}{copyText(". Tap the destination again to confirm.")}</Text>:null}
-    </View>
+      {toolsPreview?.preview?.length? <Text accessibilityLiveRegion="polite" style={styles.preview}>{copyText("Preview:")} {playerText(toolsPreview.aria_label||toolsPreview.label||copyText('placement'))}{copyText(". Tap the destination again to confirm.")}</Text>:null}
+    </View>}
   </View>;
 }
 
@@ -463,15 +532,11 @@ const BoardGraphic=memo(function BoardGraphic({board,spec}:{board:Board;spec:Gam
   </G>;
 });
 
-const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:()=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean}) {
+const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false,concealed=false,dragged=false}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:()=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean;concealed?:boolean;dragged?:boolean}) {
   const [frameState,setFrameState]=useState({serial:-1,phase:1});
-  const newEffect=previous?.animation?.key!==piece.animation?.key;
-  const next=position(spec,piece),before=previous?position(spec,previous):next,type=spec.piece_types[piece.type],size=pieceSize(spec,piece);
-  const moved=!!previous&&(before.x!==next.x||before.y!==next.y||(previous.rotation||0)!==(piece.rotation||0)||(previous.scale??1)!==(piece.scale??1));
-  const popAnimation=pulseEnabled&&newEffect&&piece.animation?.kind==='pulse';
-  const needsAnimation=popAnimation||animate&&(sceneTrack?sceneTrack.duration+sceneTrack.delay>0:!!moveTrack||!!effect||inferMovement&&moved||newEffect&&!!piece.animation&&piece.animation.kind!=='move');
-  const duration=sceneTrack?.duration??moveTrack?.duration??(effect?(spec.motion?.move_ms??1440):piece.animation?.duration_ms??(piece.animation?.kind==='roll'?spec.motion?.roll_ms??650:piece.animation?.kind==='pulse'?560:spec.motion?.move_ms??1440));
-  const delay=sceneTrack?.delay??(moveTrack||effect?0:piece.animation?.delay_ms??0);
+  const {newEffect,next,before,popAnimation,needsAnimation,duration,delay}=pieceAnimation(spec,piece,previous,
+    {animate,effect,inferMovement,moveTrack,sceneTrack,pulseEnabled});
+  const type=spec.piece_types[piece.type],size=pieceSize(spec,piece);
   useEffect(()=>{
     if(!needsAnimation)return;
     let cancelled=false,frame=0;const start=(started??Date.now())+delay;
@@ -490,9 +555,13 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const notice=!sceneTrack&&piece.animation?.kind==='notice'?(animate&&newEffect&&p>.02&&p<.96?1:0):1;
   const fade=effect==='enter'?p:effect==='change'?.25+.75*p:effect==='exit'?(p<.65?1-p/.65*.2:.8*(1-(p-.65)/.35)):1;
   const accessibleName=`${playerText(pieceName(piece))}${enabled&&actions.length?`: ${actions.map(a=>copyText(labels[a])).join(', ')}`:''}`;
-  const accessibility:Record<string,unknown>=effect==='exit'?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:'history-ghost',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
+  const accessibility:Record<string,unknown>=effect==='exit'||concealed||dragged?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:effect==='exit'?'history-ghost':dragged?'dragged-piece':'held-piece-origin',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
     accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length?onPress:undefined};
-  return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale*pulseScale})`} opacity={(authored?.opacity??piece.opacity??1)*notice*fade} {...accessibility}>
+  // Keep the original SVG subtree mounted while dragging. Browser touch
+  // sequences retain their initial target; removing it severs subsequent
+  // touchMove/touchEnd delivery even though mouse dragging still appears fine.
+  const touchStyle:Record<string,unknown>=Platform.OS==='web'&&actions.includes('move')?{style:{touchAction:'none',userSelect:'none',WebkitUserSelect:'none'}}:{};
+  return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale*pulseScale})`} opacity={concealed?0:(authored?.opacity??piece.opacity??1)*notice*fade} {...accessibility} {...touchStyle}>
     {type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:type.shape==='hex'?<Polygon points={Array.from({length:6},(_,i)=>`${Math.cos((i*60+30)*Math.PI/180)*size.width/2},${Math.sin((i*60+30)*Math.PI/180)*size.height/2}`).join(' ')} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:((type.shape!=='text'&&type.shape!=='image')||piece.face==='back')?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={type.shape==='card'?7:4} fill={piece.face==='back'?'#324a88':type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
     <Asset spec={spec} id={piece.face==='back'?type.back_asset:piece.asset||type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
     {(piece.face==='back'||piece.text!==undefined)&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{piece.face==='back'?'◆':playerText(piece.text||'')}</SvgText>}

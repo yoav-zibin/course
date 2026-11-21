@@ -411,6 +411,8 @@ class NativeSmoke:
         self.events.append({"assertion": "public-board-and-next-turn-restored-after-process-restart"})
         self.capture("game-02-restored-public-board")
 
+        # Test navigation from the fitted board after inspecting match details.
+        self.tap("Match menu", scroll=False)
         self.command("shell", "input", "keyevent", "4")
         self.wait("Pass and play", scroll=True)
         self.wait("1 moves", contains=True, scroll=True)

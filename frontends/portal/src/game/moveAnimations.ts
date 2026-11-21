@@ -1,7 +1,7 @@
 import type { GameSpec, MoveAnimation, Point, StateMessage } from './types';
 import { position } from './validation';
 
-export type MoveTrack = { segments: { from: Point; to: Point; start: number; end: number }[]; duration: number };
+export type MoveTrack = { segments: { from: Point; to: Point; start: number; end: number; z?:number }[]; duration: number };
 
 // Only a consecutive accepted opponent update can play the path stored in its
 // view. A reconnect/jump has no complete preceding position to animate from.
@@ -17,18 +17,29 @@ export function moveTracks(spec: GameSpec, animations: MoveAnimation[]): Map<str
   let elapsed = 0;
   for (const animation of animations) {
     const duration = animation.duration_ms ?? spec.motion?.move_ms ?? 1440;
-    const track = tracks.get(animation.piece_id) ?? {segments: [], duration: 0};
+    const track:MoveTrack = tracks.get(animation.piece_id) ?? {segments: [], duration: 0};
     const points = animation.path.map(point => {const {x,y}=position(spec,point);return {x,y};});
     for (let index = 1; index < points.length; index++) track.segments.push({
       from: points[index - 1], to: points[index],
       start: elapsed + duration * (index - 1) / (points.length - 1),
       end: elapsed + duration * index / (points.length - 1),
+      ...(animation.z!==undefined?{z:animation.z}:{}),
     });
     tracks.set(animation.piece_id, track);
     elapsed += duration;
   }
   for (const track of tracks.values()) track.duration = elapsed;
   return tracks;
+}
+
+export function trackLayer(track:MoveTrack,elapsed:number):{active:boolean;z?:number;transition:number} {
+  const segment=track.segments.find(item=>elapsed>=item.start&&elapsed<item.end);
+  let transition=Infinity;
+  for(const item of track.segments){
+    if(item.start>elapsed)transition=Math.min(transition,item.start);
+    if(item.end>elapsed)transition=Math.min(transition,item.end);
+  }
+  return {active:!!segment,...(segment?.z!==undefined?{z:segment.z}:{}),transition};
 }
 
 export function trackPosition(track: MoveTrack, elapsed: number, easing?: 'ease-out' | 'ease-in-out-quad'): Point {

@@ -77,9 +77,15 @@ export function contains(box: Point & {width: number; height: number}, at: Point
     && at.y >= box.y - margin && at.y <= box.y + box.height + margin;
 }
 
-export function hitPiece(spec: GameSpec, scene: Scene, at: Point): Piece | undefined {
-  return [...(scene.pieces || [])].sort((a,b)=>(b.z || 0)-(a.z || 0) || scene.pieces!.indexOf(b)-scene.pieces!.indexOf(a)).find(piece => {
-    if (!pieceActions(piece).length) return false;
+export function hitPiece(spec: GameSpec, scene: Scene, at: Point,paintOrder?:ReadonlyMap<string,number>): Piece | undefined {
+  const candidates=(scene.pieces||[]).filter(piece=>pieceActions(piece).length);
+  // Hidden/decorative pieces have no hit geometry. Exclude them before
+  // ordering, and use one comparator throughout even during a stale paint.
+  const ranked=paintOrder&&candidates.every(piece=>paintOrder.has(piece.id))?paintOrder:undefined;
+  return candidates.sort((a,b)=>{
+    if(ranked)return ranked.get(b.id)!-ranked.get(a.id)!;
+    return (b.z || 0)-(a.z || 0) || scene.pieces!.indexOf(b)-scene.pieces!.indexOf(a);
+  }).find(piece => {
     const center = position(spec, piece), size = pieceSize(spec, piece);
     const angle = -(piece.rotation || 0) * Math.PI / 180, scale = piece.scale || 1;
     const dx = (at.x-center.x) / scale, dy = (at.y-center.y) / scale;

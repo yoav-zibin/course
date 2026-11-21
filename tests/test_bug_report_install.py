@@ -115,6 +115,39 @@ def test_help_exposes_the_optional_owner_argument_without_installing():
     assert "--student-user-ids-file" in result.stdout
 
 
+def test_reinstall_writes_daily_units_restarts_active_timer_and_preserves_identity_pins(tmp_path, monkeypatch):
+    state = tmp_path / "private-state"
+    state.mkdir(mode=0o700)
+    credential = tmp_path / "admin-api-credential"
+    credential.write_text("fixture-only-private-credential")
+    credential.chmod(0o600)
+    thread = "12345678-1234-1234-1234-123456789abc"
+    review.save_json(state / "config.json", {
+        **CONFIG, "branch": "main", "thread_id": thread,
+        "repository_path": str(install.REPOSITORY), "password_file": str(credential),
+        "owner_google_user_id": OWNER, "student_user_ids": [REPLACEMENT],
+    })
+    commands = []
+    monkeypatch.setattr(install.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(review, "BugAPI", lambda config: None)
+    monkeypatch.setitem(sys.modules, "review", review)
+    monkeypatch.setattr(install.subprocess, "run", lambda command, **kwargs: commands.append(command))
+    monkeypatch.setattr(sys, "argv", ["install.py", "--thread-id", thread,
+                                     "--password-file", str(credential), "--state-dir", str(state)])
+    install.main()
+    timer = (tmp_path / ".config/systemd/user/buildplay-bug-reports.timer").read_text()
+    assert "OnCalendar=*-*-* 00:00:00 UTC\n" in timer
+    assert "Persistent=true\n" in timer and "Unit=buildplay-bug-reports.service\n" in timer
+    assert "daily" in timer and "every hour" not in timer
+    assert ["systemctl", "--user", "daemon-reload"] in commands
+    assert ["systemctl", "--user", "restart", "buildplay-bug-reports.timer"] in commands
+    config = review.configuration(state)
+    assert config["owner_google_user_id"] == OWNER
+    assert config["student_user_ids"] == [REPLACEMENT]
+    assert config["thread_id"] == thread and config["password_file"] == str(credential)
+    assert not (state / "authorizations.json").exists()
+
+
 def configured_students(previous=None, explicit=None, **changes):
     return install.with_student_user_ids(
         {**CONFIG, **changes}, previous, student_user_ids=explicit,

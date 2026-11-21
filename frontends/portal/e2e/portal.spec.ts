@@ -44,52 +44,57 @@ test('host controls and the offline starter game retain all eight languages with
   expect(await saves()).toEqual(original);
 });
 
-test('short screens keep the full native board width and can scroll to its last rank',async({page},info)=>{
-  for(const viewport of [{width:320,height:480},{width:480,height:320},{width:844,height:390}]){
-    await page.setViewportSize(viewport);await page.goto('/portal#local');
-    await page.getByRole('button',{name:'Pass and play',exact:true}).click();
-    const board=page.getByLabel('Game board. Use pieces and highlighted destinations.');
-    await expect(page.getByRole('button',{name:'Cell 9',exact:true})).toBeAttached();
-    const geometry=await board.boundingBox();expect(geometry!.width).toBeCloseTo(viewport.width,0);
-    // The bundled package declares 600x560, including its instruction margins.
-    await expect(board.locator('svg').first()).toHaveAttribute('viewBox','0 0 600 560');
-    expect(geometry!.height).toBeGreaterThanOrEqual(Math.min(viewport.width*560/600,viewport.height*.7)-1);
-    await board.scrollIntoViewIfNeeded();
-    // Wheel over the actual board must reach the bottom through the native
-    // containing scroll view, without silently zooming the game instead.
-    const rect=(await board.boundingBox())!;await page.mouse.move(viewport.width/2,Math.max(20,Math.min(viewport.height-20,rect.y+rect.height/2)));
-    const cell=page.getByRole('button',{name:'Cell 9',exact:true});
-    for(let step=0;step<15;step++){
-      const box=(await cell.boundingBox())!;
-      const clip=await cell.evaluate(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement){if(/auto|scroll/.test(getComputedStyle(parent).overflowY)){const r=parent.getBoundingClientRect();return {top:r.top,bottom:r.bottom};}}return {top:0,bottom:innerHeight};});
-      if(box.y>=clip.top&&box.y+box.height<=clip.bottom)break;
-      await page.mouse.wheel(0,box.y<clip.top?-80:80);
-      await expect.poll(async()=>Math.abs((await cell.boundingBox())!.y-box.y)).toBeGreaterThan(1);
-    }
-    await expect.poll(async()=>{const box=await cell.boundingBox();return !!box&&box.x>=0&&box.x+box.width<=viewport.width+1&&box.y>=0&&box.y+box.height<=viewport.height+1;}).toBe(true);
-    expect(await cell.evaluate(node=>{const rect=node.getBoundingClientRect();return node.contains(document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2));})).toBe(true);
-    await expect(board.locator('svg').first()).toHaveAttribute('viewBox','0 0 600 560');
-    await expect(page.getByRole('button',{name:/^(Zoom in|Zoom out|Reset board view)$/})).toHaveCount(0);
-    await page.screenshot({path:info.outputPath(`last-rank-${viewport.width}.png`)});
-    await cell.click();await expect(cell).toHaveCount(0);
-    await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
+test('short screens refit the complete board after rotation and resizing without page scrolling',async({page},info)=>{
+  await page.setViewportSize({width:390,height:844});await page.goto('/portal#local');
+  await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  const board=page.getByLabel('Game board. Use pieces and highlighted destinations.');
+  const canvas=board.locator('svg').first();await expect(page.getByRole('button',{name:'Cell 9',exact:true})).toBeAttached();
+  const route=page.url(),id=decodeURIComponent(new URL(route).hash.slice('#match='.length));
+  const savedMoves=()=>page.evaluate(id=>{for(const key of Object.keys(localStorage).filter(key=>key.startsWith('buildplay.shared.v1.'))){const match=JSON.parse(localStorage.getItem(key)!).local?.[id];if(match)return match.move_count;}return null;},id);
+  for(const [index,viewport] of [{width:320,height:480},{width:480,height:320},{width:844,height:390},{width:390,height:844},{width:1024,height:600},{width:600,height:1024}].entries()){
+    const original=await canvas.elementHandle(),cell=page.getByRole('button',{name:`Cell ${9-index}`,exact:true});
+    await expect(cell).toHaveAttribute('aria-disabled','false');
+    await board.focus();await page.keyboard.press('+');await page.keyboard.press('ArrowRight');
+    await expect(canvas).not.toHaveAttribute('viewBox','0 0 600 560');
+    await page.setViewportSize(viewport);
+    await expect(canvas).toHaveAttribute('viewBox','0 0 600 560');
+    await expect.poll(async()=>{const box=(await board.boundingBox())!;return box.x>=-1&&box.y>=-1&&box.x+box.width<=viewport.width+1&&box.y+box.height<=viewport.height+1;}).toBe(true);
+    const geometry=(await board.boundingBox())!;expect(geometry.width).toBeCloseTo(viewport.width,0);
+    await expect.poll(()=>cell.evaluate(node=>{const r=node.getBoundingClientRect();return r.x>=0&&r.y>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
+    expect(await board.evaluate(node=>{for(let p:HTMLElement|null=node as HTMLElement;p;p=p.parentElement)if(p.scrollHeight>p.clientHeight+1||p.scrollWidth>p.clientWidth+1)return false;return true;})).toBe(true);
+    expect(await original!.evaluate(node=>node.isConnected)).toBe(true);expect(page.url()).toBe(route);
+    await page.screenshot({path:info.outputPath(`fitted-board-${viewport.width}x${viewport.height}.png`)});
+    // The very first physical pointer gesture after resize and keyboard zoom
+    // must play the intended square in this same saved match.
+    await cell.click();await expect(cell).toHaveCount(0);await expect.poll(savedMoves).toBe(index+1);
+    await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
   }
+  await ensureMatchMenuOpen(page);
+  const port=await page.getByTestId('match-details').evaluateHandle(node=>{for(let p=node.parentElement;p;p=p.parentElement)if(/auto|scroll/.test(getComputedStyle(p).overflowY))return p;throw new Error('Missing details scroll view');});
+  await page.mouse.move(15,500);await page.mouse.wheel(0,1800);
+  await expect.poll(()=>port.evaluate(node=>node.scrollTop)).toBeGreaterThan(0);
+  await page.getByTestId('match-menu-button').click();
+  await expect(page.getByTestId('match-menu-button')).toHaveAttribute('aria-expanded','false');
+  await expect.poll(()=>port.evaluate(node=>node.scrollTop)).toBe(0);
+  await expect(canvas).toHaveAttribute('viewBox','0 0 600 560');
+  await expect.poll(async()=>{const box=(await board.boundingBox())!;return box.y>=-1&&box.y+box.height<=1025;}).toBe(true);
+  await page.getByRole('button',{name:'Cell 2',exact:true}).click();
+  await expect.poll(savedMoves).toBe(7);expect(page.url()).toBe(route);
 });
 
-test('empty fitted board space permits native touch scrolling and retains real piece taps',async({page,isMobile})=>{
+test('empty fitted board space does not scroll or pan and retains real piece taps',async({page,isMobile})=>{
   test.skip(!isMobile,'Uses the mobile project’s native touch input');
-  // The board-only layout fits at 320px; use a shorter screen that requires scrolling.
   await page.setViewportSize({width:480,height:180});await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   const board=page.getByLabel('Game board. Use pieces and highlighted destinations.');
-  await expect(page.getByRole('button',{name:'Cell 9',exact:true})).toBeAttached();await board.scrollIntoViewIfNeeded();
-  const port=await board.evaluateHandle(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)if(/auto|scroll/.test(getComputedStyle(parent).overflowY))return parent;throw new Error('Missing native containing scroll view');});
-  const before=await port.evaluate(node=>node.scrollTop),bounds=await port.evaluate(node=>{const r=node.getBoundingClientRect();return {top:r.top,bottom:r.bottom};});
-  const cdp=await page.context().newCDPSession(page),start=bounds.bottom-20,end=bounds.top+20;
-  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:5,y:start,id:1}]});
-  for(let step=1;step<=8;step++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:5,y:start+(end-start)*step/8,id:1}]});await page.waitForTimeout(16);}
+  const cell=page.getByRole('button',{name:'Cell 9',exact:true});await expect(cell).toBeInViewport();
+  const before=await board.evaluate(node=>{const values=[];for(let p:HTMLElement|null=node as HTMLElement;p;p=p.parentElement)values.push(p.scrollTop);return values;});
+  const cdp=await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:5,y:160,id:1}]});
+  for(let step=1;step<=8;step++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:5,y:160-140*step/8,id:1}]});await page.waitForTimeout(16);}
   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  await expect.poll(()=>port.evaluate(node=>node.scrollTop)).toBeGreaterThan(before+20);
-  const cell=page.getByRole('button',{name:'Cell 9',exact:true});await cell.tap();await expect(cell).toHaveCount(0);
+  expect(await board.evaluate(node=>{const values=[];for(let p:HTMLElement|null=node as HTMLElement;p;p=p.parentElement)values.push(p.scrollTop);return values;})).toEqual(before);
+  await expect(board.locator('svg').first()).toHaveAttribute('viewBox','0 0 600 560');await expect(cell).toBeVisible();
+  await cell.tap();await expect(cell).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeAttached();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
 });
 

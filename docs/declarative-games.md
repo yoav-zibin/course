@@ -389,6 +389,25 @@ a repeated key does not replay. `duration_ms` and `delay_ms` are integers from
 0 to 5,000. Duration defaults to `motion.move_ms` or 1,440 ms, and delay defaults
 to 0.
 
+Animation entries accept optional numeric `z` from -1,000,000 to 1,000,000.
+During playback, pieces default to a raised layer at 100,001, above stationary
+pieces, targets and labels. Values through 100,000 draw inline with the normal
+piece stack; larger values draw in the animation overlay, ordered by `z`.
+The piece's resting `z` returns when playback finishes. A held drag stays above
+the animation overlay. The same override is supported by a piece's `animation`
+object and by last-move paths. Reduced motion, repeated keys and suppressed
+animations do not leave artwork raised.
+Only the currently playing path segment is raised; queued and completed paths
+use their resting layers. Repeated path entries for one piece retain each
+entry's own `z`. A delayed scene animation changes layers only when its delay
+has elapsed and returns to its resting layer at its own end.
+
+Older installed clients reject unknown animation fields. When updating content
+that must support them, use the existing scene `Piece.z` for the moved pieces
+instead of emitting an animation `z`. The current host still raises moving
+pieces from older pinned packages by default; game versions and saved pins are
+not rewritten.
+
 This field is supported on `ui_event` and `state_changed` responses. A current
 player's local interactions can animate without submitting a move. Accepted
 own and opponent moves may animate on consecutive forward updates. Initial
@@ -420,7 +439,7 @@ the filtered view and the complete final scene. It attaches the returned JSON
 as `last_move_animations` in the presentation response. Local UI events do not
 call this function. Do not update match state or emit `make_move` from it.
 
-Return an array of entries `{piece_id, path, duration_ms?}`. Entries run in
+Return an array of entries `{piece_id, path, duration_ms?, z?}`. Entries run in
 order; each path visits its waypoints in order. Each waypoint is
 `{board, position}`, using the same board-relative `{x,y}` or `{cell}` positions
 as pieces. A duration applies to the whole entry, divided equally among its
@@ -463,23 +482,26 @@ backward history and reduced-motion settings also settle immediately. Legacy
 games retain the behavior described above.
 
 The shared React Native host fits the complete declared viewport, boards,
-visible piece bodies and legal destinations at **100%**. Its canvas uses the
-available width and normally caps its height for short screens. When that cap
-would make piece bodies or destinations smaller than 32 CSS pixels, the canvas
-grows vertically and its native containing scroll view reaches the full board.
-A package that cannot meet the minimum at the available width still needs a
-responsive layout repair; this host adjustment does not certify a package.
+visible piece bodies and legal destinations at **100%**. In the focused match
+view, its canvas fills the actual space left below game controls and inside the
+device's safe area, with no horizontal or vertical page scrolling. Dense boards
+can show smaller pieces in this initial overview; the host does not grow or crop
+the canvas to enforce a minimum artwork size. Players can intentionally zoom in
+for precise play. Menu/details pages remain scrollable so instructions and
+match controls stay reachable.
 Scene coordinates and label left edges stay independent of the account's text
 direction. Full player names wrap without truncating identity.
 
-The host provides zoom/reset controls, two-finger pinch/spread and **25%–600%**
-camera zoom. On the web, ordinary wheel scrolling reaches the page's board and
-controls; hold Ctrl or Meta while using the wheel to zoom. At the fitted view,
-dragging empty space scrolls the page. After zooming, background dragging pans
-the bounded camera. Keyboard users can focus the board and use `+`/`-` to zoom,
-`0` or Home to restore the fitted view, and arrow keys to pan.
-Camera state survives scene changes, replay, viewport resizing and language
-changes, and resets when the host opens a different match or viewer.
+The host provides optional zoom/reset controls, two-finger pinch/spread and
+**25%–600%** camera zoom. Hold Ctrl or Meta while using the wheel to zoom on the
+web. A fitted or zoomed-out overview stays centered; background dragging pans
+the bounded camera only after zooming in. Keyboard users can focus the board
+and use `+`/`-` to zoom, `0` or Home to restore the fitted view, and arrow keys
+to pan a magnified board.
+Rotation or a real window/host geometry change resets the camera and any
+unfinished drag to the full-board fitted view. Scene changes, replay and
+language changes retain an intentional camera position when the geometry
+has not changed. Opening a different match or viewer also starts fitted.
 Camera gestures stay in the host and never emit `make_move`; two fingers cancel
 an unfinished piece gesture. Audit actual object sizes, clipping, complete reach
 and input guards at every required viewport and zoom level.
