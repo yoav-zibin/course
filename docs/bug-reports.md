@@ -227,15 +227,17 @@ Unmatched or ambiguous identities stay excluded until verified or clarified.
 belong in source. Ordinary reinstalls preserve both sets of pins for the same
 repository and API origin; a scope change drops prior pins.
 
-The timer reviews feedback once daily at **00:00 UTC** and uses `Persistent=true`
-to catch up after downtime. It requests every page of `open` and `handling`
+The timer reviews feedback once daily at **7:00 pm Eastern** using
+`America/New_York`, so it stays at 7:00 pm through daylight saving changes. It
+uses `Persistent=true` to catch up after downtime. It requests every page of `open` and `handling`
 headers and pending/active individually approved reports and deferred student
 experience concerns from private state, then queues one batch review only when
 reports exist. Other escalated reports stay excluded until Yoav authorizes
 reopening. A private delivery receipt suppresses another delivery of the same
-reports on that UTC calendar day; unfinished work recovers at the next daily
-check. Calendar-day deduplication handles an afternoon delivery followed by the
-next midnight and small timer jitter without skipping a day's recovery. New
+reports in that evening-to-evening review period; unfinished work recovers at
+the next 7:00 pm check. The period uses the local review boundary rather than
+UTC dates or a rolling 24-hour delay, so afternoon deliveries, timer jitter and
+23-hour or 25-hour daylight saving days do not skip a scheduled review. New
 reports normally join the daily batch or its final arrival check; an explicit
 manual `watch` can still deliver newly discovered IDs. A process lock prevents
 overlapping watcher invocations. Queue delivery never marks a report handled.

@@ -2,6 +2,7 @@
 
 import copy
 from concurrent.futures import ThreadPoolExecutor
+import datetime as dt
 import fcntl
 import importlib.util
 import json
@@ -11,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 import urllib.parse
 import uuid
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -79,7 +81,7 @@ def test_delivery_deduplicates_then_recovers_interrupted_handling(state_dir, pen
     assert receipt["report_ids"] == ["report-a"]
     assert review.watch(state_dir, now=200).startswith("Player bug-report repair already queued")
     assert queue.call_count == 1
-    assert review.watch(state_dir, now=100 + review.RETRY_SECONDS).startswith("Queued repair")
+    assert review.watch(state_dir, now=100 + 24 * 3600).startswith("Queued repair")
     assert queue.call_count == 2
     command = queue.call_args.args[0]
     assert command[:4] == ["/usr/bin/codex", "queue", "--thread", "12345678-1234-1234-1234-123456789abc"]
@@ -89,22 +91,38 @@ def test_delivery_deduplicates_then_recovers_interrupted_handling(state_dir, pen
     pending.request.assert_not_called()
 
 
-@pytest.mark.parametrize("queued_at,next_check", [
-    (15 * 3600, 24 * 3600),  # Migrate an afternoon hourly receipt to next midnight.
-    (3, 24 * 3600 + 2),  # A daily trigger one second earlier must still recover.
+def eastern_timestamp(value):
+    return dt.datetime.fromisoformat(value).replace(tzinfo=ZoneInfo("America/New_York")).timestamp()
+
+
+@pytest.mark.parametrize("queued_local,next_local,elapsed", [
+    ("2026-11-21T15:00:00", "2026-11-21T19:00:00", 4 * 3600),
+    ("2026-11-21T19:00:03", "2026-11-22T19:00:02", 24 * 3600 - 1),
+    ("2026-03-07T19:00:03", "2026-03-08T19:00:02", 23 * 3600 - 1),
+    ("2026-10-31T19:00:03", "2026-11-01T19:00:02", 25 * 3600 - 1),
 ])
-def test_daily_recovery_uses_utc_dates_not_a_rolling_delay(state_dir, pending, monkeypatch, queued_at, next_check):
+def test_daily_recovery_uses_the_eastern_evening_boundary_through_dst(
+        state_dir, pending, monkeypatch, queued_local, next_local, elapsed):
+    queued_at, next_check = eastern_timestamp(queued_local), eastern_timestamp(next_local)
+    assert next_check - queued_at == elapsed
+    boundary = dt.datetime.fromtimestamp(next_check, ZoneInfo("America/New_York")).replace(
+        hour=19, minute=0, second=0, microsecond=0).timestamp()
     queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
     monkeypatch.setattr(review.subprocess, "run", queue)
     review.watch(state_dir, now=queued_at)
-    assert review.watch(state_dir, now=queued_at + 100).startswith("Player bug-report repair already queued")
+    assert review.watch(state_dir, now=boundary - 1).startswith("Player bug-report repair already queued")
     assert queue.call_count == 1
     assert review.watch(state_dir, now=next_check).startswith("Queued repair")
     assert queue.call_count == 2
-    assert review.RETRY_SECONDS == 24 * 3600
 
 
-def test_same_day_receipt_suppresses_the_former_six_hour_retry(state_dir, pending, monkeypatch):
+def test_review_period_changes_at_seven_pm_not_midnight():
+    assert review.review_period(eastern_timestamp("2026-11-21T18:59:59")) == dt.date(2026, 11, 20)
+    assert review.review_period(eastern_timestamp("2026-11-21T19:00:00")) == dt.date(2026, 11, 21)
+    assert review.review_period(eastern_timestamp("2026-11-22T00:00:00")) == dt.date(2026, 11, 21)
+
+
+def test_same_review_period_suppresses_the_former_six_hour_retry(state_dir, pending, monkeypatch):
     queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
     monkeypatch.setattr(review.subprocess, "run", queue)
     review.watch(state_dir, now=100)

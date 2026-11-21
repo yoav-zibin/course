@@ -13,12 +13,12 @@ import uuid
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = ROOT.parent.parent
 UNIT = "buildplay-bug-reports"
-DAILY_CALENDAR = "*-*-* 00:00:00 UTC"
+DAILY_CALENDAR = "*-*-* 19:00:00 America/New_York"
 
 
 def timer_unit():
     return (
-        "[Unit]\nDescription=Review player bug reports daily as one batch\n\n"
+        "[Unit]\nDescription=Review player bug reports daily at 7pm Eastern as one batch\n\n"
         "[Timer]\nOnCalendar=" + DAILY_CALENDAR + "\nPersistent=true\nUnit=" + UNIT +
         ".service\n\n[Install]\nWantedBy=timers.target\n"
     )

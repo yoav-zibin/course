@@ -4,6 +4,7 @@
 import argparse
 import base64
 from contextlib import contextmanager
+import datetime as dt
 import fcntl
 import json
 import os
@@ -16,10 +17,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_STATE = Path.home() / ".local/share/buildplay-bug-reports"
-RETRY_SECONDS = 24 * 3600  # UTC calendar-day buckets, not a rolling delay.
+REVIEW_TIME_ZONE = ZoneInfo("America/New_York")
+REVIEW_HOUR = 19
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # Headers contain up to 10k description + 20k review notes + 4k assessment and
 # changes-summary characters. JSON can escape each character to six bytes;
@@ -398,6 +401,13 @@ def delivery_prompt(state_dir, config, count):
     )
 
 
+def review_period(timestamp):
+    """The local date of the latest scheduled 7pm Eastern review boundary."""
+    local = dt.datetime.fromtimestamp(timestamp, REVIEW_TIME_ZONE)
+    day = local.date()
+    return day if local.hour >= REVIEW_HOUR else day - dt.timedelta(days=1)
+
+
 def watch(state_dir, *, dry_run=False, now=None):
     config = configuration(state_dir)
     identifiers = review_ids(BugAPI(config), authorizations(state_dir, config))
@@ -410,8 +420,8 @@ def watch(state_dir, *, dry_run=False, now=None):
     pending = json.loads(receipt.read_text()) if receipt.exists() else {}
     queued_at = pending.get("queued_at", 0)
     if (identifiers.issubset(set(pending.get("report_ids", []))) and
-            0 <= now - queued_at and now // RETRY_SECONDS == queued_at // RETRY_SECONDS):
-        return "Player bug-report repair already queued for this UTC day; retrying unfinished work at the next daily check"
+            0 <= now - queued_at and review_period(now) == review_period(queued_at)):
+        return "Player bug-report repair already queued for this 7pm Eastern review period; retrying unfinished work at the next daily check"
     if dry_run:
         return f"Would queue repair of {len(identifiers)} unhandled player bug reports"
     prompt = delivery_prompt(state_dir, config, len(identifiers))
@@ -422,7 +432,8 @@ def watch(state_dir, *, dry_run=False, now=None):
     )
     if result.returncode or "warn" in (result.stdout + result.stderr).lower():
         raise RuntimeError("Could not confirm Codex queue/resume; no success receipt saved")
-    # A delivery receipt is never a resolution. Interrupted work retries next UTC day.
+    # A receipt is never a resolution. Recover at the next local 7pm boundary,
+    # including 23-hour and 25-hour review periods around daylight saving time.
     save_json(receipt, {"report_ids": sorted(identifiers), "queued_at": now,
                         "thread_id": config["thread_id"]})
     return f"Queued repair of {len(identifiers)} player bug reports in the existing Codex thread"

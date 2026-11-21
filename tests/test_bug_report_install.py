@@ -136,7 +136,7 @@ def test_reinstall_writes_daily_units_restarts_active_timer_and_preserves_identi
                                      "--password-file", str(credential), "--state-dir", str(state)])
     install.main()
     timer = (tmp_path / ".config/systemd/user/buildplay-bug-reports.timer").read_text()
-    assert "OnCalendar=*-*-* 00:00:00 UTC\n" in timer
+    assert "OnCalendar=*-*-* 19:00:00 America/New_York\n" in timer
     assert "Persistent=true\n" in timer and "Unit=buildplay-bug-reports.service\n" in timer
     assert "daily" in timer and "every hour" not in timer
     assert ["systemctl", "--user", "daemon-reload"] in commands
