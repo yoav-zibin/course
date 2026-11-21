@@ -66,6 +66,12 @@ presentation code. The visible board, pieces and controls are platform-owned
 scene elements; the test's “no visible iframe” check does not claim the browser
 implementation has no internal sandbox.
 
+The web runtime allows up to ten seconds for the iframe and worker to start.
+After the worker acknowledges readiness, game execution retains its 1,200 ms
+limit and a separate 3,000 ms parent watchdog. Readiness and input messages are
+accepted once, so repeated messages cannot extend these deadlines. Slow browser
+startup therefore has its own bounded allowance.
+
 Additional browser checks passed for the existing authoring test page, filtered
 Memory views, practice reload, replay, offline moves, and face-down artwork and
 accessibility labels. A visual review also confirmed readable game titles and
