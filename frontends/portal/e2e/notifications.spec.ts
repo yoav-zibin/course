@@ -173,9 +173,12 @@ test('first confirmed turn handoff asks once and profile controls register and d
   const match=await createMatch(request,alice,await createGame(request,uniqueName('Consent game')));await joinAndStart(request,alice,bob,match.id);
   await fakeWebPush(page);await loginAs(page,alice);await page.goto(`/portal#match=${match.id}`);
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name:'Know when it’s your turn',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>(window as any).__notificationPrompts)).toBe(0);
   await page.getByRole('button',{name:'Not now',exact:true}).click();
+  await page.getByTestId('match-menu-button').click();
+  await expect(page.getByTestId('match-menu-button')).toHaveAttribute('aria-expanded','false');
   const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(bob),data:{move:{cell:3},expected_move_count:1}});expect(moved.ok()).toBeTruthy();
   await page.getByRole('button',{name:'Cell 2',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Know when it’s your turn',exact:true})).toHaveCount(0);

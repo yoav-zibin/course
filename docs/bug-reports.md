@@ -116,6 +116,7 @@ Admin endpoints require the configured master password through HTTP Basic:
 | --- | --- |
 | `GET /admin/bug-reports?status=open&limit=50&cursor=...` | Headers and `next_cursor`; maximum limit 100. Status defaults to `open`; use `all` for every status. |
 | `GET /admin/bug-reports/{id}` | Complete private report and evidence. |
+| `POST /admin/bug-reports/{id}/assessment` | Save an investigated report's score and rationale without changing its status. |
 | `POST /admin/bug-reports/{id}/status` | Update review status, notes and fixing commit. |
 
 Status updates accept `status`, `resolution`, optional `commit`, optional
@@ -124,6 +125,22 @@ Status updates accept `status`, `resolution`, optional `commit`, optional
 characters and required for `escalated` and `handled`. Optimistic expectations
 are checked transactionally; a stale update returns 409. The backend records
 the reviewer and change time. Handling a report preserves its evidence.
+Status updates also accept `changes_summary`, up to 2,000 trimmed characters,
+describing the actual code or game-logic changes in a few sentences. Omitting
+this field preserves the previous summary.
+
+Reports have three admin review fields: `score` (an integer from 0 through 10,
+or null until assessed), `score_rationale` and `changes_summary`. New and legacy
+unassessed reports are not assigned a zero. Public submissions cannot supply
+these fields. The private admin page displays the assessment and actual changes
+separately from the resolution and evidence.
+
+Assessment requests require `score`, a nonempty `score_rationale` of at most
+2,000 characters, and both `expected_status` and `expected_updated_at`. Boolean,
+fractional and string scores are rejected. The transaction checks both guards
+and preserves status, resolution, commit and submitted evidence. Assessment
+updates the review timestamp, so fetch the report again before a later status
+change. Recording an assessment does not authorize implementation.
 
 ## Hourly Codex repair workflow
 
@@ -163,16 +180,17 @@ repository and API origin; a scope change drops prior pins.
 
 The timer checks at the start of every UTC hour and uses `Persistent=true` to
 catch up after downtime. It requests every page of `open` and `handling`
-headers and pending/active individually approved reports from private state,
+headers and pending/active individually approved reports and deferred student
+experience concerns from private state,
 then queues a repair turn only if pending reports exist. Other escalated
 reports stay excluded until the user authorizes reopening. A private delivery
 receipt suppresses duplicate turns for the same reports for six hours; new
 report IDs can trigger a turn sooner. An unfinished `handling` report retries
 after that interval, recovering an interrupted repair. A process lock prevents
 overlapping watcher invocations. Queue delivery never marks a report handled.
-Watcher pages contain at most 20 headers, so complete descriptions and review
+Watcher pages contain at most 15 headers, so complete descriptions and review
 notes fit within its 4 MiB private-response limit, including JSON-escaped control
-characters.
+characters and the assessment and changes summaries.
 
 The queued instructions require independent examination of the report and
 screenshots, focused code fixes and checks, integration of current upstream,
@@ -195,6 +213,17 @@ covers one report approved by Yoav in this conversation. `authorization_required
 is true for every other report, even an ordinary clear bug that fits BuildPlay.
 Standing approval permits choosing routine implementation details, while all
 technical claims still need independent verification and the normal checks.
+If investigation shows that a student's requested change would worsen the
+portal for other users, give it zero, record the rationale, and escalate to
+Yoav before implementing anything. This exception takes precedence over student
+standing approval. Reserve the decision using `request-authorization` with
+`--student-experience-concern`; it requires a fresh, server-verified student
+report with a saved zero assessment and rationale. An unresolved concern pauses
+standing approval for that report until Yoav directly decides. The usual single
+pending question rule still applies. When another question is pending, the same
+command saves the concern privately for later recovery without reserving or
+asking a second question. Leave the harmful change unimplemented and escalated
+until its turn; private deferred concerns also enter hourly snapshots.
 
 Ask Yoav for authorization **one report at a time**, showing its report ID,
 server-derived reporter user name (or `Signed-out reporter`) and a concise
@@ -219,7 +248,8 @@ ambiguous replies and delivery receipts grant no
 permission. A lost decision response requires inspecting the private state.
 
 State writes use an exclusive lock and atomic mode-600 replacement. Pending
-questions and active approved escalations enter hourly recovery and snapshots;
+questions, deferred student concerns and active approved escalations enter hourly
+recovery and snapshots;
 recovery cannot ask about a second report. Confirming handled retires an active
 approval from recovery while preserving its decision history. It also clears a
 matching pending question resolved elsewhere, without granting authorization.
@@ -227,15 +257,51 @@ Other previously escalated reports require an explicit decision to reopen. The s
 fresh authorization before open/handling/handled and requires both optimistic
 guards for every transition.
 
+### Assessment and changes summaries
+
+Score each report only after reading its complete evidence, independently
+investigating the behavior, understanding the issue, and developing a concrete
+fix plan or a supported no-change conclusion. Do not assign provisional scores
+or backfill ratings from a title, reporter identity or incomplete investigation.
+Use this benefit scale:
+
+| Score | Meaning |
+| --- | --- |
+| 0 | Nothing needs fixing, or the proposed change would worsen other users' experience. |
+| 1 | A completely trivial adjustment, such as minor wording, a color or a CSS property. |
+| 2–10 | Increasing improvements to the website, with higher scores for more substantial real bugs and user-experience improvements. |
+
+Save a few sentences explaining the score before implementation. Cosmetic
+implementation size alone does not determine impact: a small fix to a serious
+interaction defect can deserve a higher score. A zero is an assessment, not
+permission to dismiss a report or mark incomplete work handled. Existing
+authorization, escalation, verification and publication requirements still apply.
+
+After making and verifying changes, save a separate few-sentence
+`changes_summary` describing what actually changed in code or game logic. Do not
+put the proposed plan in this field. For a verified already-fixed report, explain
+that no additional changes were needed and identify the published fix. The CLI
+requires a saved assessment and this summary when marking a report handled;
+resolution notes still record root cause, checks and publication evidence.
+Failed or unfinished repairs remain pending.
+
 Useful private operations:
 
 ```sh
 python3 ops/bug-reports/review.py watch --dry-run
 python3 ops/bug-reports/review.py snapshot
 python3 ops/bug-reports/review.py get <id>
+# Only after complete analysis and a concrete fix/no-change plan:
+python3 ops/bug-reports/review.py assess <id> --score <0-10> \
+  --rationale-file <private-rationale-file> --analysis-complete \
+  --expected-status <current-status> --expected-updated-at <last-seen-timestamp>
+# Fetch again after assessment before using its new timestamp in a transition.
 python3 ops/bug-reports/review.py authorizations
 python3 ops/bug-reports/review.py request-authorization <id> \
   --summary-file <private-summary-file>
+# For an assessed student request expected to worsen the portal:
+python3 ops/bug-reports/review.py request-authorization <id> \
+  --summary-file <private-harm-summary-file> --student-experience-concern
 # Only after Yoav's direct reply in this conversation:
 python3 ops/bug-reports/review.py decide-authorization <id> \
   --decision approved --user-response-file <private-direct-reply-file> \
@@ -245,6 +311,7 @@ python3 ops/bug-reports/review.py status <id> --status handling \
   --expected-updated-at <last-seen-timestamp>
 python3 ops/bug-reports/review.py status <id> --status handled \
   --notes-file <private-resolution-file> --commit <published-commit> \
+  --changes-summary-file <private-actual-changes-file> \
   --expected-status handling --expected-updated-at <last-seen-timestamp>
 python3 ops/bug-reports/review.py status <id> --status escalated \
   --notes-file <private-escalation-file> --expected-status open \

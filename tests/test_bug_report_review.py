@@ -140,6 +140,7 @@ def test_pending_query_follows_short_and_empty_pages_and_excludes_escalations(mo
 @pytest.mark.parametrize("character", ["🎮", "\x01"])
 def test_watcher_page_size_fits_maximum_unicode_report_text_and_resolution(character):
     row = {"id": "a" * 32, "text": character * 10_000, "resolution": character * 20_000,
+           "score": 10, "score_rationale": character * 2_000, "changes_summary": character * 2_000,
            "user": {"display_name": "🎮" * 200, "email": "a" * 254}}
     response = json.dumps({"items": [row] * review.PAGE_LIMIT, "next_cursor": "a" * 500},
                           ensure_ascii=False).encode()
@@ -170,20 +171,27 @@ def test_snapshot_rechecks_status_before_saving_evidence(state_dir, pending):
 def test_status_requires_api_confirmation_and_preserves_compare_guard(state_dir, pending, tmp_path):
     configure_owner(state_dir)
     pending.get.return_value = {**owner_report(), "id": "report-a", "status": "handling",
+                                "score": 6, "score_rationale": "A real flow was broken; the verified repair restores it.",
                                 "updated_at": "2026-11-19T00:00:00Z"}
     notes = tmp_path / "notes.txt"
     notes.write_text("Verified fix, focused regression passed, published commit abc.")
+    changes = tmp_path / "changes.txt"
+    changes.write_text("Corrected the broken control. It now preserves the player's selection.")
     pending.request.return_value = {"id": "report-a", "status": "handled"}
     assert review.set_status(state_dir, "report-a", status="handled", notes_file=notes,
+                             changes_summary_file=changes,
                              commit="abc", expected_status="handling",
                              expected_updated_at="2026-11-19T00:00:00Z") == {
         "id": "report-a", "status": "handled",
     }
     assert pending.request.call_args.kwargs["body"]["expected_status"] == "handling"
     assert pending.request.call_args.kwargs["body"]["expected_updated_at"] == "2026-11-19T00:00:00Z"
+    assert pending.request.call_args.kwargs["body"]["changes_summary"] == changes.read_text()
+    assert "score" not in pending.request.call_args.kwargs["body"]
     pending.request.return_value = {"id": "report-a", "status": "open"}
     with pytest.raises(RuntimeError, match="did not confirm"):
         review.set_status(state_dir, "report-a", status="handled", notes_file=notes,
+                          changes_summary_file=changes,
                           expected_status="handling", expected_updated_at="2026-11-19T00:00:00Z")
 
 
@@ -358,6 +366,222 @@ def private_note(state_dir, name, text):
     path.write_text(text)
     path.chmod(0o600)
     return path
+
+
+def test_assessment_is_guarded_private_metadata_and_never_authorizes_a_fix(state_dir, pending):
+    report = foreign_report(status="escalated")
+    pending.get.return_value = report
+    rationale = private_note(state_dir, "rationale", "A recurring broken action prevents play. A bounded repair will restore the documented flow.")
+    pending.request.return_value = {**report, "score": 6, "score_rationale": rationale.read_text()}
+    assert review.assess_report(state_dir, report["id"], score=6, rationale_file=rationale,
+                                analysis_complete=True, expected_status="escalated",
+                                expected_updated_at=report["updated_at"]) == {
+        "id": report["id"], "status": "escalated", "score": 6}
+    assert pending.request.call_args.args == (f"/admin/bug-reports/{report['id']}/assessment",)
+    assert pending.request.call_args.kwargs["body"] == {
+        "score": 6, "score_rationale": rationale.read_text(),
+        "expected_status": "escalated", "expected_updated_at": report["updated_at"]}
+    assert not (state_dir / "authorizations.json").exists()
+    with pytest.raises(PermissionError, match="explicit authorization"):
+        review.set_status(state_dir, report["id"], status="handling", notes_file=rationale,
+                          expected_status="escalated", expected_updated_at=report["updated_at"])
+
+
+@pytest.mark.parametrize("score", [-1, 11, True, False, 1.0, "6", None])
+def test_assessment_rejects_invalid_scores_before_private_api_access(state_dir, pending, score):
+    rationale = private_note(state_dir, "rationale", "Independently analyzed evidence and a concrete fix plan.")
+    with pytest.raises(ValueError, match="integer from 0 to 10"):
+        review.assess_report(state_dir, "report-a", score=score, rationale_file=rationale,
+                              analysis_complete=True, expected_status="open", expected_updated_at="now")
+    pending.get.assert_not_called()
+    pending.request.assert_not_called()
+
+
+def test_assessment_requires_complete_analysis_rationale_guards_and_a_fresh_report(state_dir, pending):
+    rationale = private_note(state_dir, "rationale", "A complete root-cause analysis and concrete fix plan.")
+    kwargs = dict(score=4, rationale_file=rationale, analysis_complete=True,
+                  expected_status="open", expected_updated_at="now")
+    with pytest.raises(ValueError, match="complete evidence analysis"):
+        review.assess_report(state_dir, "report-a", **{**kwargs, "analysis_complete": False})
+    for text in (" ", "x" * 2001):
+        rationale.write_text(text)
+        with pytest.raises(ValueError, match="score rationale"):
+            review.assess_report(state_dir, "report-a", **kwargs)
+    rationale.write_text("The independent analysis supports this fix plan.")
+    for override in ({"expected_status": None}, {"expected_updated_at": None}):
+        with pytest.raises(ValueError, match="Both expected"):
+            review.assess_report(state_dir, "report-a", **{**kwargs, **override})
+    pending.get.return_value = {"id": "report-a", "status": "open", "updated_at": "changed"}
+    with pytest.raises(RuntimeError, match="report changed"):
+        review.assess_report(state_dir, "report-a", **kwargs)
+    pending.request.assert_not_called()
+
+
+@pytest.mark.parametrize("score", [0, 1, 10])
+def test_assessment_accepts_integer_boundary_scores_without_changing_status(state_dir, pending, score):
+    rationale = private_note(state_dir, "rationale", "The complete investigation and concrete plan support this impact score.")
+    report = {"id": "report-a", "status": "handling", "updated_at": "now"}
+    pending.get.return_value = report
+    pending.request.return_value = {**report, "score": score, "score_rationale": rationale.read_text()}
+    assert review.assess_report(state_dir, "report-a", score=score, rationale_file=rationale,
+                                analysis_complete=True, expected_status="handling", expected_updated_at="now")["score"] == score
+
+
+def test_assessment_cli_requires_explicit_analysis_assertion_before_any_api_call(monkeypatch, pending, capsys):
+    import sys
+    monkeypatch.setattr(sys, "argv", ["review.py", "assess", "report-a", "--score", "5",
+                                      "--rationale-file", "/private/rationale", "--expected-status", "open",
+                                      "--expected-updated-at", "now"])
+    with pytest.raises(SystemExit) as error:
+        review.main()
+    assert error.value.code == 2
+    assert "--analysis-complete" in capsys.readouterr().err
+    pending.get.assert_not_called()
+    pending.request.assert_not_called()
+
+
+@pytest.mark.parametrize("result", [None, {}, {"id": "report-a", "status": "handling", "score": 0, "score_rationale": "No change is needed."},
+                                    {"id": "report-a", "status": "open", "score": False, "score_rationale": "No change is needed."}])
+def test_assessment_lost_or_unconfirmed_response_requires_get_before_retry(state_dir, pending, result):
+    rationale = private_note(state_dir, "rationale", "No change is needed.")
+    pending.get.return_value = {"id": "report-a", "status": "open", "updated_at": "now"}
+    pending.request.return_value = result
+    with pytest.raises(RuntimeError, match="did not confirm the assessment"):
+        review.assess_report(state_dir, "report-a", score=0, rationale_file=rationale,
+                              analysis_complete=True, expected_status="open", expected_updated_at="now")
+
+
+def test_handled_requires_actual_changes_summary_but_other_statuses_preserve_it(state_dir, pending):
+    configure_owner(state_dir)
+    report = {**owner_report(), "status": "handling", "updated_at": "now", "score": 0,
+              "score_rationale": "The current published behavior already fixes this report."}
+    pending.get.return_value = report
+    notes = private_note(state_dir, "notes", "Verified published behavior and relevant checks.")
+    with pytest.raises(ValueError, match="separate actual changes summary"):
+        review.set_status(state_dir, report["id"], status="handled", notes_file=notes,
+                          expected_status="handling", expected_updated_at="now")
+    changes = private_note(state_dir, "changes", "x" * 2001)
+    with pytest.raises(ValueError, match="changes summary"):
+        review.set_status(state_dir, report["id"], status="handled", notes_file=notes,
+                          changes_summary_file=changes, expected_status="handling", expected_updated_at="now")
+    pending.request.assert_not_called()
+    pending.request.return_value = {"id": report["id"], "status": "escalated"}
+    review.set_status(state_dir, report["id"], status="escalated", notes_file=notes,
+                      expected_status="handling", expected_updated_at="now")
+    assert "changes_summary" not in pending.request.call_args.kwargs["body"]
+
+
+@pytest.mark.parametrize("score,rationale", [(None, ""), (True, "A rationale"), (11, "A rationale"),
+                                          (3, " "), (3, None)])
+def test_handled_cannot_bypass_the_analyzed_persisted_assessment(state_dir, pending, score, rationale):
+    configure_owner(state_dir)
+    report = {**owner_report(), "status": "handling", "updated_at": "now",
+              "score": score, "score_rationale": rationale}
+    pending.get.return_value = report
+    notes = private_note(state_dir, "notes", "Verified published behavior.")
+    changes = private_note(state_dir, "changes", "Repaired the broken game control.")
+    with pytest.raises(ValueError, match="persisted analyzed score"):
+        review.set_status(state_dir, report["id"], status="handled", notes_file=notes,
+                          changes_summary_file=changes, expected_status="handling", expected_updated_at="now")
+    pending.request.assert_not_called()
+
+
+def test_harmful_student_question_suspends_standing_approval_until_direct_decision(state_dir, pending):
+    config = review.configuration(state_dir)
+    config["student_user_ids"] = [OTHER_ID]
+    review.save_json(state_dir / "config.json", config)
+    report = {**foreign_report(), "score": 0, "score_rationale": "This would remove another player's access to a working feature."}
+    pending.get.return_value = report
+    summary = private_note(state_dir, "summary", "This student proposal removes a working feature and would worsen other players' experience.")
+    review.request_authorization(state_dir, report["id"], summary_file=summary, student_experience_concern=True)
+    state = review.authorizations(state_dir, config)
+    assert state["pending"]["student_experience_concern"] is True
+    policy = review.with_review_policy(config, report, state)["_review_policy"]
+    assert policy["student_suggestion_authorized"] is True and policy["authorization_required"] is True
+    with pytest.raises(PermissionError, match="explicit authorization"):
+        review.set_status(state_dir, report["id"], status="handling", notes_file=summary,
+                          expected_status="open", expected_updated_at=report["updated_at"])
+    with pytest.raises(RuntimeError, match="second question"):
+        review.request_authorization(state_dir, "second-report", summary_file=summary)
+    response = private_note(state_dir, "response", "Yoav directly replied: Approve this specific change despite that concern.")
+    review.decide_authorization(state_dir, report["id"], decision="approved", user_response_file=response,
+                                confirmed_direct_reply=True)
+    assert review.with_review_policy(config, report, review.authorizations(state_dir, config))["_review_policy"]["authorization_required"] is False
+    assert review.authorization_status(state_dir)["student_experience_concern_report_ids"] == []
+    pending.request.assert_not_called()
+
+
+def test_deferred_student_concern_survives_recovery_without_replacing_pending_question(state_dir, pending):
+    first = foreign_report("first-report")
+    student = {**foreign_report("student-report", status="escalated"), "score": 0,
+               "score_rationale": "Removing this documented flow would worsen other players' experience."}
+    pending.get.side_effect = lambda identifier: {first["id"]: first, student["id"]: student}[identifier]
+    summary = private_note(state_dir, "summary", "A specific behavior needs Yoav's decision.")
+    review.request_authorization(state_dir, first["id"], summary_file=summary)
+    config = review.configuration(state_dir)
+    config["student_user_ids"] = [OTHER_ID]
+    review.save_json(state_dir / "config.json", config)
+    result = review.request_authorization(state_dir, student["id"], summary_file=summary,
+                                          student_experience_concern=True)
+    assert result["pending_report_id"] == first["id"]
+    assert result["student_experience_concern_report_ids"] == [student["id"]]
+    state = review.authorizations(state_dir, config)
+    assert state["student_experience_concerns"][student["id"]]["reporter_user_id"] == OTHER_ID
+    assert review.with_review_policy(config, student, state)["_review_policy"]["authorization_required"] is True
+    pending.pending_ids.return_value = set()
+    snapshot = review.snapshot(state_dir)
+    saved = {row["id"]: row for row in map(json.loads, Path(snapshot["private_snapshot"]).read_text().splitlines())}
+    assert set(saved) == {first["id"], student["id"]}
+    assert saved[student["id"]]["_review_policy"]["student_experience_concern"] is True
+    response = private_note(state_dir, "response", "Yoav directly replied: No to the first report.")
+    review.decide_authorization(state_dir, first["id"], decision="declined", user_response_file=response,
+                                confirmed_direct_reply=True)
+    assert review.authorization_status(state_dir)["pending_report_id"] is None
+    result = review.request_authorization(state_dir, student["id"], summary_file=summary,
+                                          student_experience_concern=True)
+    assert result["pending_report_id"] == student["id"]
+    response.write_text("Yoav directly replied: Decline the harmful student change.")
+    review.decide_authorization(state_dir, student["id"], decision="declined", user_response_file=response,
+                                confirmed_direct_reply=True)
+    state = review.authorizations(state_dir, config)
+    assert state["pending"] is None and state["student_experience_concerns"] == {}
+    assert review.with_review_policy(config, student, state)["_review_policy"]["authorization_required"] is True
+    assert review.review_ids(pending, state) == set()
+    pending.request.assert_not_called()
+
+
+def test_existing_generic_question_can_acquire_a_fresh_student_harm_gate(state_dir, pending):
+    report = foreign_report()
+    pending.get.return_value = report
+    summary = private_note(state_dir, "summary", "A change needs Yoav's authorization.")
+    review.request_authorization(state_dir, report["id"], summary_file=summary)
+    config = review.configuration(state_dir)
+    config["student_user_ids"] = [OTHER_ID]
+    review.save_json(state_dir / "config.json", config)
+    report.update(score=0, score_rationale="This change would remove a working flow for other players.")
+    assert review.with_review_policy(config, report, review.authorizations(state_dir, config))["_review_policy"]["authorization_required"] is False
+    review.request_authorization(state_dir, report["id"], summary_file=summary, student_experience_concern=True)
+    state = review.authorizations(state_dir, config)
+    assert state["pending"]["report_id"] == report["id"]
+    assert state["pending"]["student_experience_concern"] is True
+    assert state["student_experience_concerns"][report["id"]]["reporter_user_id"] == OTHER_ID
+    assert review.with_review_policy(config, report, state)["_review_policy"]["authorization_required"] is True
+    assert pending.get.call_count == 2
+    pending.request.assert_not_called()
+
+
+@pytest.mark.parametrize("overrides,pinned", [({}, False), ({"score": 1}, True), ({"score": False}, True),
+                                             ({"score_rationale": " "}, True), ({"score_rationale": None}, True)])
+def test_student_concern_cannot_be_forged_or_requested_before_analysis(state_dir, pending, overrides, pinned):
+    config = review.configuration(state_dir)
+    config["student_user_ids"] = [OTHER_ID] if pinned else []
+    review.save_json(state_dir / "config.json", config)
+    pending.get.return_value = {**foreign_report(), "score": 0, "score_rationale": "This harms the portal.", **overrides}
+    summary = private_note(state_dir, "summary", "A harmful request needs the owner's decision.")
+    with pytest.raises(ValueError, match="fresh pinned student"):
+        review.request_authorization(state_dir, "foreign-report", summary_file=summary, student_experience_concern=True)
+    assert not (state_dir / "authorizations.json").exists()
+    pending.request.assert_not_called()
 
 
 def test_student_identity_requires_consistent_pinned_server_ids_and_preserves_owner_rule():

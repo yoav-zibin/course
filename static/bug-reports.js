@@ -31,6 +31,25 @@ function statusLabel(status) {
     handled: () => I18n.t("ui.bug_reports.status_handled", {}, "Handled"),
   })[status]?.() || status;
 }
+function scoreLabel(report) {
+  return Number.isInteger(report.score) && report.score >= 0 && report.score <= 10
+    ? I18n.t("ui.bug_reports.score", {score: report.score}, "Score: {score}/10")
+    : I18n.t("ui.bug_reports.unassessed", {}, "Score: Not assessed");
+}
+
+function assessmentDetails(report) {
+  return el("section", {class: "report-assessment"},
+    translated("h3", {}, () => I18n.t("ui.bug_reports.assessment", {}, "Assessment")),
+    translated("p", {}, () => scoreLabel(report)),
+    translated("h4", {}, () => I18n.t("ui.bug_reports.score_rationale", {}, "Score rationale")),
+    report.score_rationale
+      ? el("p", {class: "report-text", textContent: report.score_rationale})
+      : translated("p", {class: "muted"}, () => I18n.t("ui.bug_reports.no_rationale", {}, "No assessment recorded yet.")),
+    translated("h4", {}, () => I18n.t("ui.bug_reports.changes_summary", {}, "Code or game logic changes")),
+    report.changes_summary
+      ? el("p", {class: "report-text", textContent: report.changes_summary})
+      : translated("p", {class: "muted"}, () => I18n.t("ui.bug_reports.no_changes", {}, "No changes recorded.")));
+}
 
 async function request(path, body) {
   const response = await fetch(path, {cache: "no-store", ...(body ? {
@@ -48,10 +67,13 @@ async function request(path, body) {
 }
 
 function reportCard(row) {
+  let current = row;
+  const score = translated("p", {class: "muted report-score"}, () => scoreLabel(current));
   const details = el("details", {}, translated("summary", {}, () => I18n.t("ui.bug_reports.evidence", {}, "Screenshot, diagnostics and resolution")));
   const card = el("article", {},
     translated("p", {class: "muted"}, () => `${row.id} · ${statusLabel(row.status)} · ${formatTime(row.created_at)}`),
     el("p", {class: "report-text", textContent: row.text}),
+    score,
     translated("p", {class: "muted"}, () => I18n.t("ui.bug_reports.from", {
       name: row.user?.display_name || row.user?.name || I18n.t("ui.bug_reports.visitor", {}, "visitor"),
       identity: row.reporter_user_id ? ` (${row.reporter_user_id})` : "",
@@ -64,6 +86,8 @@ function reportCard(row) {
     details.append(content);
     try {
       const report = await request(`/admin/bug-reports/${encodeURIComponent(row.id)}`);
+      current = report;
+      score._bugCopy.textContent();
       content.replaceChildren();
       // The loading message no longer owns this container's contents.
       content.removeAttribute("data-bug-localized");
@@ -75,6 +99,7 @@ function reportCard(row) {
         : I18n.t("ui.bug_reports.updated", {time: formatTime(report.updated_at)}, "Last updated {time}")),
         el("details", {}, translated("summary", {}, () => I18n.t("ui.bug_reports.diagnostics", {}, "User and app diagnostics")),
           el("pre", {textContent: JSON.stringify({user: report.user, diagnostics: report.diagnostics}, null, 2)})));
+      content.append(assessmentDetails(report));
       const resolutionLabel = () => I18n.t("ui.bug_reports.resolution", {}, "Resolution or escalation reason");
       const notes = localize(el("textarea", {maxLength: 20000, value: report.resolution || ""}), "aria-label", resolutionLabel);
       const commit = localize(el("input", {class: "commit", value: report.commit || "", maxLength: 128}), "aria-label", () => I18n.t("ui.bug_reports.commit", {}, "Fix commit"));

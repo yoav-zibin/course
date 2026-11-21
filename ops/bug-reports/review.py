@@ -21,11 +21,12 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_STATE = Path.home() / ".local/share/buildplay-bug-reports"
 RETRY_SECONDS = 6 * 3600
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
-# Headers contain up to 10k description + 20k review-note characters. With
-# JSON escapes control characters to six bytes each; twenty maximal headers
-# still fit, including when the text needs more space than four-byte Unicode.
-PAGE_LIMIT = 20
+# Headers contain up to 10k description + 20k review notes + 4k assessment and
+# changes-summary characters. JSON can escape each character to six bytes;
+# fifteen maximal headers leave room for account context and cursor metadata.
+PAGE_LIMIT = 15
 STATUSES = ("open", "handling", "escalated", "handled")
+MAX_REVIEW_SUMMARY_CHARS = 2_000
 MAX_STUDENT_ACCOUNTS = 24  # Twelve people can each have multiple verified accounts.
 
 
@@ -116,7 +117,8 @@ def authorization_scope(config):
 
 
 def authorizations(state_dir, config):
-    empty = {"scope": authorization_scope(config), "approved": {}, "declined": {}, "pending": None}
+    empty = {"scope": authorization_scope(config), "approved": {}, "declined": {}, "pending": None,
+             "student_experience_concerns": {}}
     path = state_dir / "authorizations.json"
     if not path.exists():
         return empty
@@ -137,6 +139,16 @@ def authorizations(state_dir, config):
                 raise ValueError("Invalid private authorization state")
     if value["pending"] is not None:
         report_id(value["pending"].get("report_id"))
+    concerns = value.setdefault("student_experience_concerns", {})
+    if not isinstance(concerns, dict):
+        raise ValueError("Invalid private student experience concerns")
+    for identifier, concern in concerns.items():
+        report_id(identifier)
+        if (not isinstance(concern, dict) or concern.get("report_id") != identifier
+                or validate_owner_google_user_id(concern.get("reporter_user_id")) is None
+                or not isinstance(concern.get("summary"), str)
+                or not isinstance(concern.get("reporter_name"), str)):
+            raise ValueError("Invalid private student experience concerns")
     return value
 
 
@@ -158,12 +170,16 @@ def with_review_policy(config, report, authorization=None):
     explicit = (consistent and bool(approval) and approval.get("reporter_user_id") == identifier)
     declined = report["id"] in authorization["declined"]
     pending = authorization["pending"]
+    pending_concern = bool(pending and pending["report_id"] == report["id"]
+                           and pending.get("student_experience_concern") is True)
+    student_concern = pending_concern or report["id"] in authorization.get("student_experience_concerns", {})
     return {**report, "_review_policy": {
         "owner_suggestion_authorized": owner,
         "student_suggestion_authorized": student,
         "preauthorized": owner or student,
         "explicitly_authorized": explicit,
-        "authorization_required": declined or not (owner or student or explicit),
+        "authorization_required": declined or student_concern or not (owner or student or explicit),
+        "student_experience_concern": student_concern,
         "authorization_declined": declined,
         "authorization_pending": bool(pending and pending["report_id"] == report["id"]),
         "pending_authorization_report_id": pending["report_id"] if pending else None,
@@ -174,6 +190,7 @@ def review_ids(api, authorization):
     identifiers = set(api.pending_ids())
     identifiers.update(identifier for identifier, decision in authorization["approved"].items()
                        if decision.get("active") is True)
+    identifiers.update(authorization.get("student_experience_concerns", {}))
     if authorization["pending"]:
         identifiers.add(authorization["pending"]["report_id"])
     return identifiers
@@ -183,10 +200,11 @@ def authorization_status(state_dir):
     state = authorizations(state_dir, configuration(state_dir))
     return {"private_authorizations": str(state_dir / "authorizations.json"),
             "pending_report_id": state["pending"]["report_id"] if state["pending"] else None,
-            "approved_reports": len(state["approved"])}
+            "approved_reports": len(state["approved"]),
+            "student_experience_concern_report_ids": sorted(state["student_experience_concerns"])}
 
 
-def request_authorization(state_dir, identifier, *, summary_file):
+def request_authorization(state_dir, identifier, *, summary_file, student_experience_concern=False):
     """Reserve the sole question; no report status or approval changes here."""
     report_id(identifier)
     summary = " ".join(summary_file.read_text().split())
@@ -196,14 +214,20 @@ def request_authorization(state_dir, identifier, *, summary_file):
     with authorization_lock(state_dir):
         state = authorizations(state_dir, config)
         if state["pending"]:
-            if state["pending"]["report_id"] != identifier:
+            if state["pending"]["report_id"] == identifier and not student_experience_concern:
+                return authorization_status(state_dir)
+            if not student_experience_concern:
                 raise RuntimeError("Another report is awaiting Yoav's decision; do not ask a second question")
-            return authorization_status(state_dir)
         report = BugAPI(config).get(identifier)
         if report["status"] == "handled":
             raise ValueError("A handled report does not need authorization")
         policy = with_review_policy(config, report, state)["_review_policy"]
-        if not policy["authorization_required"]:
+        if student_experience_concern:
+            if (not policy["student_suggestion_authorized"] or type(report.get("score")) is not int
+                    or report["score"] != 0 or not isinstance(report.get("score_rationale"), str)
+                    or not report["score_rationale"].strip()):
+                raise ValueError("Student experience concerns require a fresh pinned student report with score 0 and rationale")
+        elif not policy["authorization_required"]:
             raise ValueError("This report is already authorized")
         if policy["authorization_declined"]:
             raise ValueError("Yoav already declined this report; await his explicit decision to reconsider")
@@ -213,8 +237,13 @@ def request_authorization(state_dir, identifier, *, summary_file):
         user = report.get("user") or {}
         name = user.get("display_name")
         name = " ".join(name.split())[:160] if isinstance(name, str) and name.strip() else "Signed-out reporter" if user_id is None else "Unnamed signed-in reporter"
-        state["pending"] = {"report_id": identifier, "reporter_user_id": user_id,
-                            "reporter_name": name, "summary": summary, "requested_at": time.time()}
+        question = {"report_id": identifier, "reporter_user_id": user_id,
+                    "reporter_name": name, "summary": summary, "requested_at": time.time()}
+        if student_experience_concern:
+            question["student_experience_concern"] = True
+            state["student_experience_concerns"][identifier] = question
+        if state["pending"] is None or state["pending"]["report_id"] == identifier:
+            state["pending"] = question
         save_json(state_dir / "authorizations.json", state)
     return authorization_status(state_dir)
 
@@ -235,7 +264,8 @@ def decide_authorization(state_dir, identifier, *, decision, user_response_file,
         state = authorizations(state_dir, config)
         pending = state["pending"]
         pending_matches = bool(pending and pending["report_id"] == identifier)
-        subject = pending if pending_matches else (state["declined"].get(identifier) or state["approved"].get(identifier))
+        subject = pending if pending_matches else (state["student_experience_concerns"].get(identifier)
+                                                   or state["declined"].get(identifier) or state["approved"].get(identifier))
         if not subject:
             raise ValueError("The decision must match the sole pending report or update its recorded decision")
         report = BugAPI(config).get(identifier)
@@ -247,6 +277,7 @@ def decide_authorization(state_dir, identifier, *, decision, user_response_file,
         state["declined" if decision == "approved" else "approved"].pop(identifier, None)
         if pending_matches:
             state["pending"] = None
+        state["student_experience_concerns"].pop(identifier, None)
         save_json(state_dir / "authorizations.json", state)
     return {**authorization_status(state_dir), "id": identifier, "decision": decision}
 
@@ -260,6 +291,9 @@ def complete_authorization(state_dir, config, identifier):
             changed = True
         if state["pending"] and state["pending"]["report_id"] == identifier:
             state["pending"] = None  # Another reviewer resolved it; this grants no permission.
+            changed = True
+        if identifier in state["student_experience_concerns"]:
+            state["student_experience_concerns"].pop(identifier)
             changed = True
         if changed:
             save_json(state_dir / "authorizations.json", state)
@@ -401,7 +435,8 @@ def snapshot(state_dir):
                     continue
                 if body["status"] == "escalated" and not (
                         body["_review_policy"]["explicitly_authorized"] or
-                        body["_review_policy"]["authorization_pending"]):
+                        body["_review_policy"]["authorization_pending"] or
+                        body["_review_policy"]["student_experience_concern"]):
                     continue
                 handle.write(json.dumps(body, ensure_ascii=False) + "\n")
                 count += 1
@@ -436,7 +471,37 @@ def get_report(state_dir, identifier):
             **body["_review_policy"]}
 
 
-def set_status(state_dir, identifier, *, status, notes_file, commit=None,
+def assess_report(state_dir, identifier, *, score, rationale_file, analysis_complete=False,
+                  expected_status=None, expected_updated_at=None):
+    """Save an analyzed assessment without claiming or authorizing implementation."""
+    report_id(identifier)
+    if analysis_complete is not True:
+        raise ValueError("Confirm complete evidence analysis and a concrete fix or no-change plan")
+    if type(score) is not int or not 0 <= score <= 10:
+        raise ValueError("The score must be an integer from 0 to 10")
+    rationale = rationale_file.read_text().strip()
+    if not 1 <= len(rationale) <= MAX_REVIEW_SUMMARY_CHARS:
+        raise ValueError("A nonempty score rationale of at most 2,000 characters is required")
+    if expected_status is None or not expected_updated_at:
+        raise ValueError("Both expected status and updated-at guards are required")
+    api = BugAPI(configuration(state_dir))
+    current = api.get(identifier)
+    if current["status"] != expected_status or current.get("updated_at") != expected_updated_at:
+        raise RuntimeError("The report changed; fetch it before saving its assessment")
+    result = api.request(
+        "/admin/bug-reports/" + urllib.parse.quote(identifier, safe="") + "/assessment",
+        method="POST", body={"score": score, "score_rationale": rationale,
+                             "expected_status": expected_status,
+                             "expected_updated_at": expected_updated_at},
+    )
+    if (not isinstance(result, dict) or result.get("id") != identifier
+            or result.get("status") != expected_status or type(result.get("score")) is not int
+            or result["score"] != score or result.get("score_rationale") != rationale):
+        raise RuntimeError("The API did not confirm the assessment; fetch the report before retrying")
+    return {"id": identifier, "status": expected_status, "score": score}
+
+
+def set_status(state_dir, identifier, *, status, notes_file, commit=None, changes_summary_file=None,
                expected_status=None, expected_updated_at=None):
     report_id(identifier)
     notes = notes_file.read_text().strip()
@@ -452,7 +517,18 @@ def set_status(state_dir, identifier, *, status, notes_file, commit=None,
     policy = with_review_policy(config, current, authorizations(state_dir, config))["_review_policy"]
     if status in ("open", "handling", "handled") and policy["authorization_required"]:
         raise PermissionError("Yoav's explicit authorization is required before working on this report")
+    if status == "handled" and (type(current.get("score")) is not int or not 0 <= current["score"] <= 10
+                                 or not isinstance(current.get("score_rationale"), str)
+                                 or not current["score_rationale"].strip()):
+        raise ValueError("Handled reports require a persisted analyzed score and rationale")
     body = {"status": status, "resolution": notes}
+    if changes_summary_file is not None:
+        summary = changes_summary_file.read_text().strip()
+        if not 1 <= len(summary) <= MAX_REVIEW_SUMMARY_CHARS:
+            raise ValueError("A nonempty changes summary of at most 2,000 characters is required")
+        body["changes_summary"] = summary
+    elif status == "handled":
+        raise ValueError("Handled reports require a separate actual changes summary file")
     if commit is not None:
         body["commit"] = commit
     if expected_status is not None:
@@ -482,6 +558,8 @@ def main():
     permission = commands.add_parser("request-authorization")
     permission.add_argument("id")
     permission.add_argument("--summary-file", type=Path, required=True)
+    permission.add_argument("--student-experience-concern", action="store_true",
+                            help="Reserve review of a pinned student's analyzed score-0 change that would worsen the portal")
     decision = commands.add_parser("decide-authorization", description="Record only Yoav's direct reply in this conversation")
     decision.add_argument("id")
     decision.add_argument("--decision", choices=("approved", "declined"), required=True)
@@ -489,10 +567,19 @@ def main():
     decision.add_argument("--from-yoav-in-this-thread", action="store_true", required=True)
     detail = commands.add_parser("get")
     detail.add_argument("id")
+    assessment = commands.add_parser("assess", description="Score only after deep analysis and a concrete fix or no-change plan")
+    assessment.add_argument("id")
+    assessment.add_argument("--score", type=int, choices=range(11), required=True)
+    assessment.add_argument("--rationale-file", type=Path, required=True)
+    assessment.add_argument("--analysis-complete", action="store_true", required=True,
+                            help="Confirm complete evidence review, independent investigation and a concrete fix or no-change plan")
+    assessment.add_argument("--expected-status", choices=STATUSES, required=True)
+    assessment.add_argument("--expected-updated-at", required=True)
     change = commands.add_parser("status")
     change.add_argument("id")
     change.add_argument("--status", choices=STATUSES, required=True)
     change.add_argument("--notes-file", type=Path, required=True)
+    change.add_argument("--changes-summary-file", type=Path)
     change.add_argument("--commit")
     change.add_argument("--expected-status", choices=STATUSES)
     change.add_argument("--expected-updated-at")
@@ -503,17 +590,23 @@ def main():
         result = snapshot(args.state_dir)
     elif args.command == "get":
         result = get_report(args.state_dir, args.id)
+    elif args.command == "assess":
+        result = assess_report(args.state_dir, args.id, score=args.score,
+                               rationale_file=args.rationale_file, analysis_complete=args.analysis_complete,
+                               expected_status=args.expected_status, expected_updated_at=args.expected_updated_at)
     elif args.command == "authorizations":
         result = authorization_status(args.state_dir)
     elif args.command == "request-authorization":
-        result = request_authorization(args.state_dir, args.id, summary_file=args.summary_file)
+        result = request_authorization(args.state_dir, args.id, summary_file=args.summary_file,
+                                       student_experience_concern=args.student_experience_concern)
     elif args.command == "decide-authorization":
         result = decide_authorization(args.state_dir, args.id, decision=args.decision,
                                       user_response_file=args.user_response_file,
                                       confirmed_direct_reply=args.from_yoav_in_this_thread)
     else:
         result = set_status(args.state_dir, args.id, status=args.status, notes_file=args.notes_file,
-                            commit=args.commit, expected_status=args.expected_status,
+                            commit=args.commit, changes_summary_file=args.changes_summary_file,
+                            expected_status=args.expected_status,
                             expected_updated_at=args.expected_updated_at)
     print(json.dumps(result), flush=True)
 

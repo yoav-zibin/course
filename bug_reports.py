@@ -73,6 +73,7 @@ class BugReportStatusChange(BaseModel):
     status: ReportStatus
     resolution: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20_000)] = ""
     commit: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] | None = None
+    changes_summary: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2_000)] | None = None
     expected_status: ReportStatus | None = None
     expected_updated_at: str | None = Field(default=None, max_length=100)
 
@@ -81,6 +82,20 @@ class BugReportStatusChange(BaseModel):
         if self.status in ("escalated", "handled") and not self.resolution:
             raise ValueError("handled and escalated reports require an explanation")
         return self
+
+
+class BugReportAssessmentChange(BaseModel):
+    """An admin assessment is independent of authorization and report status."""
+    model_config = ConfigDict(extra="forbid")
+    score: Annotated[int, Field(strict=True, ge=0, le=10)]
+    score_rationale: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2_000)]
+    expected_status: ReportStatus
+    expected_updated_at: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
+def reviewed_report(row):
+    # Historical reports remain unassessed; zero means a considered decision.
+    return {"score": None, "score_rationale": "", "changes_summary": "", **row}
 
 
 def report_summary(row):
@@ -103,8 +118,18 @@ def changed_report(row, change, *, changed_by, now):
             or (change.get("expected_updated_at") is not None and row["updated_at"] != change["expected_updated_at"])):
         from game_platform.service import ConflictError
         raise ConflictError("this bug report changed; reload it before updating")
-    return {**row, "status": change["status"], "resolution": change["resolution"],
-            "commit": change.get("commit"), "updated_at": now, "changed_by": changed_by}
+    if "score" in change:
+        # The shared store operation keeps assessment CAS atomic in every
+        # backend. Validate its shape here too, so internal callers cannot
+        # combine an assessment with an unrelated status or evidence edit.
+        assessment = BugReportAssessmentChange.model_validate(change)
+        updates = {"score": assessment.score, "score_rationale": assessment.score_rationale}
+    else:
+        updates = {"status": change["status"], "resolution": change["resolution"],
+                   "commit": change.get("commit")}
+        if change.get("changes_summary") is not None:
+            updates["changes_summary"] = change["changes_summary"]
+    return {**row, **updates, "updated_at": now, "changed_by": changed_by}
 
 
 def clean_diagnostics(value):
@@ -177,7 +202,8 @@ def make_router(platform_dependency, master_dependency, caller_dependency):
                 row = {"id": uuid.uuid4().hex, "text": report.text, "screenshot": report.screenshot,
                        "diagnostics": clean_diagnostics(report.diagnostics), "user": user_info,
                        "reporter_user_id": caller_id, "status": "open", "created_at": now,
-                       "updated_at": now, "resolution": "", "commit": None, "changed_by": None}
+                       "updated_at": now, "resolution": "", "commit": None, "changed_by": None,
+                       "score": None, "score_rationale": "", "changes_summary": ""}
                 platform._store.create_bug_report(row, rate_keys=rate_keys)
                 return {"id": row["id"], "status": row["status"], "created_at": now}
 
@@ -202,18 +228,17 @@ def make_router(platform_dependency, master_dependency, caller_dependency):
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
         rows, next_after = store.list_bug_reports(status=status, limit=limit, after=after)
-        return {"items": rows, "next_cursor": encode_cursor(scope, next_after) if next_after else None}
+        return {"items": [reviewed_report(row) for row in rows],
+                "next_cursor": encode_cursor(scope, next_after) if next_after else None}
 
     @private.get("/admin/bug-reports/{report_id}")
     def get_report(report_id: str, platform=Depends(platform_dependency)):
         row = platform._store.get_bug_report(report_id)
         if row is None:
             raise HTTPException(404, "no bug report with that id")
-        return row
+        return reviewed_report(row)
 
-    @private.post("/admin/bug-reports/{report_id}/status")
-    def set_status(report_id: str, payload: BugReportStatusChange, request: Request,
-                   platform=Depends(platform_dependency)):
+    def reviewer_name(request):
         import binascii
         changed_by = "admin"
         authorization = request.headers.get("authorization", "")
@@ -222,11 +247,24 @@ def make_router(platform_dependency, master_dependency, caller_dependency):
                 changed_by = base64.b64decode(authorization[6:], validate=True).decode().partition(":")[0][:200] or "admin"
             except (ValueError, binascii.Error, UnicodeError):
                 pass
-        row = platform._store.set_bug_report_status(report_id, payload.model_dump(), changed_by=changed_by,
+        return changed_by
+
+    def update_review(report_id, payload, request, platform):
+        row = platform._store.set_bug_report_status(report_id, payload.model_dump(), changed_by=reviewer_name(request),
                                                    now=dt.datetime.now(dt.timezone.utc).isoformat())
         if row is None:
             raise HTTPException(404, "no bug report with that id")
-        return row
+        return reviewed_report(row)
+
+    @private.post("/admin/bug-reports/{report_id}/status")
+    def set_status(report_id: str, payload: BugReportStatusChange, request: Request,
+                   platform=Depends(platform_dependency)):
+        return update_review(report_id, payload, request, platform)
+
+    @private.post("/admin/bug-reports/{report_id}/assessment")
+    def set_assessment(report_id: str, payload: BugReportAssessmentChange, request: Request,
+                       platform=Depends(platform_dependency)):
+        return update_review(report_id, payload, request, platform)
 
     router.include_router(private)
     return router

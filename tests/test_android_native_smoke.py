@@ -50,7 +50,7 @@ def driver():
     value.fixture, value.width, value.height = FIXTURE, 1080, 2400
     value.package = "com.buildplay.app"
     value.events, value.played_cells = [], []
-    value.tap = lambda label: None
+    value.tap = lambda label, **options: None
     value.capture = lambda stage: None
     return value
 
