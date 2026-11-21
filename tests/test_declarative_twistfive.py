@@ -258,4 +258,4 @@ def test_every_language_has_every_string_with_matching_placeholders():
             assert set(re.findall(r'\{\w+\}', strings[key])) == set(re.findall(r'\{\w+\}', source)), (locale, key)
         msg = message(position([0], [35])[1])
         msg.update(locale=locale, strings=strings)
-        assert UI.reduce(msg)['scene']['labels'][0]['text'] == strings['place_turn'].replace('{name}', strings['seat_name'].replace('{color}', strings['gold']).replace('{name}', 'Ana'))
+        assert UI.reduce(msg)['scene']['labels'][0]['text'] == strings['place_turn'].replace('{name}', strings['you'].replace('{name}', strings['seat_name'].replace('{color}', strings['gold']).replace('{name}', 'Ana')))

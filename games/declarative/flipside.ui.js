@@ -31,7 +31,9 @@ var gameUI = {
     var colorName = function (seat) { return seat === 0 ? S.light : S.dark; };
     var name = function (seat) {
       var p = players[seat];
-      return fill(S.seat_name, {color: colorName(seat), name: p && p.name ? p.name : fill(S.player, {n: seat + 1})});
+      var label = fill(S.seat_name, {color: colorName(seat), name: p && p.name ? p.name : fill(S.player, {n: seat + 1})});
+      // Your own seat says so everywhere it is named.
+      return seat === m.my_player_index ? fill(S.you, {name: label}) : label;
     };
     var unit = function (t) { return S['unit_' + t]; };
     var over = m.status === 'over' || view.phase === 'over';

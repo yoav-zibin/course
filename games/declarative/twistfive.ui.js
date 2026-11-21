@@ -70,7 +70,9 @@ var gameUI = {
     var color = function (seat) { return seat === 0 ? S.gold : S.black; };
     var name = function (seat) {
       var p = players[seat];
-      return fill(S.seat_name, {color: color(seat), name: p && p.name ? p.name : fill(S.player, {n: seat + 1})});
+      var label = fill(S.seat_name, {color: color(seat), name: p && p.name ? p.name : fill(S.player, {n: seat + 1})});
+      // Your own seat says so everywhere it is named.
+      return seat === m.my_player_index ? fill(S.you, {name: label}) : label;
     };
     var acting = m.status === 'ongoing' && view.winner === null && m.acting_for_player_index === view.cur && !m.replay;
     // Local state is only the pending hole for this exact position.

@@ -58,6 +58,7 @@ TEXTS = {
     'light': ['Ivory', 'Marfil', 'Ivoire', 'Elfenbein', 'Marfim', '象牙', 'हाथीदाँत', 'العاجي'],
     'dark': ['Walnut', 'Nogal', 'Noyer', 'Nussbaum', 'Nogueira', '胡桃', 'अखरोट', 'الجوزي'],
     'seat_name': ['{color} · {name}'] * 8,
+    'you': ['{name} (you)', '{name} (tú)', '{name} (vous)', '{name} (du)', '{name} (você)', '{name}（你）', '{name} (आप)', '{name} (أنت)'],
     'player': ['Player {n}', 'Jugador {n}', 'Joueur {n}', 'Spieler {n}', 'Jogador {n}', '玩家{n}', 'खिलाड़ी {n}', 'اللاعب {n}'],
     'board_name': ['Battlefield', 'Campo de batalla', 'Champ de bataille', 'Schlachtfeld', 'Campo de batalha', '战场', 'रणभूमि', 'ساحة المعركة'],
     'last_from': ['Last move from {square}', 'Último movimiento desde {square}', 'Dernier coup depuis {square}', 'Letzter Zug von {square}', 'Último lance de {square}', '上一步从{square}', 'पिछली चाल {square} से', 'آخر حركة من {square}'],

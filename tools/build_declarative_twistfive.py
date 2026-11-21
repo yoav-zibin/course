@@ -43,6 +43,7 @@ TEXTS = {
     'gold': ['Gold', 'Oro', 'Or', 'Gold', 'Ouro', '金', 'सुनहरा', 'الذهبي'],
     'black': ['Black', 'Negro', 'Noir', 'Schwarz', 'Preto', '黑', 'काला', 'الأسود'],
     'seat_name': ['{color} · {name}'] * 8,
+    'you': ['{name} (you)', '{name} (tú)', '{name} (vous)', '{name} (du)', '{name} (você)', '{name}（你）', '{name} (आप)', '{name} (أنت)'],
     'player': ['Player {n}', 'Jugador {n}', 'Joueur {n}', 'Spieler {n}', 'Jogador {n}', '玩家{n}', 'खिलाड़ी {n}', 'اللاعب {n}'],
     'place_turn': ['{name}: place a marble', '{name}: pon una canica', '{name} : posez une bille', '{name}: Kugel legen', '{name}: coloque uma bolinha', '{name}：放一颗弹珠', '{name}: कंचा रखें', '{name}: ضع كرة'],
     'twist_turn': ['{name}: turn a plate', '{name}: gira una placa', '{name} : tournez une plaque', '{name}: Platte drehen', '{name}: gire uma placa', '{name}：转动一块转盘', '{name}: प्लेट घुमाएँ', '{name}: أدر صفيحة'],

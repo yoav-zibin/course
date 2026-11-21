@@ -47,6 +47,7 @@ TEXTS = {
     'amber': ['Amber', 'Ámbar', 'Ambre', 'Bernstein', 'Âmbar', '琥珀', 'अंबर', 'كهرماني'],
     'jade': ['Jade', 'Jade', 'Jade', 'Jade', 'Jade', '翠玉', 'जेड', 'يشمي'],
     'seat_name': ['{color} · {name}'] * 8,
+    'you': ['{name} (you)', '{name} (tú)', '{name} (vous)', '{name} (du)', '{name} (você)', '{name}（你）', '{name} (आप)', '{name} (أنت)'],
     'player': ['Player {n}', 'Jugador {n}', 'Joueur {n}', 'Spieler {n}', 'Jogador {n}', '玩家{n}', 'खिलाड़ी {n}', 'اللاعب {n}'],
     'leather': ['Leather patch', 'Parche de cuero', 'Pièce de cuir', 'Lederflicken', 'Retalho de couro', '皮革补丁', 'चमड़े का पैबंद', 'رقعة جلد'],
     'patch_name': ['Patch of {n} squares', 'Parche de {n} casillas', 'Pièce de {n} cases', 'Flicken mit {n} Feldern', 'Retalho de {n} casas', '{n} 格补丁', '{n} खानों का पैबंद', 'رقعة من {n} خانات'],

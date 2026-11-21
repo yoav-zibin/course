@@ -53,6 +53,7 @@ TEXTS = {
     'color_coral': ['Coral', 'Coral', 'Corail', 'Koralle', 'Coral', '珊瑚', 'मूँगा', 'مرجاني'],
     'color_pearl': ['Pearl', 'Perla', 'Perle', 'Perle', 'Pérola', '珍珠', 'मोती', 'لؤلؤي'],
     'seat_name': ['{color} · {name}'] * 8,
+    'you': ['{name} (you)', '{name} (tú)', '{name} (vous)', '{name} (du)', '{name} (você)', '{name}（你）', '{name} (आप)', '{name} (أنت)'],
     'player': ['Player {n}', 'Jugador {n}', 'Joueur {n}', 'Spieler {n}', 'Jogador {n}', '玩家{n}', 'खिलाड़ी {n}', 'اللاعب {n}'],
     'board_name': ['Night river', 'Río nocturno', 'Rivière de nuit', 'Nachtfluss', 'Rio noturno', '夜河', 'रात की नदी', 'نهر الليل'],
     'tile_at': ['Tile on {square}', 'Loseta en {square}', 'Tuile en {square}', 'Plättchen auf {square}', 'Peça em {square}', '{square}的水道板', '{square} पर टाइल', 'بلاطة في {square}'],
