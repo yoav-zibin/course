@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { PortalApi, ApiError,InactiveSignInError } from './api';
-import {recordDiagnosticEvent,setDiagnosticScope} from './diagnostics';
+import {recordDiagnosticEvent,recordDiagnosticLog,setDiagnosticScope} from './diagnostics';
 import { AccountRepository, emptyAccountData, equal, requestId } from './repository';
 import {protectedResponsePaths, matchRetentionPriority} from './cache-policy';
 import {gameSearchPrefix,gameSuggestions} from './game-search';
@@ -538,7 +538,10 @@ export class PortalStore {
     await this.rememberMatchGame(game);
     if (!cached) await this.cache(`/games/${game.id}/versions/${game.version}`, game);
     let presentation = game.declarative_ui;
-    if (['5f5293c3-2a3a-4eec-b631-9debf59be0ca','e299b14e-480d-44f3-8132-74282a46cebc'].includes(game.id)) { try { presentation = await (await import('../game/presentation')).presentationForGame(game); } catch { /* preserve pinned original on unavailable digest */ } }
+    if (['5f5293c3-2a3a-4eec-b631-9debf59be0ca','e299b14e-480d-44f3-8132-74282a46cebc'].includes(game.id)) {
+      try { presentation = await (await import('../game/presentation')).presentationForGame(game); }
+      catch { recordDiagnosticLog('warn','reviewed_presentation_fallback',{gameId:game.id,gameVersion:game.version}); }
+    }
     // Display repair never mutates the persisted package or its version/rules.
     return localizeGame({ ...game, declarative_ui: presentation });
   }

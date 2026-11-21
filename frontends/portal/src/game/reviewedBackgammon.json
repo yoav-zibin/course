@@ -368,7 +368,7 @@
       "asset": "off_ivory"
     },
     "die": {
-      "action_outline": "none",
+      "action_outline": "rect",
       "shape": "image",
       "width": 56,
       "height": 56

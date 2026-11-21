@@ -311,7 +311,7 @@ def specification():
             'p1':{'action_outline':'ellipse','shape':'image','width':42,'height':42,'asset':'checker_ivory','text_color':'#301f0e'},
             'p0_off':{'action_outline':'none','shape':'image','width':44,'height':10,'asset':'off_red'},
             'p1_off':{'action_outline':'none','shape':'image','width':44,'height':10,'asset':'off_ivory'},
-            'die':{'action_outline':'none','shape':'image','width':56,'height':56},
+            'die':{'action_outline':'rect','shape':'image','width':56,'height':56},
             'status':{'action_outline':'none','shape':'image','width':252,'height':54,'asset':'status'},
             'swatch_red':{'action_outline':'none','shape':'image','width':28,'height':28,'asset':'checker_red'},
             'swatch_ivory':{'action_outline':'none','shape':'image','width':28,'height':28,'asset':'checker_ivory'},
