@@ -147,7 +147,7 @@ def count_match(counts, match):
 def report_sample(row):
     return {key: row.get(key) for key in (
         "id", "text", "score", "score_rationale", "status", "resolution",
-        "changes_summary", "created_at", "reporter_user_id",
+        "changes_summary", "created_at", "reporter_user_id", "automatic",
     )}
 
 
@@ -222,7 +222,7 @@ def build_dashboard(store, roster, *, roster_fetched_at):
             "matches": empty_matches(), "other_players": 0,
             "direct_recruits": len(direct), "transitive_recruits": len(recruited),
             "recruits_matches": empty_matches(),
-            "reports": {"total": 0, "assessed": 0, "unassessed": 0,
+            "reports": {"total": 0, "manual": 0, "automatic": 0, "assessed": 0, "unassessed": 0,
                         "average_score": None,
                         "status_counts": dict.fromkeys(("open", "handling", "escalated", "handled"), 0),
                         "top": [], "lowest": []},
@@ -256,6 +256,7 @@ def build_dashboard(store, roster, *, roster_fetched_at):
                 continue
             reports = student["reports"]
             reports["total"] += 1
+            reports["automatic" if row.get("automatic") is True else "manual"] += 1
             status = row.get("status", "open")
             reports["status_counts"][status] = reports["status_counts"].get(status, 0) + 1
             score = row.get("score")

@@ -67,6 +67,7 @@ function setup(report, detail = report, {pages = [[report]], students = [], sear
   const selects = {
     status: ["all", "open", "handling", "escalated", "handled"],
     student: ["all", "course", "other"],
+    source: ["all", "manual", "automatic"],
     score: ["all", "assessed", "unassessed", "high", "middle", "low"],
     changes: ["all", "yes", "no"],
     sort: ["newest", "oldest", "highest", "lowest"],
@@ -199,7 +200,7 @@ test("status actions keep review metadata untouched and retain concurrency guard
 test("student and score filters search every report page, including merged accounts", async () => {
   const other = {...report, id: "anonymous", reporter_user_id: null, score: null};
   const zero = {...report, id: "later-zero", reporter_user_id: "old-account", score: 0};
-  const high = {...report, id: "later-high", reporter_user_id: "current-account", score: 10};
+  const high = {...report, id: "later-high", reporter_user_id: "current-account", score: 10, automatic: true};
   const page = setup(other, other, {
     pages: [[other], [zero, high]],
     students: [{id: "student-one", name: "Example Learner", emails: ["learner@example.invalid"],
@@ -224,4 +225,12 @@ test("student and score filters search every report page, including merged accou
   page.roots.search.value = "learner@example.invalid";
   page.roots.search.listeners.input();
   assert.equal(page.roots.reports.children.length, 2, "email search includes both linked account IDs");
+  page.roots.source.value = "automatic";
+  page.roots.source.listeners.change();
+  assert.deepEqual(page.roots.reports.children.map(card => card.id), ["report-later-high"]);
+  assert.match(page.roots.reports.children[0].querySelector(".report-source").textContent, /Automatic/);
+  assert.match(page.roots.summary.textContent, /0 manual · 1 automatic/);
+  page.roots.source.value = "manual";
+  page.roots.source.listeners.change();
+  assert.deepEqual(page.roots.reports.children.map(card => card.id), ["report-later-zero"]);
 });

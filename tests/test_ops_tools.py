@@ -196,7 +196,7 @@ def test_the_drill_really_triggers_a_surge_then_a_flood_and_cleans_up(
     monkeypatch.setattr(drill, "USERS_FILE", tmp_path / "users.jsonl")
     monitor = Monitor(MonitoringConfig(signup_surge_per_minute=3, signup_flood_per_minute=8, alert_cooldown_seconds=0))
     platform = GamePlatform()
-    app = create_app(platform, monitor=monitor, master_password="pw")
+    app = create_app(platform, monitor=monitor, master_password="pw", admin_api_key="pw")
     with RunningServer(app) as server:
         stages = "120x2,600x1"  # 4 sign-ups, then 10
         args = type("Args", (), {"target": server.url, "stages": stages, "allow_remote": False, "password": "pw"})()
@@ -213,7 +213,7 @@ def test_the_drill_really_triggers_a_surge_then_a_flood_and_cleans_up(
 
 def test_the_drill_can_send_a_test_alert(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG)
-    app = create_app(GamePlatform(), monitor=Monitor(), master_password="pw")
+    app = create_app(GamePlatform(), monitor=Monitor(), master_password="pw", admin_api_key="pw")
     with RunningServer(app) as server:
         status, _ = drill.call("POST", f"{server.url}/admin/alerts/test?tier=major", password="pw")
         denied, _ = drill.call("POST", f"{server.url}/admin/alerts/test?tier=major", password="wrong")

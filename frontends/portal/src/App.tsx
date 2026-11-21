@@ -12,7 +12,7 @@ import {AccountDeletionBanner} from './ui/AccountDeletion';
 import {MatchStage} from './ui/MatchStage';
 import {BugReporter} from './ui/BugReporter';
 import {BugButton} from './ui/BugButton';
-import {recordDiagnosticPage,recordDiagnosticEvent,rememberDiagnosticSecrets} from './core/diagnostics';
+import {diagnosticPath,recordDiagnosticPage,recordDiagnosticEvent,rememberDiagnosticSecrets} from './core/diagnostics';
 import {installWebApp} from './ui/webApp';
 import {EmbeddedGameHost} from './game/EmbeddedGameHost';
 import {getDirection} from './platform/i18n';
@@ -39,6 +39,10 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnTyp
   const [pendingInvite,setPendingInvite]=useState(''),[invitePreview,setInvitePreview]=useState<any>(null);
   const navigation = useRef(0), acceptingInvite = useRef('');
   const knownPasswords=useRef(new Set<string>());
+  const reportingAccount=useRef(p.account);reportingAccount.current=p.account;
+  const reportingContext=useRef<Record<string,unknown>>({});
+  reportingContext.current={platform:Platform.OS,locale:p.locale,screen,gameId:p.selectedGameId,
+    gameVersion:p.game?.version,matchId:p.selectedMatch?.id,network:p.network};
   const notificationScope = useRef(''); notificationScope.current = JSON.stringify([p.baseUrl,p.account?.id]);
   for(const saved of p.accounts)knownPasswords.current.add(saved.password);
   rememberDiagnosticSecrets(knownPasswords.current);
@@ -157,12 +161,18 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnTyp
     });return()=>listener.remove();
   },[account,screen,p.selectedMatch?.id,p.selectedGameId,matchMenuOpen]);
   useEffect(()=>{
-    if(!p.ready)return;
-    if(localOnly){configureReporter(()=>{});return;}
-    configureReporter(createReporter(p.baseUrl,()=>knownPasswords.current));
+    if(localOnly){
+      configureReporter(()=>{});
+      if(Platform.OS==='web')(window as any).SiteBugReporter?.claimPortal?.();
+      return;
+    }
+    configureReporter(createReporter(p.baseUrl,()=>knownPasswords.current,fetch,{
+      account:()=>reportingAccount.current,context:()=>reportingContext.current,
+    }));
     if(Platform.OS==='web'){
+      (window as any).SiteBugReporter?.claimPortal?.();
       document.documentElement.lang=p.locale;document.documentElement.dir=getDirection();
-      const error=(event:ErrorEvent)=>reportClientIssue('script_error',event.error||event.message);
+      const error=(event:ErrorEvent)=>reportClientIssue('script_error',event.error||`${event.message} (${diagnosticPath(event.filename||'')}:${event.lineno||0}:${event.colno||0})`);
       const rejection=(event:PromiseRejectionEvent)=>reportClientIssue('unhandled_rejection',event.reason);
       window.addEventListener('error',error);window.addEventListener('unhandledrejection',rejection);
       return()=>{window.removeEventListener('error',error);window.removeEventListener('unhandledrejection',rejection);};
@@ -170,7 +180,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnTyp
     const errors=(globalThis as any).ErrorUtils,previous=errors?.getGlobalHandler?.();
     if(previous)errors.setGlobalHandler((error:Error,fatal:boolean)=>{reportClientIssue('script_error',error);previous(error,fatal);});
     return()=>{if(previous)errors.setGlobalHandler(previous);};
-  },[p.ready,p.baseUrl,p.locale]);
+  },[p.baseUrl,p.locale,p.account?.id]);
   useEffect(()=>{if(p.storageError)reportClientIssue('storage_error',p.storageError);},[p.storageError]);
 
   const gameVisible = p.selectedMatch !== null;

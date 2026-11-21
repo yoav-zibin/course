@@ -11,7 +11,7 @@ from game_platform.schemas import (
     UserCreate,
     UserUpdate,
 )
-from game_platform.tests.helpers import Api
+from game_platform.tests.helpers import Api, login_google_admin
 
 DEBUG_PATHS = (
     "/console",
@@ -29,7 +29,17 @@ DEBUG_PATHS = (
 
 @pytest.mark.parametrize("path", DEBUG_PATHS)
 def test_debug_pages_are_served(api: Api, path: str) -> None:
-    assert api.request("GET", path).status_code == 200
+    if path in ("/console", "/browse"):
+        credentials = ("fixture-admin", api.client.app.state.master_password)
+        denied = api.client.get(path, follow_redirects=False)
+        assert denied.status_code == 303
+        assert denied.headers["location"].startswith("/admin/login?next=")
+        login_google_admin(api.client)
+        response = api.client.get(path, follow_redirects=False)
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+    else:
+        assert api.request("GET", path).status_code == 200
 
 
 def test_root_serves_the_shared_player_application(api: Api) -> None:
@@ -169,19 +179,19 @@ def test_the_all_data_endpoint_is_gone(api: Api) -> None:
     assert api.request("GET", "/debug/all-data").status_code == 404
 
 
-def test_without_a_master_password_the_debug_tools_are_disabled() -> None:
+def test_without_machine_master_the_browser_still_requires_course_google() -> None:
     client = TestClient(create_app())
-    assert client.get("/browse").status_code == 503
+    assert client.get("/browse", follow_redirects=False).status_code == 303
     assert client.get("/admin/stats").status_code == 503
 
 
-def test_the_master_password_protects_browse() -> None:
-    client = TestClient(create_app(master_password="s3cret"))
+def test_google_protects_html_while_machine_master_still_protects_api() -> None:
+    client = TestClient(create_app(master_password="s3cret", admin_api_key="s3cret"))
 
     def status(path: str, auth: tuple[str, str] | None = None) -> int:
         if auth is None:
-            return client.get(path).status_code
-        return client.get(path, auth=auth).status_code
+            return client.get(path, follow_redirects=False).status_code
+        return client.get(path, auth=auth, follow_redirects=False).status_code
 
     assert {
         "browse, no password": status("/browse"),
@@ -189,17 +199,17 @@ def test_the_master_password_protects_browse() -> None:
         "console, no password": status("/console"),
         "API, no password": status("/games"),
     } == {
-        "browse, no password": 401,
-        "browse, right password": 200,
-        "console, no password": 200,
+        "browse, no password": 303,
+        "browse, right password": 303,
+        "console, no password": 303,
         "API, no password": 200,
     }
-    # The challenge makes the browser ask for the password.
-    response = client.get("/browse")
+    # Non-browser API automation retains its explicit Basic challenge.
+    response = client.get("/admin/stats")
     assert (response.json(), response.headers["www-authenticate"]) == (
         {
-            "detail": "the master password is required (any username)",
-            "code": "master_password_required",
+            "detail": "An admin API credential is required.",
+            "code": "admin_api_credential_required",
         },
         'Basic realm="Game platform debug tools"',
     )

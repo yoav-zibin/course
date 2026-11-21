@@ -29,6 +29,9 @@
         flex: none;
       }
 
+      #account-menu { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:var(--space-sm); min-width:0; max-width:100%; }
+      #admin-identity { overflow-wrap:anywhere; }
+
       .admin-tabs button {
         border: none;
         border-radius: var(--radius-sm) var(--radius-sm) 0 0;
@@ -80,9 +83,9 @@
     <div id="admin-frame-wrap">
       <div class="empty-note" data-i18n="ui.state.loading">Loading…</div>
     </div>
-    <script src="/static/common.js?v=39"></script>
+    <script src="/static/common.js?v=40"></script>
     <script src="/static/i18n.js?v=9"></script>
     <script src="/static/auth.js?v=29"></script>
-    <script src="/static/admin.js?v=7"></script>
+    <script src="/static/admin.js?v=8"></script>
   </body>
 </html>

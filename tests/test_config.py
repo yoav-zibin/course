@@ -108,34 +108,13 @@ def test_invalid_configs_are_rejected(tmp_path: Path) -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    ("config", "expected_error"),
-    [
-        ({"server": {"host": "127.0.0.1"}}, None),
-        ({"server": {"host": "::1"}}, None),
-        ({"server": {"host": "localhost"}}, None),
-        # Regression (bug 18): every interface, or any real address or hostname,
-        # needs a password.
-        *(
-            (
-                {"server": {"host": host}},
-                f"Value error, master_password must be set when server.host ({host!r}) "
-                "is not a loopback address (127.0.0.1, ::1 or localhost)",
-            )
-            for host in ("0.0.0.0", "::", "10.0.0.5", "example.com")
-        ),
-        ({"server": {"host": "0.0.0.0"}, "master_password": "s3cret"}, None),
-        # Without debug tools there is nothing for the password to protect.
-        ({"server": {"host": "0.0.0.0"}, "debug_tools": False}, None),
-    ],
-)
-def test_a_non_loopback_host_needs_a_master_password(
-    tmp_path: Path, config: object, expected_error: str | None
-) -> None:
-    path = _write_config(tmp_path, config)
-    if expected_error is None:
-        load_config(path)
-        return
-    with pytest.raises(ValidationError) as error:
-        load_config(path)
-    assert [detail["msg"] for detail in error.value.errors()] == [expected_error]
+@pytest.mark.parametrize("host", ["127.0.0.1", "::1", "localhost", "0.0.0.0", "::", "10.0.0.5", "example.com"])
+def test_admin_google_configuration_does_not_require_a_shared_game_master_on_any_bind_host(tmp_path, host):
+    config = load_config(_write_config(tmp_path, {
+        "server": {"host": host},
+        "auth": {"google": {"client_id": "fixture-client"}},
+        "admin_google_emails": ["teacher@example.test"],
+    }))
+    assert config.master_password == ""
+    assert config.admin_google_emails == ("teacher@example.test",)
+    assert config.server.host == host

@@ -291,7 +291,7 @@ def test_deleting_a_user_removes_user_level_experiment_data() -> None:
 
 
 def test_experiment_admin_endpoints_require_master_password() -> None:
-    client = TestClient(create_app(GamePlatform(), master_password="secret"))
+    client = TestClient(create_app(GamePlatform(), master_password="secret", admin_api_key="secret"))
     assert client.get("/admin/experiments").status_code == 401
     assert client.get(
         "/admin/experiments", auth=("admin", "secret")

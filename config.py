@@ -1,6 +1,6 @@
 """Server configuration, read from a JSON file. Every field has a default."""
 
-import ipaddress
+import re
 from pathlib import Path
 from typing import Annotated, Literal
 import uuid
@@ -265,9 +265,24 @@ class Config(_Section):
     firestore: FirestoreConfig = FirestoreConfig()
     # Serve the /console and /browse pages, which expose all data.
     debug_tools: bool = True
-    # Protects /browse and the other admin pages (HTTP basic auth, any username). Empty means
-    # no password, which is only allowed when [server.host] is a numeric IP address.
+    # Shared game-content capability only. Browser admin access uses the fixed
+    # Google email list; unattended admin APIs use a separate private key.
     master_password: str = ""
+    admin_google_emails: Annotated[tuple[str, ...], Field(max_length=64)] = ()
+
+    @field_validator("admin_google_emails")
+    @classmethod
+    def _admin_google_emails(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        local = r"[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
+        label = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+        normalized = []
+        for value in values:
+            email = value.strip().casefold()
+            if len(email) > 254 or re.fullmatch(local + "@" + label + r"(?:\." + label + ")+", email) is None:
+                raise ValueError("admin_google_emails must contain valid email addresses")
+            if email not in normalized:
+                normalized.append(email)
+        return tuple(normalized)
     log_level: LogLevel = "INFO"
     monitoring: MonitoringConfig = MonitoringConfig()
     translation: TranslationConfig = TranslationConfig()
@@ -278,32 +293,6 @@ class Config(_Section):
     # (server-side game API), so humans can watch the game unfold. 0 moves
     # immediately.
     computer_move_delay_seconds: float = 0.1
-    @model_validator(mode="after")
-    def _require_master_password_outside_loopback(self) -> "Config":
-        # The debug tools publish every user's password (/debug/all-data) and the
-        # admin delete endpoints, so only a server that this machine alone can reach
-        # may run them without a password. 0.0.0.0 and :: listen on every interface.
-        if (
-            self.debug_tools
-            and not self.master_password
-            and not _is_loopback(self.server.host)
-        ):
-            raise ValueError(
-                f"master_password must be set when server.host ({self.server.host!r}) "
-                "is not a loopback address (127.0.0.1, ::1 or localhost)"
-            )
-        return self
-
-
-def _is_loopback(host: str) -> bool:
-    if host == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
-
-
 def load_config(path: Path) -> Config:
     """Raises [pydantic.ValidationError] if the file is invalid."""
     config = Config.model_validate_json(path.read_bytes())

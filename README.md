@@ -176,7 +176,7 @@ different.
 In the product API, the password appears in exactly one place: the `POST /users`
 response. `GET /users/{id}` never returns it and it can't be reset, so clients must keep
 it; a lost password means a lost account. The debug tools (`/browse` and the
-API console, protected by the [master password](#master-password)) do show every
+API console, protected by [admin access](#admin-access)) do show every
 user's password — the console reads it from the paged admin user collection —
 so it can fill it in for whichever user you act as.
 
@@ -506,8 +506,8 @@ Any logged-in user (guests included) can send feedback in their own words:
   from.
 - Admins mark feedback reviewed or dismissed, or reopen it, with the buttons in the
   Feedback tab (`POST /admin/feedback/{id}/status {status}`). Each change records who and
-  when (`status_changed_by`, `status_changed_at`). Admins share one master password, so
-  "who" is the user name typed in the admin login box (`"admin"` if left empty). The
+  when (`status_changed_by`, `status_changed_at`). For legacy feedback, "who" is
+  the API automation's audit username, or `"admin"` for browser updates. The
   Feedback tab shows open feedback by default. A repeat of the same feedback (above) is
   new text, so it reopens a reviewed or dismissed message.
 - Feedback is private: only admins list it (`GET /admin/feedback` and the Feedback tab of
@@ -686,7 +686,8 @@ stop the server at startup with an error naming the field.
 | `firestore.namespace`             | `""`                                     | The query schema's namespace inside the database; required when Firestore is enabled |
 | `firestore.allow_default_database_query` | `false`                             | Explicit opt-in to run the query schema in the `(default)` database |
 | `debug_tools`                     | `true`                                   | Serve `/console` and `/browse` (see [Pages](#pages)) |
-| `master_password`                 | `""`                                     | Password for `/browse` and the other admin pages (see [Master password](#master-password)). Empty disables protected admin operations; the server also refuses a non-loopback bind with debug tools enabled and no password |
+| `master_password`                 | `""`                                     | Optional shared game-content capability for PATCH, deletion and unpublishing; does not authorize admin access (see [Master password](#master-password)) |
+| `admin_google_emails`             | `[]`                                     | Fixed Google email allowlist in private VM configuration for browser admin access. An empty list denies access; authorization never refreshes it from the course spreadsheet |
 | `log_level`                       | `"INFO"`                                 | `"DEBUG"`, `"INFO"`, `"WARNING"` or `"ERROR"` |
 | `translation.*`                   | `"provider": "off"`                      | Translate games' own texts with Google Translate, on first use (see [docs/game-translation.md](docs/game-translation.md)); `google_api_key`, `daily_character_limit` |
 | `monitoring.*`                    | see `config.example.json`                | JSON logs, a log file for the Ops Agent, and the thresholds for alerts (slow requests, sign-up floods, memory...); see [docs/monitoring.md](docs/monitoring.md) |
@@ -926,12 +927,12 @@ Once the server is running, open these pages in a browser:
 - `/browse`: every user (including their password), game (expand a row for all versions
   and their code) and match (expand for its state and moves), including deleted games
   and hidden matches. It has a filter box and optional auto-refresh.
-- `/stats`: backoffice statistics (needs the [master password](#master-password)): users
+- `/stats`: backoffice statistics (needs [Google admin sign-in](#admin-access)): users
   (total, guests vs. Google/email logins, who played), games (live,
   deleted, versions, matches per game), matches (by status, moves,
   computer seats, ended by leaving) and 14-day charts of new users, games and matches.
   The numbers come from `GET /admin/stats`.
-- `/admin/referrals`: referral dashboard (needs the [master password](#master-password)): who
+- `/admin/referrals`: referral dashboard (needs [Google admin sign-in](#admin-access)): who
   brought the most users (a leaderboard by total invites, direct and transitive, with
   each user's referral code shown as a small `#48213`), a
   search by name, id or referral code that shows a user's invite chain ("Yoav → Marcelle → Ana") and
@@ -948,9 +949,10 @@ longer uses them: it logs in as real accounts.)
 
 ### Administration
 
-Backoffice endpoints, hidden from `/openapi.json` and protected by the
-[master password](#master-password) (HTTP basic auth, any username), so administrators
-don't need a user's credentials:
+Backoffice endpoints are hidden from `/openapi.json`. Browsers use an authorized
+course Google session; unattended API clients use a separate private admin API
+key through HTTP Basic (any username). See [Admin access](#admin-access).
+Administrators do not need a player's credentials:
 
 | Endpoint | Description |
 |----------|-------------|
@@ -960,7 +962,7 @@ don't need a user's credentials:
 | `GET /admin/bug-reports?status=open&limit=50&cursor=` | Private report headers and next cursor; `status=all` includes handled and escalated reports |
 | `GET /admin/bug-reports/{id}` | Complete report with screenshot and diagnostic evidence |
 | `POST /admin/bug-reports/{id}/status` | Set `open`, `handling`, `escalated` or `handled`, with resolution notes, fix commit and optional concurrency expectations |
-| `POST /admin/feedback/{id}/status {status}` | Mark one [feedback](#feedback) `"reviewed"` or `"dismissed"`, or reopen it (`"open"`), recording who (the name typed in the admin login box) and when; returns it as listed |
+| `POST /admin/feedback/{id}/status {status}` | Mark one [feedback](#feedback) `"reviewed"` or `"dismissed"`, or reopen it (`"open"`), recording an API audit username or the browser default `admin`, and when; returns it as listed |
 | `DELETE /admin/users/{id}` | Delete a user and the matches they own; platform games are retained, and they leave the matches they're seated in |
 | `DELETE /admin/games/{id}` | Delete a game and all of its matches (held pots are refunded, invites deleted); versions are kept |
 | `DELETE /admin/matches/{id}` | Delete a match |
@@ -975,8 +977,10 @@ filter (bulk).
   `python -m game_platform.main --config config.json --purge-example-data`: it deletes
   those users (passwords equal to ids; real users' are random) with their games and
   matches, and exits. At startup the server warns when such users exist or when the
-  debug tools have no master password.
-- **Set `master_password`.** `/browse`, `/stats` and `/admin/*` show or change everything.
+  debug tools lack both Google sign-in and a private admin API credential.
+- **Configure admin access.** `/browse`, `/stats` and `/admin/*` expose private
+  data. Configure Google login and the fixed private `admin_google_emails` list;
+  provide a separate private admin API key if unattended tools need access.
 - **CORS behind a proxy.** If Caddy adds `Access-Control-Allow-Origin`, set
   `"server": {"cors_allow_origins": []}`; otherwise remove the proxy's header. Check with
   `curl -si -H 'Origin: https://x.github.io' https://<host>/games | grep -i allow-origin`:
@@ -1009,13 +1013,26 @@ become an email and **major** ones also text or page (PagerDuty), through Google
 fake users in `tools/fake_users`) and investigate from the logs (`tools/log_digest.py`,
 `ops/monitoring/investigate.sh`). Every response has an `X-Request-Id` header.
 
+### Admin access
+
+Admin pages, including `/docs`, and their browser API requests require Google
+sign-in with an email in the VM's private `admin_google_emails` configuration.
+The list is fixed at startup; authorization does not fetch the course sheet,
+and an empty list denies browser access. There is no shared-password prompt.
+The verified Google session lasts eight hours, ends on server restart, and can
+be ended with Use another Google account in the admin header.
+
+Unattended admin API clients use a separate private credential as the HTTP Basic
+password, with any username. It is loaded from `GAME_PLATFORM_ADMIN_API_KEY` or
+a mode-600 `admin-api-key` file beside the server configuration. It is independent
+of `master_password`, and is not exposed by the UI or `--print-config`. Browser
+Basic credentials do not substitute for Google sign-in. Without the private
+key, machine admin access is unavailable; player operations remain separate.
+
 ### Master password
 
-`master_password` in the config protects `/browse` and the other admin pages with
-HTTP basic auth: the browser asks for a username and password once, and then sends
-them with every request, including the other pages' fetches of the paged admin
-collections (so opening the portal or console asks for it too). The username is
-ignored; only the password is checked. Player operations and `/docs` do not need it.
+`master_password` is an optional shared capability for game-content operations.
+It does not grant admin access.
 
 Changing game content uses `PATCH /games/{id}` with the JSON body field
 `game_addition_request_id_and_secret`, containing that game's secret or the
@@ -1032,11 +1049,9 @@ the server's own origin or the configured `public_base_url` origin. Cross-site f
 are rejected because HTTP Basic credentials can be sent automatically by a browser.
 Command-line requests without browser origin metadata remain supported.
 
-It defaults to empty; protected admin operations then return 503, including on
-loopback. With debug tools enabled, a non-loopback bind requires a master password. A reverse proxy
-can expose even a loopback server: always configure a strong password before
-putting it behind a public proxy. Use HTTPS because Basic authentication sends
-the password with each request.
+It defaults to empty, disabling this shared game-content capability while
+per-game secrets still work. Use HTTPS for credentials; HTTP Basic sends its
+credential with each authenticated request.
 
 ## Game API
 

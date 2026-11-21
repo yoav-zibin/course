@@ -159,12 +159,20 @@ OptionalCallerId = Annotated[str | None, Depends(_get_caller_id_or_none)]
 
 def _get_caller_id_or_anonymous(
     platform: Platform,
+    request: Request,
     x_user_id: Annotated[str | None, Header()] = None,
     x_user_password: Annotated[str | None, Header()] = None,
 ) -> str | None:
     """The caller's id when supplied credentials authenticate, otherwise anonymous.
     Invalid supplied credentials are rejected instead of silently ignored."""
     if x_user_id is None and x_user_password is None:
+        if request.url.path == "/bug-reports":
+            from game_platform.admin_auth import admin_session_user_id
+
+            user_id = admin_session_user_id(request)
+            if user_id is not None:
+                _check_master_write_origin(request)
+                return user_id
         return None
     return platform.authenticate(user_id=x_user_id, password=x_user_password).id
 
@@ -1566,21 +1574,51 @@ _STATIC_DIR: Final = Path(__file__).parent / "static"
 
 debug_router = APIRouter(include_in_schema=False)
 
+
+def _admin_browser_request(request: Request) -> bool:
+    return bool(request.headers.get("sec-fetch-mode") or request.headers.get("sec-fetch-site")
+                or "text/html" in request.headers.get("accept", "").lower())
+
+
+async def _admin_api_basic(request: Request) -> HTTPBasicCredentials | None:
+    # Ignore old/malformed browser Basic credentials entirely. Google sign-in
+    # is the only interactive admin login, including after a cookie expires.
+    if _admin_browser_request(request):
+        return None
+    return await _basic_auth(request)
+
+
 def _check_master_password(
     request: Request,
-    credentials: Annotated[HTTPBasicCredentials | None, Depends(_basic_auth)],
+    credentials: Annotated[HTTPBasicCredentials | None, Depends(_admin_api_basic)],
 ) -> None:
-    """Uses HTTP basic auth so the browser asks for the password once and then sends
-    it with every request, including the pages' fetches of the admin collections."""
-    master_password: str = request.app.state.master_password
-    if not master_password:
-        raise HTTPException(HTTPStatus.SERVICE_UNAVAILABLE, "master password is not configured")
+    """Authorize course Google sessions, or existing non-browser API automation.
+
+    Browser requests never use a remembered Basic credential as a substitute
+    for the Google course allowlist, nor receive a native password prompt.
+    """
+    admin_api_key: str = request.app.state.admin_api_key
+    browser = _admin_browser_request(request)
+    valid_machine = bool(admin_api_key) and credentials is not None and secrets.compare_digest(
+        credentials.password.encode(), admin_api_key.encode())
+    if valid_machine and not browser:
+        _check_master_write_origin(request)
+        return
+    from game_platform.admin_auth import admin_session_user_id
+
+    if admin_session_user_id(request) is not None:
+        _check_master_write_origin(request)
+        return
+    if browser:
+        raise HTTPException(HTTPStatus.UNAUTHORIZED, "Google sign-in with a course admin account is required.")
+    if not admin_api_key:
+        raise HTTPException(HTTPStatus.SERVICE_UNAVAILABLE, "Admin API automation is not configured.")
     if credentials is None or not secrets.compare_digest(
-        credentials.password.encode(), master_password.encode()
+        credentials.password.encode(), admin_api_key.encode()
     ):
         raise HTTPException(
             status_code=HTTPStatus.UNAUTHORIZED,
-            detail="the master password is required (any username)",
+            detail="An admin API credential is required.",
             headers={"WWW-Authenticate": f'Basic realm="{_MASTER_PASSWORD_REALM}"'},
         )
     _check_master_write_origin(request)
@@ -1866,11 +1904,11 @@ def admin_set_feedback_status(
     platform: Platform,
     feedback_id: str,
     body: FeedbackStatusChange,
-    credentials: Annotated[HTTPBasicCredentials | None, Depends(_basic_auth)],
+    credentials: Annotated[HTTPBasicCredentials | None, Depends(_admin_api_basic)],
 ) -> dict[str, JsonValue]:
     """Marks one feedback "reviewed" or "dismissed", or reopens it ("open"), recording
-    who and when. Admins share the master password, so "who" is the user name typed
-    in the admin login box ("admin" if none). Returns the feedback as listed."""
+    who and when. API automation can provide an audit name in its credential's
+    username; otherwise the historical default is "admin". Returns the listed feedback."""
     return platform.admin_set_feedback_status(
         feedback_id=feedback_id,
         status=body.status,
@@ -1948,10 +1986,13 @@ async def _handle_unexpected_exception(request: Request, exc: Exception) -> Resp
     The caller gets only the request id to quote when reporting it."""
     request_id = getattr(request.state, "request_id", None)
     if _is_html_navigation(request):
+        from game_platform.site_pages import admin_document
+
         content = (
             ""
             if request.method == "HEAD"
-            else _error_page_content(HTTPStatus.INTERNAL_SERVER_ERROR, _page_locale(request))
+            else _error_page_content(HTTPStatus.INTERNAL_SERVER_ERROR, _page_locale(request),
+                                     admin=admin_document(request.url.path) or request.url.path.startswith("/admin/"))
         )
         return HTMLResponse(
             content,
@@ -2021,7 +2062,7 @@ def _page_locale(request: Request) -> str:
     )
 
 
-def _error_page_content(status_code: int, locale: str = i18n.DEFAULT_LOCALE) -> str:
+def _error_page_content(status_code: int, locale: str = i18n.DEFAULT_LOCALE, *, admin: bool = False) -> str:
     """The branded error page, written in [locale]."""
 
     def text(key: str, /, **params: object) -> str:
@@ -2040,10 +2081,13 @@ def _error_page_content(status_code: int, locale: str = i18n.DEFAULT_LOCALE) -> 
     label = text(f"ui.error_page.label_{kind}", code=status_code)
     direction = i18n.get_locale(locale).direction
     app_name = text("ui.app_name")
+    from game_platform.site_pages import reporting_markup
+    reporting = reporting_markup(admin).decode()
 
     return f"""<!doctype html>
 <html lang="{locale}" dir="{direction}">
   <head>
+    {reporting}
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#10131d" />
@@ -2098,11 +2142,15 @@ async def _branded_browser_responses(
         if key.lower() in {"www-authenticate", "x-request-id", "retry-after"}
     }
     if response.status_code >= 400:
+        from game_platform.site_pages import admin_document
+
         headers["Cache-Control"] = "no-store"
         locale = _page_locale(request)
         headers["Content-Language"] = locale
         headers["Vary"] = "Accept-Language, X-User-Id"
-        content = "" if request.method == "HEAD" else _error_page_content(response.status_code, locale)
+        content = "" if request.method == "HEAD" else _error_page_content(
+            response.status_code, locale,
+            admin=admin_document(request.url.path) or request.url.path.startswith("/admin/"))
         return HTMLResponse(content, status_code=response.status_code, headers=headers)
 
     # JSON routes are for the app's fetch calls, not standalone web pages. When
@@ -2197,7 +2245,10 @@ class _VersionedStaticCacheMiddleware:
         async def send_immutable(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
-                headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                # Admin HTML may have a version query too. It must reauthorize
+                # every visit instead of being reused as an immutable asset.
+                if not headers.get("content-type", "").lower().startswith("text/html") and not scope["path"].endswith(".html"):
+                    headers["Cache-Control"] = "public, max-age=31536000, immutable"
             await send(message)
 
         await self.app(scope, receive, send_immutable)
@@ -2239,6 +2290,8 @@ def create_app(
     *,
     debug_tools: bool = True,
     master_password: str = "",
+    admin_api_key: str = "",
+    admin_google_emails: Sequence[str] = (),
     auth_config: AuthConfig | None = None,
     bug_report_config: BugReportConfig | None = None,
     push_config: PushConfig | None = None,
@@ -2252,8 +2305,10 @@ def create_app(
 ) -> FastAPI:
     """[debug_tools] adds the web pages (/, /portal, /admin, /console, /browse)
     and the backoffice's /stats and /admin/* endpoints; the admin user pages
-    expose every user's password. /admin, /browse, /stats and /admin/* need
-    [master_password]. An empty password disables access to protected operations.
+    expose private operational data. Admin HTML and browser API requests need
+    a verified Google session from the fixed email allowlist. Non-browser
+    operational API clients use [admin_api_key]. The separate [master_password]
+    remains a game-content capability and cannot authorize admin operations.
 
     [cors_allow_origins] are the origins whose pages may call the API from a browser;
     empty adds no CORS headers, for when a reverse proxy already adds them (two
@@ -2269,7 +2324,9 @@ def create_app(
     mimetypes.add_type("text/javascript", ".js")
     app = FastAPI(title="BuildPlay")
     # Allow REST API requests from other domains (browser cross-origin requests).
-    # Auth uses per-request headers, not cookies, so a wildcard origin is safe here.
+    # Player API auth uses explicit headers. The admin cookie is same-site only,
+    # state-changing admin requests check origins, and credentialed cross-origin
+    # cookie responses are not enabled.
     if cors_allow_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -2282,6 +2339,8 @@ def create_app(
     app.state.import_slots = threading.BoundedSemaphore(2)
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
+    app.state.admin_api_key = admin_api_key
+    app.state.admin_google_emails = frozenset(email.strip().casefold() for email in admin_google_emails if email.strip())
     monitor = monitor if monitor is not None else observability.Monitor()
     app.state.monitor = monitor
     observability.set_current(monitor)
@@ -2316,6 +2375,10 @@ def create_app(
     app.include_router(push_router)
     app.middleware("http")(_choose_locale)
     if debug_tools:
+        from game_platform.admin_auth import install as install_admin_auth
+        install_admin_auth(app, platform_dependency=_get_platform,
+                           master_dependency=_check_master_password,
+                           write_origin_check=_check_master_write_origin)
         from game_platform.student_dashboard import make_router as make_student_dashboard_router
         app.include_router(make_student_dashboard_router(_get_platform, _check_master_password))
         app.include_router(debug_router)
@@ -2324,6 +2387,8 @@ def create_app(
         app.mount("/static", static_files, name="static")
         app.middleware("http")(_revalidate_pages)
     app.middleware("http")(_branded_browser_responses)
+    from game_platform.site_pages import SitePagesMiddleware
+    app.add_middleware(SitePagesMiddleware, debug_tools=debug_tools)
     app.add_exception_handler(PlatformError, _handle_platform_error)
     app.add_exception_handler(StarletteHTTPException, _handle_http_exception)
     app.add_exception_handler(Exception, _handle_unexpected_exception)

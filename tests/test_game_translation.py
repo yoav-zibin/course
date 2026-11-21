@@ -506,7 +506,7 @@ def test_the_translation_admin_needs_the_master_password() -> None:
     from game_platform.api import create_app
     from game_platform.service import GamePlatform
 
-    client = TestClient(create_app(GamePlatform(), master_password="s3cret"))
+    client = TestClient(create_app(GamePlatform(), master_password="s3cret", admin_api_key="s3cret"))
     assert client.get("/admin/translations").status_code == 401
     assert client.put("/admin/translations", json={}).status_code == 401
     assert client.delete("/admin/translations/es/abc").status_code == 401

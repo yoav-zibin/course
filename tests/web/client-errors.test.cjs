@@ -35,19 +35,24 @@ function setup() {
   return { listeners, sent, banner, context };
 }
 
-test("a script error is shown and reported to the server", () => {
+test("a script error is logged and silently submitted as an automatic report", () => {
   const { listeners, sent, banner } = setup();
   listeners.error({ message: "x is not a function", filename: "/static/portal.js?v=56", lineno: 10 });
-  assert.match(banner.textContent, /x is not a function/);
-  assert.equal(sent.length, 1);
+  assert.equal(banner.hidden, true);
+  assert.equal(banner.textContent, "");
+  assert.equal(sent.length, 2);
   assert.equal(sent[0].url, "/client-errors");
   assert.equal(sent[0].method, "POST");
   assert.deepEqual(sent[0].body, {
     kind: "script_error",
-    message: "x is not a function (portal.js?v=56:10)",
+    message: "x is not a function (portal.js:10)",
     page: "/static/portal.html",
     user_agent: "Test UA",
   });
+  assert.equal(sent[1].url, "/bug-reports");
+  assert.equal(sent[1].body.automatic, true);
+  assert.equal(sent[1].body.screenshot, null);
+  assert.equal(sent[1].body.diagnostics.automatic_error.kind, "script_error");
 });
 
 test("an unhandled promise rejection is reported", () => {
@@ -55,6 +60,7 @@ test("an unhandled promise rejection is reported", () => {
   listeners.unhandledrejection({ reason: new Error("boom") });
   assert.equal(sent[0].body.kind, "unhandled_rejection");
   assert.equal(sent[0].body.message, "boom");
+  assert.equal(sent[1].body.automatic, true);
 });
 
 test("error reports remove remembered credentials before truncation and after account switches", () => {
@@ -64,7 +70,7 @@ test("error reports remove remembered credentials before truncation and after ac
   listeners.unhandledrejection({reason: new Error(`request failed: ${previous}; response: ${current}`)});
   assert.equal(sent[0].body.message, "request failed: <redacted>; response: <redacted>");
   context.reportClientError("script_error", "x".repeat(490) + current);
-  assert.equal(sent[1].body.message, "x".repeat(490) + "<redacted>");
+  assert.equal(sent.filter(row => row.url === "/client-errors")[1].body.message, "x".repeat(490) + "<redacted>");
   assert.ok(!JSON.stringify(sent).includes(previous));
   assert.ok(!JSON.stringify(sent).includes(current));
 });
@@ -82,9 +88,10 @@ test("error reports remove password inputs and labeled URL or JSON secrets", () 
 test("the same error is reported once, and at most five per page load", () => {
   const { listeners, sent, context } = setup();
   for (let i = 0; i < 3; i++) listeners.error({ message: "same", filename: "a.js", lineno: 1 });
-  assert.equal(sent.length, 1);
+  assert.equal(sent.filter(row => row.url === "/client-errors").length, 1);
+  assert.equal(sent.filter(row => row.url === "/bug-reports").length, 1);
   for (let i = 0; i < 10; i++) context.reportClientError("script_error", `different ${i}`);
-  assert.equal(sent.length, 5);
+  assert.equal(sent.filter(row => row.url === "/client-errors").length, 5);
 });
 
 test("reporting never throws, even when the network call does", () => {

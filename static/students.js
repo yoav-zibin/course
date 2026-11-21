@@ -64,6 +64,9 @@ function reportExample(student, report, lowest) {
   const card = el("article", {class: `report-card${lowest ? " lowest" : ""}`},
     el("header", {},
       el("strong", {textContent: I18n.t("ui.bug_reports.score", {score: report.score}, "Score: {score}/10")}),
+      el("span", {class: "muted", textContent: report.automatic === true
+        ? I18n.t("ui.reports.source_automatic", {}, "Automatic")
+        : I18n.t("ui.reports.source_manual", {}, "Manual")}),
       el("span", {class: "muted", textContent: statusLabel(report.status)})),
     el("p", {class: "report-text", textContent: report.text}),
     el("p", {class: "muted", textContent: `${report.id} · ${formatTime(report.created_at)}`}));
@@ -117,10 +120,13 @@ function personDetails(student) {
     el("h3", {textContent: I18n.t("ui.students.reports", {}, "Bug reports")}),
     el("dl", {class: "breakdown"},
       statistic(I18n.t("ui.students.reports", {}, "Bug reports"), reports.total),
+      statistic(I18n.t("ui.students.manual_reports", {}, "Manual reports"), reports.manual ?? Math.max(0, reports.total - (reports.automatic || 0))),
+      statistic(I18n.t("ui.students.automatic_reports", {}, "Automatic reports"), reports.automatic || 0),
       ...Object.entries(reports.status_counts || {}).map(([status, total]) => statistic(statusLabel(status), total))),
     el("p", {class: "muted", textContent: I18n.t("ui.students.assessed_summary", {
       assessed: count(reports.assessed), unassessed: count(reports.unassessed),
     }, "{assessed} assessed · {unassessed} unassessed")}),
+    el("p", {class: "muted", textContent: I18n.t("ui.students.report_source_average", {}, "The average includes assessed manual and automatic reports; unassessed reports are excluded.")}),
     el("a", {href: reportsUrl(student), target: "_blank", rel: "noopener",
       textContent: I18n.t("ui.students.reports_for_person", {}, "Browse this person's reports")}));
   const examples = [

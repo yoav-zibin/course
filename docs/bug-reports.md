@@ -1,6 +1,8 @@
 # Player bug reports and feature requests
 
-The Portal's persistent bug icon replaces the old feedback category picker and
+The bug icon is available on every BuildPlay web HTML page, including admin and
+sign-in pages, and in the native Portal. It opens a manual bug or feature report.
+The Portal's persistent icon replaces the old feedback category picker and
 its game, match, user and footer entry points. The icon floats at the top left
 outside matches. When a match board is showing, it shares one floating capsule
 with the match menu at the bottom right. The menu reveals the game name, players,
@@ -16,6 +18,11 @@ the keyboard, and an unsent draft survives closing and reopening the dialog.
 A successful submission clears only its submitted text, preserving newer edits
 made before the response arrives.
 
+Other web pages use the same glyph in a draggable bottom-right control.
+Embedded pages share their parent's control and forward unexpected errors only
+to a same-origin parent. Once the Portal mounts, its existing reporter takes
+over from the early web recorder, keeping one visible icon.
+
 Web screenshots use `html-to-image` to rasterize the visible viewport and
 preserve nested scroll positions in the rasterized copy. Password
 inputs and elements marked `data-private` are excluded, along with the bug
@@ -29,7 +36,8 @@ the screenshot.
 
 ## Diagnostic evidence and privacy
 
-The recorder starts at Portal entry and keeps bounded recent history in memory:
+The recorder starts at web document entry and in the Portal, keeping bounded
+recent history in memory:
 
 | Evidence | Maximum recent entries |
 | --- | ---: |
@@ -49,8 +57,15 @@ contents are excluded. Known account secrets and credential-shaped fields and
 strings are redacted. The server applies another credential-redaction pass to
 diagnostics. The frontend trims the aggregate snapshot below the API limit.
 API metadata can also contain request/response size, request IDs and server
-timing. The history lasts only for the current app session; it is not stored in
-browser local storage or uploaded before the user sends a report.
+timing. The history lasts only for the current page or app diagnostic session;
+it is not stored in browser local storage. A manual report uploads a snapshot
+when the user selects Send. Unexpected client errors, including uncaught errors
+and unhandled promise rejections, automatically submit recent diagnostics and
+the authenticated account identity when available. Automatic reports never
+capture a screenshot, open a dialog or require an action from the user.
+The client suppresses repeated errors and caps automatic submissions at five
+distinct errors per page load or diagnostic session. Reporting failures stay
+silent and do not recursively create reports.
 Recoverable cache failures enter these logs without cached values or raw storage
 error text. Repeated failures are limited per operation and diagnostic session.
 Old cache entries are reclaimed automatically; a failed cache write leaves the
@@ -74,15 +89,21 @@ The backend derives account context from the authenticated caller rather than
 trusting a client-supplied identity. It records ID, display name, email, locale,
 guest/link-provider state, account timestamps and token balance, with no account
 passwords or provider credentials. Reports can also be submitted while signed
-out. Anonymous and signed-in submissions share a per-client rolling-day limit;
+out. Manual submissions share a per-client rolling-day limit;
 signed-in submissions also have a per-account limit. Both limits are 20 reports
-per 24 hours and commit atomically with the report.
+per 24 hours and commit atomically with the report. Automatic reports use
+separate counters with the same limits, so they do not consume manual slots.
+The server also suppresses matching automatic reports for five minutes using a
+fingerprint scoped to the authenticated reporter, or the client IP when signed
+out. Fingerprints omit transient logs and timestamps; duplicates consume no slot.
 The optional private server setting `bug_reports.unlimited_user_ids` exempts
 operator-verified canonical owner/student account IDs from both quota counters.
 These authenticated submissions neither read nor consume account/shared-client
-slots, even if existing counters are exhausted. Payload and screenshot bounds
-still apply. Unlisted accounts and signed-out submissions retain the ordinary
-limits. Keep actual IDs out of source, examples and documentation.
+slots, even if existing counters are exhausted. This exemption applies only to
+manual reports; automatic reports always retain their separate bounded limits.
+Payload and screenshot bounds still apply. Unlisted accounts and signed-out
+submissions retain the ordinary limits. Keep actual IDs out of source, examples
+and documentation.
 
 ## HTTP API and storage
 
@@ -92,7 +113,8 @@ limits. Keep actual IDs out of source, examples and documentation.
 {
   "text": "Describe what happened or the requested feature.",
   "screenshot": "data:image/jpeg;base64,...",
-  "diagnostics": {"version": 1}
+  "diagnostics": {"version": 1},
+  "automatic": false
 }
 ```
 
@@ -103,6 +125,12 @@ limited to 760,000 bytes, including requests without `Content-Length`. Incomplet
 uploads time out after 15 seconds without storing evidence or consuming a quota slot.
 Success is HTTP 201 with `{id,status,created_at}`. Invalid or excessive data
 receives 422 or 413 without echoing its private input; rate limiting returns 429.
+`automatic` is an optional strict boolean, defaulting to `false`; strings and
+numbers are rejected. With `true`, the server filters the generated error text
+for credentials and discards any screenshot. A recent automatic duplicate
+returns HTTP 200 with `{"status":"duplicate"}` instead of creating a report.
+New reports persist the source flag; historical reports default to manual.
+The admin review page labels and filters manual versus automatic reports.
 
 The query store keeps report headers in `bug_reports` and immutable screenshot
 and diagnostic payloads separately. Queue listings read bounded pages of
@@ -110,7 +138,9 @@ headers and do not download screenshots. In-memory storage uses the same
 contract for tests and local development. Existing feedback records and legacy
 feedback endpoints remain available for historical compatibility.
 
-Admin endpoints require the configured master password through HTTP Basic:
+Admin endpoints accept an authorized course Google session. Unattended API
+automation uses a separate private admin API credential through HTTP Basic;
+the former shared master password does not grant admin API access:
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -118,6 +148,25 @@ Admin endpoints require the configured master password through HTTP Basic:
 | `GET /admin/bug-reports/{id}` | Complete private report and evidence. |
 | `POST /admin/bug-reports/{id}/assessment` | Save an investigated report's score and rationale without changing its status. |
 | `POST /admin/bug-reports/{id}/status` | Update review status, notes and fixing commit. |
+
+Admin HTML documents require Google sign-in only at
+`/admin/login`, including direct static admin pages and API documentation pages.
+The verified Google subject identifies the platform account, and its verified
+email must exactly match the fixed `admin_google_emails` list in the VM's private
+server configuration. This list was extracted from the instructor, institutional
+and personal emails in the course roster. Authorization never fetches or
+refreshes the spreadsheet. Names never authorize access; an empty list denies
+all browser admin access.
+The email is saved with that identity. A remembered Portal account or matching
+display name does not satisfy this browser gate. The opaque admin session uses
+a Secure, HttpOnly, SameSite=Strict cookie, expires after eight hours and is
+invalidated by server restart. Signing out calls `DELETE /auth/admin-session`.
+The admin interface has no master-password prompt. Browser API requests require
+the course Google session as well; cached Basic credentials do not substitute
+for it. API automation does not need a browser Google session. Its credential is
+loaded from `GAME_PLATFORM_ADMIN_API_KEY` or a private mode-600 `admin-api-key`
+file next to the server configuration, and is never exposed by the UI or
+`--print-config`. The game-content master capability remains separate.
 
 Status updates accept `status`, `resolution`, optional `commit`, optional
 `expected_status` and optional `expected_updated_at`. Status is `open`,
@@ -152,13 +201,13 @@ internal databases or start a separate repair conversation. The existing Codex
 daemon, valid authentication, the user systemd manager and network access must
 remain available on this machine.
 
-Install after publishing the report API, using a pre-existing private password
-file. Neither the password nor private scheduler state belongs in Git:
+Install after publishing the report API, using the separate private admin API
+credential file. Neither the credential nor private scheduler state belongs in Git:
 
 ```sh
 python3 ops/bug-reports/install.py \
   --thread-id <this-conversation-uuid> \
-  --password-file <existing-mode-600-master-password-file>
+  --password-file <mode-600-admin-api-key-file>
 ```
 
 Yoav's bugs and product suggestions have standing approval when submitted from

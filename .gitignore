@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 data.json
+admin-api-key
+admin-access.pending.json
 
 # UI tests
 node_modules/

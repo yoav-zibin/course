@@ -10,7 +10,7 @@ from game_platform.json_file_store import JsonFileStore
 from game_platform.config import Config
 from game_platform.main import purge_example_data, warn_about_insecure_setup
 from game_platform.service import GamePlatform
-from game_platform.tests.helpers import Api, TEST_GAME_SECRET
+from game_platform.tests.helpers import Api, TEST_GAME_SECRET, login_google_admin
 
 
 def test_stats_count_users_games_and_matches(api: Api) -> None:
@@ -57,15 +57,20 @@ def test_stats_of_an_empty_platform(api: Api) -> None:
     assert (stats["users"]["total"], stats["matches"]["avg_moves_per_match"]) == (0, 0)
 
 
-def test_the_stats_page_is_served_and_needs_the_master_password() -> None:
-    client = TestClient(create_app(master_password="s3cret"))
-    assert client.get("/stats").status_code == 401
-    assert client.get("/admin").status_code == 401
+def test_admin_pages_use_course_google_and_machine_apis_keep_their_contract() -> None:
+    client = TestClient(create_app(master_password="s3cret", admin_api_key="s3cret"))
+    assert client.get("/stats", follow_redirects=False).status_code == 303
+    assert client.get("/admin", follow_redirects=False).status_code == 303
     assert client.get("/admin/stats").status_code == 401
-    assert client.get("/stats", auth=("", "s3cret")).status_code == 200
-    assert client.get("/admin", auth=("", "s3cret")).status_code == 200
-    assert client.get("/admin/stats", auth=("", "s3cret")).status_code == 200
     assert client.delete("/admin/users/x").status_code == 401
+    for path in ("/stats", "/admin"):
+        response = client.get(path, auth=("", "s3cret"), follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"].startswith("/admin/login?next=")
+    login_google_admin(client)
+    assert client.get("/stats", follow_redirects=False).status_code == 200
+    assert client.get("/admin", follow_redirects=False).status_code == 200
+    assert client.get("/admin/stats").status_code == 200
 
 
 def test_admin_deletes_a_user_and_their_matches_preserving_platform_games(api: Api) -> None:
@@ -187,4 +192,4 @@ def test_weak_passwords_and_open_debug_tools_are_warned_about(caplog) -> None:
     warn_about_insecure_setup(Config(), platform)
 
     assert "own id as password" in caplog.text
-    assert "no master_password" in caplog.text
+    assert "without Google sign-in or a private admin API credential" in caplog.text

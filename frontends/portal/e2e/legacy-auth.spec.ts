@@ -1,5 +1,5 @@
 import {test,expect,type Page,type APIRequestContext} from '@playwright/test';
-import {createUser,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
+import {createUser,E2E_ADMIN_HEADERS,loginAdmin,uniqueName} from './helpers';
 
 declare const Auth:any;
 const currentKey='game-platform.current-account.v1',accountsKey='game-platform.accounts.v1';
@@ -7,6 +7,7 @@ async function fixture(page:Page,request:APIRequestContext){
   const alice={...await createUser(request,uniqueName('Legacy Alice')),linked:[]};
   const bob={...await createUser(request,uniqueName('Legacy Bob')),linked:[]};
   await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
+  await loginAdmin(page);
   await page.addInitScript(({alice,bob,currentKey,accountsKey})=>{
     if(!sessionStorage.getItem('legacy-auth-fixture-seeded')){
       localStorage.setItem(accountsKey,JSON.stringify([alice,bob]));localStorage.setItem(currentKey,alice.id);
@@ -22,7 +23,10 @@ async function fixture(page:Page,request:APIRequestContext){
   let configs=0,verifiedRequests=0;
   await page.route('**/auth/config',route=>{configs++;return route.fulfill({json:{google_client_id:'synthetic-client',email_login_enabled:true,phone_login_enabled:true,phone_call_enabled:false}});});
   await page.route('**/auth/google',route=>{verifiedRequests++;return route.fulfill({json:{user_id:alice.id,password:alice.password,display_name:alice.display_name,linked_accounts:[{kind:'google',identifier:'synthetic-provider'}]}});});
-  await page.goto('/static/admin.html');await expect(page.locator('.auth-menu-button')).toBeVisible();
+  // Keep the player-menu checks on an exempt login-page fixture. The admin
+  // hub now shows its Google session; console pages redirect signed-out players.
+  await page.route('**/static/welcome.html',route=>route.fulfill({contentType:'text/html',body:`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/common.css?v=22"><link rel="stylesheet" href="/static/site-bug-report.css?v=1"><script src="/static/site-bug-report.js?v=1"></script></head><body><header class="topbar"><h1>BuildPlay</h1><span class="spacer"></span><span id="account-menu"></span></header><script src="/static/common.js?v=40"></script><script src="/static/i18n.js?v=9"></script><script src="/static/auth.js?v=29"></script><script>(()=>{const menu=document.getElementById('account-menu'),render=()=>Auth.renderMenu(menu);render();document.addEventListener('auth-changed',render);})();</script></body></html>`}));
+  await page.goto('/static/welcome.html');await expect(page.locator('.auth-menu-button')).toBeVisible();
   return {alice,bob,configs:()=>configs,verifiedRequests:()=>verifiedRequests};
 }
 

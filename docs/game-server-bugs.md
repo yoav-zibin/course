@@ -7,7 +7,9 @@ private records retain the exact call, deterministic seed/time, source/schema
 revision, rules and failure evidence; they can contain hidden state and must not
 be exposed to players, public logs or source control.
 
-The master-password API uses HTTP Basic authentication with any username:
+The private evidence API accepts an authorized course Google session. Unattended
+tools use the separate private admin API key as the HTTP Basic password, with
+any username. The game-content master password does not grant admin API access:
 
 - `GET /game-server-bugs?examined=false&limit=50&cursor=...` returns
   `{items,next_cursor}`. Follow all cursors, including after an empty page.
@@ -33,14 +35,16 @@ Install from a durable checkout as the signed-in Codex user:
 ```bash
 python3 ops/game-server-bugs/install.py \
   --thread-id <existing-user-Codex-thread-id> \
-  --password-file <existing-private-master-password-file>
+  --password-file <mode-600-admin-api-key-file>
 ```
 
 This creates `buildplay-game-server-bugs.service` and `.timer` in the user's
 systemd directory and a private
 `~/.local/share/buildplay-game-server-bugs/config.json`. It references the existing
-password file; no password is copied into the unit, config or prompt. Keep the
-checkout and password file at those locations. Inspect or retry with:
+credential file; the key is not copied into the unit, config or prompt. The
+`--password-file` option name remains for compatibility; its contents must be
+the admin API key, separate from any game-content master capability. Keep the
+checkout and credential file at those locations. Inspect or retry with:
 
 ```bash
 systemctl --user list-timers buildplay-game-server-bugs.timer

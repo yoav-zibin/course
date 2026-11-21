@@ -29,6 +29,7 @@
     .report-heading { display:flex; justify-content:space-between; gap:var(--space-md); align-items:baseline; flex-wrap:wrap; }
     .report-heading h2 { font-size:1rem; margin:0; overflow-wrap:anywhere; }
     .report-score { color:var(--color-text-secondary); font-size:1rem; font-weight:600; }
+    .report-source { display:inline-block; padding:4px 8px; border:1px solid var(--color-border-3); border-radius:var(--radius-sm); font-size:.875rem; color:var(--color-text-secondary); }
     .changes-summary { border-left:3px solid var(--color-accent); padding-left:var(--space-md); }
     .changes-summary h3 { font-size:.875rem; margin-bottom:4px; }
     .changes-summary p { margin-top:0; }
@@ -48,6 +49,7 @@
       <label class="search-filter"><span data-i18n="ui.reports.search">Search reports, students, emails or user IDs</span> <input id="search" type="search" placeholder="Report text, student, account, changes or resolution" data-i18n-placeholder="ui.reports.search_placeholder"></label>
       <label><span data-i18n="ui.reports.student">Student</span> <select id="student"><option value="all" data-i18n="ui.reports.all_reporters">All reporters</option><option value="course" data-i18n="ui.reports.course_members">Course members</option><option value="other" data-i18n="ui.reports.other_reporters">Other reporters / anonymous</option></select></label>
       <label><span data-i18n="ui.admin.status">Status</span> <select id="status"><option value="all" data-i18n="ui.admin.all">All</option><option value="open" data-i18n="ui.admin.open">Open</option><option value="handling" data-i18n="ui.bug_reports.status_handling">Handling</option><option value="escalated" data-i18n="ui.bug_reports.status_escalated">Needs your decision</option><option value="handled" data-i18n="ui.bug_reports.status_handled">Handled</option></select></label>
+      <label><span data-i18n="ui.reports.source">Source</span> <select id="source"><option value="all" data-i18n="ui.reports.source_all">Manual and automatic</option><option value="manual" data-i18n="ui.reports.source_manual">Manual</option><option value="automatic" data-i18n="ui.reports.source_automatic">Automatic</option></select></label>
       <label><span data-i18n="ui.reports.score">Score</span> <select id="score"><option value="all" data-i18n="ui.reports.all_scores">All scores</option><option value="assessed" data-i18n="ui.reports.assessed">Assessed</option><option value="unassessed" data-i18n="ui.reports.unassessed">Not assessed</option><option value="high" data-i18n="ui.reports.score_high">High (8–10)</option><option value="middle" data-i18n="ui.reports.score_middle">Middle (4–7)</option><option value="low" data-i18n="ui.reports.score_low">Low (0–3)</option></select></label>
       <label><span data-i18n="ui.reports.changes">Changes</span> <select id="changes"><option value="all" data-i18n="ui.reports.all_reports">All reports</option><option value="yes" data-i18n="ui.reports.changes_yes">Changes recorded</option><option value="no" data-i18n="ui.reports.changes_no">No changes recorded</option></select></label>
       <label><span data-i18n="ui.reports.from">Submitted from (UTC)</span> <input id="from" type="date"></label>
@@ -55,14 +57,15 @@
       <label><span data-i18n="ui.reports.sort">Sort</span> <select id="sort"><option value="newest" data-i18n="ui.reports.newest">Newest first</option><option value="oldest" data-i18n="ui.reports.oldest">Oldest first</option><option value="highest" data-i18n="ui.reports.highest">Highest score first</option><option value="lowest" data-i18n="ui.reports.lowest">Lowest score first</option></select></label>
     </div>
     <p id="summary" role="status" data-i18n="ui.reports.loading_all">Loading all reports…</p>
+    <p class="muted" data-i18n="ui.reports.source_explainer">Automatic reports capture unexpected client errors silently, without screenshots. Manual reports are submitted by a person. Filter by source to compare them separately.</p>
     <p id="student-warning" role="status" hidden></p>
     <details><summary data-i18n="ui.reports.about">About reports and student attribution</summary><p data-i18n="ui.bug_reports.explainer">Reports include the screenshot and recent app diagnostics. Uncertain requests wait for your decision; reopen an escalated report after deciding how to proceed.</p><p data-i18n="ui.reports.attribution_explainer">Student attribution uses the accounts linked on the leaderboard, including merged accounts. Name matches follow the course matching rule and can identify more than one course member. Anonymous reports cannot be attributed. Filters search every report; scores range from 0 to 10, and averages exclude reports that have not been assessed.</p></details>
     <p id="error" role="alert"></p>
     <div id="reports"></div>
     <button id="more" type="button" data-i18n="ui.bug_reports.more" hidden>Load more</button>
   </main>
-  <script src="/static/common.js?v=39"></script>
+  <script src="/static/common.js?v=40"></script>
   <script src="/static/i18n.js?v=9"></script>
-  <script src="/static/bug-reports.js?v=4"></script>
+  <script src="/static/bug-reports.js?v=5"></script>
 </body>
 </html>

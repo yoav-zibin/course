@@ -4,8 +4,7 @@ pydantic>=2.9,<3
 jsonschema>=4.23,<5
 referencing>=0.36,<1
 uvicorn>=0.34,<1
-# Needed by oauth.py for the Google tokeninfo call (it used to arrive
-# transitively with the deleted Model API client's dependency).
+# HTTP integrations in senders.py and preview.py.
 httpx>=0.28,<1
 # Needed for web push notifications (push.py): RFC 8030 delivery signed with VAPID,
 # and the EC key handling behind it.
@@ -16,6 +15,8 @@ cryptography>=42
 quickjs>=1.19,<2
 # Query-backed Firestore persistence when firestore.enabled is set (query_store.py).
 google-cloud-firestore>=2.34,<3
+# Directly used for Google ID-token signature verification.
+google-auth>=2.14,<3
 
 # Push HTTP transport (directly used to reject redirects).
 requests>=2.32.5,<3

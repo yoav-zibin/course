@@ -64,11 +64,12 @@ with tempfile.TemporaryDirectory() as tmp:
     config.write_text(
         '{"server": {"host": "127.0.0.1", "port": %s},'
         ' "master_password": "e2e-test-master",'
+        ' "admin_google_emails": ["admin@loopback.example.test"],'
         ' "data_file": {"path": "%s"}}' % (port, (Path(tmp) / "data.json").as_posix())
     )
     sys.exit(
         subprocess.call(
-            [sys.executable, "-m", "game_platform.main", "--config", str(config)],
+            [sys.executable, str(repo / "e2e" / "run-server.py"), str(config)],
             cwd=tmp,
         )
     )

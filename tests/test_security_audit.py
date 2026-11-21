@@ -77,13 +77,32 @@ def test_game_lifecycle_payouts_are_applied_exactly_once(api, phase):
     assert api.platform.get_user(alice).token_balance == balance
 
 
-def test_non_loopback_debug_server_requires_a_master_password(tmp_path):
+def test_non_loopback_google_only_admin_starts_without_shared_master_and_fails_closed(tmp_path, monkeypatch):
     import json
+    from fastapi.testclient import TestClient
     from game_platform import main
+
+    monkeypatch.delenv("GAME_PLATFORM_ADMIN_API_KEY", raising=False)
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({"server":{"host":"0.0.0.0"}}))
-    with patch("sys.argv", ["server", "--config", str(path)]), pytest.raises(ValueError, match="master_password"):
+    path.write_text(json.dumps({
+        "server": {"host": "0.0.0.0"},
+        "data_file": {"path": str(tmp_path / "data.json")},
+        "auth": {"google": {"client_id": "fixture-client"}},
+        "admin_google_emails": ["teacher@example.test"],
+    }))
+    apps = []
+    with patch("sys.argv", ["server", "--config", str(path)]), \
+            patch.object(main.uvicorn, "run", side_effect=lambda app, **kwargs: apps.append(app)):
         main.main()
+    assert apps[0].state.master_password == ""
+    client = TestClient(apps[0], base_url="https://testserver", follow_redirects=False)
+    assert client.get("/admin").status_code == 303
+    assert client.get("/admin/stats").status_code == 503
+    with patch("game_platform.admin_auth.verify_google_admin_token", return_value=(
+        "fixture-subject", "Teacher", "teacher@example.test", "")):
+        assert client.post("/auth/admin-session", json={"id_token": "fresh-proof"}).status_code == 200
+    assert client.get("/admin").status_code == 200
+    assert client.get("/admin/stats").status_code == 200
 
 @pytest.mark.parametrize("endpoint", [
     "http://localhost:8000/admin/users", "https://127.0.0.1/push",

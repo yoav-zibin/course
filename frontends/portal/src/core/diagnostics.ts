@@ -30,6 +30,7 @@ export function redactDiagnostic(value: unknown): string {
     .replace(/\b(?:password|passwd|passcode|secret|(?:access[_-]|refresh[_-]|id[_-])?token|authorization|cookie|code|api[_-]?key)\b["']?\s*[:=]\s*(["'])(.*?)\1/gi,'[redacted]')
     .replace(/\b(?:password|passwd|passcode|secret|token|authorization|cookie|code|api[_-]?key)\b["']?\s*[:=]\s*["']?[^\s,;&"'<>]+/gi,'[redacted]')
     .replace(/\bbearer\s+[^\s,;&"'<>]+/gi,'Bearer [redacted]')
+    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b/g,'[redacted token]')
     .replace(/https?:\/\/[^\s"'<>]+/g,raw=>{try {const url=new URL(raw);return url.origin+diagnosticPath(raw);}catch{return '[URL]';}})
     .slice(0,1000);
 }

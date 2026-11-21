@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import es from '../../../locales/es.json';
 import fr from '../../../locales/fr.json';
+import {loginAdmin} from './helpers';
 
 test.beforeEach(async({page})=>{
   // Review tests never need the real course roster or its network dependency.
@@ -15,6 +16,7 @@ test('private bug report review displays evidence safely and records an escalati
   expect(sent.status()).toBe(201);
   const id=(await sent.json()).id;
   await context.setHTTPCredentials({username:'review-test',password:'e2e-test-master'});
+  await loginAdmin(page);
   await page.goto('/admin#bug-reports');
   const review=page.frameLocator('iframe[data-tab="bug-reports"]');
   await review.getByRole('combobox',{name:'Status',exact:true}).selectOption('open');
@@ -41,6 +43,7 @@ test('private bug report review displays evidence safely and records an escalati
 test('report filters include later pages, attribute merged accounts and distinguish zero from unassessed',async({page,context,baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Requires a disposable loopback server.');
   await context.setHTTPCredentials({username:'report-filters',password:'e2e-test-master'});
+  await loginAdmin(page);
   const errors:string[]=[];
   const requests:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
@@ -55,7 +58,7 @@ test('report filters include later pages, attribute merged accounts and distingu
   });
   const first=row('first-page',null,null);
   const low=row('later-zero',0,'old-account',{changes_summary:'Fixed the board layout',status:'handled'});
-  const high=row('later-high',10,'current-account',{changes_summary:'Fixed reconnect retry'});
+  const high=row('later-high',10,'current-account',{changes_summary:'Fixed reconnect retry',automatic:true});
   await page.route(/\/admin\/bug-reports\?/,route=>{
     const query=new URL(route.request().url()).searchParams;
     requests.push(query.get('cursor')||'first');
@@ -82,6 +85,14 @@ test('report filters include later pages, attribute merged accounts and distingu
   await expect(page.locator('#report-first-page .report-score')).toHaveText('Score: Not assessed');
   await page.getByRole('searchbox').fill('personal@example.invalid');
   await expect(page.locator('#reports article')).toHaveCount(2);
+  await page.getByRole('combobox',{name:'Source',exact:true}).selectOption('automatic');
+  await expect(page.locator('#reports article')).toHaveCount(1);
+  await expect(page.locator('#reports article .report-source')).toHaveText('Automatic');
+  await expect(page.locator('#summary')).toContainText('0 manual · 1 automatic');
+  await page.getByRole('combobox',{name:'Source',exact:true}).selectOption('manual');
+  await expect(page.locator('#reports article')).toHaveCount(1);
+  await expect(page.locator('#reports article .report-source')).toHaveText('Manual');
+  await page.getByRole('combobox',{name:'Source',exact:true}).selectOption('all');
   await page.getByRole('combobox',{name:'Sort',exact:true}).selectOption('highest');
   await expect(page.locator('#reports article').first()).toHaveAttribute('id','report-later-high');
   await page.getByRole('combobox',{name:'Changes',exact:true}).selectOption('no');
@@ -94,6 +105,7 @@ test('report filters include later pages, attribute merged accounts and distingu
 test('student attribution failure leaves all reports available and does not broaden student filters',async({page,context,baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Requires a disposable loopback server.');
   await context.setHTTPCredentials({username:'report-filters',password:'e2e-test-master'});
+  await loginAdmin(page);
   await page.route('**/admin/students/data',route=>route.fulfill({status:503,json:{detail:'Roster unavailable'}}));
   await page.route(/\/admin\/bug-reports\?/,route=>route.fulfill({json:{items:[{
     id:'anonymous-report',text:'Visitor found a board problem',reporter_user_id:null,user:null,score:null,status:'open',created_at:'2026-11-20T12:00:00Z',
@@ -112,6 +124,7 @@ test('admin report copy and revised privacy text translate while resolution draf
   const description=`Localization report ${Date.now()} ${Math.random()}`;
   expect((await request.post('/bug-reports',{data:{text:description,diagnostics:{}}})).status()).toBe(201);
   await context.setHTTPCredentials({username:'translation-test',password:'e2e-test-master'});
+  await loginAdmin(page);
   await page.addInitScript(()=>{if(!localStorage.getItem('game-platform.locale.v1'))localStorage.setItem('game-platform.locale.v1',JSON.stringify('es'));});
   await page.goto('/admin#bug-reports');
   await expect(page.getByRole('tab',{name:es['ui.admin.tab_bug_reports'],exact:true})).toBeVisible();

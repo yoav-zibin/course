@@ -60,14 +60,8 @@ def make_router(platform_dependency, master_dependency):
     from fastapi import APIRouter, Depends, HTTPException, Query, Request
     from pydantic import BaseModel, Field, field_validator
 
-    def require_configured_master(request: Request):
-        # The ordinary debug tools allow passwordless local development. Bug
-        # evidence includes hidden state and RNG secrets, so it must fail closed.
-        if not request.app.state.master_password:
-            raise HTTPException(503, "game server bug review requires a configured master password")
-
     router = APIRouter(include_in_schema=False,
-                       dependencies=[Depends(require_configured_master), Depends(master_dependency)])
+                       dependencies=[Depends(master_dependency)])
 
     class ReviewIn(BaseModel):
         outcome: Literal["fixed", "escalated", "obsolete"]

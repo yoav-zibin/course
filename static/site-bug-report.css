@@ -1,0 +1,20 @@
+#site-bug-overlay { position:fixed; inset:0; width:100%; height:100%; margin:0; padding:0; border:0; background:transparent; pointer-events:none; overflow:visible; z-index:2147483647; }
+#site-bug-button { position:absolute; display:flex; align-items:center; justify-content:center; width:36px; height:32px; min-width:36px; margin:0; padding:0; background:#171c2a; color:#c6f432; border:1px solid #3b4760; border-radius:8px; box-sizing:border-box; cursor:grab; touch-action:none; user-select:none; pointer-events:auto; box-shadow:none; }
+#site-bug-button svg { flex:none; }
+#site-bug-button:focus-visible { outline:2px solid #8bb6ff; outline-offset:2px; }
+.site-bug-dialog { position:fixed; inset:0; margin:auto; padding:22px; width:min(760px,calc(100vw - 36px)); max-width:calc(100vw - 36px); max-height:90dvh; box-sizing:border-box; background:#171c2a; color:#f5f7ff; border:1px solid #3b4760; border-radius:16px; z-index:2147483646; overflow:auto; font:16px/1.5 Inter,"Trebuchet MS",sans-serif; color-scheme:dark; }
+.site-bug-dialog::backdrop { background:#050915bb; }
+.site-bug-dialog * { box-sizing:border-box; }
+.site-bug-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
+.site-bug-heading h2 { margin:0; font-size:20px; line-height:1.4; }
+.site-bug-dialog button { font:inherit; color:#f5f7ff; background:#243554; border:1px solid #3b4760; border-radius:9px; padding:8px 14px; cursor:pointer; min-height:40px; }
+.site-bug-dialog .site-bug-close { font-size:22px; line-height:1; min-width:40px; padding:7px; flex:none; }
+.site-bug-content { display:flex; flex-direction:column; gap:14px; }
+.site-bug-content p { margin:0; }
+.site-bug-content label { font-size:14px; }
+.site-bug-content textarea { width:100%; display:block; min-height:130px; resize:vertical; border:1px solid #6884b5; border-radius:9px; padding:10px; font:16px/1.4 Inter,"Trebuchet MS",sans-serif; color:#f5f7ff; background:#090d17; }
+.site-bug-content .site-bug-send { background:#4e7cff; border-color:#78a0ff; font-weight:600; align-self:flex-start; }
+.site-bug-content button:disabled { opacity:.55; cursor:default; }
+.site-bug-content .site-bug-error { color:#ff8297; }
+.site-bug-content .site-bug-muted,.site-bug-capture-note { color:#b9c6dd; font-size:14px; }
+.site-bug-screenshot { display:block; width:100%; max-height:220px; object-fit:contain; background:#10141f; border-radius:8px; }

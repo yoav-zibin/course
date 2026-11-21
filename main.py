@@ -2,7 +2,9 @@
 
 import argparse
 import logging
+import json
 import os
+import stat
 from pathlib import Path
 
 import uvicorn
@@ -25,6 +27,78 @@ from game_platform.translation import FakeTranslator, GoogleTranslator, Translat
 logger = logging.getLogger(__name__)
 
 
+def load_admin_api_key(config_path: Path | None) -> str:
+    """Load the private machine credential without entering printable Config.
+
+    Browser administrators use course Google sign-in. This independent key is
+    optional and is never derived from the shared game-content master secret.
+    """
+    if "GAME_PLATFORM_ADMIN_API_KEY" in os.environ:
+        return os.environ["GAME_PLATFORM_ADMIN_API_KEY"].strip()
+    if config_path is None:
+        return ""
+    path = config_path.expanduser().resolve().parent / "admin-api-key"
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        raise ValueError("The private admin API credential file could not be opened safely.") from None
+    try:
+        mode = os.fstat(descriptor).st_mode
+        if not stat.S_ISREG(mode) or stat.S_IMODE(mode) & 0o077:
+            raise ValueError("The admin API credential file must be a private regular file (mode 0600).")
+        with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+            descriptor = None
+            value = stream.read(4097)
+        if len(value) > 4096 or not value.strip():
+            raise ValueError("The private admin API credential file is empty or too large.")
+        return value.strip()
+    except (OSError, UnicodeError):
+        raise ValueError("The private admin API credential file could not be read.") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def configured_admin_emails(config: Config, config_path: Path | None) -> tuple[str, ...]:
+    """Read fixed admin access once, including a safe old-source transition.
+
+    An explicitly configured empty list always denies access. The optional
+    private pending file lets deployment stage the new list without giving an
+    older Config parser an unknown field before the new source starts.
+    """
+    if "admin_google_emails" in config.model_fields_set:
+        return config.admin_google_emails
+    if config_path is None:
+        return ()
+    path = config_path.expanduser().resolve().parent / "admin-access.pending.json"
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except FileNotFoundError:
+        return ()
+    except OSError:
+        raise ValueError("The pending admin access configuration could not be opened safely.") from None
+    try:
+        mode = os.fstat(descriptor).st_mode
+        if not stat.S_ISREG(mode) or stat.S_IMODE(mode) & 0o077:
+            raise ValueError("The pending admin access configuration must be private (mode 0600).")
+        with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+            descriptor = None
+            text = stream.read(32769)
+        if len(text) > 32768:
+            raise ValueError("oversized pending configuration")
+        data = json.loads(text)
+        if not isinstance(data, dict) or set(data) != {"admin_google_emails"}:
+            raise ValueError("unexpected pending configuration fields")
+        return Config(admin_google_emails=data["admin_google_emails"]).admin_google_emails
+    except (OSError, UnicodeError, ValueError):
+        raise ValueError("The pending admin access configuration is invalid or not private (mode 0600).") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def make_translator(config: Config) -> Translator | None:
     """The translator the config asks for, or None when translation is off. The API key is
     taken from GAME_PLATFORM_TRANSLATE_API_KEY if set, else from the config; with neither,
@@ -37,12 +111,12 @@ def make_translator(config: Config) -> Translator | None:
     return GoogleTranslator(key, timeout_seconds=config.translation.timeout_seconds)
 
 
-def warn_about_insecure_setup(config: Config, platform: GamePlatform) -> None:
+def warn_about_insecure_setup(config: Config, platform: GamePlatform, *, admin_api_configured=False) -> None:
     """Logs problems that are fine in development and dangerous on the internet."""
-    if config.debug_tools and not config.master_password:
+    if config.debug_tools and not config.auth.google.client_id and not admin_api_configured:
         logger.warning(
-            "debug_tools is on with no master_password: protected admin "
-            "operations are disabled until a master password is configured"
+            "debug_tools is on without Google sign-in or a private admin API credential; "
+            "admin access is unavailable until one is configured"
         )
     if getattr(platform._store, "scalable", False):
         return  # Full-database hygiene checks belong to offline maintenance.
@@ -102,6 +176,8 @@ def main() -> None:
     if args.print_config:
         print(config.model_dump_json(indent=2))
         return
+    admin_api_key = load_admin_api_key(args.config)
+    admin_google_emails = configured_admin_emails(config, args.config)
     push_config = config.push
     if env_key := os.environ.get("GAME_PLATFORM_VAPID_PRIVATE_KEY"):
         push_config = push_config.model_copy(update={"vapid_private_key": env_key})
@@ -172,11 +248,13 @@ def main() -> None:
             return
         # Published community games live in the data store, not in games/.
         platform.resume_computer_moves()
-        warn_about_insecure_setup(config, platform)
+        warn_about_insecure_setup(config, platform, admin_api_configured=bool(admin_api_key))
         app = create_app(
             platform,
             debug_tools=config.debug_tools,
             master_password=config.master_password,
+            admin_api_key=admin_api_key,
+            admin_google_emails=admin_google_emails,
             auth_config=config.auth,
             bug_report_config=config.bug_reports,
             push_config=push_config,

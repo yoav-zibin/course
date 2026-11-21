@@ -1,9 +1,40 @@
 import {test,expect} from '@playwright/test';
-import {createUser,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
+import {createUser,E2E_ADMIN_HEADERS,loginAs,uniqueName} from './helpers';
 import {verifiedSignInFixtures,logoutAndSignIn} from './auth-fixtures';
 
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Bug reporter tests require a disposable loopback server.');});
 const label='Report a bug or request a feature';
+
+test('Portal unexpected errors silently upload automatic diagnostics with the active account',async({page,request})=>{
+  const user=await createUser(request,uniqueName('Automatic report account'));
+  await loginAs(page,user);
+  const sent:any[]=[];
+  await page.route('**/bug-reports',route=>{
+    sent.push({body:route.request().postDataJSON(),headers:route.request().headers()});
+    return route.fulfill({status:503,json:{detail:'Intentional unavailable-report fixture'}});
+  });
+  await page.goto('/portal');
+  await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(user.display_name);
+  await expect(page.getByTestId('bug-report-button')).toHaveCount(1);
+  await expect(page.locator('#site-bug-button')).toHaveCount(0);
+  await page.evaluate(()=>{
+    // A full non-ASCII history exceeds fetch's keepalive body limit. The
+    // automatic upload must still reach the network, including on a second error.
+    for(let index=0;index<100;index++)console.warn('界'.repeat(1000)+index);
+    const message='Portal automatic marker password=private-automatic-value';
+    for(let index=0;index<2;index++)window.dispatchEvent(new ErrorEvent('error',{message,error:new Error(message)}));
+    void Promise.reject(new Error('Portal rejected-promise automatic marker'));
+  });
+  await expect.poll(()=>sent.length).toBe(2);
+  expect(Buffer.byteLength(JSON.stringify(sent[0].body),'utf8')).toBeGreaterThan(65536);
+  expect(sent.every(row=>row.body.automatic===true&&row.body.screenshot===null)).toBe(true);
+  expect(sent.every(row=>row.headers['x-user-id']===user.id)).toBe(true);
+  expect(sent.map(row=>row.body.diagnostics.automatic_error.kind).sort()).toEqual(['script_error','unhandled_rejection']);
+  expect(JSON.stringify(sent.map(row=>row.body))).not.toContain('private-automatic-value');
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await expect(page.locator('#page-error')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:label,exact:true})).toBeVisible();
+});
 
 test('switching accounts keeps an earlier private report and diagnostics out of the new report',async({page,request})=>{
   const alice=await createUser(request,uniqueName('Private Alice'));

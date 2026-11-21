@@ -1506,11 +1506,13 @@ class QueryStore:
                 if name != "evidence" and not name.startswith("__bug_payload_")}
 
     def create_bug_report(self, row, *, rate_keys):
-        from game_platform.bug_reports import report_summary, take_report_slot
+        from game_platform.bug_reports import report_summary, prepare_report_limits
         with self.atomic():
             self.assert_account_write_allowed([row.get("reporter_user_id")])
-            limits = [(self.ref("bug_report_limits", key), None) for key in rate_keys]
-            limits = [(ref, take_report_slot(self.raw_get(ref), row["created_at"])) for ref, _ in limits]
+            limit_refs = {key: self.ref("bug_report_limits", key) for key in rate_keys}
+            updates = prepare_report_limits({key: self.raw_get(ref) for key, ref in limit_refs.items()}, row)
+            if updates is None:
+                return False
             ref = self.ref("bug_reports", row["id"])
             # One unindexed payload document keeps list/claim operations small.
             # JSON preserves diagnostic integers outside Firestore's int64 range.
@@ -1518,8 +1520,9 @@ class QueryStore:
                                  ensure_ascii=False, separators=(",", ":"), allow_nan=False)
             self.raw_put(ref.collection("body").document("report"), {"json": payload})
             self.raw_put(ref, report_summary(row))
-            for limit_ref, data in limits:
-                self.raw_put(limit_ref, data)
+            for key, data in updates.items():
+                self.raw_put(limit_refs[key], data)
+            return True
 
     def get_bug_report(self, report_id):
         ref = self.ref("bug_reports", report_id)

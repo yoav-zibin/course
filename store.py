@@ -39,7 +39,9 @@ class Store(Protocol):
 
     def list_token_movements(self, *, limit: int = 100) -> list[TokenMovement]: ...
 
-    def create_bug_report(self, row: dict[str, Any], *, rate_keys: list[str]) -> None: ...
+    def create_bug_report(self, row: dict[str, Any], *, rate_keys: list[str]) -> bool:
+        """Atomically save a report and quota slots; False suppresses an auto duplicate."""
+        ...
 
     def get_bug_report(self, report_id: str) -> dict[str, Any] | None: ...
 
@@ -682,12 +684,14 @@ class InMemoryStore:
             self._game_server_bugs[row["id"]] = copy.deepcopy(row)
 
     def create_bug_report(self, row, *, rate_keys):
-        from game_platform.bug_reports import take_report_slot
+        from game_platform.bug_reports import prepare_report_limits
         with self._bug_report_lock:
-            updates = {key: take_report_slot(self._bug_report_limits.get(key), row["created_at"])
-                       for key in rate_keys}
+            updates = prepare_report_limits({key: self._bug_report_limits.get(key) for key in rate_keys}, row)
+            if updates is None:
+                return False
             self._bug_reports[row["id"]] = copy.deepcopy(row)
             self._bug_report_limits.update(updates)
+            return True
 
     def get_bug_report(self, report_id):
         with self._bug_report_lock:

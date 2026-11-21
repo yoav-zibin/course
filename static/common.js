@@ -48,6 +48,21 @@ function showPageError(text) {
 }
 
 const clientErrorsSent = new Set();
+const automaticClientErrorsSent = new Set();
+
+function redactClientError(message) {
+  let text = String(message ?? "");
+  const accounts = typeof Auth !== "undefined" ? Auth.accounts() : [];
+  const secrets = [...accounts.map(account => account.password),
+    ...Array.from(document.querySelectorAll?.('input[type="password"]') || [], input => input.value)];
+  for (const secret of secrets) if (typeof secret === "string" && secret)
+    text = text.split(secret).join("<redacted>");
+  return text.replace(/\b(?:authorization|proxy-authorization)["']?\s*[:=]\s*["']?(?:Bearer|Basic)\s+[^\s,;"'<>]+/gi, "Authorization: <redacted>")
+    .replace(/\b(?:password|passwd|passcode|secret|(?:access[_-]|refresh[_-]|id[_-])?token|authorization|cookie|credential|code|api[_-]?key)\b["']?\s*[:=]\s*["']?[^\s,;&"'<>]+/gi, "<redacted>")
+    .replace(/\bbearer\s+[^\s,;&"'<>]+/gi, "<redacted>")
+    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\b/g, "<redacted token>")
+    .replace(/https?:\/\/[^\s"'<>]+/g, raw => { try { const url = new URL(raw); return url.origin + url.pathname; } catch { return "<url>"; } });
+}
 
 /** Tells the server about an error that happened in this page (POST /client-errors), so it
  * reaches the server's log instead of only this browser's console. Best effort: never
@@ -55,20 +70,7 @@ const clientErrorsSent = new Set();
  * snake_case name; never put a password or token in [message]. */
 function reportClientError(kind, message) {
   try {
-    let text = String(message ?? "");
-    // Exception text can contain a copied request or response. Remove every
-    // remembered account's credential before it leaves the browser, including
-    // when a delayed error arrives after an account switch.
-    const accounts = typeof Auth !== "undefined" ? Auth.accounts() : [];
-    const secrets = [...accounts.map(account => account.password),
-      ...Array.from(document.querySelectorAll?.('input[type="password"]') || [], input => input.value)];
-    for (const secret of secrets) {
-      if (typeof secret === "string" && secret)
-        text = text.split(secret).join("<redacted>");
-    }
-    text = text.replace(/\b(?:password|passwd|passcode|secret|token|authorization|api[_-]?key)\b["']?\s*[:=]\s*["']?[^\s,;&"'<>]+/gi, "<redacted>")
-      .replace(/\bbearer\s+[^\s,;&"'<>]+/gi, "<redacted>");
-    text = text.slice(0, 500);
+    const text = redactClientError(message).slice(0, 500);
     const key = `${kind}:${text}`;
     if (clientErrorsSent.has(key) || clientErrorsSent.size >= 5) return;
     clientErrorsSent.add(key);
@@ -89,16 +91,35 @@ function reportClientError(kind, message) {
 }
 globalThis.reportClientError = reportClientError;
 
-// Errors that would otherwise only reach the browser console.
-window.addEventListener("error", (event) => {
-  showPageError(I18n.t("ui.common.page_error", { message: event.message }, `Page error: ${event.message}`));
-  const file = String(event.filename ?? "").split("/").pop();
-  reportClientError("script_error", `${event.message} (${file}:${event.lineno})`);
-});
-window.addEventListener("unhandledrejection", (event) => {
-  showPageError(I18n.t("ui.common.page_error", { message: event.reason?.message ?? event.reason }, `Page error: ${event.reason?.message ?? event.reason}`));
-  reportClientError("unhandled_rejection", event.reason?.message ?? event.reason);
-});
+// This fallback also reports a failure to load the early shared recorder. The
+// recorder owns global events when it loaded successfully; neither path opens
+// a dialog or displays an error-report banner to the visitor.
+function reportUnexpectedClientError(kind, error, stack) {
+  const message = redactClientError(error?.message ?? error).slice(0, 500);
+  reportClientError(kind, message);
+  if (automaticClientErrorsSent.has(`${kind}:${message}`) || automaticClientErrorsSent.size >= 5) return;
+  automaticClientErrorsSent.add(`${kind}:${message}`);
+  try {
+    const text = `Automatic client error (${kind}): ${message}`;
+    fetch("/bug-reports", {
+      method: "POST", headers: {"Content-Type": "application/json"}, keepalive: true,
+      body: JSON.stringify({automatic: true, text,
+        screenshot: null, diagnostics: {version: 1,
+          automatic_error: {kind, message, stack: redactClientError(stack || error?.stack || "").slice(0, 1000), url: location.pathname},
+          logs: Array.from(clientErrorsSent, text => ({level: "error", message: text})).slice(-5),
+          context: {page: location.pathname, userAgent: navigator.userAgent}}}),
+    }).catch(() => {});
+  } catch { /* An unavailable reporting transport must stay silent. */ }
+}
+if (!globalThis.SiteBugReporter?.active) {
+  window.addEventListener("error", event => {
+    const tag = event.target?.tagName;
+    if (!event.message && tag !== "SCRIPT" && tag !== "LINK") return;
+    const file = String(event.filename || event.target?.src || event.target?.href || "").split("?")[0].split("#")[0].split("/").pop();
+    reportUnexpectedClientError("script_error", `${event.message || "Resource could not be loaded"} (${file}:${event.lineno || 0})`, event.error?.stack);
+  }, true);
+  window.addEventListener("unhandledrejection", event => reportUnexpectedClientError("unhandled_rejection", event.reason));
+}
 
 /** Every item of one admin collection (/v2/admin/{kind}), fetched in bounded
  * pages of 100: the server never builds a whole-dataset response. */

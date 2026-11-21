@@ -10,7 +10,7 @@ from game_platform.api import create_app
 from game_platform.config import AuthConfig, EmailAuthConfig, GoogleAuthConfig
 from game_platform.service import GamePlatform
 from game_platform.store import InMemoryStore
-from game_platform.tests.helpers import Api, FakeClock
+from game_platform.tests.helpers import Api, FakeClock, login_google_admin
 
 
 class RecordingSender:
@@ -224,10 +224,13 @@ def test_deleting_a_user_passes_their_invites_up_to_their_inviter(api: Api) -> N
 
 
 def test_the_referrals_page_and_data_need_the_master_password() -> None:
-    client = TestClient(create_app(master_password="s3cret"))
+    client = TestClient(create_app(master_password="s3cret", admin_api_key="s3cret"))
     name = "Private referral test user"
     assert client.post("/users", json={"display_name": name}).status_code == 201
-    for path in ("/admin/referrals", "/admin/invites"):
+    html = client.get("/admin/referrals", follow_redirects=False)
+    assert html.status_code == 303
+    assert "www-authenticate" not in html.headers
+    for path in ("/admin/invites",):
         for credentials in (None, ("admin", "wrong-password")):
             response = client.get(path, auth=credentials)
             assert response.status_code == 401
@@ -236,12 +239,16 @@ def test_the_referrals_page_and_data_need_the_master_password() -> None:
             )
             assert name not in response.text
 
-    page = client.get("/admin/referrals", auth=("", "s3cret"))
-    assert page.status_code == 200
-    assert page.headers["content-type"].startswith("text/html")
+    page = client.get("/admin/referrals", follow_redirects=False)
+    assert page.status_code == 303
+    assert page.headers["location"] == "/admin/login?next=%2Fadmin%2Freferrals"
     data = client.get("/admin/invites", auth=("", "s3cret"))
     assert data.status_code == 200
     assert [user["display_name"] for user in data.json()["users"]] == [name]
+    login_google_admin(client)
+    page = client.get("/admin/referrals", follow_redirects=False)
+    assert page.status_code == 200
+    assert page.headers["content-type"].startswith("text/html")
     # The old dashboard path is retired; match invite capabilities use
     # /invites/{token}, rather than exposing referral data at /invites.
     assert client.get("/invites").status_code == 404

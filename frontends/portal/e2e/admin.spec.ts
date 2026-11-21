@@ -1,9 +1,10 @@
 import {test,expect} from '@playwright/test';
-import {E2E_ADMIN_HEADERS,uniqueName} from './helpers';
+import {E2E_ADMIN_HEADERS,loginAdmin,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL,page})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Administrator acceptance tests require a disposable loopback server.');
   await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
+  await loginAdmin(page);
 });
 
 for(const name of ['admin','browse','invites','stats']){

@@ -2,6 +2,7 @@
 
 import datetime as dt
 import hashlib
+from unittest.mock import patch
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
@@ -20,6 +21,31 @@ from game_platform.game_logic import GameLogic
 
 TEST_GAME_SCHEMAS = {"state": True, "move": True, "view": True}
 TEST_GAME_SECRET = "fixture-game-secret-0123456789"
+
+
+def login_google_admin(client: TestClient) -> str:
+    """A verified provider fixture through the real admin session endpoint.
+
+    Use only when a test needs to inspect protected HTML. API/data tests retain
+    their normal Basic contract and should not add this extra fixture account.
+    HTTPS is required by the production Secure cookie shape.
+    """
+    from game_platform.config import GoogleAuthConfig
+
+    client.base_url = client.base_url.copy_with(scheme="https")
+    previous = client.app.state.auth_config
+    client.app.state.auth_config = previous.model_copy(update={"google": GoogleAuthConfig(client_id="fixture-admin-client")})
+    try:
+        client.app.state.admin_google_emails = frozenset((*client.app.state.admin_google_emails, "admin-fixture@example.test"))
+        with patch("game_platform.admin_auth.verify_google_admin_token", return_value=(
+            "fixture-admin-subject", "Admin fixture", "admin-fixture@example.test", "")):
+            response = client.post("/auth/admin-session", json={"id_token": "fixture-admin-token"})
+        assert response.status_code == 200
+        return response.json()["user"]["id"]
+    finally:
+        client.app.state.auth_config = previous
+
+
 TEST_DECLARATIVE_UI = {
     "format": "buildplay-ui", "version": 1,
     "viewport": {"width": 300, "height": 300},
@@ -154,6 +180,7 @@ class Api:
                 email_sender=email_sender,
                 push_config=push_config,
                 master_password=master_password,
+                admin_api_key=master_password or "",
             )
         )
         self.platform = platform
@@ -204,7 +231,8 @@ class Api:
             )
             if method == "PATCH" and use_master and isinstance(json, dict):
                 json = {"game_addition_request_id_and_secret": master or TEST_GAME_SECRET, **json}
-        auth = ("test-admin", master) if use_master and master else None
+        admin_api_key = self.client.app.state.admin_api_key
+        auth = ("test-admin", admin_api_key) if use_master and admin_api_key else None
         response = self.client.request(
             method, path, headers=headers, json=json, params=params, auth=auth
         )

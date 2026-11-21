@@ -5,6 +5,15 @@ import {expect,type APIRequestContext,type Page} from '@playwright/test';
 // Only administrator requests receive them; player contexts stay unprivileged.
 export const E2E_ADMIN_CREDENTIALS={username:'e2e-admin',password:'e2e-test-master'};
 export const E2E_ADMIN_HEADERS={Authorization:`Basic ${Buffer.from(`${E2E_ADMIN_CREDENTIALS.username}:${E2E_ADMIN_CREDENTIALS.password}`).toString('base64')}`};
+export async function loginAdmin(page:Page){
+  const health=await page.context().request.get('/health');
+  const origin=new URL(health.url()).origin;
+  if(!['127.0.0.1','localhost'].includes(new URL(origin).hostname))throw new Error('Admin provider fixture requires the disposable loopback server.');
+  const response=await page.context().request.post(`${origin}/auth/admin-session`,{data:{id_token:'loopback-admin-google-fixture'}});
+  expect(response.ok(),await response.text()).toBeTruthy();
+  const cookie=(await page.context().cookies(origin)).find(item=>item.name==='__Host-buildplay-admin');
+  expect(cookie,'The browser must receive the Secure Google admin session cookie.').toBeTruthy();
+}
 export const uniqueName=(prefix:string)=>`${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
 export async function createUser(request:APIRequestContext,name:string){const response=await request.post('/users',{data:{display_name:name}});expect(response.ok()).toBeTruthy();return response.json();}
 export async function createGame(request:APIRequestContext,name:string){

@@ -1,7 +1,6 @@
 // Admin hub: tabs that embed the super-admin tools (API console, data browser,
-// statistics, invites, API docs) as iframes. The /browse, /stats and /invites pages
-// need the master password; the browser reuses the credentials entered for /admin
-// itself.
+// statistics, invites, API docs) as iframes. The header shows the verified Google
+// admin session; Portal player accounts stay separate from admin sign-in.
 
 "use strict";
 
@@ -9,6 +8,55 @@ const $ = (id) => document.getElementById(id);
 
 const TABS = ["console", "browse", "stats", "students", "invites", "bug-reports", "feedback", "docs"];
 const loaded = new Set();
+let administrator = null, sessionLoading = true, signingOut = false, sessionError = "";
+
+function signInUrl() {
+  return "/admin/login?" + new URLSearchParams({next: location.pathname + location.search + location.hash});
+}
+
+function renderAdminIdentity() {
+  const menu = $("account-menu");
+  menu.replaceChildren();
+  if (sessionLoading) {
+    menu.append(el("span", {textContent: I18n.t("ui.admin_signin.loading", {}, "Loading sign-in…")}));
+    return;
+  }
+  if (administrator) {
+    menu.append(el("span", {id: "admin-identity", textContent: I18n.t("ui.admin_signin.identity", {
+      name: administrator.display_name || administrator.email, email: administrator.email,
+    }, "Signed in as {name} ({email}).")}));
+    const change = el("button", {id: "admin-sign-out", type: "button", disabled: signingOut,
+      textContent: I18n.t("ui.admin_signin.change_google", {}, "Use another Google account")});
+    change.addEventListener("click", async () => {
+      signingOut = true; sessionError = ""; renderAdminIdentity();
+      try {
+        const response = await fetch("/auth/admin-session", {method: "DELETE", credentials: "same-origin", cache: "no-store"});
+        if (!response.ok) throw new Error("admin_signout_failed");
+        window.google?.accounts?.id?.disableAutoSelect();
+        location.replace(signInUrl());
+      } catch {
+        signingOut = false; sessionError = "signout"; renderAdminIdentity();
+      }
+    });
+    menu.append(change);
+  }
+  if (sessionError) {
+    menu.append(el("span", {role: "alert", textContent: sessionError === "signout"
+      ? I18n.t("ui.admin_signin.signout_failed", {}, "Could not sign out. Try again.")
+      : I18n.t("ui.admin_signin.load_failed", {}, "Could not load admin sign-in. Reload this page to try again.")}));
+  }
+}
+
+async function loadAdminIdentity() {
+  try {
+    const response = await fetch("/auth/admin-session", {credentials: "same-origin", cache: "no-store"});
+    if (!response.ok) throw new Error("admin_session_unavailable");
+    const session = await response.json();
+    if (!session.signed_in) {location.replace(signInUrl()); return;}
+    administrator = session.user;
+  } catch {sessionError = "load";}
+  finally {sessionLoading = false; renderAdminIdentity();}
+}
 
 function showTab(name) {
   for (const tab of TABS) {
@@ -40,8 +88,9 @@ function main() {
     $(`tab-${tab}`).addEventListener("click", () => showTab(tab));
   }
   const initial = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "console";
-  Auth.renderMenu($("account-menu"));
-  document.addEventListener("auth-changed", () => Auth.renderMenu($("account-menu")));
+  renderAdminIdentity();
+  document.addEventListener("i18n-changed", renderAdminIdentity);
+  void loadAdminIdentity();
   showTab(initial);
 }
 

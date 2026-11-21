@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {E2E_ADMIN_HEADERS} from './helpers';
+import {E2E_ADMIN_HEADERS,loginAdmin} from './helpers';
 
 const matches=(computer=0,pass_and_play=0,multiplayer=0)=>({computer,pass_and_play,multiplayer,total:computer+pass_and_play+multiplayer,waiting:2});
 function person(id:string,name:string,score:number|null,recruits:number){
@@ -21,12 +21,16 @@ const payload={generated_at:'2026-11-21T10:30:00Z',cache_seconds:60,
 test.beforeEach(async({page,baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Requires a disposable loopback server.');
   await page.setExtraHTTPHeaders(E2E_ADMIN_HEADERS);
+  await loginAdmin(page);
 });
 
 test('admin students tab shows matched identities and safe report examples',async({page},testInfo)=>{
   const errors:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
-  await page.route('**/admin/students/data',route=>route.fulfill({json:payload}));
+  const withSources={...payload,students:payload.students.map((student,index)=>index?student:{...student,reports:{
+    ...student.reports,manual:2,automatic:1,top:student.reports.top.map(report=>({...report,automatic:true})),
+  }})};
+  await page.route('**/admin/students/data',route=>route.fulfill({json:withSources}));
   await page.goto('/admin#students');
   await expect(page.getByRole('tab',{name:'Students leaderboard',exact:true})).toHaveAttribute('aria-selected','true');
   const dashboard=page.frameLocator('iframe[data-tab="students"]');
@@ -40,6 +44,10 @@ test('admin students tab shows matched identities and safe report examples',asyn
   await expect(detail).toContainText('Match: email; first name');
   await expect(detail).toContainText('Not provided');
   await expect(detail).toContainText('A useful report <img src=x onerror=alert(1)>');
+  await expect(detail.locator('.breakdown div').filter({has:dashboard.getByText('Manual reports',{exact:true})})).toContainText('2');
+  await expect(detail.locator('.breakdown div').filter({has:dashboard.getByText('Automatic reports',{exact:true})})).toContainText('1');
+  await expect(detail.locator('.report-card').first()).toContainText('Automatic');
+  await expect(detail).toContainText('The average includes assessed manual and automatic reports; unassessed reports are excluded.');
   await expect(detail.locator('img')).toHaveCount(0);
   await expect(detail.getByRole('link',{name:"Browse this person's reports"})).toHaveAttribute('href','/bug-reports?student=course-alice');
   await expect(detail.getByRole('link',{name:'Open full report'}).first()).toHaveAttribute('href','/bug-reports?student=course-alice&report=report-course-alice');

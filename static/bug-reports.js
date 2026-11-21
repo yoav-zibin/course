@@ -10,7 +10,7 @@ let reportsReady = false;
 let visibleCount = 50;
 let linkedReportOpened = false;
 const initialParams = new URLSearchParams(location.search);
-const filterIds = ["search", "student", "status", "score", "changes", "from", "through", "sort"];
+const filterIds = ["search", "student", "status", "source", "score", "changes", "from", "through", "sort"];
 
 function assessed(report) {
   return Number.isInteger(report.score) && report.score >= 0 && report.score <= 10;
@@ -52,6 +52,12 @@ function scoreLabel(report) {
   return assessed(report)
     ? I18n.t("ui.bug_reports.score", {score: report.score}, "Score: {score}/10")
     : I18n.t("ui.bug_reports.unassessed", {}, "Score: Not assessed");
+}
+
+function sourceLabel(report) {
+  return report.automatic === true
+    ? I18n.t("ui.reports.source_automatic", {}, "Automatic")
+    : I18n.t("ui.reports.source_manual", {}, "Manual");
 }
 
 function assessmentDetails(report) {
@@ -109,6 +115,7 @@ function reportCard(row) {
   const card = el("article", {id: `report-${row.id}`},
     el("div", {class: "report-heading"},
       el("h2", {}, el("a", {href: reportLink(row), textContent: row.id})),
+      translated("span", {class: "report-source"}, () => sourceLabel(row)),
       translated("p", {class: "muted"}, () => `${statusLabel(row.status)} · ${formatTime(row.created_at)}`)),
     el("p", {class: "report-text", textContent: row.text}),
     score, studentAttribution(row),
@@ -200,6 +207,7 @@ function filteredReports() {
   const studentFilter = $("student").value;
   if (studentFilter !== "all" && !rosterReady) return [];
   const status = $("status").value;
+  const source = $("source").value;
   const score = $("score").value;
   const changes = $("changes").value;
   const from = $("from").value;
@@ -210,6 +218,7 @@ function filteredReports() {
     if (studentFilter === "other" && attribution.length) return false;
     if (!["all", "course", "other"].includes(studentFilter) && !attribution.some(student => student.id === studentFilter)) return false;
     if (status !== "all" && report.status !== status) return false;
+    if (source === "automatic" && report.automatic !== true || source === "manual" && report.automatic === true) return false;
     const hasScore = assessed(report);
     if (score === "assessed" && !hasScore || score === "unassessed" && hasScore) return false;
     if (score === "high" && (!hasScore || report.score < 8)) return false;
@@ -223,7 +232,7 @@ function filteredReports() {
     if (query) {
       const haystack = [report.id, report.text, report.reporter_user_id, report.user?.display_name, report.user?.name,
         report.user?.email, report.score_rationale, report.resolution, report.changes_summary, report.commit,
-        ...attribution.flatMap(student => [student.name, ...(student.emails || []), student.columbia_email, student.personal_email,
+        sourceLabel(report), ...attribution.flatMap(student => [student.name, ...(student.emails || []), student.columbia_email, student.personal_email,
           ...(student.accounts || []).flatMap(account => [account.id, account.display_name, ...(account.emails || [])])])];
       if (!haystack.filter(Boolean).join(" ").toLocaleLowerCase().includes(query)) return false;
     }
@@ -246,6 +255,7 @@ function updateSummary() {
   const scored = filtered.filter(assessed);
   const average = scored.length ? (scored.reduce((sum, row) => sum + row.score, 0) / scored.length).toFixed(2) : null;
   $("summary").textContent = I18n.t("ui.reports.result_count", {count: filtered.length, total: reports.length, shown: Math.min(visibleCount, filtered.length)}, "{count} of {total} reports match · {shown} shown") + " · " +
+    I18n.t("ui.reports.source_counts", {manual: filtered.filter(row => row.automatic !== true).length, automatic: filtered.filter(row => row.automatic === true).length}, "{manual} manual · {automatic} automatic") + " · " +
     (average === null
       ? I18n.t("ui.reports.no_assessed", {}, "No assessed reports in these results")
       : I18n.t("ui.reports.average", {score: average, count: scored.length}, "Average score {score}/10 across {count} assessed reports"));

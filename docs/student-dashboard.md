@@ -5,7 +5,10 @@ Open `/admin#students` for the course leaderboard. Its student details link to
 student, status, assessment, text and date. The report detail panels retain the
 existing evidence and review controls.
 
-The leaderboard page and `/admin/students/data` require the master password.
+The leaderboard page requires Google sign-in with an email explicitly pinned
+in the VM's private `admin_google_emails` configuration. This fixed allowlist is
+independent of the roster's display/contact refresh. The data API accepts the
+same Google session; unattended automation retains its existing API credential.
 Roster names and emails are fetched on the server from the course spreadsheet;
 they are not embedded in public static assets or checked into the repository.
 Only the roster columns are requested. An unavailable roster produces an
@@ -31,8 +34,9 @@ student's own accounts and handles cycles without counting anyone twice.
 Recruit match totals count each match once even when several recruits share it.
 Different students' referral trees can overlap, so their totals are not additive.
 
-Report averages include assessed scores from 0 through 10. Unassessed reports
-are counted separately. Highest and lowest examples include the existing review
+Report totals distinguish manual submissions from automatic client-error
+reports. Averages include assessed manual and automatic scores from 0 through
+10. Unassessed reports are counted separately. Highest and lowest examples include the existing review
 rationale and resolution; the dashboard does not assign scores automatically.
 The data response contains report summaries, without screenshots, diagnostics
 or account passwords. Aggregates are cached briefly and show their generation

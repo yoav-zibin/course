@@ -16,6 +16,7 @@ import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, field_validator, model_validator
 from starlette.concurrency import run_in_threadpool
 
@@ -28,6 +29,7 @@ MAX_REPORT_BYTES = 760_000
 MAX_SCREENSHOT_CHARS = 500_000
 MAX_DIAGNOSTIC_BYTES = 180_000
 REPORTS_PER_DAY = 20
+AUTOMATIC_DEDUPE_MINUTES = 5
 ReportStatus = Literal["open", "handling", "escalated", "handled"]
 _DIAGNOSTIC_SECRET = re.compile(
     r'''(?:password|passwd|passcode|secret|token|authorization|api[_-]?key)["']?\s*[:=]\s*'''
@@ -41,6 +43,7 @@ class BugReportCreate(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=10_000)]
     screenshot: str | None = Field(default=None, max_length=MAX_SCREENSHOT_CHARS)
     diagnostics: dict[str, JsonValue] = Field(default_factory=dict)
+    automatic: Annotated[bool, Field(strict=True)] = False
 
     @field_validator("screenshot")
     @classmethod
@@ -95,21 +98,55 @@ class BugReportAssessmentChange(BaseModel):
 
 def reviewed_report(row):
     # Historical reports remain unassessed; zero means a considered decision.
-    return {"score": None, "score_rationale": "", "changes_summary": "", **row}
+    return {"score": None, "score_rationale": "", "changes_summary": "", "automatic": False, **row}
 
 
 def report_summary(row):
     return {key: value for key, value in row.items() if key not in ("screenshot", "diagnostics")}
 
 
-def take_report_slot(previous, now):
-    """A bounded rolling-day limiter, committed atomically with the report."""
+def take_report_slot(previous, now, *, automatic=False, fingerprint=None):
+    """Independent manual/automatic rolling-day budgets in one bounded record."""
+    previous = previous or {}
+    field = "automatic_times" if automatic else "times"
     since = (dt.datetime.fromisoformat(now) - dt.timedelta(days=1)).isoformat()
-    times = [time for time in (previous or {}).get("times", []) if time > since]
+    times = [time for time in previous.get(field, []) if time > since]
     if len(times) >= REPORTS_PER_DAY:
         from game_platform.service import TooManyRequestsError
         raise TooManyRequestsError("you can send at most 20 bug reports a day; try again tomorrow")
-    return {"times": [*times, now]}
+    updated = {**previous, field: [*times, now]}
+    if automatic:
+        dedupe_since = (dt.datetime.fromisoformat(now) - dt.timedelta(minutes=AUTOMATIC_DEDUPE_MINUTES)).isoformat()
+        fingerprints = {key: time for key, time in previous.get("automatic_fingerprints", {}).items()
+                        if time > dedupe_since}
+        if fingerprint:
+            fingerprints[fingerprint] = now
+        updated["automatic_fingerprints"] = dict(sorted(fingerprints.items(), key=lambda item: item[1])[-REPORTS_PER_DAY:])
+    return updated
+
+
+def prepare_report_limits(previous_by_key, row):
+    """Return atomic quota updates, or None for a recent automatic duplicate.
+
+    Fingerprints omit transient session logs and timestamps. Identity comes from
+    the server-owned reporter field; anonymous requests are scoped by the IP
+    quota record. No raw error text is retained in quota records.
+    """
+    automatic = row.get("automatic") is True
+    fingerprint = None
+    if automatic:
+        error = (row.get("diagnostics") or {}).get("automatic_error")
+        error = error if isinstance(error, dict) else {}
+        stable = [row.get("reporter_user_id"), row["text"],
+                  *[error.get(key) for key in ("kind", "message", "stack", "url")]]
+        fingerprint = hashlib.sha256(json.dumps(stable, sort_keys=True, ensure_ascii=False,
+                                                separators=(",", ":")).encode()).hexdigest()
+        since = (dt.datetime.fromisoformat(row["created_at"]) - dt.timedelta(minutes=AUTOMATIC_DEDUPE_MINUTES)).isoformat()
+        if any((previous or {}).get("automatic_fingerprints", {}).get(fingerprint, "") > since
+               for previous in previous_by_key.values()):
+            return None
+    return {key: take_report_slot(previous, row["created_at"], automatic=automatic, fingerprint=fingerprint)
+            for key, previous in previous_by_key.items()}
 
 
 def changed_report(row, change, *, changed_by, now):
@@ -184,9 +221,10 @@ def make_router(platform_dependency, master_dependency, caller_dependency):
                 user = platform._store.get_user(caller_id) if caller_id else None
                 # Only authenticated, canonical server identity and private operator
                 # configuration grant this exception. Submitted diagnostics, names,
-                # email addresses and client headers cannot claim it. Empty keys
-                # bypass both quotas without consuming the shared network's slots.
-                unlimited = (user is not None and user.id == caller_id
+                # email addresses and client headers cannot claim it. Manual
+                # exemptions do not spend shared network slots. Automatic errors
+                # always receive bounded quotas, including for exempt users.
+                unlimited = (not report.automatic and user is not None and user.id == caller_id
                              and user.replaced_by_user_id is None
                              and caller_id in request.app.state.bug_report_config.unlimited_user_ids)
                 rate_keys = [] if unlimited else ["client:" + hashlib.sha256(client.encode()).hexdigest()]
@@ -199,22 +237,21 @@ def make_router(platform_dependency, master_dependency, caller_dependency):
                     "created_at": user.created_at.isoformat(), "updated_at": user.updated_at.isoformat(),
                     "token_balance": user.token_balance,
                 }
-                row = {"id": uuid.uuid4().hex, "text": report.text, "screenshot": report.screenshot,
+                row = {"id": uuid.uuid4().hex, "text": clean_diagnostics(report.text) if report.automatic else report.text,
+                       "screenshot": None if report.automatic else report.screenshot, "automatic": report.automatic,
                        "diagnostics": clean_diagnostics(report.diagnostics), "user": user_info,
                        "reporter_user_id": caller_id, "status": "open", "created_at": now,
                        "updated_at": now, "resolution": "", "commit": None, "changed_by": None,
                        "score": None, "score_rationale": "", "changes_summary": ""}
-                platform._store.create_bug_report(row, rate_keys=rate_keys)
+                created = platform._store.create_bug_report(row, rate_keys=rate_keys)
+                if created is False:
+                    return JSONResponse(status_code=200, content={"status": "duplicate"})
                 return {"id": row["id"], "status": row["status"], "created_at": now}
 
         return await run_in_threadpool(save)
 
-    def require_configured_master(request: Request):
-        if not request.app.state.master_password:
-            raise HTTPException(503, "bug report review requires a configured master password")
-
     private = APIRouter(include_in_schema=False,
-                        dependencies=[Depends(require_configured_master), Depends(master_dependency)])
+                        dependencies=[Depends(master_dependency)])
 
     @private.get("/admin/bug-reports")
     def list_reports(status: Literal["open", "handling", "escalated", "handled", "all"] = "open", limit: int = Query(default=50, ge=1, le=100),

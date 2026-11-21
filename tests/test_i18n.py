@@ -385,11 +385,12 @@ def test_unknown_routes_are_localized_too(api: Api) -> None:
     )
 
 
-def test_the_master_password_error_is_localized_and_keeps_its_challenge() -> None:
-    client = TestClient(create_app(master_password="s3cret"))
-    response = client.get("/browse", headers={"Accept-Language": "fr"})
+def test_machine_admin_api_credential_error_is_localized_and_keeps_its_challenge() -> None:
+    client = TestClient(create_app(master_password="separate-game-write-secret", admin_api_key="s3cret"))
+    response = client.get("/admin/feedback", headers={"Accept-Language": "fr", "Accept": "application/json"})
     assert response.status_code == 401
-    assert response.json()["detail"].startswith("le mot de passe maître")
+    assert response.json()["detail"] == i18n.translate("error.admin_api_credential_required", "fr")
+    assert response.json()["code"] == "admin_api_credential_required"
     assert response.headers["www-authenticate"].startswith("Basic")
 
 

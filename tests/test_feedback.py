@@ -188,7 +188,7 @@ def test_a_repeat_of_the_same_kind_within_24_hours_updates_it() -> None:
 
 
 def test_the_admin_listing_needs_the_master_password() -> None:
-    client = TestClient(create_app(master_password="s3cret"))
+    client = TestClient(create_app(master_password="s3cret", admin_api_key="s3cret"))
     assert client.get("/admin/feedback").status_code == 401
     assert client.get("/admin/feedback", auth=("", "wrong")).status_code == 401
     assert client.get("/admin/feedback", auth=("", "s3cret")).status_code == 200
@@ -197,11 +197,11 @@ def test_the_admin_listing_needs_the_master_password() -> None:
 
 def test_nobody_else_can_list_feedback() -> None:
     platform, ann, bob, game = world()
-    client = TestClient(create_app(platform, master_password="s3cret"))
+    client = TestClient(create_app(platform, master_password="s3cret", admin_api_key="s3cret"))
     headers = {"X-User-Id": ann, "X-User-Password": platform._store.get_user(ann).password}
     feedback(platform, ann, "user", bob, text="bad name")
     # A logged-in user (even the sender) gets neither the admin page nor its data.
-    assert client.get("/feedback", headers=headers).status_code == 401
+    assert client.get("/feedback", headers=headers, follow_redirects=False).status_code == 303
     assert client.get("/admin/feedback", headers=headers).status_code == 401
     # And there's no public way to list feedback.
     body = {"kind": "problem", "target_type": "user", "target_id": bob, "text": "bad name again"}
@@ -283,7 +283,7 @@ def test_feedback_without_a_kind_is_a_problem(tmp_path) -> None:
 
 
 def admin(platform, password="s3cret"):
-    return TestClient(create_app(platform, master_password=password))
+    return TestClient(create_app(platform, master_password=password, admin_api_key=password))
 
 
 def test_an_admin_marks_feedback_reviewed_dismissed_or_open_again() -> None:

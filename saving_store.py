@@ -151,8 +151,10 @@ class SavingStore:
 
     def create_bug_report(self, row, *, rate_keys):
         with self._lock:
-            self._inner.create_bug_report(row, rate_keys=rate_keys)
-            self._set_dirty()
+            created = self._inner.create_bug_report(row, rate_keys=rate_keys)
+            if created is not False:
+                self._set_dirty()
+            return created
 
     def get_bug_report(self, report_id):
         with self._lock:

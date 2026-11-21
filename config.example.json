@@ -23,6 +23,7 @@
   },
   "debug_tools": true,
   "master_password": "",
+  "admin_google_emails": [],
   "log_level": "INFO",
   "monitoring": {
     "log_format": "text",
