@@ -389,16 +389,36 @@ def test_discard_is_offered_only_when_nothing_fits():
     assert 'discard' not in ids(reduce(message(view, 0)), 'controls')
 
 
-def test_roster_shows_any_realm_and_waiting_players_get_no_actions():
+def test_every_kingdom_is_visible_and_waiting_players_get_no_actions():
     game = logic()
     c, state = lay_position(game, {KEEP + 1: [0, 0]}, 13)
     view = game.call('viewFor', state, 'p1', ctx=c, seed=1)
     waiting = reduce(message(view, 1))
-    assert set(ids(waiting)) == {'roster-0', 'roster-1'} and not waiting['scene']['controls']
-    # While p0 plays, p1 watches p0's realm.
-    assert any(p['id'] == 'keep-0' for p in waiting['scene']['pieces'])
-    own = reduce(message(view, 1), waiting['local_state'], {'type': 'tap', 'id': 'roster-1'})
-    assert any(p['id'] == 'keep-1' for p in own['scene']['pieces'])
+    assert not ids(waiting) and not waiting['scene']['controls']
+    pieces = {p['id']: p for p in waiting['scene']['pieces']}
+    # The big kingdom is the viewer's own; the opponent's sits beside it, small.
+    assert 'keep-1' in pieces and 'mini-keep-0' in pieces and 'mini-keep-1' not in pieces
+    assert pieces['mini-0-' + str(KEEP + 1)]['asset'] == 'mq_0_0'
+    # A real game: the opponent's most recent tile is outlined beside yours.
+    steps = list(walk(game, 2, 4, 'computerMove'))
+    mid = next(st[3]['state'] for st in steps if st[3]['state'].get('laid') and len(st[3]['state']['laid'][0]) >= 3 and st[3]['turn'])
+    seen = reduce(message(game.call('viewFor', mid, 'p1', ctx=ctx(), seed=1), 1))
+    assert any(p['id'] == 'last-mini-0' for p in seen['scene']['pieces'])
+    labels = {l['id']: l['text'] for l in waiting['scene']['labels']}
+    assert labels['my-title'].startswith('Jade · Bea (you)') and labels['mini-name-0'] == 'Amber · Ana'
+    assert labels['status'].startswith('Amber · Ana ') and '(you)' not in labels['status']
+
+
+def test_your_seat_is_marked_you_and_no_label_leaves_the_viewport():
+    game = logic()
+    c, state = lay_position(game, {}, 13)
+    view = game.call('viewFor', state, 'p0', ctx=c, seed=1)
+    response = reduce(message(view, 0))
+    labels = {l['id']: l for l in response['scene']['labels']}
+    assert '(you)' in labels['status']['text'] and '(you)' in labels['my-title']['text']
+    assert all(0 <= l['y'] <= 730 - 14 for l in labels.values())
+    # The opponent column does not overlap the big kingdom (x 4..418).
+    assert all(l['x'] >= 424 for i, l in labels.items() if i.startswith('mini-'))
 
 
 def test_end_screen_names_the_winner_with_their_score():
@@ -413,8 +433,10 @@ def test_end_screen_names_the_winner_with_their_score():
         assert status.startswith('Shared win: ')
     labels = [label['id'] for label in response['scene']['labels']]
     assert any(i.startswith('legend-total-0') for i in labels) and any(i.startswith('legend-total-1') for i in labels)
-    # The draft rows are gone and both realms are drawn.
+    # The draft rows are gone, both realms are drawn and every group is listed.
     assert 'row-label' not in labels and {'keep-0', 'keep-1'} <= {p['id'] for p in response['scene']['pieces']}
+    assert not any(i.startswith('legend-more') for i in labels)
+    assert all(l['y'] >= 64 for l in response['scene']['labels'] if l['id'].startswith('end-name-'))
 
 
 def test_every_language_has_every_string_and_placeholder():

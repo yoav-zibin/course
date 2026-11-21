@@ -51,10 +51,15 @@ Store / Google Play), which offers bots; no free web version with a computer
 exists. Ideas taken, in our own design: the "now" and "next" rows with kings on
 them, a big realm board with the 5×5 limit visible, and live scores.
 
-- Layout (600 units wide, fits a 390 px phone without sideways scrolling):
-  status and score tabs; a compact draft (Now / Next rows, kings beside the
-  labels); the realm; a toolbar with your tile and big ↺ ✓ ↻ buttons (72
-  units, about 47 px on an iPhone). The draft and the realm never overlap.
+- Layout (600 × 730 units, one layout for every screen, since the portal does
+  not tell a game the screen size): the status line; a compact draft (Now /
+  Next rows); your kingdom (46-unit squares) with its title, colour and score;
+  every other kingdom beside it, smaller (34 units, 21 with three opponents),
+  with name, colour and score, drawn with flat squares and large crowns so it
+  reads on a phone; a toolbar with your tile and big ↺ ✓ ↻ buttons (72 units).
+  On an iPhone in portrait and on desktop, everything fits on screen at once.
+- Your seat says "(you)" everywhere a player is named (status, kingdom title,
+  king markers, end screen), e.g. "Jade · Marcelle (you)".
 - Pick: tap a tile in the Next row (a ghost king marks it), then tap again or
   press Take tile, so a stray tap never commits.
 - Lay: every square where the tile's first half can go glows. Tap one: the tile
@@ -64,12 +69,13 @@ them, a big realm board with the 5×5 limit visible, and live scores.
   tile you are laying shows faded in the Now row: it lives on the realm.
 - Squares are drawn upright, one picture per terrain and crown count, so crowns
   and numbers never turn; turning only moves the two squares.
-- The yellow outline shows the 5×5 window still reachable. Score tabs show live
-  totals; tap one to see that realm. While someone else plays, their realm is
-  shown.
-- End: the draft disappears; every realm is cropped to its used 5×5 area and
-  shown side by side (2×2 for 3–4 players), each with a legend ("lake 3×3 = 9",
-  total, discards) below it, so nothing covers the art. The portal's own Play
+- The yellow outline shows the 5×5 window still reachable. Each opponent's
+  most recent tile has a white outline on their small kingdom until they lay
+  their next one (the portal cannot fade a highlight on a timer).
+- End: the draft disappears; every kingdom is cropped to its used 5×5 area and
+  shown side by side (2×2 for 3–4 players), each with its full score
+  breakdown (every crowned group, "lake 3×3 = 9", then total and discards)
+  below it, so nothing covers the art; the block is centred in the board. The portal's own Play
   again button starts a new game.
 - SVG pictures use no ids (the host inlines every picture into one page).
 

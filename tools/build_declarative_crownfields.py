@@ -49,6 +49,12 @@ TEXTS = {
     'color_rose': ['Rose', 'Rosa', 'Rose', 'Rosa', 'Rosa', '玫瑰', 'गुलाबी', 'وردي'],
     'color_sky': ['Sky', 'Cielo', 'Ciel', 'Himmel', 'Céu', '天蓝', 'आसमानी', 'سماوي'],
     'seat_name': ['{color} · {name}'] * 8,
+    'realm_title': ['{name} · {score} points', '{name} · {score} puntos', '{name} · {score} points', '{name} · {score} Punkte', '{name} · {score} pontos', '{name} · {score} 分', '{name} · {score} अंक', '{name} · {score} نقطة'],
+    'realm_title_one': ['{name} · 1 point', '{name} · 1 punto', '{name} · 1 point', '{name} · 1 Punkt', '{name} · 1 ponto', '{name} · 1 分', '{name} · 1 अंक', '{name} · نقطة واحدة'],
+    'point_one': ['1 point', '1 punto', '1 point', '1 Punkt', '1 ponto', '1 分', '1 अंक', 'نقطة واحدة'],
+    'points': ['{score} points', '{score} puntos', '{score} points', '{score} Punkte', '{score} pontos', '{score} 分', '{score} अंक', '{score} نقطة'],
+    'last_tile_of': ['Last tile of {name}: tile {n}', 'Última ficha de {name}: ficha {n}', 'Dernière tuile de {name} : tuile {n}', 'Letztes Plättchen von {name}: Plättchen {n}', 'Última peça de {name}: peça {n}', '{name}最后放的板块：{n} 号', '{name} की आख़िरी टाइल: टाइल {n}', 'آخر قطعة لـ{name}: القطعة {n}'],
+    'you': ['{name} (you)', '{name} (tú)', '{name} (vous)', '{name} (du)', '{name} (você)', '{name}（你）', '{name} (आप)', '{name} (أنت)'],
     'player': ['Player {n}', 'Jugador {n}', 'Joueur {n}', 'Spieler {n}', 'Jogador {n}', '玩家{n}', 'खिलाड़ी {n}', 'اللاعب {n}'],
     'terrain_wheat': ['wheat', 'trigo', 'blé', 'Weizen', 'trigo', '麦田', 'गेहूँ', 'قمح'],
     'terrain_forest': ['forest', 'bosque', 'forêt', 'Wald', 'floresta', '森林', 'जंगल', 'غابة'],
@@ -207,6 +213,15 @@ def tile_svg(number, halves):
     return ''.join(parts)
 
 
+def mini_square_svg(terrain, crowns):
+    """A flat square with large crowns, for the small kingdoms beside yours."""
+    crown = 'M0 13l2-9l4 5l3-7l3 7l4-5l2 9z'
+    spots = {0: [], 1: [(30, 30, 2.2)], 2: [(17, 30, 1.45), (43, 30, 1.45)], 3: [(17, 20, 1.3), (43, 20, 1.3), (30, 42, 1.3)]}[crowns]
+    art = ''.join(f'<path transform="translate({x - 9 * k:.1f} {y - 7.5 * k:.1f}) scale({k})" d="{crown}" fill="#ffd23f" stroke="#3d2d00" stroke-width="{1.6 / k:.2f}" stroke-linejoin="round"/>'
+                  for x, y, k in spots)
+    return SVG.format('0 0 60 60') + f'<rect x="2" y="2" width="56" height="56" rx="6" fill="{TERRAIN_FILL[terrain]}"/>' + art + '</svg>'
+
+
 def square_svg(terrain, crowns):
     """One upright square of terrain with its crowns (crowns never turn)."""
     return SVG.format('0 0 60 60') + terrain_art(terrain, 0) + crowns_art(crowns, 0) + '</svg>'
@@ -279,20 +294,21 @@ def specification():
     for terrain, top in enumerate([1, 1, 1, 2, 2, 3]):
         for crowns in range(top + 1):
             assets[f'sq_{terrain}_{crowns}'] = asset(square_svg(terrain, crowns))
+            assets[f'mq_{terrain}_{crowns}'] = asset(mini_square_svg(terrain, crowns))
     assets.update({'grid': asset(GRID), 'endframe': asset(END_FRAME), 'lay_ok': asset(LAY_OK)})
     assets.update({'pick': asset(PICK), 'pick_on': asset(PICK_ON), 'spot': asset(SPOT),
-                   'fit_ok': asset(frame_svg('#7dff8a', 5)), 'fit_bad': asset(frame_svg('#ff5d5d', 5, ' stroke-dasharray="10 6"')),
+                   'fit_ok': asset(frame_svg('#7dff8a', 5)), 'last_mark': asset(frame_svg('#ffffff', 6)), 'fit_bad': asset(frame_svg('#ff5d5d', 5, ' stroke-dasharray="10 6"')),
                    'rot_cw': asset(arrow_svg(True)), 'rot_ccw': asset(arrow_svg(False))})
     server = (DEST / f'{KIND}.server.js').read_text()
     shared = server[server.index('// ---- shared geometry'):server.index('// ---- end shared geometry ----')]
-    return {'format': 'buildplay-ui', 'version': 1, 'viewport': {'width': 600, 'height': 790},
+    return {'format': 'buildplay-ui', 'version': 1, 'viewport': {'width': 600, 'height': 730},
             'motion': {'move_ms': 700, 'turn_pause_ms': 450},
             'assets': assets,
             # Two areas only: the header and one stage; the presentation lays
             # out the draft, realm and toolbar (or the end screen) without overlap.
             'boards': [
-                {'id': 'hud', 'kind': 'zone', 'x': 0, 'y': 0, 'width': 600, 'height': 112, 'color': '#16202e', 'line_color': '#16202e'},
-                {'id': 'stage', 'kind': 'zone', 'x': 0, 'y': 112, 'width': 600, 'height': 678, 'color': '#1b2619', 'line_color': '#1b2619'}],
+                {'id': 'hud', 'kind': 'zone', 'x': 0, 'y': 0, 'width': 600, 'height': 64, 'color': '#16202e', 'line_color': '#16202e'},
+                {'id': 'stage', 'kind': 'zone', 'x': 0, 'y': 64, 'width': 600, 'height': 666, 'color': '#1b2619', 'line_color': '#1b2619'}],
             'piece_types': {
                 'tile': {'shape': 'image', 'width': 98, 'height': 48, 'asset': 'tile_1', 'action_outline': 'rect'},
                 'square': {'shape': 'image', 'width': 48, 'height': 48, 'asset': 'keep_amber'},
