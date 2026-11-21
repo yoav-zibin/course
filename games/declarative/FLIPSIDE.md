@@ -43,6 +43,21 @@ independent implementation: 11 tiles match `gatoflaco/The-Duke-Board-Game`
 (`data/tiles/movements.json`) exactly, and the Ranger (missing there) matches
 `zjbthomas/DukeChess` (`Ranger.json`). The tests check key tiles and the bag.
 
+## Sources and originality
+
+Used only as references for rules, tile data and design ideas; no code, art or
+text was copied from any of them. The tile movements were re-entered by hand
+into this game's own format and checked against each other; all artwork, names
+and wording are original.
+
+| What | Source |
+| --- | --- |
+| Rules | The Duke rulebook, Catalyst Game Labs, 2013 (link above) |
+| Tile movements (12 base tiles) | <https://github.com/ReeseLloyd/DukeOnline> (`public/js/tiles.js`) |
+| Cross-check, 11 tiles | <https://github.com/gatoflaco/The-Duke-Board-Game> (`data/tiles/movements.json`) |
+| Cross-check, Ranger | <https://github.com/zjbthomas/DukeChess> (`Ranger.json`) |
+| Look-and-feel reference | DukeOnline (above), studied from its design notes and renderer |
+
 ## Computer player
 
 One move ahead with the opponent's best capture as the reply: it takes or

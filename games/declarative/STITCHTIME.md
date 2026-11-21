@@ -37,6 +37,21 @@ agrees as well (plus the 1×1 leather patch). Totals: 133 buttons, 107 time,
 35, 41, 47, 53, leather at 20, 26, 32, 44, 50) agrees in `PatchworkSim` and
 `patchwork-online`. The tests check these totals.
 
+## Sources and originality
+
+Used only as references for rules, patch and track data and design ideas; no
+code, art or text was copied from any of them. The patch table was re-entered
+into this game's own format and its totals checked against two implementations;
+all artwork (fabrics, buttons, quilt), names and wording are original.
+
+| What | Source |
+| --- | --- |
+| Rules | Patchwork rulebook, Lookout Games (links above) |
+| 33 patches (shape, cost, time, income) | <https://github.com/danzel/PatchworkSim> (`PieceDefinition.cs`) |
+| Cross-check of the patches | <https://github.com/mVilayvanh/Patchwork> (`patches.data`) |
+| Time track, leather patch; third check | <https://github.com/PineappleZero/patchwork-online> |
+| Look-and-feel reference | patchwork-online (above), studied from its code and README |
+
 ## Computer player
 
 It values each affordable patch by squares covered (each worth 2 at the end),
