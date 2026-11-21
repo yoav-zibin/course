@@ -1,5 +1,5 @@
 import {test, expect, type Page, type APIRequestContext} from '@playwright/test';
-import {readFileSync} from 'node:fs';
+import {readFileSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 
 const load=(kind:string)=>JSON.parse(readFileSync(path.resolve(__dirname,`../../../games/declarative/${kind}.json`),'utf8'));
@@ -64,21 +64,28 @@ async function settled(page:Page,name:string,at:number[]){
     return actual.length===at.length?Math.max(...at.map((value,index)=>Math.abs(actual[index]-value))):Infinity;
   },{timeout:10000}).toBeLessThan(1e-6);
 }
-type Frame={t:number;positions:Record<string,number[]>};
+type Frame={t:number;positions:Record<string,number[]>;nodes:Record<string,number>};
 async function watch(page:Page,names:string[],selectors:Record<string,{label:string;index?:number}>={}){
   await page.evaluate(({names,selectors})=>{
     const global=window as any;global.__animationObserver?.disconnect();global.__animationFrames=[];
+    const tracked=new Map<string,Element>(),identities=new Map<Element,number>();
     let previous='';
     const record=()=>{
-      const positions:Record<string,number[]>={};
+      const positions:Record<string,number[]>={},nodes:Record<string,number>={};
       for(const name of names){
         const {label=name,index=0}=selectors[name]||{};
-        const node=[...document.querySelectorAll('g[aria-label]')].filter(node=>node.getAttribute('aria-label')===label)[index];
-        const match=/translate\(([-\d.e]+)[, ]+([-\d.e]+)\)/.exec(node?.getAttribute('transform')||'');
-        if(match)positions[name]=[Number(match[1]),Number(match[2])];
+        // Animation layers reorder existing SVG nodes. Two captured checkers
+        // can share a label, so their current DOM indices are not identities.
+        let node=tracked.get(name);
+        if(!node){
+          node=[...document.querySelectorAll('g[aria-label]')].filter(node=>node.getAttribute('aria-label')===label)[index];
+          if(node){tracked.set(name,node);if(!identities.has(node))identities.set(node,identities.size);}
+        }
+        const match=node?.isConnected?/translate\(([-\d.e]+)[, ]+([-\d.e]+)\)/.exec(node.getAttribute('transform')||''):null;
+        if(match){positions[name]=[Number(match[1]),Number(match[2])];nodes[name]=identities.get(node)!;}
       }
       const encoded=JSON.stringify(positions);
-      if(encoded!==previous){global.__animationFrames.push({t:performance.now(),positions});previous=encoded;}
+      if(encoded!==previous){global.__animationFrames.push({t:performance.now(),positions,nodes});previous=encoded;}
     };
     record();global.__animationObserver=new MutationObserver(record);
     global.__animationObserver.observe(document.body,{subtree:true,childList:true,attributes:true,characterData:true});
@@ -233,7 +240,10 @@ test('Backgammon accepted combined moves paint checker stops and hits sequential
   await send(page,flow.after);
   await settled(page,'Player 1: Point 6',[396,515]);
   const samples=(await frames(page)).filter(frame=>backgammonPieces.every(id=>frame.positions[id]));
+  writeFileSync(info.outputPath('backgammon-sequence-samples.json'),JSON.stringify(samples));
   expect(samples.length).toBeGreaterThan(20);
+  for(const id of backgammonPieces)expect(new Set(samples.map(frame=>frame.nodes[id])).size).toBe(1);
+  expect(new Set(Object.values(samples[0].nodes)).size).toBe(backgammonPieces.length);
   const mover=samples.map(frame=>frame.positions.mover);
   for(const stop of [212,264,316])expect(mover.some(([x,y])=>Math.abs(x-stop)<3&&Math.abs(y-515)<.01)).toBe(true);
   const firstHit=samples.filter(frame=>{const [x]=frame.positions['first hit'];return x>220&&x<345;});

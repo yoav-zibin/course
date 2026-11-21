@@ -180,14 +180,28 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     // piece when neither authority nor history has changed.
     if(gesture.current&&!sent.current&&messageJSON===JSON.stringify(latest.current)&&historyJSON===lastHistoryJSON.current)return;
     lastHistoryJSON.current=historyJSON;
-    const incoming=copy(message);latest.current=incoming;
+    const incoming=copy(message);
+    const waitForMotion=async()=>{
+      while(alive.current&&motionUntil.current>Date.now())
+        await new Promise(resolve=>setTimeout(resolve,Math.min(motionUntil.current-Date.now(),10000)));
+    };
+    // History can arrive after the current authoritative board is playable.
+    // Refresh its presentation without briefly disabling controls or cancelling
+    // a held piece. A rejected submission must still use the normal re-arm path.
+    const authorityJSON=(value:StateMessage)=>JSON.stringify({...value,presentation_history:undefined});
+    if(!sent.current&&latest.current&&authorityJSON(incoming)===authorityJSON(latest.current)){
+      const atRevision=revision.current;
+      queue.current=queue.current.catch(()=>{}).then(async()=>{
+        await waitForMotion();
+        if(!alive.current||atRevision!==revision.current||sent.current)return;
+        latest.current=incoming;await apply(incoming,atRevision,true);
+      }).catch(report);
+      return;
+    }
+    latest.current=incoming;
     revision.current++;const atRevision=revision.current;
     sent.current=false;select(null);showPreview(null);gesture.current=null;setDrag(null);
     queue.current=queue.current.catch(()=>{}).then(async()=>{
-      const waitForMotion=async()=>{
-        while(alive.current&&motionUntil.current>Date.now())
-          await new Promise(resolve=>setTimeout(resolve,Math.min(motionUntil.current-Date.now(),10000)));
-      };
       await waitForMotion();
       if(!alive.current||atRevision!==revision.current)return;
       const steps=presentationSteps(lastPaint.current,presentationHistory?{...incoming,presentation_history:copy(presentationHistory)}:incoming);

@@ -74,6 +74,50 @@ test('a genuine authoritative change cancels a held touch without submitting a s
   expect(await page.evaluate(()=>(window as any).__moves)).toEqual([]);
 });
 
+test('late history enrichment keeps current controls enabled and preserves a held drag',async({page,request,isMobile})=>{
+  const pkg=spec(`const gameUI={reduce(m){const s=m.type==='ui_event'?m.state_changed:m;return {scene:{
+    pieces:[{id:'token',type:'token',board:'board',position:{cell:'0'},actions:['move'],move_targets:['destination'],aria_label:'Source token'}],
+    targets:[{id:'destination',board:'board',position:{cell:'12'},label:'Bottom destination'}],
+    labels:[{id:'history',x:220,y:20,text:'History entries '+(s.presentation_history||[]).length}]},
+    ...(m.type==='ui_event'?{make_move:m.event}:{})}}};`);
+  await mount(page,request,pkg);
+  const source=page.getByRole('button',{name:'Source token: Move',exact:true});await expect(source).toBeEnabled();
+  await page.evaluate(()=>{
+    (window as any).__historyDisabled=false;
+    new MutationObserver(()=>{
+      const source=document.querySelector('[aria-label^="Source token"]');
+      if(source?.getAttribute('aria-disabled')==='true')(window as any).__historyDisabled=true;
+    }).observe(document.body,{subtree:true,attributes:true,attributeFilter:['aria-disabled']});
+  });
+  const history=[{move_count:0,view:{},last_move_player_index:null}];
+  await page.evaluate(message=>window.postMessage(message,'*'),state({presentation_history:history}));
+  await expect(page.getByText('History entries 1',{exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>(window as any).__historyDisabled)).toBe(false);
+  const box=(await source.locator('ellipse').first().boundingBox())!;
+  const start={x:box.x+box.width/2,y:box.y+box.height/2};
+  const cdp=isMobile?await page.context().newCDPSession(page):null;
+  if(cdp){
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...start,id:1}]});
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:start.x+30,y:start.y+30,id:1}]});
+  }else{
+    await page.mouse.move(start.x,start.y);await page.mouse.down();
+    await page.mouse.move(start.x+30,start.y+30,{steps:3});
+  }
+  const held=page.getByTestId('dragged-piece');await expect(held).toHaveCount(1);
+  await page.evaluate(message=>window.postMessage(message,'*'),state({presentation_history:[...history,{move_count:0,view:{accepted:true},last_move_player_index:null}]}));
+  await expect(page.getByText('History entries 2',{exact:true})).toBeVisible();
+  await expect(held).toHaveCount(1);
+  const destination=(await page.getByRole('button',{name:'Bottom destination',exact:true}).locator('rect').boundingBox())!;
+  if(cdp){
+    const canvas=(await page.getByLabel('Game board. Use pieces and highlighted destinations.').boundingBox())!;
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:destination.x+destination.width/2,y:Math.min(canvas.y+canvas.height-1,destination.y+destination.height/2+54),id:1}]});
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  }else{
+    await page.mouse.move(destination.x+destination.width/2,destination.y+destination.height/2,{steps:8});await page.mouse.up();
+  }
+  await expect.poll(()=>page.evaluate(()=>(window as any).__moves)).toEqual([{type:'drop',id:'token',piece_id:'token',target_id:'destination'}]);
+});
+
 test('a stationary touch reveals selection controls when the frozen gesture toolbar thaws',async({page,request})=>{
   await mount(page,request);
   const source=page.getByRole('button',{name:/Source token/});await expect(source).toBeVisible();
