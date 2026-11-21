@@ -1,5 +1,5 @@
 import {test,expect,type Page,type APIRequestContext} from '@playwright/test';
-import {createUser,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createUser,uniqueName} from './helpers';
 
 const id='legacy-private-computer',gameId='legacy-private-game';
 const game={id:gameId,version:1,name:'Legacy computer game',description:'Private waiting-match fixture.',allowed_player_counts:[2],renderer_type:'declarative',all_state_public:true,
@@ -43,6 +43,7 @@ test('canonical owner explicitly starts a preserved private computer draft and c
   await context.setOffline(true);
   await page.getByRole('button',{name:'Advance',exact:true}).click();
   await expect(page.getByText('Accepted moves 2',{exact:true})).toBeVisible();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByText('Saved locally · waiting to sync',{exact:true})).toBeVisible();
 });
 

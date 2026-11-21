@@ -1,5 +1,5 @@
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
-import {createGame,createUser,E2E_ADMIN_CREDENTIALS,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createGame,createUser,E2E_ADMIN_CREDENTIALS,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Game metadata checks require a disposable loopback server.');
@@ -56,7 +56,7 @@ test('player screens hide game revisions while saved matches retain their exact 
   // A later catalog revision must not change the older match's saved package.
   expect((await updateDescription(request,gameId,'Updated catalog wording for a later release.')).version).toBe(2);
   await page.goto(`/portal#match=${match.id}`);
-  await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   expect(await page.locator('body').innerText()).not.toMatch(/\bv\s*[12]\b|\bversion\s*[12]\b/i);
   await expect.poll(()=>cachedPackageIdentity(page,gameId,1)).toEqual({id:gameId,version:1});

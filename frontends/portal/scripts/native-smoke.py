@@ -340,6 +340,7 @@ class NativeSmoke:
         # injecting view state or disturbing the durably saved match.
         self.command("shell", "am", "force-stop", self.package)
         self.launch()
+        self.tap("Match menu", scroll=False)
         count = len(self.played_cells)
         self.wait(f"{count} moves", contains=True, timeout=60, scroll=True)
         tree, canvas = self.fitted_canvas()
@@ -391,11 +392,11 @@ class NativeSmoke:
         self.wait("Single-player matches")
         self.bug_report_from_account()
         self.tap("Pass and play")
-        self.tap("Focus mode", scroll=False)
-        self.wait("Exit focus mode")
-        self.assert_bug_control("game-focus-mode")
-        self.capture("bug-04-focus-mode")
-        self.tap("Exit focus mode", scroll=False)
+        self.wait("Match menu")
+        self.assert_bug_control("game-board-only")
+        self.capture("bug-04-board-only")
+        self.tap("Match menu", scroll=False)
+        self.wait("0 moves", contains=True, scroll=True)
         self.tap_cell(1)
         self.capture("game-01-next-player-board")
 
@@ -403,6 +404,7 @@ class NativeSmoke:
         # restart without requiring a pass-and-play privacy handoff.
         self.command("shell", "am", "force-stop", self.package)
         self.launch()
+        self.tap("Match menu", scroll=False)
         self.wait("1 moves", contains=True, timeout=60, scroll=True)
         self.assert_public_board()
         self.wait("Cell 4", scroll=True)
@@ -434,7 +436,7 @@ class NativeSmoke:
         self.tap("Live board")
         self.wait("Finished", contains=True, scroll=True)
         self.capture("game-10-live-finished")
-        print("Native gameplay passed: bug control over Account and focus mode, offline screenshot/draft, SVG taps, isolated QuickJS rules, continuous public board, process restart, Back navigation, win and replay.")
+        print("Native gameplay passed: bug control over Account and the board-only match, offline screenshot/draft, SVG taps, isolated QuickJS rules, continuous public board, process restart, Back navigation, win and replay.")
 
 
 def main():

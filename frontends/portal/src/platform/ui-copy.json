@@ -2528,23 +2528,23 @@
     "hi": "रिपोर्ट भेजें",
     "ar": "إرسال البلاغ"
   },
-  "Focus mode": {
-    "es": "Modo de concentración",
-    "fr": "Mode concentration",
-    "de": "Fokusmodus",
-    "pt": "Modo de foco",
-    "zh": "专注模式",
-    "hi": "फ़ोकस मोड",
-    "ar": "وضع التركيز"
+  "Match menu": {
+    "es": "Menú de la partida",
+    "fr": "Menu de la partie",
+    "de": "Spielmenü",
+    "pt": "Menu da partida",
+    "zh": "对局菜单",
+    "hi": "मैच मेन्यू",
+    "ar": "قائمة المباراة"
   },
-  "Exit focus mode": {
-    "es": "Salir del modo de concentración",
-    "fr": "Quitter le mode concentration",
-    "de": "Fokusmodus beenden",
-    "pt": "Sair do modo de foco",
-    "zh": "退出专注模式",
-    "hi": "फ़ोकस मोड से बाहर निकलें",
-    "ar": "الخروج من وضع التركيز"
+  "Current turn": {
+    "es": "Turno actual",
+    "fr": "Tour actuel",
+    "de": "Am Zug",
+    "pt": "Vez atual",
+    "zh": "当前回合",
+    "hi": "मौजूदा बारी",
+    "ar": "الدور الحالي"
   },
   "Your screenshot, recent app logs, errors, API timings, pages, device details, and account identity will be included. Passwords and API request bodies are excluded from diagnostics.": {
     "es": "Se incluirán tu captura, los registros y errores recientes, tiempos de API, páginas, detalles del dispositivo y tu identidad. Los diagnósticos no incluyen contraseñas ni contenido de las solicitudes de API.",

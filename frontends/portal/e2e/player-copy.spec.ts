@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {createGame,createUser,E2E_ADMIN_CREDENTIALS,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createGame,createUser,E2E_ADMIN_CREDENTIALS,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Player copy checks require a disposable loopback server.');
@@ -53,7 +53,7 @@ test('legacy title tags stay hidden for cached pinned matches after the catalog 
   const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{}});expect(joined.ok(),await joined.text()).toBeTruthy();
   const started=await request.post(`/matches/${match.id}/start`,{headers,data:{}});expect(started.ok(),await started.text()).toBeTruthy();
   await loginAs(page,host);await page.goto(`/portal#match=${match.id}`);
-  await expect(page.getByTestId('game-stage')).toBeVisible();
+  await expect(page.getByTestId('game-stage')).toBeVisible();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:rawName,exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
@@ -64,7 +64,7 @@ test('legacy title tags stay hidden for cached pinned matches after the catalog 
   expect(updated.status(),await updated.text()).toBe(200);expect((await updated.json()).version).toBe(2);
   await page.route(`**/games/${gameId}/versions/1`,route=>route.abort());
   await page.reload();
-  await expect(page.getByTestId('game-stage')).toBeVisible();
+  await expect(page.getByTestId('game-stage')).toBeVisible();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:rawName,exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();

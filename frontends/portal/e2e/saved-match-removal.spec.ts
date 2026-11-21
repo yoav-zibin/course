@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import bundled from '../src/core/bundled-tictactoe.json';
-import {createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Saved-copy removal checks require a disposable loopback server.');
@@ -31,6 +31,7 @@ for(const source of ['list','board'])test(`an old unsynced copy can be removed f
     matchWrites.push(route.request().method()+' '+new URL(route.request().url()).pathname);return route.abort('blockedbyclient');
   });
   await page.goto(source==='board'?`/portal#match=${target}`:'/portal#matches');
+  if(source==='board')await ensureMatchMenuOpen(page);
   const read=()=>page.evaluate(({owner,baseURL,other})=>{
     const key=`buildplay.shared.v1.${encodeURIComponent(baseURL!)}.${owner.id}`;
     return {data:JSON.parse(localStorage.getItem(key)!),other:localStorage.getItem(`${key}.${other}`)};

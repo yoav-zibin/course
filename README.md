@@ -469,9 +469,10 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
 
 ### Bug reports
 
-The persistent bug icon at the top left captures the current screen before
-opening a screenshot preview and description field. It remains available in
-game focus mode and over dialogs. Reports include recent console logs, visible
+The persistent bug icon captures the current screen before opening a screenshot
+preview and description field. It floats at the top left outside matches and
+shares a draggable capsule with the menu in the board-only match view. It also
+remains available over dialogs. Reports include recent console logs, visible
 errors, API timings, UI events, page history and account/device context, with
 credentials removed from diagnostics. The private **Bug reports** admin tab
 shows evidence and tracks handling, escalation, resolution notes and fix commits.

@@ -1,5 +1,5 @@
 import {test,expect,type APIRequestContext} from '@playwright/test';
-import {createGame,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
 
 const headers=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
 
@@ -41,7 +41,7 @@ for(const ending of ['played','left'] as const)test(`a guest can leave a finishe
     expect(result.status).toBe('over');expect(result.players.find((player:any)=>player.user_id===guest.id).active).toBe(false);
   }
   expect((await listedMatches(request,guest)).some((item:any)=>item.id===match.id)).toBe(true);
-  await loginAs(page,guest);await page.goto(`/portal#match=${match.id}`);
+  await loginAs(page,guest);await page.goto(`/portal#match=${match.id}`);await ensureMatchMenuOpen(page);
   await expect(page.getByRole('button',{name:'Leave match',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Delete match',exact:true})).toHaveCount(0);

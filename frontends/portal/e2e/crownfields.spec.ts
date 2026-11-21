@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type Page} from '@playwright/test';
-import {createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
 
 // Crownfields (based on Kingdomino): a full practice game against the
 // computer, played only through the visible board. The first tile is turned
@@ -38,6 +38,7 @@ test('Crownfields: a full game against the computer, with tile rotation, ends wi
   await page.goto(`/portal#game=${id}`);
   await page.getByTestId('play-computer').getByRole('button',{name:'Players: 2',exact:true}).click();
   await page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   const outcome=page.getByTestId('match-outcome');
   const stage=page.getByTestId('game-stage');
   const pick=page.getByRole('button',{name:/^Choose tile \d+$/});

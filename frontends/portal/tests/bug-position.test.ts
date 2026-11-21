@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {BUG_HEIGHT,BUG_WIDTH,bugBounds,clampBugPoint,isBugDrag,normalizedBugPoint,resolveBugPoint} from '../src/ui/bugPosition';
+import {BUG_HEIGHT,BUG_WIDTH,MATCH_CONTROLS_HEIGHT,MATCH_CONTROLS_WIDTH,bugBounds,clampBugPoint,isBugDrag,normalizedBugPoint,resolveBugPoint} from '../src/ui/bugPosition';
 
 test('a floating bug control starts inside the safe top-left corner and clamps every edge',()=>{
   const bounds=bugBounds(390,797,{top:44,right:0,bottom:34,left:0});
@@ -31,4 +31,16 @@ test('minor tap movement does not become a drag and collapsed bounds do not prod
   const bounds=bugBounds(36,32,{top:44,right:20,bottom:34,left:20});
   assert.deepEqual(normalizedBugPoint({x:200,y:400},bounds),{x:0,y:0});
   assert.deepEqual(resolveBugPoint({x:1,y:1},bounds),{x:0,y:0});
+});
+
+test('the entire paired match control stays within safe edges and a resized visual viewport',()=>{
+  const size={width:MATCH_CONTROLS_WIDTH,height:MATCH_CONTROLS_HEIGHT};
+  for(const [width,height] of [[390,844],[844,390],[320,250]]){
+    const bounds=bugBounds(width,height,{top:24,right:16,bottom:21,left:16},{x:35,y:60},size);
+    const point=resolveBugPoint({x:1,y:1},bounds);
+    assert.equal(point.x+size.width,35+width-16-5);
+    assert.equal(point.y+size.height,60+height-21-2);
+    assert.ok(point.x>=35+16&&point.y>=60+24);
+    assert.deepEqual(normalizedBugPoint(point,bounds),{x:1,y:1});
+  }
 });

@@ -2,9 +2,12 @@
 
 The Portal's persistent bug icon replaces the old feedback category picker and
 its game, match, user and footer entry points. The icon floats at the top left
-without reserving a header row, and can be dragged clear of other controls.
+outside matches. When a match board is showing, it shares one floating capsule
+with the match menu at the bottom right. The menu reveals the game name, players,
+current turn, instructions, history and navigation; closing it returns to the
+board. The capsule can be dragged clear of other controls.
 Its position stays within the visible screen and follows the user across app
-screens and dialogs during the session, including game focus mode. It captures the
+screens and dialogs during the session. The bug icon captures the
 current screen before opening the reporting dialog. The dialog previews the
 attachment and accepts one description of a bug or feature request.
 Native draft editing stays inside the displayed form, without relaying every

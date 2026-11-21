@@ -15,3 +15,10 @@ export async function createGame(request:APIRequestContext,name:string){
   expect(response.ok(),await response.text()).toBeTruthy();return(await response.json()).id;
 }
 export async function loginAs(page:Page,user:any){await page.addInitScript(account=>{localStorage.setItem('game-platform.accounts.v1',JSON.stringify([account]));localStorage.setItem('game-platform.current-account.v1',account.id);},user);}
+
+export async function ensureMatchMenuOpen(page:Page){
+  const menu=page.getByTestId('match-menu-button');
+  await expect(menu).toBeVisible();
+  if(await menu.getAttribute('aria-expanded')!=='true')await menu.click();
+  await expect(menu).toHaveAttribute('aria-expanded','true');
+}

@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {createGame,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Offline match checks require a disposable loopback server.');
@@ -51,7 +51,7 @@ test('match names and playable packages download without catalog entries and sur
   offline=true;await context.setOffline(true);await page.reload();
   await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
   await expect(cardTitle).toBeVisible();
-  await page.getByRole('button',{name:'Open match',exact:true}).click();
+  await page.getByRole('button',{name:'Open match',exact:true}).click();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
@@ -62,7 +62,7 @@ test('match names and playable packages download without catalog entries and sur
     return {moves:data?.queues?.[matchId]?.map((item:any)=>item.body),packageSaved:!!data?.responses?.[`/games/${gameId}/versions/${version}`]?.server_code};
   },{userId:host.id,matchId:match.id,gameId,version:match.game_version});
   await expect.poll(queued).toEqual({moves:[{move:{cell:0},expected_move_count:0}],packageSaved:true});
-  await page.reload();
+  await page.reload();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   await expect(page.getByText(/Your move is saved and waiting for server confirmation/)).toBeVisible();
   await expect.poll(queued).toEqual({moves:[{move:{cell:0},expected_move_count:0}],packageSaved:true});

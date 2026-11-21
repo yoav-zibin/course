@@ -1,4 +1,5 @@
 import {test,expect,type Page,type Locator} from '@playwright/test';
+import {createUser,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Bug drag checks require a disposable loopback server.');
@@ -69,4 +70,42 @@ test('dragged bug control remains above native browser modals and fullscreen con
   }
   await control.focus();await page.keyboard.press('Space');
   await expect(page.getByRole('textbox',{name:'Bug or feature request',exact:true})).toBeVisible();
+});
+
+test('bug and menu drag as one control and remain usable after narrow and landscape resizing',async({page,request,isMobile})=>{
+  const owner=await createUser(request,uniqueName('Grouped control owner'));
+  await loginAs(page,owner);await page.goto('/portal#local');
+  await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  const group=page.getByTestId('match-floating-controls'),bug=page.getByTestId('bug-report-button'),menu=page.getByTestId('match-menu-button');
+  await expect(group).toBeVisible();await expect(menu).toHaveAttribute('aria-expanded','false');
+  async function assertPair(){
+    await expect(group.getByRole('button')).toHaveCount(2);
+    const whole=(await group.boundingBox())!,left=(await bug.boundingBox())!,right=(await menu.boundingBox())!;
+    expect(Math.abs(left.y-right.y)).toBeLessThan(1);
+    expect(Math.abs(left.x+left.width-right.x)).toBeLessThan(1);
+    expect(left.x).toBeGreaterThanOrEqual(whole.x);expect(right.x+right.width).toBeLessThanOrEqual(whole.x+whole.width);
+    expect(whole.x).toBeGreaterThanOrEqual(0);expect(whole.y).toBeGreaterThanOrEqual(0);
+    expect(whole.x+whole.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    expect(whole.y+whole.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+    return whole;
+  }
+  const initial=await assertPair();
+  await drag(page,bug,180,220,isMobile);
+  await expect(menu).toHaveAttribute('aria-expanded','false');
+  await expect(page.getByRole('textbox',{name:'Bug or feature request',exact:true})).toHaveCount(0);
+  const moved=await assertPair();expect(Math.abs(moved.y-initial.y)).toBeGreaterThan(30);
+  await drag(page,menu,page.viewportSize()!.width-1,page.viewportSize()!.height-1,isMobile);
+  await expect(menu).toHaveAttribute('aria-expanded','false');await assertPair();
+  for(const viewport of [{width:844,height:390},{width:320,height:480}]){
+    await page.setViewportSize(viewport);
+    await expect.poll(async()=>{const box=(await group.boundingBox())!;return box.x>=0&&box.y>=0&&box.x+box.width<=viewport.width&&box.y+box.height<=viewport.height;}).toBe(true);
+    await assertPair();
+    if(isMobile)await menu.tap();else await menu.click();
+    await expect(menu).toHaveAttribute('aria-expanded','true');await expect(page.getByTestId('portal-header')).toBeVisible();
+    if(isMobile)await menu.tap();else await menu.click();
+    await expect(menu).toHaveAttribute('aria-expanded','false');await expect(page.getByTestId('portal-header')).toHaveCount(0);
+  }
+  if(isMobile)await bug.tap();else await bug.click();
+  await expect(page.getByRole('textbox',{name:'Bug or feature request',exact:true})).toBeVisible();
+  await expect(page.getByRole('img',{name:'Screenshot captured before opening this report',exact:true})).toBeVisible();
 });

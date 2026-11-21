@@ -1,5 +1,5 @@
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
-import {createGame,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
 import {logoutAndSignIn,seedAccounts,verifiedSignInFixtures} from './auth-fixtures';
 
 const headers=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
@@ -156,9 +156,10 @@ test('the inbox updates automatically, keeps one named opponent update per match
   await notification.click();await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));
   await expect(page.getByRole('heading',{name:'Notifications',exact:true})).toHaveCount(0);
   expect((await inbox(request,bob)).items).toEqual([]);
+  await ensureMatchMenuOpen(page);
   await page.getByRole('button',{name:'Notifications',exact:true}).click();
   await expect(page.getByText('No notifications yet.',{exact:true})).toBeVisible();await expect(rows).toHaveCount(0);
-  await page.getByRole('button',{name:'Close dialog',exact:true}).click();await page.reload();
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();await page.reload();await ensureMatchMenuOpen(page);
   await page.getByRole('button',{name:'Notifications',exact:true}).click();
   await expect(page.getByText('No notifications yet.',{exact:true})).toBeVisible();
 
@@ -178,6 +179,7 @@ test('first confirmed turn handoff asks once and profile controls register and d
   const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(bob),data:{move:{cell:3},expected_move_count:1}});expect(moved.ok()).toBeTruthy();
   await page.getByRole('button',{name:'Cell 2',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Know when it’s your turn',exact:true})).toHaveCount(0);
+  await ensureMatchMenuOpen(page);
   await page.getByRole('button',{name:'Account menu',exact:true}).click();
   const toggle=page.getByRole('switch',{name:'Push notifications',exact:true});await expect(toggle).toBeChecked();
   await toggle.click();await expect(toggle).not.toBeChecked();

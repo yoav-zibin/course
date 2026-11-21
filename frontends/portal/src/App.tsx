@@ -1,7 +1,7 @@
 import {copyText} from './platform/i18n';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, AppState, BackHandler, Linking, Platform, ScrollView, StyleSheet, View, useWindowDimensions} from 'react-native';
-import {SafeAreaProvider, SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
+import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {StatusBar} from 'expo-status-bar';
 import {usePortal} from './core';
 import {Button, Card, Copy, Notice, Row, Title, colors} from './ui/components';
@@ -26,12 +26,12 @@ import {useNotificationDelivery} from './ui/useNotificationDelivery';
 import {NotificationInbox, NotificationItem, NotificationPrompt} from './ui/Notifications';
 import {PortalHeader} from './ui/PortalHeader';
 
-function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
+function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnType<typeof usePortal>;boardVisible:boolean;matchMenuOpen:boolean;onCloseMatchMenu:()=>void}) {
   const {width} = useWindowDimensions();
-  const insets = useSafeAreaInsets();
   const localOnly=useRef(readLocalUiTest()).current;
   const [screen, setScreen] = useState<Screen>('games');
-  const [account, setAccount] = useState(false), [focus,setFocus]=useState(false);
+  const [account, setAccount] = useState(false);
+  const content = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const [notice, setNotice] = useState('');
   const [inbox,setInbox] = useState(false), [notificationBanner,setNotificationBanner] = useState<InAppNotification|null>(null);
   const observedNotifications = useRef<{scope:string; ids:Set<string>; initialized:boolean}>({scope:'',ids:new Set(),initialized:false});
@@ -42,8 +42,8 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   const notificationScope = useRef(''); notificationScope.current = JSON.stringify([p.baseUrl,p.account?.id]);
   for(const saved of p.accounts)knownPasswords.current.add(saved.password);
   rememberDiagnosticSecrets(knownPasswords.current);
-  useEffect(()=>recordDiagnosticPage({screen,gameId:p.selectedGameId,matchId:p.selectedMatch?.id,focus}),[screen,p.selectedGameId,p.selectedMatch?.id,focus]);
-  useEffect(()=>{if(!p.selectedMatch)setFocus(false);},[p.selectedMatch?.id]);
+  useEffect(()=>recordDiagnosticPage({screen,gameId:p.selectedGameId,matchId:p.selectedMatch?.id,matchMenuOpen}),[screen,p.selectedGameId,p.selectedMatch?.id,matchMenuOpen]);
+  useEffect(()=>{const frame=requestAnimationFrame(()=>content.current?.scrollTo({y:0,animated:false}));return()=>cancelAnimationFrame(frame);},[matchMenuOpen]);
   const t = (key: string, fallback: string) => text(p,key,fallback);
   const run = useCallback(async (task: () => Promise<unknown>) => {try { await task(); } catch (error) {setNotice(error instanceof Error ? error.message : String(error));}}, []);
   const routeBase = Platform.OS === 'web' ? window.location.origin : process.env.EXPO_PUBLIC_API_URL || 'https://buildplay.fun';
@@ -149,12 +149,13 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
     if(Platform.OS!=='android')return;
     const listener=BackHandler.addEventListener('hardwareBackPress',()=>{
       if(account){setAccount(false);return true;}
+      if(matchMenuOpen){onCloseMatchMenu();return true;}
       if(p.selectedMatch){navigate('matches');return true;}
       if(p.selectedGameId){p.actions.clearGame();setScreen('games');return true;}
       if(screen!=='games'){navigate('games');return true;}
       return false;
     });return()=>listener.remove();
-  },[account,screen,p.selectedMatch?.id,p.selectedGameId]);
+  },[account,screen,p.selectedMatch?.id,p.selectedGameId,matchMenuOpen]);
   useEffect(()=>{
     if(!p.ready)return;
     if(localOnly){configureReporter(()=>{});return;}
@@ -173,26 +174,26 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
   useEffect(()=>{if(p.storageError)reportClientIssue('storage_error',p.storageError);},[p.storageError]);
 
   const gameVisible = p.selectedMatch !== null;
+  const showDetails = !boardVisible || matchMenuOpen;
   // New destinations start at the top; updates within a match keep its position.
   const contentKey = gameVisible ? `match:${p.selectedMatch!.id}` : screen === 'games' && p.selectedGameId ? `game:${p.selectedGameId}` : screen;
-  const toggleFocus=()=>{setFocus(value=>!value);recordDiagnosticEvent('focus_mode',{enabled:!focus});};
   return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>setAccount(true),navigate,openGame,openMatch}}>
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
-      {!focus&&<PortalHeader width={width} locale={p.locale} baseUrl={p.baseUrl} account={p.account} balance={p.profile?.token_balance??p.account?.token_balance??0} unread={p.unreadNotifications} ready={p.ready} gameVisible={gameVisible}
+      {showDetails&&<PortalHeader width={width} locale={p.locale} baseUrl={p.baseUrl} account={p.account} balance={p.profile?.token_balance??p.account?.token_balance??0} unread={p.unreadNotifications} ready={p.ready}
         gamesLabel={t('ui.portal.nav_games','Games')} matchesLabel={t('ui.portal.nav_matches','Matches')} selected={screen==='games'?'games':'matches'}
-        onGames={()=>navigate('games')} onMatches={()=>navigate('matches')} onAccount={()=>setAccount(true)} onNotifications={()=>setInbox(true)} onFocus={toggleFocus}/>}
-      <AccountDeletionBanner/>
+        onGames={()=>navigate('games')} onMatches={()=>navigate('matches')} onAccount={()=>setAccount(true)} onNotifications={()=>setInbox(true)}/>}
+      {showDetails&&<AccountDeletionBanner/>}
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
-        <ScrollView key={contentKey} style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},focus&&{paddingTop:42}]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={content} key={contentKey} style={{flex:1,minWidth:0}} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},boardVisible&&matchMenuOpen&&{paddingBottom:64}]} keyboardShouldPersistTaps="handled">
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
-          {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {copyText('pending saves')}. {p.pending ? copyText('Your progress is saved locally and will sync to the cloud when connected.') : copyText('Downloaded single-player games keep working offline; progress syncs when you reconnect.')}</Notice>}
-          {notificationBanner&&!inbox&&<View style={{gap:10}}><NotificationItem item={notificationBanner} onOpen={openNotification}/>{!gameVisible&&<Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button>}</View>}
-          {appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
+          {showDetails&&(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {copyText('pending saves')}. {p.pending ? copyText('Your progress is saved locally and will sync to the cloud when connected.') : copyText('Downloaded single-player games keep working offline; progress syncs when you reconnect.')}</Notice>}
+          {showDetails&&notificationBanner&&!inbox&&<View style={{gap:10}}><NotificationItem item={notificationBanner} onOpen={openNotification}/>{!gameVisible&&<Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button>}</View>}
+          {showDetails&&appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
           {pendingInvite&&!p.account&&invitePreview?.usable&&<Card><Title small>{copyText('You’re invited to play')}</Title><Copy muted>{copyText('Log in or continue as a guest to join this match.')}</Copy><Row><Button onPress={()=>setAccount(true)}>{copyText('Log in to join')}</Button><Button secondary onPress={()=>{clearInvite();writeRoute(`match=${encodeURIComponent(invitePreview.match.id)}`);}}>{copyText('Watch match')}</Button></Row></Card>}
           {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
-            : gameVisible ? <MatchStage />
+            : gameVisible ? <MatchStage showDetails={showDetails}/>
             : screen==='games' ? p.selectedGameId ? <GameDetail /> : <Catalog />
             : screen==='matches' ? <Matches />
             : <LocalMatches />}
@@ -200,15 +201,20 @@ function PortalApp({p}: {p:ReturnType<typeof usePortal>}) {
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />
       <NotificationInbox visible={inbox} onClose={()=>setInbox(false)} onOpen={openNotification}/>
-      <NotificationPrompt/>
-      {gameVisible&&focus&&<View style={{position:'absolute',right:8,top:insets.top+2,zIndex:100}}><Button secondary compact onPress={toggleFocus}>{copyText('Exit focus mode')}</Button></View>}
+      {showDetails&&<NotificationPrompt/>}
     </SafeAreaView>
   </Context.Provider>;
 }
 export default function App() {
   const p=usePortal();
+  const [menuMatch,setMenuMatch]=useState<string|null>(null);
+  const boardVisible=Boolean(p.selectedMatch&&p.selectedMatch.status!=='waiting_for_players');
+  const matchKey=JSON.stringify([p.baseUrl,p.account?.id,p.selectedMatch?.id]);
+  const matchMenuOpen=boardVisible&&menuMatch===matchKey;
+  useEffect(()=>{setMenuMatch(null);},[p.baseUrl,p.account?.id,p.selectedMatch?.id]);
+  const toggleMatchMenu=()=>{setMenuMatch(matchMenuOpen?null:matchKey);recordDiagnosticEvent('match_menu',{expanded:!matchMenuOpen});};
   const embedded=Platform.OS==='web'?document.getElementById('declarative-spec'):null;
-  return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p}/>}</ErrorBoundary><BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton/></SafeAreaProvider>;
+  return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p} boardVisible={boardVisible} matchMenuOpen={matchMenuOpen} onCloseMatchMenu={()=>setMenuMatch(null)}/>}</ErrorBoundary><BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton onMenuPress={boardVisible&&!embedded?toggleMatchMenu:undefined} menuExpanded={matchMenuOpen}/></SafeAreaProvider>;
 }
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},

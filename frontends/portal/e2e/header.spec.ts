@@ -18,7 +18,7 @@ test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].inclu
 
 async function singleLine(page:Page){
   const header=page.getByTestId('portal-header');
-  const controls=[page.getByTestId('header-games'),page.getByTestId('header-matches'),page.getByTestId('header-token-balance'),page.getByTestId('header-notifications'),page.getByTestId('header-focus'),page.getByTestId('header-account')];
+  const controls=[page.getByTestId('header-games'),page.getByTestId('header-matches'),page.getByTestId('header-token-balance'),page.getByTestId('header-notifications'),page.getByTestId('header-account')];
   const headerBox=(await header.boundingBox())!,boxes=[];
   expect(headerBox.height).toBeLessThanOrEqual(75);
   for(const control of controls){
@@ -46,7 +46,7 @@ for(const locale of ['en','ar'])test(`header stays on one line with long names a
   await page.route('**/header-avatar-unavailable',route=>route.fulfill({status:404,body:''}));
   await page.route('**/users/me/notifications?*',route=>route.fulfill({json:notificationPage(150)}));
   await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
-  await expect(page.getByTestId('header-focus')).toBeVisible();
+  await page.getByTestId('match-menu-button').click();
   if(locale==='ar'){
     await page.getByTestId('header-account').click();await page.getByRole('button',{name:/Language:.*العربية/}).click();
     await page.getByRole('button',{name:translated('Close dialog','ar'),exact:true}).click();
@@ -72,7 +72,7 @@ for(const locale of ['en','ar'])test(`header stays on one line with long names a
   }
 });
 
-test('header icons open inbox, account, focus and the bug form with avatar and keyboard access',async({page,request},info)=>{
+test('header icons open inbox, account and the bug form from the match menu with avatar and keyboard access',async({page,request},info)=>{
   const user=await createUser(request,'Header avatar fixture account');
   user.picture_url=avatar;
   await page.setViewportSize({width:390,height:844});
@@ -80,6 +80,7 @@ test('header icons open inbox, account, focus and the bug form with avatar and k
   await page.route(`**/users/${user.id}`,async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),token_balance:hugeBalance,picture_url:avatar}});});
   await page.route('**/users/me/notifications?*',route=>route.fulfill({json:notificationPage(1)}));
   await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  await page.getByTestId('match-menu-button').click();
   const account=page.getByRole('button',{name:'Account menu',exact:true});
   await expect(account.locator('img')).toHaveCount(1);
   await expect.poll(()=>account.locator('img').evaluate((node:HTMLImageElement)=>node.naturalWidth)).toBeGreaterThan(0);
@@ -96,11 +97,11 @@ test('header icons open inbox, account, focus and the bug form with avatar and k
   await page.getByRole('dialog',{name:'Report a bug or feature request',exact:true}).getByRole('button',{name:'Close dialog',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Your account',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
-  const focus=page.getByRole('button',{name:'Focus mode',exact:true});await focus.focus();await page.keyboard.press('Space');
+  const menu=page.getByTestId('match-menu-button');await menu.focus();await page.keyboard.press('Space');
   await expect(page.getByTestId('portal-header')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Report a bug or request a feature',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Exit focus mode',exact:true}).click();await expect(account).toBeVisible();
-  await page.getByRole('button',{name:'Games',exact:true}).click();await expect(focus).toHaveCount(0);
+  await menu.click();await expect(account).toBeVisible();
+  await page.getByRole('button',{name:'Games',exact:true}).click();await expect(menu).toHaveCount(0);
   await page.screenshot({path:info.outputPath('header-avatar-actions.png')});
 });
 

@@ -1,5 +1,5 @@
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
-import {createGame,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
 
 const headers=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
 async function profile(request:APIRequestContext,user:any){const response=await request.get(`/users/${user.id}`,{headers:headers(user)});expect(response.ok(),await response.text()).toBeTruthy();return response.json();}
@@ -70,6 +70,7 @@ test('local carousels are newest first, show opponent labels and disappear indep
   async function start(computer:boolean){await page.goto('/portal#local');await page.getByRole('button',{name:computer?'Practice with a computer':'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);return new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;}
   const oldComputer=await start(true),newComputer=await start(true),oldPass=await start(false),newPass=await start(false);
   for(const cell of [1,4,2,5,3])await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toContainText('won');await page.getByTestId('header-matches').click();
   const computers=page.getByTestId('computer-local-matches'),passes=page.getByTestId('pass-local-matches');
   await expect(computers).toBeVisible();await expect(passes).toBeVisible();
@@ -128,6 +129,7 @@ test('every multiplayer category scrolls horizontally and keeps its match state 
     await target.getByRole('button',{name:'Open match',exact:true}).click();
     await expect(page).toHaveURL(new RegExp(`#match=${targetId}$`));
     await expect(page.getByRole('button',{name:/^←\s+Matches$/})).toHaveCount(0);
+    if(group.status!=='waiting_for_players')await ensureMatchMenuOpen(page);
     await page.getByTestId('header-matches').click();await expect(carousel).toBeVisible();
     for(const before of matches){
       const after=await matchDetail(request,before.id,owner);

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type Page} from '@playwright/test';
-import {createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Twist Five checks require a disposable loopback server.');});
 
@@ -39,6 +39,7 @@ test('Twist Five: a full match against the computer, with plate rotation, ends w
   await page.goto(`/portal#game=${id}`);
   // Online matches are human-only; the computer plays in local practice.
   await page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   const outcome=page.getByTestId('match-outcome');
   const stage=page.getByTestId('game-stage');
   await expect(page.getByRole('button',{name:/^Hole [A-F][1-6]$/}).first()).toBeVisible({timeout:20000});

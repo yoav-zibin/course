@@ -10,7 +10,7 @@ const backToMatches=(page:Page)=>page.getByRole('button',{name:/^←\s+Matches$/
 const matchesNavigation=(page:Page)=>page.getByRole('button',{name:'Matches',exact:true});
 async function activate(control:Locator,touch:boolean){if(touch)await control.tap();else await control.click();}
 
-test('online matches use the shared navigation and retain their public game through focus and browser Back',async({page,request,isMobile},info)=>{
+test('online matches use the shared navigation and retain their public game through the match menu and browser Back',async({page,request,isMobile},info)=>{
   test.setTimeout(60000);
   const name=uniqueName('Online navigation game'),gameId=await createGame(request,name);
   const host=await createUser(request,'Online navigation host'),opponent=await createUser(request,'Online navigation opponent');
@@ -35,15 +35,13 @@ test('online matches use the shared navigation and retain their public game thro
     await page.setViewportSize(viewport);
     await expect(page.getByTestId('game-stage')).toBeVisible();
     await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);
-    await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name,exact:true})).toHaveCount(0);
+    await expect(matchesNavigation(page)).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
     await expect(backToMatches(page)).toHaveCount(0);
-    await expect(matchesNavigation(page)).toHaveCount(1);
-    await activate(page.getByRole('button',{name:'Focus mode',exact:true}),isMobile);
-    await expect(matchesNavigation(page)).toHaveCount(0);
-    await expect(backToMatches(page)).toHaveCount(0);
-    await activate(page.getByRole('button',{name:'Exit focus mode',exact:true}),isMobile);
+    await activate(page.getByTestId('match-menu-button'),isMobile);
+    await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
     await expect(matchesNavigation(page)).toBeVisible();
     await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);
     await page.screenshot({path:info.outputPath(`online-navigation-${viewport.width}.png`)});
@@ -88,6 +86,8 @@ test('single-player matches use the shared navigation and resume the played boar
     await page.setViewportSize(viewport);
     await expect(backToMatches(page)).toHaveCount(0);
     await expect(page.getByText(/^(?:On this device|Saved on this device)$/)).toHaveCount(0);
+    await expect(matchesNavigation(page)).toHaveCount(0);
+    await activate(page.getByTestId('match-menu-button'),isMobile);
     await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
     await expect(matchesNavigation(page)).toHaveCount(1);
     await activate(matchesNavigation(page),isMobile);
@@ -98,12 +98,14 @@ test('single-player matches use the shared navigation and resume the played boar
     await expect(page).toHaveURL(matchUrl);
     await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
+    await expect(matchesNavigation(page)).toHaveCount(0);
+    await activate(page.getByTestId('match-menu-button'),isMobile);
     await expect(page.getByText('1 moves · 2 players · Pass and play',{exact:true})).toBeVisible();
-    await activate(page.getByRole('button',{name:'Focus mode',exact:true}),isMobile);
+    await activate(page.getByTestId('match-menu-button'),isMobile);
     await expect(matchesNavigation(page)).toHaveCount(0);
     await expect(backToMatches(page)).toHaveCount(0);
     await expect(page.getByRole('button',{name:'Report a bug or request a feature',exact:true})).toBeVisible();
-    await activate(page.getByRole('button',{name:'Exit focus mode',exact:true}),isMobile);
+    await activate(page.getByTestId('match-menu-button'),isMobile);
     await expect(matchesNavigation(page)).toBeVisible();
     await page.screenshot({path:info.outputPath(`local-resumed-${viewport.width}.png`)});
     await page.goBack();

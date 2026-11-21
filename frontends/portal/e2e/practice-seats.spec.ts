@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL,page,request})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Practice checks require a disposable loopback server.');
@@ -47,6 +47,7 @@ async function reloadMatch(page:Page,id:string){
   const refreshed=page.waitForResponse(response=>response.request().method()==='GET'
     &&new URL(response.url()).pathname===`/matches/${id}`&&response.ok()&&++reads===2);
   await page.reload();await (await refreshed).finished();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('header-matches')).toHaveAttribute('aria-current','page');
 }
 
@@ -124,6 +125,7 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
   await page.goto('/portal#game=practice-seat-fixture');const pass=page.getByTestId('play-pass');await pass.getByRole('button',{name:'Players: 4',exact:true}).click();
   await pass.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);
   const id=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
+  await ensureMatchMenuOpen(page);
   await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
   for(let seat=0;seat<4;seat++){
     if(seat){
@@ -134,6 +136,7 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
     await expect(page.getByText(`Your seat ${seat+1}`,{exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Advance',exact:true}).click();
   }
+  await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');await reloadMatch(page,id);
   for(let frame=3;frame>=0;frame--){
     const previous=page.getByRole('button',{name:'← Previous',exact:true});
@@ -163,6 +166,7 @@ for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer pract
   const opened=await savedMatch(page,id);expect(opened.players).toHaveLength(count);expect(opened.players[humanSeat]).toMatchObject({kind:'human',user_id:opened.owner_user_id});
   expect(opened.move_count).toBe(humanSeat);expect(opened.state.private_for).toBe(`local-player-${humanSeat}`);
   await page.getByRole('button',{name:'Advance',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toHaveText(humanSeat===count-1?'You won':'You lost');
   expect((await savedMatch(page,id)).move_count).toBe(count);
   await reloadMatch(page,id);await expect(page.getByTestId('match-outcome')).toHaveText(humanSeat===count-1?'You won':'You lost');
@@ -203,6 +207,7 @@ for(const portable of [false,true])test(`Play again from a finished cloud comput
   });
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/rematch'))rematchRequests.push(request.url());});
   await page.goto(`/portal#match=${originalId}`);
+  await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toBeVisible();
   await expect(page.getByRole('button',{name:'Play again',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Play again',exact:true}).click();
@@ -217,9 +222,11 @@ for(const portable of [false,true])test(`Play again from a finished cloud comput
   expect(next.players.filter((player:any)=>player.kind==='human')).toHaveLength(1);
   expect(next.players[1]).toMatchObject({kind:'human',user_id:original.owner_user_id});
   expect(next.players[0].kind).toBe('computer');expect(nextId).not.toBe(originalId);
+  await ensureMatchMenuOpen(page);
   await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
   await reloadMatch(page,nextId);await expect(page.getByRole('button',{name:'Advance',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Advance',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toHaveText('You won');
   expect((await savedMatch(page,nextId)).move_count).toBe(2);
   expect(rematchRequests).toEqual([]);

@@ -21,6 +21,7 @@ export type GameRendererProps = {
   deliveryKey?: number;
   onAnimationStateChange?: (busy:boolean)=>void;
   onScene?: (scene:Scene,message:StateMessage)=>void;
+  showToolbar?: boolean;
 };
 
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -48,7 +49,7 @@ type Gesture = {
 };
 type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
 
-function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene}: GameRendererProps & {spec: GameSpec}) {
+function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
@@ -372,14 +373,14 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   }}:{};
 
   return <View style={styles.container}>
-    <View style={styles.toolbar}>
+    {showToolbar&&<View style={styles.toolbar}>
       <Text style={styles.status} accessibilityLiveRegion="polite">{message.replay?copyText("Reviewing match"):busy?copyText("Sending move…"):message.status!=='ongoing'?copyText("Game finished"):active?copyText("Your turn"):copyText("Waiting for a move")}</Text>
       {spec.viewport.camera_controls===true&&spec.viewport.camera_enabled!==false&&<View style={styles.row}>
         <Tool label={copyText("Zoom out")} text="−" disabled={camera.zoom<=.25} onPress={()=>zoomTo(camera.zoom/1.5)}/>
         <Tool label={copyText("Reset board view")} text="1:1" onPress={()=>setSafeCamera({zoom:1,x:0,y:0})}/>
         <Tool label={copyText("Zoom in")} text="+" disabled={camera.zoom>=6} onPress={()=>zoomTo(camera.zoom*1.5)}/>
       </View>}
-    </View>
+    </View>}
     {!ready&&<ActivityIndicator accessibilityLabel={copyText("Loading game board")} color="#91d7c4" style={styles.loading}/>}
     {!!error&&<Text accessibilityRole="alert" style={styles.error}>{playerText(error)}</Text>}
     <View style={styles.controls}>{display.scene.controls?.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>

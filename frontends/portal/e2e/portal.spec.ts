@@ -1,7 +1,7 @@
 import {test,expect,Page,APIRequestContext} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {createGame,createUser,loginAs,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createGame,createUser,loginAs,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
 import sharedCopy from '../src/platform/ui-copy.json';
 
 const fixture=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/tictactoe.json'),'utf8'));
@@ -23,6 +23,7 @@ test('host controls and the offline starter game retain all eight languages with
   await page.reload();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   const saves=()=>page.evaluate(()=>Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('buildplay.shared.v1.')).map(key=>[key,JSON.parse(localStorage.getItem(key)!).local])));
   const original=await saves();let current='en';
+  await ensureMatchMenuOpen(page);
   const board=await page.getByTestId('game-stage').locator('svg').first().elementHandle();
   for(const locale of ['es','fr','de','pt','zh','hi','ar','en']){
     await page.getByRole('button',{name:copy('Account menu',current),exact:true}).click();
@@ -77,7 +78,8 @@ test('short screens keep the full native board width and can scroll to its last 
 
 test('empty fitted board space permits native touch scrolling and retains real piece taps',async({page,isMobile})=>{
   test.skip(!isMobile,'Uses the mobile project’s native touch input');
-  await page.setViewportSize({width:480,height:320});await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  // The board-only layout fits at 320px; use a shorter screen that requires scrolling.
+  await page.setViewportSize({width:480,height:180});await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   const board=page.getByLabel('Game board. Use pieces and highlighted destinations.');
   await expect(page.getByRole('button',{name:'Cell 9',exact:true})).toBeAttached();await board.scrollIntoViewIfNeeded();
   const port=await board.evaluateHandle(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)if(/auto|scroll/.test(getComputedStyle(parent).overflowY))return parent;throw new Error('Missing native containing scroll view');});
@@ -136,12 +138,12 @@ test('visitors can watch existing matches after the game leaves the catalog',asy
   const withdrawal=await request.post(`/games/${created.id}/unpublish`,{headers:E2E_ADMIN_HEADERS});expect(withdrawal.ok(),await withdrawal.text()).toBeTruthy();
   expect((await request.get(`/games/${created.id}/versions/${created.version}`)).status()).toBe(404);
   const packageResponse=page.waitForResponse(response=>new URL(response.url()).pathname===`/matches/${match.id}/game`);
-  await page.goto(`/portal#match=${match.id}`);expect((await packageResponse).ok()).toBeTruthy();
+  await page.goto(`/portal#match=${match.id}`);expect((await packageResponse).ok()).toBeTruthy();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
   await expect(page.getByTestId('game-stage')).toBeVisible();
   await expect(page.getByText('Game in progress',{exact:true})).toBeVisible();
   await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);
-  await page.reload();await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+  await page.reload();await ensureMatchMenuOpen(page);await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
   await expect(page.getByTestId('game-stage')).toBeVisible();
   await expect(page.getByText('Game in progress',{exact:true})).toBeVisible();
 });
@@ -165,7 +167,7 @@ test('full localized instructions remain available between public turns, at game
   await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
   await expect(page.getByTestId('game-instructions')).not.toContainText(created.translations.ar.game_logic_rules);
   await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();
-  await expect(page.getByTestId('game-stage')).toBeVisible();
+  await expect(page.getByTestId('game-stage')).toBeVisible();await ensureMatchMenuOpen(page);
   await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
   const helpButton=page.getByRole('button',{name:'How to play',exact:true});
   const helpBounds=await helpButton.boundingBox(),boardBounds=await page.getByTestId('game-stage').boundingBox();
@@ -338,7 +340,8 @@ test('bundled public-state game is playable offline without handoffs, persists, 
   await page.goto('/portal#local');
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
-  // Account preferences stay reachable without leaving the current native game.
+  // Account preferences stay reachable through the match menu.
+  await ensureMatchMenuOpen(page);
   await page.getByRole('button',{name:'Account menu',exact:true}).click();await expect(page.getByRole('button',{name:/Language:.*English/})).toBeVisible();await page.getByRole('button',{name:'Close dialog'}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   // Install/cache the universal shell before taking the device offline.
   await page.evaluate(async()=>{if('serviceWorker'in navigator)await navigator.serviceWorker.ready;});
@@ -347,7 +350,7 @@ test('bundled public-state game is playable offline without handoffs, persists, 
   await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Play history',exact:true})).toBeEnabled();
   await expect(page.getByRole('button',{name:'← Previous',exact:true})).toBeEnabled();
-  await page.reload();await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
+  await page.reload();await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
   for(const cell of [4,2,5,3]){await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();await expect(page.getByRole('button',{name:'Cell '+cell,exact:true})).toHaveCount(0);}
   await expect(page.getByText('Finished',{exact:true}).first()).toBeVisible();
@@ -365,6 +368,7 @@ test('a genuinely finished local draw stays translated offline in detail and mat
   for(const cell of [1,2,3,5,4,6,8,7,9]){
     const target=page.getByRole('button',{name:`Cell ${cell}`,exact:true});await target.click();await expect(target).toHaveCount(0);
   }
+  await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toHaveText('Draw');
   // Spanish has never been downloaded in this fresh browser context.
   await context.setOffline(true);
@@ -422,6 +426,7 @@ test('two browser players share turns, a lost reply cannot duplicate a move, and
   await bob.getByRole('button',{name:'Join match',exact:true}).click();
   await expect(page.getByRole('button',{name:'Start match',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Start match',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
+  await ensureMatchMenuOpen(page);await ensureMatchMenuOpen(bob);
   let lost=false;
   await page.route(`**/matches/${match.id}/moves`,async route=>{if(route.request().method()==='POST'&&!lost){lost=true;await route.fetch();await route.abort('failed');}else await route.continue();});
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();

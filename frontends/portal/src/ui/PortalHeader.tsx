@@ -6,9 +6,9 @@ import {recordDiagnosticEvent} from '../core/diagnostics';
 import {copyText,playerText} from '../platform/i18n';
 import {colors} from './components';
 
-function HeaderGlyph({kind}:{kind:'bell'|'account'|'focus'}){
+function HeaderGlyph({kind}:{kind:'bell'|'account'}){
   return <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={colors.text} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    {kind==='bell'?<><Path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></>:kind==='account'?<><Circle cx={12} cy={8} r={4}/><Path d="M4 21v-2a8 8 0 0 1 16 0v2"/></>:<Path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>}
+    {kind==='bell'?<Path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>:<><Circle cx={12} cy={8} r={4}/><Path d="M4 21v-2a8 8 0 0 1 16 0v2"/></>}
   </Svg>;
 }
 
@@ -30,9 +30,9 @@ function amount(value:number,locale:string,compact=false){
   catch{return String(value);}
 }
 
-export function PortalHeader({width,locale,baseUrl,account,balance,unread,ready,gameVisible,gamesLabel,matchesLabel,selected,onGames,onMatches,onAccount,onNotifications,onFocus}:{
-  width:number;locale:string;baseUrl:string;account:Account|null;balance:number;unread:number;ready:boolean;gameVisible:boolean;gamesLabel:string;matchesLabel:string;selected:'games'|'matches';
-  onGames:()=>void;onMatches:()=>void;onAccount:()=>void;onNotifications:()=>void;onFocus:()=>void;
+export function PortalHeader({width,locale,baseUrl,account,balance,unread,ready,gamesLabel,matchesLabel,selected,onGames,onMatches,onAccount,onNotifications}:{
+  width:number;locale:string;baseUrl:string;account:Account|null;balance:number;unread:number;ready:boolean;gamesLabel:string;matchesLabel:string;selected:'games'|'matches';
+  onGames:()=>void;onMatches:()=>void;onAccount:()=>void;onNotifications:()=>void;
 }){
   const narrow=width<380,compact=width<600&&Math.abs(balance)>=1000,exactBalance=amount(balance,locale);
   // Short K/M/B/T units keep balances readable in locales whose compact
@@ -54,7 +54,6 @@ export function PortalHeader({width,locale,baseUrl,account,balance,unread,ready,
       <HeaderGlyph kind="bell"/>
       {unread>0&&<View pointerEvents="none" style={s.badge} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Text style={s.badgeText}>{unread>99?'99+':amount(unread,locale)}</Text></View>}
     </HeaderButton>}
-    {gameVisible&&<HeaderButton narrow={narrow} label={copyText('Focus mode')} testID="header-focus" onPress={onFocus}><HeaderGlyph kind="focus"/></HeaderButton>}
     <HeaderButton narrow={narrow} label={account?copyText('Account menu'):copyText('Log in')} hint={account?.display_name} disabled={!ready} testID="header-account" onPress={onAccount}><Avatar uri={avatar}/></HeaderButton>
   </View>;
 }

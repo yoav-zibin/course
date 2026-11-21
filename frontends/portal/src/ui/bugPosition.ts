@@ -1,17 +1,18 @@
 import {useSyncExternalStore} from 'react';
 
 export const BUG_WIDTH=36, BUG_HEIGHT=32;
+export const MATCH_CONTROLS_WIDTH=80, MATCH_CONTROLS_HEIGHT=40;
 export type BugPoint={x:number;y:number};
 export type BugBounds={left:number;top:number;right:number;bottom:number};
 type Insets={top:number;right:number;bottom:number;left:number};
 const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
 
 /** Keep the entire control inside the visible viewport and its safe area. */
-export function bugBounds(width:number,height:number,insets:Insets,origin:BugPoint={x:0,y:0}):BugBounds {
-  const left=origin.x+Math.min(insets.left+5,Math.max(0,width-BUG_WIDTH));
-  const top=origin.y+Math.min(insets.top+2,Math.max(0,height-BUG_HEIGHT));
-  return {left,top,right:Math.max(left,origin.x+width-insets.right-5-BUG_WIDTH),
-    bottom:Math.max(top,origin.y+height-insets.bottom-2-BUG_HEIGHT)};
+export function bugBounds(width:number,height:number,insets:Insets,origin:BugPoint={x:0,y:0},size={width:BUG_WIDTH,height:BUG_HEIGHT}):BugBounds {
+  const left=origin.x+Math.min(insets.left+5,Math.max(0,width-size.width));
+  const top=origin.y+Math.min(insets.top+2,Math.max(0,height-size.height));
+  return {left,top,right:Math.max(left,origin.x+width-insets.right-5-size.width),
+    bottom:Math.max(top,origin.y+height-insets.bottom-2-size.height)};
 }
 export function clampBugPoint(point:BugPoint,bounds:BugBounds):BugPoint {
   return {x:clamp(point.x,bounds.left,bounds.right),y:clamp(point.y,bounds.top,bounds.bottom)};

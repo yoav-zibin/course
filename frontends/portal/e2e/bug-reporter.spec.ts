@@ -143,7 +143,7 @@ test('fast draft edits retain their input and survive closing above the account 
   await expect(input).toHaveValue(draft+' Still here.');await expect(input).toBeFocused();expect(sent).toBe(0);
 });
 
-test('captures before opening, sends real screenshot with recent diagnostics, and remains above modal and focus mode',async({page,request})=>{
+test('captures before opening, sends real screenshot with recent diagnostics, and remains above modal and the board-only match',async({page,request})=>{
   await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).click();
   const bug=page.getByRole('button',{name:label,exact:true});await expect(bug).toBeVisible();
   // A shared account modal must never cover or disable the always-visible icon.
@@ -154,8 +154,8 @@ test('captures before opening, sends real screenshot with recent diagnostics, an
   await page.goto('/portal#local');await page.reload();await expect(page.getByTestId('header-account')).toHaveAccessibleName('Account menu');
   await expect(page.getByRole('button',{name:'Account menu',exact:true})).toHaveAccessibleDescription(account.display_name);
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
-  await expect(page.getByTestId('game-stage')).toBeVisible();await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Focus mode',exact:true}).click();await expect(page.getByTestId('portal-header')).toHaveCount(0);await expect(bug).toBeVisible();
+  await expect(page.getByTestId('game-stage')).toBeVisible();await expect(page.getByTestId('portal-header')).toHaveCount(0);await expect(bug).toBeVisible();
+  const menu=page.getByTestId('match-menu-button');await menu.click();await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();await menu.click();
   await page.evaluate(()=>{const pane=document.createElement('div');pane.id='scroll-screenshot-proof';pane.style.cssText='position:fixed;left:60px;top:100px;width:100px;height:80px;overflow:auto;z-index:2147483646';pane.innerHTML='<div style="height:1000px;background:black"></div><div style="height:80px;background:rgb(255,0,255)"></div>';document.body.appendChild(pane);pane.scrollTop=1000;});
   await page.evaluate(()=>console.error('Visible diagnostic marker password=do-not-copy'));
   const capture=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/bug-reports');
@@ -166,7 +166,7 @@ test('captures before opening, sends real screenshot with recent diagnostics, an
   expect(pixels.width).toBeGreaterThan(300);expect(pixels.height).toBeGreaterThan(200);expect(pixels.colors).toBeGreaterThan(10);expect(pixels.sample[0]).toBeGreaterThan(235);expect(pixels.sample[1]).toBeLessThan(20);expect(pixels.sample[2]).toBeGreaterThan(235);
   await page.evaluate(()=>document.getElementById('scroll-screenshot-proof')?.remove());
   await page.getByRole('textbox',{name:'Bug or feature request'}).fill('The game board needs a clearer turn marker.');await page.getByRole('button',{name:'Send report',exact:true}).click();
-  const submitted=(await capture).postDataJSON();expect(submitted.screenshot).toBe(uri);expect(submitted.diagnostics.context.matchId).toBeTruthy();expect(submitted.diagnostics.pages.some((row:any)=>row.page.focus)).toBe(true);expect(submitted.diagnostics.apiCalls.length).toBeGreaterThan(0);
+  const submitted=(await capture).postDataJSON();expect(submitted.screenshot).toBe(uri);expect(submitted.diagnostics.context.matchId).toBeTruthy();expect(submitted.diagnostics.pages.some((row:any)=>row.page.matchMenuOpen)).toBe(true);expect(submitted.diagnostics.apiCalls.length).toBeGreaterThan(0);
   expect(submitted.diagnostics.context.webAssets.some((asset:string)=>asset.startsWith('/static/app/_expo/static/js/web/index-'))).toBe(true);
   expect(JSON.stringify(submitted.diagnostics)).toContain('Visible diagnostic marker');expect(JSON.stringify(submitted.diagnostics)).not.toContain('do-not-copy');
   await expect(page.getByText('Thanks! Your report was sent.')).toBeVisible();
