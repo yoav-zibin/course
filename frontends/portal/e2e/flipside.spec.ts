@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type Page} from '@playwright/test';
-import {createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
 
 // Flipside Lords (based on The Duke): a full game against the computer,
 // played only through the visible board: setup, moves, captures, drawing
@@ -31,6 +31,7 @@ test('Flipside Lords: a full game against the computer, with a tile flip, ends w
   await loginAs(page,{...await createUser(request,'Ana'),linked:[],picture_url:''});
   await page.goto(`/portal#game=${id}`);
   await page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   const outcome=page.getByTestId('match-outcome');
   const stage=page.getByTestId('game-stage');
 

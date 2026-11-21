@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type Page} from '@playwright/test';
-import {createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
 
 // Stitch & Time (based on Patchwork): a full game against the computer, played
 // only through the visible board: buying patches (turned with the host's
@@ -31,6 +31,7 @@ test('Stitch & Time: a full game against the computer, with patch rotation, ends
   await loginAs(page,{...await createUser(request,'Ana'),linked:[],picture_url:''});
   await page.goto(`/portal#game=${id}`);
   await page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   const outcome=page.getByTestId('match-outcome');
   const stage=page.getByTestId('game-stage');
   const cards=page.getByRole('button',{name:/^Choose this patch: /});
