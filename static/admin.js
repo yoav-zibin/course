@@ -7,7 +7,7 @@
 
 const $ = (id) => document.getElementById(id);
 
-const TABS = ["console", "browse", "stats", "invites", "bug-reports", "feedback", "docs"];
+const TABS = ["console", "browse", "stats", "students", "invites", "bug-reports", "feedback", "docs"];
 const loaded = new Set();
 
 function showTab(name) {
@@ -32,6 +32,7 @@ function showTab(name) {
   const note = wrap.querySelector(".empty-note");
   if (note) note.remove();
   location.hash = name;
+  $(`tab-${name}`).scrollIntoView({block: "nearest", inline: "nearest"});
 }
 
 function main() {

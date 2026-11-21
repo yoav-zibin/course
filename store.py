@@ -117,6 +117,10 @@ class Store(Protocol):
         """Matches that [user_id] owns or holds a seat in, oldest first."""
         ...
 
+    def iter_student_match_summaries(self, user_ids):
+        """Private analytics metadata, without game state, saves or move history."""
+        ...
+
     def list_matches_for_game(self, game_id: str) -> list[Match]:
         """Matches played with [game_id], oldest first."""
         ...
@@ -629,6 +633,15 @@ class InMemoryStore:
                 key=self._match_order.__getitem__,
             )
         ]
+
+    def iter_student_match_summaries(self, user_ids):
+        user_ids = set(user_ids)
+        for match in tuple(self._matches.values()):
+            participants = ({match.owner_user_id, *match.human_user_ids}
+                            if match.effective_match_kind == "multiplayer" else {match.owner_user_id})
+            if participants & user_ids:
+                yield {"id": match.id, "status": match.status,
+                       "match_kind": match.effective_match_kind, "participants": participants}
 
     def list_matches_for_game(self, game_id: str) -> list[Match]:
         return [

@@ -2316,6 +2316,8 @@ def create_app(
     app.include_router(push_router)
     app.middleware("http")(_choose_locale)
     if debug_tools:
+        from game_platform.student_dashboard import make_router as make_student_dashboard_router
+        app.include_router(make_student_dashboard_router(_get_platform, _check_master_password))
         app.include_router(debug_router)
         # Build environments may symlink the packaged files.
         static_files = StaticFiles(directory=_STATIC_DIR, follow_symlink=True)

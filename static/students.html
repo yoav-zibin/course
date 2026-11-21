@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="ui.students.page_title">BuildPlay · Students leaderboard</title>
+  <link rel="stylesheet" href="/static/common.css?v=22">
+  <link rel="stylesheet" href="/static/students.css?v=1">
+  <script>if(new URLSearchParams(location.search).has('frame'))document.documentElement.classList.add('framed');</script>
+</head>
+<body>
+  <header class="topbar"><h1 data-i18n="ui.students.page_title">BuildPlay · Students leaderboard</h1></header>
+  <main id="student-dashboard" aria-busy="true">
+    <div class="heading">
+      <div>
+        <h2 data-i18n="ui.admin.tab_students">Students leaderboard</h2>
+        <p class="muted" data-i18n="ui.students.intro">Course participation, referrals and bug reports across every matched account.</p>
+      </div>
+      <a href="/bug-reports?status=all" target="_blank" rel="noopener" data-i18n="ui.students.all_reports">Browse all bug reports</a>
+    </div>
+    <div id="overview" class="overview" hidden></div>
+    <div class="toolbar">
+      <label class="search-label"><span data-i18n="ui.students.search">Find a person or account</span><input id="student-search" type="search" autocomplete="off" data-i18n-placeholder="ui.students.search_placeholder" placeholder="Name, email or user ID"></label>
+      <label><span data-i18n="ui.students.sort">Sort by</span><select id="student-sort"></select></label>
+      <label><span data-i18n="ui.students.order">Order</span><select id="student-order"><option value="desc" data-i18n="ui.students.desc">Highest first</option><option value="asc" data-i18n="ui.students.asc">Lowest first</option></select></label>
+      <button id="refresh" type="button" data-i18n="ui.action.refresh">Refresh</button>
+    </div>
+    <p id="freshness" class="muted" role="status" aria-live="polite" data-i18n="ui.state.loading">Loading…</p>
+    <p id="error" role="alert" hidden></p>
+    <ul id="dashboard-notes" class="dashboard-notes" hidden></ul>
+    <p class="muted" data-i18n="ui.students.open_hint">Select a name to see emails, account IDs, matching reasons and report examples.</p>
+    <div id="leaderboard"></div>
+    <details id="methodology" class="methodology">
+      <summary data-i18n="ui.students.methodology">How these metrics are counted</summary>
+      <p data-i18n="ui.students.matching_note">Accounts match a roster email or a whole first or last name in the display name. Name matches are heuristic; review the matching reasons in each person's details.</p>
+      <p data-i18n="ui.students.matches_note">Match totals count started cloud matches, once per person, across all their accounts. Waiting lobbies are shown separately. Device saves appear after they sync.</p>
+      <p data-i18n="ui.students.referrals_note">All invited players includes direct invites and every later generation, deduplicated by canonical account. Recruited matches count each started match involving those players once, even if several of them played together.</p>
+      <p data-i18n="ui.students.reports_note">Average score uses assessed reports only, on a 0–10 scale. A score of zero is included; an unassessed report is excluded. People may share a name match, so their rows must not be added together.</p>
+      <p id="roster-source" class="muted"></p>
+    </details>
+  </main>
+  <script src="/static/common.js?v=39"></script>
+  <script src="/static/i18n.js?v=9"></script>
+  <script src="/static/students.js?v=1"></script>
+</body>
+</html>

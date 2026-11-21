@@ -1095,6 +1095,37 @@ class QueryStore:
     def list_matches_involving(self, user_id):
         return self._list_all("matches", [("participants", "array_contains", user_id)])
 
+    def iter_student_match_summaries(self, user_ids):
+        """Bounded analytics reads; never hydrate compressed saves or moves.
+
+        Query only the course members and their referrals. Name-based account
+        discovery needs every user, but unrelated matches need no reads here.
+        A match can appear in several batches; the consumer deduplicates by ID.
+        """
+        user_ids = sorted(user_ids)
+        for offset in range(0, len(user_ids), 30):
+            filters = [("participants", "array_contains_any", user_ids[offset:offset + 30])]
+            after = None
+            while True:
+                docs = self._query("matches", filters, limit=100, after=after)
+                for doc in docs:
+                    data = doc.to_dict()
+                    if not data or data.get("tombstone"):
+                        continue
+                    raw = json.loads(data["json"])
+                    seats = raw.get("seats", [])
+                    kind = ("computer" if any(seat["kind"] == "computer" for seat in seats)
+                            else raw.get("match_kind") or "multiplayer")
+                    participants = {raw["owner_user_id"]}
+                    if kind == "multiplayer":
+                        participants.update(seat["user_id"] for seat in seats
+                                            if seat["kind"] == "human" and seat.get("user_id"))
+                    yield {"id": raw["id"], "status": raw["status"],
+                           "match_kind": kind, "participants": participants}
+                if len(docs) < 100:
+                    break
+                after = docs[-1].id
+
     def list_matches_for_game(self, game_id):
         """All matches played with [game_id], oldest first, paging past the
         100-record legacy cap (a popular game can have more matches than that)."""

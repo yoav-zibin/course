@@ -263,6 +263,11 @@ class SavingStore:
         with self._lock:
             return self._inner.list_matches_involving(user_id)
 
+    def iter_student_match_summaries(self, user_ids):
+        with self._lock:
+            rows = list(self._inner.iter_student_match_summaries(user_ids))
+        yield from rows
+
     def list_matches_for_game(self, game_id: str) -> list[Match]:
         with self._lock:
             return self._inner.list_matches_for_game(game_id)
