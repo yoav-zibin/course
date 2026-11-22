@@ -43,7 +43,7 @@ and does not coordinate requests handled by another VM.
    process-wide lock with narrower coordination so unrelated requests can proceed
    concurrently.
 5. Add queryable fields and indexes for actual access patterns, especially matches by
-   player, owner, status and game; user authentication and referral-code lookups;
+   player, owner, status and game; user authentication and match-invitation lookups;
    published-game browsing; and invitations. Add cursor pagination to unbounded list
    endpoints and make admin/export operations explicit batch jobs. Replace startup
    scans with targeted work queues for tasks such as resuming computer moves.

@@ -27,8 +27,8 @@ def test_invite_views_joins_and_sign_ups_are_counted(api: Api) -> None:
         "invites_created": 1,
         "views": 1,
         "acceptances": 2,
-        "sign_ups": 1,
-        "referred_users": [api.ok("GET", f"/users/{newcomer['id']}")],
+        "sign_ups": 2,
+        "referred_users": [api.ok("GET", f"/users/{bob}"), api.ok("GET", f"/users/{newcomer['id']}")],
     }
     (invite,) = referrals["invites"]
     assert invite["views"] == 1
@@ -52,23 +52,14 @@ def test_merging_accounts_keeps_referrals(api: Api) -> None:
     assert [user["id"] for user in referrals["referred_users"]] == [friend["id"]]
 
 
-def test_match_invites_and_personal_invite_links_share_one_inviter(api: Api) -> None:
-    alice, bob = api.new_user("alice"), api.new_user("bob")
+def test_match_and_invite_urls_credit_the_same_owner(api: Api) -> None:
+    alice = api.new_user("alice")
     match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
     token = _invite(api, match_id, as_user=alice)
-
-    via_invite = api.ok(
-        "POST", "/users", json={"display_name": "carol", "invite_token": token}
-    )
-    # A personal link (invited_by_user_id) names the inviter explicitly and wins.
-    both = api.ok(
-        "POST",
-        "/users",
-        json={"display_name": "dave", "invite_token": token, "invited_by_user_id": bob},
-    )
-
+    via_invite = api.ok("POST", "/users", json={"display_name": "carol", "invite_token": token})
+    via_match = api.ok("POST", "/users", json={"display_name": "dave", "invite_match_id": match_id})
     tree = {row["id"]: row for row in api.ok("GET", "/admin/invites")["users"]}
     assert tree[via_invite["id"]]["invited_by_user_id"] == alice
-    assert tree[both["id"]]["invited_by_user_id"] == bob
-    referred = api.ok("GET", "/users/me/referrals", as_user=alice)["referred_users"]
-    assert [user["id"] for user in referred] == [via_invite["id"]]
+    assert tree[via_match["id"]]["invited_by_user_id"] == alice
+    assert {user["id"] for user in api.ok("GET", "/users/me/referrals", as_user=alice)["referred_users"]} == {
+        via_invite["id"], via_match["id"]}

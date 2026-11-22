@@ -1,3 +1,4 @@
+import {requestId} from './random-id';
 import * as storage from '../platform/storage';
 import type { AccountData, LocalMatch } from './types';
 import { redactedArchive } from './redaction';
@@ -16,7 +17,7 @@ export function equal(a: any, b: any): boolean {
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
   const keys = Object.keys(a); return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) && equal(a[key], b[key]));
 }
-export function requestId(): string { return globalThis.crypto?.randomUUID?.() ?? `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`; }
+export {requestId} from './random-id';
 const RECOVERABLE_BUDGET = 1_000_000, MATCH_BUDGET = 20_000_000, QUOTA_RETRIES = 8;
 const LOCAL_BUDGET = 2_000_000, ARCHIVE_BUDGET = 1_000_000, PRUNE_ON_LOAD_BYTES = 3_000_000;
 function entryBytes(key: string, value: unknown): number { return utf8Size(JSON.stringify(value)) + utf8Size(JSON.stringify(key)) + 2; }

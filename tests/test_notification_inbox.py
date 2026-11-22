@@ -91,9 +91,8 @@ def test_targeted_invites_are_rejected_without_notifications_or_code_changes():
     _subscribe_ok(api, bob, "https://push.example.com/bob")
     game = api.new_game(owner=alice)
     match = api.new_match(owner=alice, game_id=game)
-    code = api.ok("GET", f"/users/{bob}", as_user=bob)["referral_code"]
     original = api.ok("GET", f"/matches/{match}")["invite_code"]
-    for recipient in (code, bob, alice, "nobody"):
+    for recipient in (bob, alice, "nobody"):
         response = api.request("POST", f"/matches/{match}/invites", as_user=alice,
                                json={"recipient_user_id": recipient})
         assert response.status_code == 400

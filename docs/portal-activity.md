@@ -105,8 +105,9 @@ its control/health pages, random arrivals, friend invites, quick matches and
 speed matches. Keep using that tool for ongoing autoscaling/monitoring demos.
 The deterministic runner here is a backend test fixture: it advances a private
 synthetic calendar, chooses known game inputs and records exact counts. It does
-not replace her tool or its interactive controls. The private harness also
-mounts the ordinary `/r/{code}` redirect so her referral links work against it.
+not replace her tool or its interactive controls. The generator now uses shared
+multiplayer match links for invitation arrivals. Personal referral redirects from
+the original workload are retired.
 
 Completed cloud dashboard snapshots are in `portal-cloud-dashboards.json`;
 `portal-cloud-history-validation.json` reconciles every stored match history

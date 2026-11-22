@@ -1,7 +1,7 @@
 // Invites page: who brought whom to the platform, from /admin/invites.
 //
-// Every user knows who invited them (the "ref" of the invite link they signed up
-// through). "Total" counts everyone a user brought in transitively: the people they
+// A shared multiplayer match or invitation attributes its owner when the viewer
+// has no inviter yet. "Total" counts everyone a user brought in transitively: the people they
 // invited, the people those people invited, and so on.
 
 "use strict";
@@ -20,11 +20,6 @@ const state = { users: [], byId: new Map(), children: new Map(), selectedId: nul
 
 function card(value, label) {
   return el("div", { class: "card" }, el("div", { class: "value", textContent: value }), el("div", { class: "label", textContent: label }));
-}
-
-/** A user's referral code as a small "#48213" tag, or null when they have none. */
-function codeTag(user) {
-  return user.referral_code ? el("span", { class: "code", textContent: `#${user.referral_code}` }) : null;
 }
 
 /** A user's name as a button that opens their details. */
@@ -53,7 +48,7 @@ function userTable(users, { rank = false } = {}) {
           "tr",
           { class: `pick${user.id === state.selectedId ? " selected" : ""}`, onclick: () => select(user.id) },
           rank ? el("td", { class: "num", textContent: i + 1 }) : null,
-          el("td", { title: user.id }, user.display_name, codeTag(user)),
+          el("td", { title: user.id }, user.display_name),
           el("td", { class: "num", textContent: user.total_invites }),
           el("td", { class: "num", textContent: user.direct_invites }),
           el("td", { class: "muted", textContent: user.invited_by_name || "—" }),
@@ -69,7 +64,7 @@ function renderSummary(summary) {
       "div",
       { class: "cards" },
       card(summary.users, I18n.t("ui.invites.card_users", {}, "users")),
-      card(summary.invited_users, I18n.t("ui.invites.card_invited", {}, "came through an invite link")),
+      card(summary.invited_users, I18n.t("ui.invites.card_invited", {}, "have a recorded inviter")),
       card(summary.inviters, I18n.t("ui.invites.card_inviters", {}, "invited someone")),
       card(summary.biggest_tree, I18n.t("ui.invites.card_biggest_tree", {}, "people in the biggest invite tree")),
       card(summary.longest_chain, I18n.t("ui.invites.card_longest_chain", {}, "invites in the longest chain")),
@@ -86,7 +81,6 @@ function renderLeaderboard() {
 
 function renderSearch() {
   const query = $("search").value.trim().toLowerCase();
-  const code = query.replace(/^#/, "");
   if (!query) {
     $("results").replaceChildren();
     return;
@@ -94,8 +88,7 @@ function renderSearch() {
   const matches = state.users.filter(
     (user) =>
       user.display_name.toLowerCase().includes(query) ||
-      user.id.toLowerCase().includes(query) ||
-      (code !== "" && (user.referral_code ?? "").includes(code)),
+      user.id.toLowerCase().includes(query),
   );
   show(
     "results",
@@ -115,7 +108,7 @@ function subtree(userId, { open = false } = {}) {
     "ul",
     { class: "tree" },
     kids.map((child) => {
-      const label = [userLink(child), codeTag(child), el("span", { class: "count", textContent: child.total_invites ? I18n.t("ui.invites.brought", { count: child.total_invites }, "brought {count}") : "" })];
+      const label = [userLink(child), el("span", { class: "count", textContent: child.total_invites ? I18n.t("ui.invites.brought", { count: child.total_invites }, "brought {count}") : "" })];
       return el(
         "li",
         {},
@@ -147,14 +140,14 @@ function renderDetail() {
   const chain = chainTo(user);
   show(
     "detail",
-    el("h3", { style: "margin-top: var(--space-md)" }, user.display_name, codeTag(user)),
+    el("h3", { style: "margin-top: var(--space-md)" }, user.display_name),
     el("div", { class: "muted", textContent: I18n.t("ui.invites.joined", { id: user.id, time: formatTime(user.created_at) }, "{id} · joined {time}") }),
     el(
       "div",
       { class: "chain", "aria-label": I18n.t("ui.invites.chain_aria", {}, "Invite chain") },
       chain.length > 1
         ? chain.flatMap((link, i) => [i ? el("span", { class: "muted", textContent: "→" }) : null, link.id === user.id ? el("strong", { textContent: link.display_name }) : userLink(link)])
-        : el("span", { class: "muted", textContent: I18n.t("ui.invites.no_invite_link", {}, "Came without an invite link.") }),
+        : el("span", { class: "muted", textContent: I18n.t("ui.invites.no_invite_link", {}, "No recorded inviter.") }),
     ),
     el("p", {
       textContent: user.total_invites
@@ -179,12 +172,12 @@ function renderTree() {
             el(
               "li",
               {},
-              el("details", {}, el("summary", {}, userLink(root), codeTag(root), el("span", { class: "count", textContent: I18n.t("ui.invites.brought", { count: root.total_invites }, "brought {count}") })), subtree(root.id)),
+              el("details", {}, el("summary", {}, userLink(root), el("span", { class: "count", textContent: I18n.t("ui.invites.brought", { count: root.total_invites }, "brought {count}") })), subtree(root.id)),
             ),
           ),
         )
       : el("div", { class: "muted", textContent: I18n.t("ui.invites.no_invites", {}, "No invites yet.") }),
-    alone ? el("p", { class: "muted", textContent: I18n.plural("ui.invites.alone", alone, {}, { one: "1 other user came without an invite link and hasn't invited anyone.", many: "{count} other users came without an invite link and haven't invited anyone." }) }) : null,
+    alone ? el("p", { class: "muted", textContent: I18n.plural("ui.invites.alone", alone, {}, { one: "1 other user has no recorded inviter and has not invited anyone.", many: "{count} other users have no recorded inviter and have not invited anyone." }) }) : null,
   );
 }
 

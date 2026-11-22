@@ -437,13 +437,21 @@ def test_invite_pages_are_scoped_to_creator(store):
     )
 
 
-def test_referrals_and_linked_identity_survive_restart(store):
+def test_match_recruitment_and_linked_identity_survive_restart(store):
+    from game_platform.models import LinkedAccount
+
     api = api_for(store)
     alice = api.new_user("alice")
     user = store.get_user(alice)
-    assert len(user.referral_code) == 16
+    store.put_user(replace(user, linked_accounts=(LinkedAccount(kind="google", identifier="alice-subject", linked_at=user.created_at),)))
+    match = api.new_match(owner=alice, game_id=api.new_game(owner=alice))
+    invited = api.ok("POST", "/users", json={"display_name": "Bob", "invite_match_id": match})
     second = QueryStore(store.client, namespace=store.namespace)
-    assert second.user_for_referral(user.referral_code) == alice
+    assert second.get_user(invited["id"]).invited_by_user_id == alice
+    assert second.get_user(invited["id"]).invited_via_match_id == match
+    assert second.find_linked_account("google", "alice-subject").id == alice
+    assert "referral_code" not in json.loads(second.raw_get(second.ref("users", alice))["json"])
+    assert list(second.collection("referrals").limit(1).stream()) == []
 
 
 def test_list_matches_for_game_returns_only_that_games_matches(store):
@@ -1144,6 +1152,7 @@ def test_merge_job_resumes_and_rewrites_everything(store):
             source,
             token_balance=17,
             invited_by_user_id=carol,
+            invited_via_match_id="carol-recruitment-match",
             linked_accounts=(
                 LinkedAccount(
                     kind="email",
@@ -1153,6 +1162,9 @@ def test_merge_job_resumes_and_rewrites_everything(store):
             ),
         )
     )
+    from game_platform.recruitment_history import record_attribution
+    record_attribution(store, alice, carol, via_match_id="carol-recruitment-match",
+                       at=dt.datetime.now(dt.timezone.utc))
     calls = 0
     result = None
     for _ in range(1000):
@@ -1299,7 +1311,6 @@ def test_delete_job_resumes_and_removes_the_user(store):
         owner=erin, game_id=other_game, joiners=[carol], start=True
     )
     store.put_user(replace(store.get_user(dave), invited_by_user_id=carol))
-    code = store.get_user(carol).referral_code
     platform = ScalablePlatform(store=store, computer_move_delay_seconds=0)
     result = _run_until_complete(
         delete_user,
@@ -1317,9 +1328,7 @@ def test_delete_job_resumes_and_removes_the_user(store):
     # Carol leaving Erin's live match ends it (the game forbids mid-match
     # leaves), exactly as the snapshot admin deletion does via leave_match.
     assert store.get_match(shared_match).status == "over"
-    assert store.get_user(dave).invited_by_user_id is None
-    if code:
-        assert store.user_for_referral(code) is None
+    assert store.get_user(dave).invited_by_user_id == carol
     assert delete_user(store, run_id="delete-1", max_records=1)["processed"] == 0
     assert not any(x.user_id == carol for x in store.list_experiment_assignments())
     assert not any(x.user_id == carol for x in store.list_experiment_events())
@@ -1559,9 +1568,8 @@ def test_referral_report_is_resumable_and_pages_children_and_search(store):
     assert first["items"][0]["id"] == root and first["items"][0]["total_invites"] == 2
     assert users(store, parent_id=root)["items"][0]["id"] == child
     assert users(store, q="grand")["items"][0]["id"] == grandchild
-    assert (
-        users(store, q=store.get_user(child).referral_code)["items"][0]["id"] == child
-    )
+    assert users(store, q=child)["items"][0]["id"] == child
+    assert "referral_code" not in first["items"][0]
     with pytest.raises(ValueError):
         users(store, parent_id=child, cursor=first["next_cursor"])
     assert api.ok("GET", "/v2/admin/referrals/summary")["summary"]["users"] == 3

@@ -88,9 +88,6 @@ def seed(store, *, run_id, users, games, matches, moves_per_match, max_writes):
                         id=uid,
                         display_name=f"Synthetic {i}",
                         password=hashlib.sha256(uid.encode()).hexdigest(),
-                        referral_code=hashlib.sha256(
-                            (uid + "ref").encode()
-                        ).hexdigest()[:16],
                         created_at=base,
                         updated_at=base,
                     )

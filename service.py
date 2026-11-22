@@ -6,6 +6,7 @@ matters, and raises a subclass of [PlatformError] when a request can't be honore
 
 import collections
 from game_platform.move_history import append_move, history_prefix
+from game_platform import conversion_funnel, recruitment_history
 import datetime as dt
 import hashlib
 import hmac
@@ -299,20 +300,9 @@ PILOT_CAMPAIGNS: Final = (
 )
 
 
-# Referral codes: 5-digit numbers with no leading zero, so always 5 characters.
-REFERRAL_CODE_MIN: Final = 10_000
-REFERRAL_CODE_MAX: Final = 99_999
-# What an invite's "ref" looks like when it's a code rather than a user id.
-_REFERRAL_CODE_RE: Final = re.compile(r"\d{5}")
-
-
 # Sentinel for "argument not passed" in update_game: server_code/game_schemas
 # may be explicitly set to None (removing them), so None cannot mean "unchanged".
 UNSET: Final = object()
-
-
-def _new_referral_code() -> str:
-    return str(REFERRAL_CODE_MIN + secrets.randbelow(REFERRAL_CODE_MAX - REFERRAL_CODE_MIN + 1))
 
 
 # Login codes sent by text/email live this long, survive this many wrong guesses, and
@@ -461,7 +451,7 @@ class GamePlatform:
         new_password: Callable[[], str] = _new_password,
         new_verification_code: Callable[[], str] = _new_verification_code,
         new_invite_token: Callable[[], str] = _new_invite_token,
-        new_referral_code: Callable[[], str] = _new_referral_code,
+        new_invite_allocation_id: Callable[[], str] = _new_id,
         new_seed: Callable[[], int] = _new_seed,
         push_notifier: PushNotifier | None = None,
         max_push_subscriptions_per_user: int = 10,
@@ -523,7 +513,7 @@ class GamePlatform:
         self._new_password = new_password
         self._new_verification_code = new_verification_code
         self._new_invite_token = new_invite_token
-        self._new_referral_code = new_referral_code
+        self._new_invite_allocation_id = new_invite_allocation_id
         self._new_seed = new_seed
         self._push_notifier = (
             push_notifier if push_notifier is not None else LogPushNotifier()
@@ -555,10 +545,7 @@ class GamePlatform:
         # User id -> (when it was read, the language they saved), so the language of a
         # response doesn't cost a database read on every request.
         self._saved_locales: dict[str, tuple[float, str]] = {}
-        # Referral code -> the user id it was given to (possibly merged away since,
-        # which resolves to the survivor like any old id).
-        self._user_ids_by_code: dict[str, str] = {}
-        self._give_missing_referral_codes()
+        self._normalize_user_avatars()
 
     def _ensure_campaign_experiment(
         self, *, created_at: dt.datetime | None = None
@@ -1017,48 +1004,38 @@ class GamePlatform:
         picture_url: str = "",
         linked_accounts: tuple[LinkedAccount, ...] = (),
         locale: str = "",
-        invited_by_user_id: str | None = None,
+        invite_match_id: str | None = None,
         invite_token: str | None = None,
         campaign_code: str | None = None,
+        visitor_id: str | None = None,
     ) -> User:
-        """[invited_by_user_id] is the user whose invite link brought this one here:
-        their 5-digit referral code, or their user id (older links). Each new user
-        gets a referral code of their own. An unknown code or id is ignored rather than rejected, so a stale or mistyped invite
-        link never stops anyone from signing up; a merged-away id is recorded as the
-        account it was merged into. [invite_token] is the match invite the user
-        arrived through, if any: when [invited_by_user_id] names nobody, the invite's
-        creator is recorded as the inviter. Unknown or unusable tokens are ignored
-        for the same reason."""
+        """Create an account, optionally recruited by a shared match URL.
+
+        Unknown/dead links never block signup. Personal inviter IDs and referral
+        codes are not accepted: the server resolves the match's owner itself.
+        """
         with self._lock:
-            inviter_id = self._referrer_id(invited_by_user_id)
-            via_token = None
-            invite = self._store.get_invite(invite_token) if invite_token else None
-            if invite is not None:
-                try:
-                    self._check_invite_usable(invite)
-                    via_token = invite.token
-                    inviter_id = inviter_id or self._existing_user_id(
-                        invite.created_by_user_id
-                    )
-                except PlatformError:
-                    pass
             now = self._clock()
             user_id = self._new_id()
             user = User(
                 id=user_id,
-                referral_code=self._take_referral_code(user_id),
                 display_name=display_name,
                 email=email,
                 picture_url=user_avatar(picture_url.strip()),
                 locale=locale,
                 password=self._new_password(),
                 linked_accounts=linked_accounts,
-                invited_by_user_id=inviter_id,
-                invited_via_invite_token=via_token,
                 created_at=now,
                 updated_at=now,
             )
             self._store.put_user(user)
+            recruitment_history.record_node(self._store, user.id, created_at=user.created_at)
+            user = self._attribute_recruitment(
+                user, invite_token=invite_token, invite_match_id=invite_match_id, signup=True, visitor_id=visitor_id)
+            conversion_funnel.record_event(self._store, "account_created", at=now,
+                identity="signup:" + user.id, user_id=user.id, visitor_id=visitor_id,
+                match_id=user.invited_via_match_id, owner_user_id=user.invited_by_user_id,
+                invite_allocation_id=self._allocation_for_token(invite_token))
             observability.current().note_signup(user.id)
             self.record_new_user(
                 user_id=user.id,
@@ -1233,50 +1210,66 @@ class GamePlatform:
                or user.deletion_started_at is not None for user in (source, into)):
             raise ConflictError("cancel the account deletion request before merging accounts")
 
-    def _give_missing_referral_codes(self) -> None:
-        """At startup: indexes the codes accounts have, and gives one to every account
-        from before referral codes."""
+    def _normalize_user_avatars(self) -> None:
         if getattr(self._store, "scalable", False):
-            return  # Migration assigns old codes; new accounts reserve codes atomically.
+            return
         with self._lock:
-            users = self._store.list_users()
-            for user in users:
-                if user.referral_code:
-                    self._user_ids_by_code[user.referral_code] = user.id
-            for user in users:
-                if not user.referral_code or user.picture_url not in USER_AVATARS:
-                    self._store.put_user(replace(
-                        user,
-                        referral_code=user.referral_code or self._take_referral_code(user.id),
-                        picture_url=user_avatar(user.picture_url),
-                    ))
+            for user in self._store.list_users():
+                if user.picture_url not in USER_AVATARS:
+                    self._store.put_user(replace(user, picture_url=user_avatar(user.picture_url)))
 
-    def _take_referral_code(self, user_id: str) -> str:
-        """A random code no account has yet, now reserved for [user_id]. The caller
-        holds the lock."""
-        # TODO: free the codes of long-inactive accounts once there's a policy for it;
-        # until then a code is never reused (except a deleted account's, see
-        # admin_delete_user).
-        if getattr(self._store, "scalable", False):
-            return self._store.reserve_referral(user_id)
-        if len(self._user_ids_by_code) > REFERRAL_CODE_MAX - REFERRAL_CODE_MIN:
-            raise RuntimeError(
-                f"all {REFERRAL_CODE_MAX - REFERRAL_CODE_MIN + 1} referral codes are taken"
-            )
-        while (code := self._new_referral_code()) in self._user_ids_by_code:
-            pass  # a collision: pick another random number
-        self._user_ids_by_code[code] = user_id
-        return code
+    def _recruitment_match(self, *, invite_token: str | None = None,
+                           invite_match_id: str | None = None) -> Match | None:
+        """Resolve a shared URL without requiring an empty seat or joining it."""
+        if invite_token:
+            try:
+                invite = self._get_invite(invite_token)
+            except NotFoundError:
+                return None
+            invite_match_id = invite.match_id
+        match = self._store.get_match(invite_match_id) if invite_match_id else None
+        return match if match and match.effective_match_kind == "multiplayer" else None
 
-    def _referrer_id(self, ref: str | None) -> str | None:
-        """The surviving account an invite link's "ref" names: a 5-digit referral code
-        or (older links) a user id. None when it names nobody. The caller holds the
-        lock."""
-        if ref and getattr(self._store, "scalable", False):
-            ref = self._store.user_for_referral(ref) or ref
-        elif ref and _REFERRAL_CODE_RE.fullmatch(ref):
-            ref = self._user_ids_by_code.get(ref)
-        return self._existing_user_id(ref)
+    def _attribute_recruitment(self, user: User, *, match: Match | None = None,
+                               invite_token: str | None = None,
+                               invite_match_id: str | None = None,
+                               signup: bool = False, visitor_id: str | None = None) -> User:
+        """Persist the first match owner only; never make self-referrals or cycles.
+
+        The caller holds the operation lock (a transaction in query mode), so two
+        simultaneous opens cannot overwrite the first successful attribution.
+        Only signup stores a token: existing visitors are not new signups in the
+        per-invite acceptance statistics.
+        """
+        if user.invited_by_user_id is not None:
+            return user
+        historical = self._store.get_analytics("recruitment_nodes", user.id)
+        if historical and historical.get("inviter_user_id"):
+            return user
+        match = match or self._recruitment_match(
+            invite_token=invite_token, invite_match_id=invite_match_id)
+        if match is None or match.effective_match_kind != "multiplayer":
+            return user
+        owner_id = self._existing_user_id(match.owner_user_id)
+        if (owner_id is None or self._invited_by_descendant(inviter_id=owner_id, user_id=user.id)
+                or user.id in recruitment_history.inviter_chain(self._store, owner_id)):
+            return user
+        user = replace(user, invited_by_user_id=owner_id,
+                       invited_via_match_id=match.id,
+                       invited_via_invite_token=(invite_token or match.invite_code) if signup else None,
+                       updated_at=self._clock())
+        self._store.put_user(user)
+        recruitment_history.record_attribution(self._store, user.id, owner_id,
+            via_match_id=match.id, at=user.updated_at, created_at=user.created_at)
+        conversion_funnel.record_event(self._store, "recruited", at=user.updated_at,
+            identity="recruited:" + user.id, user_id=user.id, owner_user_id=owner_id,
+            match_id=match.id, visitor_id=visitor_id, on_signup=signup,
+            invite_allocation_id=self._allocation_for_token(invite_token))
+        return user
+
+    def _allocation_for_token(self, token):
+        invite = self._store.get_invite(token) if token else None
+        return conversion_funnel.allocation_id(invite) if invite else None
 
     def _existing_user_id(self, user_id: str | None) -> str | None:
         """[user_id] resolved to its surviving account, or None when there is no such
@@ -1377,9 +1370,10 @@ class GamePlatform:
         self, verification_id: str, *, approved: bool,
         display_name: str | None = None,
         as_user_id: str | None = None,
-        invited_by_user_id: str | None = None,
+        invite_match_id: str | None = None,
         invite_token: str | None = None,
         campaign_code: str | None = None,
+        visitor_id: str | None = None,
     ) -> tuple[User, str | None]:
         with self._lock:
             entry = self._external_phone_pending(verification_id)
@@ -1392,9 +1386,10 @@ class GamePlatform:
                 identifier=entry.identifier,
                 display_name=display_name or entry.identifier,
                 as_user_id=as_user_id,
-                invited_by_user_id=invited_by_user_id,
+                invite_match_id=invite_match_id,
                 invite_token=invite_token,
                 campaign_code=campaign_code,
+                visitor_id=visitor_id,
             )
 
     def verify_code(
@@ -1404,9 +1399,10 @@ class GamePlatform:
         code: str,
         display_name: str | None = None,
         as_user_id: str | None = None,
-        invited_by_user_id: str | None = None,
+        invite_match_id: str | None = None,
         invite_token: str | None = None,
         campaign_code: str | None = None,
+        visitor_id: str | None = None,
     ) -> tuple[User, str | None]:
         """Checks a login code, then logs the owner in (see
         [login_with_linked_account]). Returns (user, merged_from_user_id)."""
@@ -1440,9 +1436,10 @@ class GamePlatform:
                 identifier=verification.identifier,
                 display_name=name,
                 as_user_id=as_user_id,
-                invited_by_user_id=invited_by_user_id,
+                invite_match_id=invite_match_id,
                 invite_token=invite_token,
                 campaign_code=campaign_code,
+                visitor_id=visitor_id,
             )
 
     def login_with_linked_account(
@@ -1454,9 +1451,10 @@ class GamePlatform:
         email: str = "",
         picture_url: str = "",
         as_user_id: str | None = None,
-        invited_by_user_id: str | None = None,
+        invite_match_id: str | None = None,
         invite_token: str | None = None,
         campaign_code: str | None = None,
+        visitor_id: str | None = None,
     ) -> tuple[User, str | None]:
         """Logs in with a verified Google subject, phone number or email.
 
@@ -1465,7 +1463,8 @@ class GamePlatform:
         credential is linked to that account instead; if it already belongs to a
         different user, the two accounts merge, and the one with the stronger
         login method survives (google > phone > email > guest). The provider's
-        name and email are refreshed on login; the assigned animal avatar persists. [invited_by_user_id] is recorded only when this creates a new user.
+        name and email are refreshed on login; the assigned animal avatar persists. A shared
+        match can recruit either a new account or an existing account without an inviter.
         The first verified day credits 10 tokens; later login days credit 10,
         up to 100 tokens issued across the account's lifetime.
         Returns (user, merged_from_user_id).
@@ -1486,9 +1485,10 @@ class GamePlatform:
                         email=email.strip(),
                         picture_url=picture_url.strip(),
                         linked_accounts=(linked,),
-                        invited_by_user_id=invited_by_user_id,
+                        invite_match_id=invite_match_id,
                         invite_token=invite_token,
                         campaign_code=campaign_code,
+                        visitor_id=visitor_id,
                     )
                     return self._grant_verified_login_bonus(user), None
                 owner = self._require_user(as_user_id)
@@ -1498,6 +1498,7 @@ class GamePlatform:
                     updated_at=self._clock(),
                 )
                 self._store.put_user(owner)
+                owner = self._attribute_recruitment(owner, invite_token=invite_token, invite_match_id=invite_match_id, visitor_id=visitor_id)
                 return self._grant_verified_login_bonus(owner), None
             if as_user_id is None or as_user_id == user.id:
                 refreshed = _refresh_profile_from_provider(
@@ -1509,6 +1510,7 @@ class GamePlatform:
                 if refreshed is not user:
                     refreshed = replace(refreshed, updated_at=self._clock())
                     self._store.put_user(refreshed)
+                refreshed = self._attribute_recruitment(refreshed, invite_token=invite_token, invite_match_id=invite_match_id, visitor_id=visitor_id)
                 return self._grant_verified_login_bonus(refreshed), None
             target = self._require_user(as_user_id)
             source, into = self._merge_pair(
@@ -1516,6 +1518,7 @@ class GamePlatform:
             )
             merged_from = source.id
             merged = self._merge_locked(source=source, into=into)
+            merged = self._attribute_recruitment(merged, invite_token=invite_token, invite_match_id=invite_match_id, visitor_id=visitor_id)
             return self._grant_verified_login_bonus(merged), merged_from
 
     def _grant_verified_login_bonus(self, user: User) -> User:
@@ -1731,12 +1734,14 @@ class GamePlatform:
         # stats resolve merged-away inviters). If only the source was invited, the
         # survivor inherits that inviter, unless it would make a cycle.
         invited_by = into.invited_by_user_id
+        attribution = into
         if self._inviter_of(into) is None:
             source_inviter = self._inviter_of(source)
             if source_inviter is not None and not self._invited_by_descendant(
                 inviter_id=source_inviter, user_id=into_user_id
             ):
                 invited_by = source_inviter
+                attribution = source
         self._record_token_movement(into, source.token_balance, reason="account_merged")
         into = replace(
             into,
@@ -1764,11 +1769,22 @@ class GamePlatform:
                 (*into.recent_game_ids, *source.recent_game_ids)
             )[: self.RECENT_GAME_LIMIT],
             invited_by_user_id=invited_by,
-            invited_via_invite_token=into.invited_via_invite_token
-            or source.invited_via_invite_token,
+            invited_via_invite_token=attribution.invited_via_invite_token,
+            invited_via_match_id=attribution.invited_via_match_id,
             updated_at=self._clock(),
         )
         self._store.put_user(into)
+        recruitment_history.mark_merged(self._store, source.id, into.id, at=self._clock())
+        # The durable graph also collapses ancestry inside a merged account.
+        # Keep the live pointer aligned, including an inviter deleted earlier.
+        node = self._store.get_analytics("recruitment_nodes", into.id)
+        if node is not None:
+            parent, via = node.get("inviter_user_id"), node.get("via_match_id")
+            token = next((account.invited_via_invite_token for account in (into, source)
+                          if account.invited_by_user_id == parent and account.invited_via_match_id == via), None)
+            into = replace(into, invited_by_user_id=parent,
+                           invited_via_match_id=via, invited_via_invite_token=token)
+            self._store.put_user(into)
         # Never delete the source: mark it as replaced so its old credentials
         # keep authenticating, resolving to the survivor on every use. It keeps
         # its password and display name but holds nothing else.
@@ -2666,10 +2682,16 @@ class GamePlatform:
         self._store.put_match(match)
         return match
 
-    def get_match(self, match_id: str, *, caller_id: str | None = None) -> Match:
+    def get_match(self, match_id: str, *, caller_id: str | None = None,
+                  visitor_id: str | None = None, track_open: bool = False) -> Match:
         with self._lock:
             match = self._get_match(match_id)
             self._check_match_viewer(match, caller_id)
+            if caller_id is not None:
+                self._attribute_recruitment(self._resolve_replaced(self._require_user(caller_id)), match=match, visitor_id=visitor_id)
+            if track_open:
+                conversion_funnel.link_opened(self._store, match, at=self._clock(),
+                    user_id=caller_id, visitor_id=visitor_id)
             return match
 
     @staticmethod
@@ -2838,12 +2860,12 @@ class GamePlatform:
                 and (game_id is None or match.game_id == game_id)
             ]
 
-    def join_match(self, *, caller_id: str, match_id: str) -> Match:
+    def join_match(self, *, caller_id: str, match_id: str, visitor_id: str | None = None) -> Match:
         with self._lock:
             match = self._get_match(match_id)
-            return self._join(match, caller_id=caller_id)
+            return self._join(match, caller_id=caller_id, visitor_id=visitor_id)
 
-    def _join(self, match: Match, *, caller_id: str) -> Match:
+    def _join(self, match: Match, *, caller_id: str, visitor_id: str | None = None) -> Match:
         """Seats [caller_id] in [match]. The caller holds the lock."""
         if not self._match_is_declarative(match):
             raise NotFoundError("match not found")
@@ -2941,6 +2963,10 @@ class GamePlatform:
             actor_name=joiner.display_name if joiner is not None else "",
             tag_suffix="join",
         )
+        conversion_funnel.record_event(self._store, "match_joined", at=self._clock(),
+            identity=f"join:{match.id}:{caller_id}", match_id=match.id,
+            owner_user_id=match.owner_user_id, user_id=caller_id, visitor_id=visitor_id,
+            invite_allocation_id=self._allocation_for_token(match.invite_code))
         return saved
 
     def request_rematch(self, *, caller_id: str, match_id: str) -> Match:
@@ -4333,13 +4359,18 @@ class GamePlatform:
                 raise InvalidRequestError("invite codes must be four lowercase letters")
             if self._store.get_invite(code) is not None:
                 continue
-            self._store.put_invite(Invite(
-                token=code,
+            invite = Invite(
+                token=code, allocation_id=self._new_invite_allocation_id(),
                 match_id=match.id,
                 created_by_user_id=match.owner_user_id,
                 created_at=match.created_at,
                 expires_at=match.created_at + INVITE_MAX_AGE,
-            ))
+            )
+            self._store.put_invite(invite)
+            conversion_funnel.archive_invite(self._store, invite)
+            conversion_funnel.record_event(self._store, "invite_created", at=match.created_at,
+                identity="invite:" + invite.allocation_id, match_id=match.id,
+                owner_user_id=match.owner_user_id, invite_allocation_id=invite.allocation_id)
             return replace(match, invite_code=code)
         raise ConflictError("invite codes are busy; please try again")
 
@@ -4347,6 +4378,7 @@ class GamePlatform:
         if match.invite_code is not None:
             invite = self._store.get_invite(match.invite_code)
             if invite is not None and invite.match_id == match.id:
+                conversion_funnel.archive_invite(self._store, invite, at=self._clock(), event="released")
                 self._store.delete_invite(invite.token)
             match = replace(match, invite_code=None)
         return match
@@ -4382,14 +4414,32 @@ class GamePlatform:
                 raise ConflictError("this match has no human opponents")
             return self._get_invite(match.invite_code)
 
-    def view_invite(self, token: str) -> InviteView:
+    def share_match(self, *, caller_id: str | None, match_id: str, channel: str,
+                    visitor_id: str | None = None) -> None:
+        with self._lock:
+            match = self._get_match(match_id)
+            if match.effective_match_kind != "multiplayer":
+                raise ForbiddenError("single-player matches cannot be shared")
+            if channel not in {"copy_code", "share_link"}:
+                raise InvalidRequestError("unsupported sharing channel")
+            conversion_funnel.record_event(self._store, "invite_shared", at=self._clock(),
+                match_id=match.id, owner_user_id=match.owner_user_id,
+                user_id=caller_id, visitor_id=visitor_id, channel=channel,
+                invite_allocation_id=self._allocation_for_token(match.invite_code))
+
+    def view_invite(self, token: str, *, caller_id: str | None = None, visitor_id: str | None = None) -> InviteView:
         """Opens a shared match and reports whether its invite can seat someone.
         Counted as a view in the creator's referral stats."""
         with self._lock:
             invite = self._get_invite(token)
             match = self._get_match(invite.match_id)
+            if caller_id is not None:
+                self._attribute_recruitment(self._resolve_replaced(self._require_user(caller_id)), match=match, visitor_id=visitor_id)
+            conversion_funnel.link_opened(self._store, match, at=self._clock(),
+                user_id=caller_id, visitor_id=visitor_id, invite=invite)
             invite = replace(invite, views=invite.views + 1)
             self._store.put_invite(invite)
+            conversion_funnel.archive_invite(self._store, invite)
             game = self._store.get_game_version(match.game_id, match.game_version)
             try:
                 self._check_invite_usable(invite)
@@ -4411,11 +4461,12 @@ class GamePlatform:
         with self._lock:
             self._get_invite(token)
 
-    def accept_invite(self, *, caller_id: str, token: str) -> Match:
+    def accept_invite(self, *, caller_id: str, token: str, visitor_id: str | None = None) -> Match:
         """Join when a seat is available; otherwise open the match as a viewer."""
         with self._lock:
             invite = self._get_invite(token)
             match = self._get_match(invite.match_id)
+            self._attribute_recruitment(self._resolve_replaced(self._require_user(caller_id)), match=match, visitor_id=visitor_id)
             if match.seat_of(caller_id) is not None:
                 return match
             # A valid but full lobby remains viewable, including rematches
@@ -4426,16 +4477,17 @@ class GamePlatform:
                              and len(match.seats) + match.held_seats() >= self._rules_of(match).max_players))):
                 return match
             self._check_invite_usable(invite, caller_id=caller_id)
-            joined = self._join(match, caller_id=caller_id)
+            joined = self._join(match, caller_id=caller_id, visitor_id=visitor_id)
             user = self._store.get_user(caller_id)
             acceptance = InviteAcceptance(
                 user_id=caller_id,
                 accepted_at=self._clock(),
-                signed_up=user is not None and user.invited_via_invite_token == token,
+                signed_up=(user is not None and user.invited_via_match_id == match.id
+                           and user.invited_via_invite_token == token),
             )
-            self._store.put_invite(
-                replace(invite, acceptances=(*invite.acceptances, acceptance))
-            )
+            accepted = replace(invite, acceptances=(*invite.acceptances, acceptance))
+            self._store.put_invite(accepted)
+            conversion_funnel.archive_invite(self._store, accepted)
             return joined
 
     def revoke_invite(self, *, caller_id: str, token: str) -> Invite:
@@ -4450,6 +4502,11 @@ class GamePlatform:
                 )
             revoked = replace(invite, revoked=True)
             self._store.put_invite(revoked)
+            conversion_funnel.archive_invite(self._store, revoked, at=self._clock(), event="revoked")
+            conversion_funnel.record_event(self._store, "invite_revoked", at=self._clock(),
+                identity="revoked:" + conversion_funnel.allocation_id(invite),
+                match_id=invite.match_id, owner_user_id=match.owner_user_id if match else invite.created_by_user_id,
+                user_id=caller_id, invite_allocation_id=conversion_funnel.allocation_id(invite))
             return revoked
 
     def list_invites(
@@ -5047,7 +5104,6 @@ class GamePlatform:
                     "picture_url": user.picture_url,
                     "invited_by_user_id": parent[user.id],
                     "invited_by_name": names.get(parent[user.id] or "", ""),
-                    "referral_code": user.referral_code,
                     "direct_invites": len(children[user.id]),
                     "total_invites": total[user.id],
                     "depth": depth[user.id],
@@ -5299,8 +5355,7 @@ class GamePlatform:
                 self._store.delete_push_subscription(subscription.id)
             for invite in self._store.list_invites(created_by_user_id=user_id):
                 self._store.delete_invite(invite.token)
-            # The people this user invited now count as invited by this user's own
-            # inviter (or nobody), so everyone above keeps the credit.
+            # Historical recruitment keeps the original inviter IDs after deletion.
             deleted = self._require_user(user_id)
             deleted_ids = {user_id, *deleted.replaced_user_ids}
             for account_id in deleted_ids:
@@ -5313,23 +5368,10 @@ class GamePlatform:
                 for event in self._store.list_experiment_events():
                     if event.user_id == account_id:
                         self._store.delete_experiment_event(event.id)
-            new_inviter = self._inviter_of(deleted)
-            for user in self._store.list_users():
-                if user.id != user_id and self._inviter_of(user) == user_id:
-                    self._store.put_user(
-                        replace(
-                            user,
-                            invited_by_user_id=new_inviter,
-                            updated_at=self._clock(),
-                        )
-                    )
             deleted = self._store.get_user(user_id)
             if deleted is not None:
                 self._record_token_movement(deleted, -deleted.token_balance, reason="account_deleted")
             self._store.delete_user(user_id)
-            # The account is gone, so its code is free again (as after a restart).
-            if deleted.referral_code:
-                self._user_ids_by_code.pop(deleted.referral_code, None)
 
     def admin_delete_game(self, game_id: str) -> None:
         with self._lock:
@@ -5484,6 +5526,20 @@ class GamePlatform:
         raise ConflictError("the match is full")
 
     def _save(self, match: Match) -> Match:
+        if match.effective_match_kind == "multiplayer":
+            previous = self._store.get_match(match.id)
+            common = {"match_id": match.id, "owner_user_id": match.owner_user_id,
+                      "participant_user_ids": list(match.human_user_ids),
+                      "invite_allocation_id": self._allocation_for_token(match.invite_code)}
+            if previous is not None and previous.status == "waiting_for_players" and match.status != "waiting_for_players":
+                conversion_funnel.record_event(self._store, "match_started", at=self._clock(),
+                    identity="started:" + match.id, **common)
+            if previous is not None and not previous.moves and match.moves:
+                conversion_funnel.record_event(self._store, "match_played", at=self._clock(),
+                    identity="played:" + match.id, user_id=match.moves[0].made_by_user_id, **common)
+            if previous is not None and previous.status != "over" and match.status == "over":
+                conversion_funnel.record_event(self._store, "match_completed", at=self._clock(),
+                    identity="completed:" + match.id, end_reason=match.end_reason, **common)
         match = replace(match, updated_at=self._clock())
         if match.effective_match_kind != "multiplayer":
             match = replace(match, cloud_revision=match.cloud_revision + 1)

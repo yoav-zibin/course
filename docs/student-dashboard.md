@@ -37,10 +37,18 @@ Match totals count unique started matches, split into `computer`,
 Other players are distinct human accounts in multiplayer matches, with the
 student's own accounts excluded and merged accounts counted once.
 
-Recruitment follows recorded `invited_by_user_id` links. Direct recruitment is
+Recruitment follows recorded `invited_by_user_id` links. Opening a shared multiplayer
+match or invitation assigns its owner to a new or existing account that has no
+inviter, including spectators. The first valid owner remains the inviter; self-links
+and cycles are excluded. Match invitation views and seat acceptances are separate
+engagement counters and do not determine these totals. Direct recruitment is
 one level; transitive recruitment includes every descendant, excludes the
-student's own accounts and handles cycles without counting anyone twice.
-Recruit match totals count each match once even when several recruits share it.
+student's own accounts and handles cycles without counting anyone twice. Historical
+recruitment nodes preserve these counts and ancestry after account deletion; live
+inviter fields are used only when no node has been backfilled. Recruit match totals
+count each retained started match once even when several recruits share it. Deleted
+matches remain in the separate permanent conversion history, but not these activity
+columns. See [recruitment history](recruitment-history.md).
 Different students' referral trees can overlap, so their totals are not additive.
 
 Report totals distinguish manual submissions from automatic client-error
@@ -51,5 +59,6 @@ The data response contains report summaries, without screenshots, diagnostics
 or account passwords. Aggregates are cached briefly and show their generation
 time; report review changes appear after the cache refreshes.
 
-All metrics describe the records currently retained on the platform. Deleted
-records and device saves that have not yet synced cannot contribute to totals.
+Recruitment counts include retained historical nodes for deleted accounts. Match
+and report metrics describe the live records currently retained on the platform;
+deleted matches/reports and device saves that have not synced cannot contribute.

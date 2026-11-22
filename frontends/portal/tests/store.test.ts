@@ -472,10 +472,32 @@ test('initial URL attribution reaches signup before the route changes and is for
   try{
     const store=new PortalStore(testRuntime());await store.actions.bootstrap('https://local.test',false,'https://local.test/portal?ref=12345&campaign=class-a#invite=invitation-token');
     await store.actions.rememberAttribution('https://local.test/portal#games');await store.actions.guest('Guest');
-    assert.equal(signup.headers['X-Campaign-Code'],'class-a');assert.equal(signup.body.invited_by_user_id,'12345');assert.equal(signup.body.invite_token,'invitation-token');assert.equal(signup.body.campaign,undefined);
+    assert.equal(signup.headers['X-Campaign-Code'],'class-a');assert.equal(signup.body.invited_by_user_id,undefined);assert.equal(signup.body.invite_token,'invitation-token');assert.equal(signup.body.campaign,undefined);
     assert.equal(saved['game-platform.invited-by.v1'],undefined);assert.equal(saved['game-platform.invite-token.v1'],undefined);assert.equal(saved['game-platform.experiment-campaign.v1'],'class-a');
   }finally{restore();}
 });
+test('ordinary match attribution reaches every signup method and reopens the match with authenticated headers',async()=>{
+  for(const method of ['guest','google','email','phone'] as const){
+    const saved=browserStorage();saved['game-platform.invited-by.v1']='retired-inviter';let signup:any=null;const matchReads:string[]=[];
+    const match={id:'shared-match',game_id:'bundled-tictactoe',game_version:1,match_kind:'multiplayer',owner_user_id:'host',players:[{id:'host',user_id:'host',kind:'human',player_index:0}],status:'waiting_for_players',state:null,turn_of_player_indices:null,move_count:0,created_at:'2026-01-01T00:00:00Z'};
+    const restore=mockedFetch((url,init)=>{
+      if(init.method==='POST'&&(url.pathname==='/users'||url.pathname==='/auth/google'||url.pathname.endsWith('/verify'))){signup=JSON.parse(init.body as string);return {id:'new-account',password:'new-credential',display_name:'Player'};}
+      if(url.pathname==='/matches/shared-match'){matchReads.push((init.headers as Record<string,string>)['X-User-Id']||'anonymous');return match;}
+    });
+    try{
+      const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test',false,'https://local.test/portal?ref=12345#match=shared-match');await store.actions.selectMatch('shared-match');
+      if(method==='guest')await store.actions.guest('Player');else if(method==='google')await store.actions.google('synthetic-token');else await store.actions.verifyCode(method,'verification','123456');
+      assert.equal(signup.invite_match_id,'shared-match');assert.equal(signup.invite_token,undefined);assert.equal(signup.invited_by_user_id,undefined);assert.equal(saved['game-platform.invited-by.v1'],undefined);assert.equal(saved['game-platform.invite-match.v1'],undefined);
+      assert.equal(store.getSnapshot().selectedMatch?.id,'shared-match');assert.equal(matchReads.at(-1),'new-account');
+    }finally{restore();}
+  }
+});
+
+test('bootstrap removes retired personal codes from cached accounts while retaining the saved login',async()=>{
+  const saved=browserStorage();saved['game-platform.accounts.v1']=JSON.stringify([{id:'saved-account',password:'saved-password',display_name:'Saved',referral_code:'12345'}]);saved['game-platform.current-account.v1']='saved-account';saved['game-platform.invited-by.v1']='retired-inviter';const restore=mockedFetch();
+  try{const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');assert.equal(store.getSnapshot().account?.id,'saved-account');assert.equal(Object.hasOwn(store.getSnapshot().account!,'referral_code'),false);assert.equal(JSON.parse(saved['game-platform.accounts.v1'])[0].referral_code,undefined);assert.equal(saved['game-platform.invited-by.v1'],undefined);}finally{restore();}
+});
+
 test('rapid remote replay choices discard late responses and preserve the historical actor', async () => {
   browserStorage(); const bundled=JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8'));
   const match={id:'remote',game_id:bundled.id,game_version:1,owner_user_id:'alice',players:[{id:'alice',user_id:'alice',kind:'human',player_index:0},{id:'bob',user_id:'bob',kind:'human',player_index:1}],status:'ongoing',state:{step:2},turn_of_player_indices:[0],move_count:2,created_at:'2026-01-01T00:00:00Z'};

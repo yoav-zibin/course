@@ -64,12 +64,12 @@ def rebuild(store, *, run_id, max_records=100):
                         )
                         target = _node(ref, user.id)
                         row = store.raw_get(target) or {}
+                        row.pop("referral_code", None)
                         words = set(re.findall(r"\w+", user.display_name.casefold()))
                         row.update(
                             id=user.id,
                             display_name=user.display_name,
                             picture_url=user.picture_url,
-                            referral_code=user.referral_code,
                             parent_id=parent_id,
                             created_at=user.created_at,
                             parent_name=parent.display_name if parent_id else "",
@@ -205,13 +205,10 @@ def users(store, *, parent_id=None, q="", limit=50, cursor=None):
     query = nodes
     if q:
         exact = nodes.document(key(q)).get().to_dict()
-        if not exact:
-            uid = store.user_for_referral(q.lstrip("#"))
-            exact = nodes.document(key(uid)).get().to_dict() if uid else None
         if exact and exact.get("active"):
             return {"items": [_public(exact)], "next_cursor": None}
         if not re.fullmatch(r"\w{2,24}", q):
-            raise ValueError("use one name prefix, a full user ID, or a referral code")
+            raise ValueError("use one name prefix or a full user ID")
         query = query.where(
             filter=FieldFilter("search_tokens", "array_contains", q.casefold())
         ).order_by("__name__")
@@ -240,7 +237,6 @@ def _public(row):
         "id": row["id"],
         "display_name": row["display_name"],
         "picture_url": row["picture_url"],
-        "referral_code": row["referral_code"],
         "invited_by_user_id": row["parent_id"],
         "invited_by_name": row.get("parent_name", "") if row["parent_id"] else "",
         "direct_invites": row["child_count"],

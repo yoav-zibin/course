@@ -30,9 +30,50 @@ from game_platform.models import (
     TokenMovement,
     WebPushSubscription,
 )
+from game_platform.paging import Page, decode_cursor, encode_cursor, page_size
+
+
+ANALYTICS_KINDS = frozenset({"recruitment_nodes", "invite_history", "funnel_events", "funnel_totals"})
+
+
+def analytics_query(kind, filters=()):
+    if kind not in ANALYTICS_KINDS:
+        raise ValueError("unsupported analytics collection")
+    if any(len(condition) != 3 or condition[1] != "==" for condition in filters):
+        raise ValueError("analytics filters require equality conditions")
+
+
+def analytics_row(kind, identity, row):
+    analytics_query(kind)
+    if not isinstance(identity, str) or not identity or not isinstance(row, dict):
+        raise ValueError("analytics records require an ID and object")
+    if row.get("id", identity) != identity:
+        raise ValueError("analytics record ID differs from its key")
+    return copy.deepcopy({**row, "id": identity})
+
+
+def record_match_deletion(store, match):
+    if match is None or match.effective_match_kind != "multiplayer":
+        return
+    from game_platform.conversion_funnel import record_event
+    now = dt.datetime.now(dt.UTC)
+    fields = {"match_id": match.id, "owner_user_id": match.owner_user_id,
+              "participant_user_ids": list(match.human_user_ids)}
+    if match.status != "waiting_for_players" and match.state is not None:
+        record_event(store, "match_started", identity="started:" + match.id,
+                     at=match.created_at, recovered_on_delete=True, **fields)
+    record_event(store, "match_deleted", identity="deleted-match:" + match.id, at=now, **fields)
 
 
 class Store(Protocol):
+    def get_analytics(self, kind, identity) -> dict[str, Any] | None: ...
+
+    def put_analytics(self, kind, identity, row) -> None: ...
+
+    def page_analytics(self, kind, *, filters=(), limit=50, cursor=None, scope=None) -> Page: ...
+
+    def list_analytics(self, kind, *, filters=()) -> list[dict[str, Any]]: ...
+
     def append_token_movement(self, movement: TokenMovement) -> None:
         """Insert an accounting event; never update or delete an existing row."""
         ...
@@ -271,6 +312,12 @@ class Snapshot:
     feedback: tuple[Feedback, ...] = ()
     game_popularity: tuple[GamePopularity, ...] = ()
     token_movements: tuple[TokenMovement, ...] = ()
+    # Durable ID-only recruitment and invitation history, independent of the
+    # lifecycle of account credentials, matches, and reusable URL codes.
+    recruitment_nodes: tuple[dict[str, Any], ...] = ()
+    invite_history: tuple[dict[str, Any], ...] = ()
+    funnel_events: tuple[dict[str, Any], ...] = ()
+    funnel_totals: tuple[dict[str, Any], ...] = ()
 
 
 class InMemoryStore:
@@ -281,6 +328,7 @@ class InMemoryStore:
         self.operation_lock = threading.RLock()
         # Dicts preserve insertion order, so listings come out oldest first.
         self._users: dict[str, User] = {}
+        self._analytics: dict[str, dict[str, dict[str, Any]]] = {kind: {} for kind in ANALYTICS_KINDS}
         self._token_movements: dict[str, TokenMovement] = {}
         self._user_ids_by_linked_account: dict[
             tuple[LinkedAccountKind, str], dict[str, None]
@@ -318,6 +366,9 @@ class InMemoryStore:
     @classmethod
     def of_snapshot(cls, snapshot: Snapshot) -> "InMemoryStore":
         store = cls()
+        for kind in ANALYTICS_KINDS:
+            for row in getattr(snapshot, kind):
+                store.put_analytics(kind, row["id"], row)
         for movement in snapshot.token_movements:
             store.append_token_movement(movement)
         for user in snapshot.users:
@@ -362,6 +413,10 @@ class InMemoryStore:
     def snapshot(self) -> Snapshot:
         # Records are immutable, so a shallow copy is a consistent snapshot.
         return Snapshot(
+            recruitment_nodes=tuple(copy.deepcopy(list(self._analytics["recruitment_nodes"].values()))),
+            invite_history=tuple(copy.deepcopy(list(self._analytics["invite_history"].values()))),
+            funnel_events=tuple(copy.deepcopy(list(self._analytics["funnel_events"].values()))),
+            funnel_totals=tuple(copy.deepcopy(list(self._analytics["funnel_totals"].values()))),
             users=tuple(self._users.values()),
             token_movements=tuple(self._token_movements.values()),
             game_versions=tuple(
@@ -390,6 +445,39 @@ class InMemoryStore:
                 for game_id, (matches, score) in sorted(self._game_popularity.items())
             ),
         )
+
+    def get_analytics(self, kind, identity):
+        analytics_query(kind)
+        return copy.deepcopy(self._analytics[kind].get(identity))
+
+    def put_analytics(self, kind, identity, row):
+        row = analytics_row(kind, identity, row)
+        prior = self._analytics[kind].get(identity)
+        if kind == "funnel_events" and prior is not None and prior != row:
+            raise ValueError("funnel events are insert-only")
+        self._analytics[kind][identity] = row
+
+    def page_analytics(self, kind, *, filters=(), limit=50, cursor=None, scope=None):
+        analytics_query(kind, filters)
+        page_size(limit)
+        query_scope = ["memory", kind, list(filters), scope]
+        after = decode_cursor(query_scope, cursor)
+        rows = sorted(self._analytics[kind].items(), key=lambda item: hashlib.sha256(item[0].encode()).hexdigest())
+        selected = [(hashlib.sha256(identity.encode()).hexdigest(), row)
+                    for identity, row in rows
+                    if (after is None or hashlib.sha256(identity.encode()).hexdigest() > after)
+                    and all(row.get(field) == value for field, _op, value in filters)]
+        return Page([copy.deepcopy(row) for _identity, row in selected[:limit]],
+                    encode_cursor(query_scope, selected[limit - 1][0]) if len(selected) > limit else None)
+
+    def list_analytics(self, kind, *, filters=()):
+        result, cursor = [], None
+        while True:
+            page = self.page_analytics(kind, filters=filters, limit=100, cursor=cursor)
+            result.extend(page.items)
+            cursor = page.next_cursor
+            if cursor is None:
+                return result
 
     def append_token_movement(self, movement: TokenMovement) -> None:
         previous = self._token_movements.get(movement.id)
@@ -502,6 +590,8 @@ class InMemoryStore:
         return list(self._users.values())
 
     def delete_user(self, user_id: str) -> None:
+        from game_platform.recruitment_history import mark_deleted
+        mark_deleted(self, user_id, at=dt.datetime.now(dt.UTC))
         user = self._users.pop(user_id, None)
         if user is None:
             return
@@ -655,6 +745,7 @@ class InMemoryStore:
         ]
 
     def delete_match(self, match_id: str) -> None:
+        record_match_deletion(self, self._matches.get(match_id))
         match = self._matches.pop(match_id, None)
         if match is None:
             return
@@ -860,4 +951,8 @@ class InMemoryStore:
         ]
 
     def delete_invite(self, token: str) -> None:
+        from game_platform.conversion_funnel import archive_invite
+        invite = self._invites.get(token)
+        if invite is not None:
+            archive_invite(self, invite, at=dt.datetime.now(dt.UTC), event="released")
         self._invites.pop(token, None)

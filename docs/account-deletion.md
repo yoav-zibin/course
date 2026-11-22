@@ -38,13 +38,19 @@ cancellation read the same user/request inside transactions. Each purge step
 commits its mutation and progress together; process failure does not reset the
 deadline, repeat refunds, or resurrect removed data.
 
-Cleanup removes the account and merged aliases, login/referral reservations,
+Cleanup removes the account and merged aliases, login and match-invitation reservations,
 online matches the account owned or participated in (including completed/shared
 matches), move history and private match evidence, related invitations and queued
 work, libraries, push registrations/deliveries, account-linked experiment
 records, submitted bug reports/feedback, and structured cached account
 references. Shared matches disappear for the other players too. Held match pots
 use the existing refund behavior.
+
+Minimal invitation, recruitment and conversion history remains permanently in
+separate analytics collections: internal IDs, inviter relationships, event types
+and times. It contains no names, contact/login details, credentials or request
+and network data. Deleted ancestors keep their place in inviter chains and
+recruitment counts. See [recruitment history](recruitment-history.md).
 
 Permanent token movements and pending accounting exports remain, including their
 historical user and match IDs, amounts, starting balances, reasons and timestamps;

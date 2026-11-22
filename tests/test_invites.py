@@ -21,10 +21,15 @@ class RecordingSender:
         self.sent.append((destination, code))
 
 
+def owner_match(api: Api, owner: str) -> str:
+    return api.new_match(owner=owner, game_id=api.new_game(owner=owner))
+
+
 def invited(api: Api, name: str, *, by: str | None) -> str:
-    """A new guest who signed up through [by]'s invite link."""
+    """A guest recruited by opening a multiplayer match belonging to [by]."""
+    match_id = owner_match(api, by) if by in api.passwords_by_user_id else "missing-match"
     user = api.ok(
-        "POST", "/users", json={"display_name": name, "invited_by_user_id": by}
+        "POST", "/users", json={"display_name": name, "invite_match_id": match_id}
     )
     api.passwords_by_user_id[user["id"]] = user["password"]
     return user["id"]
@@ -85,11 +90,11 @@ def test_google_login_records_the_inviter_only_for_a_new_account(
     )
     ann = api.new_user("ann")
     cy = api.new_user("cy")
-    body = {"id_token": "1", "invited_by_user_id": ann}
+    body = {"id_token": "1", "invite_match_id": owner_match(api, ann)}
     gina = api.ok("POST", "/auth/google", json=body)["user_id"]
     # Logging in again through someone else's link doesn't change the inviter.
     again = api.ok(
-        "POST", "/auth/google", json={"id_token": "1", "invited_by_user_id": cy}
+        "POST", "/auth/google", json={"id_token": "1", "invite_match_id": owner_match(api, cy)}
     )
     assert again["user_id"] == gina
     assert rows_by_name(api)["Gina 1"]["invited_by_user_id"] == ann
@@ -110,7 +115,7 @@ def test_a_code_login_records_the_inviter() -> None:
         json={
             "verification_id": started["verification_id"],
             "code": code,
-            "invited_by_user_id": ann,
+            "invite_match_id": owner_match(api, ann),
         },
     )
     assert rows_by_name(api)["eve"]["invited_by_user_id"] == ann
@@ -206,7 +211,8 @@ def test_the_tree_survives_inviter_loops_in_the_data() -> None:
     store = InMemoryStore()
     platform = GamePlatform(store=store, clock=FakeClock())
     ann = platform.create_user(display_name="ann")
-    bob = platform.create_user(display_name="bob", invited_by_user_id=ann.id)
+    bob = platform.create_user(display_name="bob")
+    store.put_user(replace(bob, invited_by_user_id=ann.id, invited_via_match_id="historic-match"))
     store.put_user(replace(ann, invited_by_user_id=bob.id))
     rows = {row["display_name"]: row for row in platform.invite_stats()["users"]}
     assert {name: row["total_invites"] for name, row in rows.items()} == {
@@ -215,12 +221,14 @@ def test_the_tree_survives_inviter_loops_in_the_data() -> None:
     }
 
 
-def test_deleting_a_user_passes_their_invites_up_to_their_inviter(api: Api) -> None:
+def test_deleting_a_user_preserves_their_original_historical_inviter_chain(api: Api) -> None:
     ann = api.new_user("ann")
     bob = invited(api, "bob", by=ann)
-    invited(api, "cy", by=bob)
+    cy = invited(api, "cy", by=bob)
     api.ok("DELETE", f"/admin/users/{bob}")
-    assert counts(api) == {"ann": ("", 1, 1, 0), "cy": ("ann", 0, 0, 1)}
+    assert api.platform._store.get_user(cy).invited_by_user_id == bob
+    assert api.ok("GET", "/users/me/recruitment", as_user=cy)["inviter_chain"] == [bob, ann]
+
 
 
 def test_the_referrals_page_and_data_need_the_master_password() -> None:
@@ -262,7 +270,8 @@ def test_the_inviter_is_saved_in_the_data_file(tmp_path) -> None:
     store = JsonFileStore(path, min_write_interval_seconds=0)
     platform = GamePlatform(store=store)
     ann = platform.create_user(display_name="ann")
-    bob = platform.create_user(display_name="bob", invited_by_user_id=ann.id)
+    bob = platform.create_user(display_name="bob")
+    store.put_user(replace(bob, invited_by_user_id=ann.id, invited_via_match_id="historic-match"))
     store.close()
     reloaded = JsonFileStore(path)
     assert reloaded.get_user(bob.id).invited_by_user_id == ann.id

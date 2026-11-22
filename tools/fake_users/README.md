@@ -21,7 +21,7 @@ tests.
 - **A hard cap on browsers at once**, from the machine's memory (about 200 MB per fake user,
   using at most 60% of RAM). `max_browsers` in the config can only lower it.
 - **Stop closes every browser within seconds.** So does stopping the program.
-- **Every fake account is written down** in `fake_users.jsonl` (id, name, referral code), so
+- **Every fake account is written down** in `fake_users.jsonl` (id and name), so
   they can be deleted later, for example with `DELETE /admin/users/{id}` and the master password.
 - The control and health pages need the password from the config, and listen on `127.0.0.1`
   only, unless `control_host` says otherwise.
@@ -63,7 +63,7 @@ All of these can change on the control page while running (the starting values a
 | `users_per_hour` | How often a new fake user arrives, on average (random gaps, like real visitors) |
 | `think_min_seconds`, `think_max_seconds` | The random pause between actions |
 | `speed_match_percent` | Percent of created matches that are Speed matches (1 minute per move) |
-| `invite_link_percent` | Percent of new fake users who arrive through another fake user's `/r/<code>` link |
+| `invite_link_percent` | Percent of new fake users who arrive through a recently created multiplayer match link |
 | `leave_probability` | Chance of leaving the match after each move |
 | `max_moves_per_match` | A fake user leaves after this many of their own moves |
 | `another_match_probability` | Chance of playing another match after one ends |

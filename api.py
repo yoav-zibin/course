@@ -57,6 +57,7 @@ from game_platform.schemas import (
     GoogleLogin,
     HealthOut,
     InviteCreate,
+    MatchShare,
     InviteOut,
     InviteViewOut,
     MatchCreate,
@@ -286,6 +287,8 @@ _BATCH_FORWARDED_HEADERS: Final = (
     "x-user-id",
     "x-user-password",
     "x-campaign-code",
+    "x-visitor-id",
+    "x-link-open",
     "accept-language",
 )
 
@@ -501,15 +504,17 @@ def create_user(
     platform: Platform,
     body: UserCreate,
     x_campaign_code: Annotated[str | None, Header()] = None,
+    x_visitor_id: Annotated[str | None, Header()] = None,
 ) -> UserWithPasswordOut:
     """Returns the new user's password, which authenticated requests need. Apart from
     the debug tools, this is the only place the API returns it."""
     user = platform.create_user(
         display_name=body.display_name,
         locale=body.locale,
-        invited_by_user_id=body.invited_by_user_id,
+        invite_match_id=body.invite_match_id,
         invite_token=body.invite_token,
         campaign_code=x_campaign_code,
+        visitor_id=x_visitor_id,
     )
     return UserWithPasswordOut.of_user(user)
 
@@ -612,6 +617,16 @@ def referrals(platform: Platform, request: Request, caller_id: CallerId) -> Refe
     )
 
 
+@router.get("/users/me/recruitment")
+def own_recruitment(platform: Platform, caller_id: CallerId) -> dict:
+    """Permanent inviter ancestry, including deleted intermediate accounts."""
+    from game_platform.recruitment_history import record_node, inviter_chain
+    with platform._lock:
+        node = record_node(platform._store, caller_id)
+        return {"user_id": caller_id, "node": node,
+                "inviter_chain": inviter_chain(platform._store, caller_id)}
+
+
 @router.get("/users")
 def list_users(
     platform: Platform, caller_id: OptionalCallerId, ids: str = ""
@@ -621,7 +636,7 @@ def list_users(
     fetching them one by one was the platform's worst slow-request offender
     under load, as dozens of near-instant calls queued behind each other.
     Unknown ids are skipped rather than failing the whole batch, and duplicate
-    ids collapse. Includes [referral_code] only for the caller's own profile.
+    ids collapse.
     """
     wanted = list(
         dict.fromkeys(part.strip() for part in ids.split(",") if part.strip())
@@ -636,7 +651,7 @@ def list_users(
 
 @router.get("/users/{user_id}")
 def get_user(platform: Platform, user_id: str, caller_id: OptionalCallerId) -> UserOut:
-    """Includes [referral_code] only when the caller is this user."""
+    """Private profile details are included only for the caller."""
     user = platform.get_user(user_id)
     return UserOut.of(user, own=caller_id is not None and caller_id == user.id)
 
@@ -720,9 +735,10 @@ def _login_or_link(
     email: str = "",
     picture_url: str = "",
     as_user_id: str | None,
-    invited_by_user_id: str | None = None,
+    invite_match_id: str | None = None,
     invite_token: str | None = None,
     campaign_code: str | None = None,
+    visitor_id: str | None = None,
 ) -> AuthResponse:
     user, merged_from = platform.login_with_linked_account(
         kind=kind,
@@ -731,9 +747,10 @@ def _login_or_link(
         email=email,
         picture_url=picture_url,
         as_user_id=as_user_id,
-        invited_by_user_id=invited_by_user_id,
+        invite_match_id=invite_match_id,
         invite_token=invite_token,
         campaign_code=campaign_code,
+        visitor_id=visitor_id,
     )
     return AuthResponse.of(user, merged_from_user_id=merged_from)
 
@@ -745,6 +762,7 @@ def auth_google(
     caller_id: OptionalCallerId,
     body: GoogleLogin,
     x_campaign_code: Annotated[str | None, Header()] = None,
+    x_visitor_id: Annotated[str | None, Header()] = None,
 ) -> AuthResponse:
     """Logs in with a Google ID token from the website's Sign in with Google button.
     Pass the caller's headers to link Google to the current account instead."""
@@ -767,9 +785,10 @@ def auth_google(
         email=email,
         picture_url=picture_url,
         as_user_id=caller_id,
-        invited_by_user_id=body.invited_by_user_id,
+        invite_match_id=body.invite_match_id,
         invite_token=body.invite_token,
         campaign_code=x_campaign_code,
+        visitor_id=x_visitor_id,
     )
 
 
@@ -826,6 +845,7 @@ def phone_verify(
     platform: Platform, request: Request,
     caller_id: OptionalCallerId, body: VerifyCode,
     x_campaign_code: Annotated[str | None, Header()] = None,
+    x_visitor_id: Annotated[str | None, Header()] = None,
 ) -> AuthResponse:
     if _auth_config_of(request).sms.provider == "verify":
         number = platform.pending_external_phone(body.verification_id)
@@ -846,9 +866,10 @@ def phone_verify(
             approved=approved,
             display_name=body.display_name,
             as_user_id=caller_id,
-            invited_by_user_id=body.invited_by_user_id,
+            invite_match_id=body.invite_match_id,
             invite_token=body.invite_token,
             campaign_code=x_campaign_code,
+            visitor_id=x_visitor_id,
         )
     else:
         user, merged_from = platform.verify_code(
@@ -856,9 +877,10 @@ def phone_verify(
             code=body.code,
             display_name=body.display_name,
             as_user_id=caller_id,
-            invited_by_user_id=body.invited_by_user_id,
+            invite_match_id=body.invite_match_id,
             invite_token=body.invite_token,
             campaign_code=x_campaign_code,
+            visitor_id=x_visitor_id,
         )
     return AuthResponse.of(
         user, merged_from_user_id=merged_from
@@ -893,6 +915,7 @@ def email_verify(
     caller_id: OptionalCallerId,
     body: VerifyCode,
     x_campaign_code: Annotated[str | None, Header()] = None,
+    x_visitor_id: Annotated[str | None, Header()] = None,
 ) -> AuthResponse:
     """Logs in with an emailed code. Pass the caller's headers to link the address to
     the current account instead."""
@@ -901,9 +924,10 @@ def email_verify(
         code=body.code,
         display_name=body.display_name,
         as_user_id=caller_id,
-        invited_by_user_id=body.invited_by_user_id,
+        invite_match_id=body.invite_match_id,
         invite_token=body.invite_token,
         campaign_code=x_campaign_code,
+        visitor_id=x_visitor_id,
     )
     return AuthResponse.of(user, merged_from_user_id=merged_from)
 
@@ -1159,9 +1183,12 @@ def sync_single_player(platform: Platform, caller_id: CallerId, body: SinglePlay
 
 
 @router.get("/matches/{match_id}")
-def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId) -> MatchOut:
+def get_match(platform: Platform, match_id: str, caller_id: OptionalCallerId,
+              x_visitor_id: Annotated[str | None, Header()] = None,
+              x_link_open: Annotated[str | None, Header()] = None) -> MatchOut:
     return _match_out(
-        platform, platform.get_match(match_id, caller_id=caller_id),
+        platform, platform.get_match(match_id, caller_id=caller_id, visitor_id=x_visitor_id,
+                                     track_open=x_link_open == "1"),
         caller_id=caller_id,
     )
 
@@ -1177,10 +1204,19 @@ def delete_match(platform: Platform, caller_id: CallerId, match_id: str) -> None
     platform.delete_match(caller_id=caller_id, match_id=match_id)
 
 
+@router.post("/matches/{match_id}/share", status_code=HTTPStatus.NO_CONTENT)
+def share_match(platform: Platform, caller_id: OptionalCallerId, match_id: str,
+                body: MatchShare, x_visitor_id: Annotated[str | None, Header()] = None) -> None:
+    """Record an observed device sharing action, not recipient delivery."""
+    platform.share_match(caller_id=caller_id, match_id=match_id,
+                         channel=body.channel, visitor_id=x_visitor_id)
+
+
 @router.post("/matches/{match_id}/join")
-def join_match(platform: Platform, caller_id: CallerId, match_id: str) -> MatchOut:
+def join_match(platform: Platform, caller_id: CallerId, match_id: str,
+               x_visitor_id: Annotated[str | None, Header()] = None) -> MatchOut:
     return _match_out(
-        platform, platform.join_match(caller_id=caller_id, match_id=match_id),
+        platform, platform.join_match(caller_id=caller_id, match_id=match_id, visitor_id=x_visitor_id),
         caller_id=caller_id,
     )
 
@@ -1322,10 +1358,11 @@ def list_invites(
 
 
 @router.get("/invites/{token}")
-def view_invite(platform: Platform, request: Request, token: str) -> InviteViewOut:
+def view_invite(platform: Platform, request: Request, token: str, caller_id: OptionalCallerId,
+                x_visitor_id: Annotated[str | None, Header()] = None) -> InviteViewOut:
     """What an invite link opens: the match and who invited you. Public: the token is
     the secret. Each call counts as a view in the creator's referral stats."""
-    view = platform.view_invite(token)
+    view = platform.view_invite(token, caller_id=caller_id, visitor_id=x_visitor_id)
     reason = code = None
     if view.problem is not None:
         reason, code, _ = i18n.localize_error(view.problem, request.state.locale)
@@ -1343,11 +1380,12 @@ def view_invite(platform: Platform, request: Request, token: str) -> InviteViewO
 
 
 @router.post("/invites/{token}/accept")
-def accept_invite(platform: Platform, caller_id: CallerId, token: str) -> MatchOut:
+def accept_invite(platform: Platform, caller_id: CallerId, token: str,
+                  x_visitor_id: Annotated[str | None, Header()] = None) -> MatchOut:
     """Takes a seat in the invite's match. New users can sign up with POST /users
     {invite_token} first, which credits the inviter with the referral."""
     return _match_out(
-        platform, platform.accept_invite(caller_id=caller_id, token=token),
+        platform, platform.accept_invite(caller_id=caller_id, token=token, visitor_id=x_visitor_id),
         caller_id=caller_id,
     )
 
@@ -1682,15 +1720,6 @@ def legacy_portal_manifest() -> FileResponse:
     return FileResponse(_STATIC_DIR / "app/manifest.webmanifest", media_type="application/manifest+json")
 
 
-@debug_router.get("/r/{code}")
-def short_invite_link(code: str) -> RedirectResponse:
-    """Short invite links: /r/<referral code> opens the portal crediting that user.
-    The code goes in the query, not the hash, so the browser keeps the link's own
-    hash (e.g. /r/48213#match=<id> arrives as /portal?ref=48213#match=<id>). Unknown
-    codes still redirect; the server then ignores the ref when an account is made."""
-    return RedirectResponse(f"/portal?{urlencode({'ref': code})}", status_code=HTTPStatus.FOUND)
-
-
 @debug_router.get("/browse", dependencies=[MasterPassword])
 def browse() -> FileResponse:
     return FileResponse(_STATIC_DIR / "browse.html")
@@ -1871,6 +1900,57 @@ def admin_set_experiment_active(
         "kind": experiment.kind,
         "active": experiment.active,
     }
+
+
+@debug_router.get("/admin/recruitment/{user_id}", dependencies=[MasterPassword])
+def historical_recruitment(platform: Platform, user_id: str) -> dict:
+    from game_platform.recruitment_history import record_node, inviter_chain
+    with platform._lock:
+        if (platform._store.get_analytics("recruitment_nodes", user_id) is None
+                and platform._store.get_user(user_id) is None):
+            raise HTTPException(HTTPStatus.NOT_FOUND, "user not found")
+        node = record_node(platform._store, user_id)
+        return {"user_id": user_id, "node": node,
+                "inviter_chain": inviter_chain(platform._store, user_id)}
+
+
+@debug_router.get("/admin/conversion-funnel", dependencies=[MasterPassword])
+def historical_conversion_funnel(platform: Platform, owner_user_id: str | None = None,
+                                match_id: str | None = None) -> dict:
+    from game_platform.conversion_funnel import summary
+    return summary(platform._store, owner_user_id=owner_user_id, match_id=match_id)
+
+
+@debug_router.get("/admin/conversion-funnel/invites", dependencies=[MasterPassword])
+def historical_invite_allocations(platform: Platform, owner_user_id: str | None = None,
+                                  match_id: str | None = None,
+                                  limit: int = 50, cursor: str | None = None) -> dict:
+    filters = []
+    if owner_user_id:
+        filters.append(("owner_user_id", "==", owner_user_id))
+    if match_id:
+        filters.append(("match_id", "==", match_id))
+    try:
+        page = platform._store.page_analytics("invite_history", filters=filters, limit=limit, cursor=cursor)
+    except ValueError as exc:
+        raise InvalidRequestError(str(exc)) from exc
+    return {"items": page.items, "next_cursor": page.next_cursor}
+
+
+@debug_router.get("/admin/conversion-funnel/events", dependencies=[MasterPassword])
+def historical_conversion_events(platform: Platform, owner_user_id: str | None = None,
+                                 match_id: str | None = None,
+                                 limit: int = 50, cursor: str | None = None) -> dict:
+    filters = []
+    if owner_user_id:
+        filters.append(("owner_user_id", "==", owner_user_id))
+    if match_id:
+        filters.append(("match_id", "==", match_id))
+    try:
+        page = platform._store.page_analytics("funnel_events", filters=filters, limit=limit, cursor=cursor)
+    except ValueError as exc:
+        raise InvalidRequestError(str(exc)) from exc
+    return {"items": page.items, "next_cursor": page.next_cursor}
 
 
 @debug_router.get("/admin/invites", dependencies=[MasterPassword])

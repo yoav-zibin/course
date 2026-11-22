@@ -36,7 +36,7 @@ class Generator:
         self.stop_event = asyncio.Event()
         self.hard_cap = hard_cap(total_memory or total_memory_bytes(), config.max_browsers)
         self.rng = rng or random.Random()
-        self.referral_codes: list[str] = []
+        self.match_links: list[str] = []
         self._launcher = launcher
         self._user_factory = user_factory
         self._playwright = None
@@ -136,9 +136,9 @@ class Generator:
             await asyncio.sleep(wait)
             if self.state == "running" and self.active < self.allowed:
                 link = None
-                if self.referral_codes and self.rng.uniform(0, 100) < self.settings.invite_link_percent:
-                    link = f"{self.target}/r/{self.rng.choice(self.referral_codes)}"
-                self._spawn(invite_link=link)
+                if self.match_links and self.rng.uniform(0, 100) < self.settings.invite_link_percent:
+                    link = self.rng.choice(self.match_links)
+                self._spawn(invite_link=link, for_match=bool(link))
 
     def _spawn(self, *, invite_link: str | None = None, for_match: bool = False) -> bool:
         # Invited friends count toward the same active-user limit.
@@ -199,19 +199,16 @@ class Generator:
         return bool(link) and self._spawn(invite_link=link, for_match=True)
 
     def record_account(self, account: dict, *, invited: bool) -> None:
-        """Remembers a new fake account (for cleanup later) and its referral code."""
+        """Remembers a new fake account for cleanup later."""
         record = {
             "id": account.get("id"),
             "display_name": account.get("display_name"),
-            "referral_code": account.get("referral_code"),
             "invited": invited,
             "target": self.target,
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         }
         with open(self.config.accounts_file, "a") as file:
             file.write(json.dumps(record) + "\n")
-        if record["referral_code"]:
-            self.referral_codes.append(record["referral_code"])
         self.stats.count("accounts_created")
         if invited:
             self.stats.count("referral_signups")
@@ -225,6 +222,13 @@ class Generator:
     def match_url(self, match: dict | None) -> str | None:
         """Where a person can open [match] on the target server."""
         return f"{self.target}/portal#match={match['id']}" if match and match.get("id") else None
+
+    def remember_shared_match(self, match: dict) -> None:
+        """Keep recent multiplayer match links for future arrivals."""
+        link = self.match_url(match)
+        if link and link not in self.match_links:
+            self.match_links.append(link)
+            self.match_links = self.match_links[-500:]
 
     async def couldnt_move(self, user, match: dict | None) -> None:
         """Records a turn where [user] couldn't move, with a screenshot of the game as it was."""

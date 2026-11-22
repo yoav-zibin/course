@@ -1,3 +1,4 @@
+import {cleanAccounts,withoutPersonalReferral} from '../core/account-data';
 import type {Account} from '../core/types';
 
 export const LEGACY_ACCOUNTS_KEY='game-platform.accounts.v1';
@@ -32,17 +33,18 @@ export function createCredentialVault(base:string|undefined,metadata:Values,secu
       const text=scoped??(legacy?await metadata.getItem(LEGACY_ACCOUNTS_KEY):null);
       const records=text?JSON.parse(text):[];
       if(!Array.isArray(records))throw new Error('Saved accounts need recovery');
+      if(records.some(item=>item&&Object.hasOwn(item,'referral_code')))await metadata.setItem(legacy?LEGACY_ACCOUNTS_KEY:keys.accounts,JSON.stringify(records.map(withoutPersonalReferral))).catch(()=>{});
       const accounts:Account[]=[];
       for(const item of records) {
         if(typeof item?.id!=='string'||!item.id)throw new Error('Saved accounts need recovery');
         const password=await secure.getItem(legacy?oldPasswordKey(item.id):keys.password(item.id));
-        if(password)accounts.push({...item,password});
+        if(password)accounts.push({...withoutPersonalReferral(item),password});
       }
       return accounts;
     },
     async saveAccounts(accounts:Account[]):Promise<void> {
       for(const account of accounts)await secure.setItem(keys.password(account.id),account.password);
-      await metadata.setItem(keys.accounts,JSON.stringify(accounts.map(({password:_password,...item})=>item)));
+      await metadata.setItem(keys.accounts,JSON.stringify(cleanAccounts(accounts).map(({password:_password,...item})=>item)));
     },
     async loadCurrentAccount():Promise<string|null> {
       const current=await metadata.getItem(keys.current);

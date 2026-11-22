@@ -1,3 +1,4 @@
+import {visitorId} from './visitor';
 import {rememberDiagnosticSecrets,startDiagnosticRequest} from './diagnostics';
 import type { Account } from './types';
 import { readCampaignCode } from './attribution';
@@ -5,17 +6,18 @@ export class ApiError extends Error { constructor(public status: number, message
 export class InactiveSignInError extends Error { name='InactiveSignInError'; }
 export class PortalApi {
   constructor(public baseUrl: string, private locale: () => string = () => 'en', public fetcher: typeof fetch = fetch) {}
-  async request<T = any>(method: string, path: string, body?: any, account?: Account | null, requestId?: string): Promise<T> {
+  async request<T = any>(method: string, path: string, body?: any, account?: Account | null, requestId?: string, linkOpen=false): Promise<T> {
     if (!path.startsWith('/') || path.startsWith('//') || /[\r\n]/.test(path)) throw new Error('Invalid API path');
     if(account)rememberDiagnosticSecrets([account.password]);
     const finish=startDiagnosticRequest(method,path,{authenticated:Boolean(account),requestId,requestBytes:body===undefined?0:JSON.stringify(body).length});
     let received=false;
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 20000);
     try {
-      const headers: Record<string, string> = { 'Accept-Language': this.locale() };
+      const headers: Record<string, string> = { 'Accept-Language': this.locale(), 'X-Visitor-Id': await visitorId() };
       const campaign=await readCampaignCode();if(campaign&&campaign!==account?.password)headers['X-Campaign-Code']=campaign;
       if (account) { headers['X-User-Id'] = account.id; headers['X-User-Password'] = account.password; }
       if (requestId) headers['Idempotency-Key'] = requestId;
+      if (linkOpen) headers['X-Link-Open'] = '1';
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       // Browser fetch is a Web IDL function: invoking it as this.fetcher binds
       // the PortalApi instance and throws Illegal invocation before networking.

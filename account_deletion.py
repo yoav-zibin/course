@@ -133,6 +133,8 @@ _PHASES = (
     ("push_receipts", "user_id", "=="),
     ("requests", "user_id", "=="),
     ("matchmaking", "user_id", "=="),
+    # Retired relationship-clearing phase; retain its checkpoint number for
+    # in-flight jobs. Opaque inviter IDs remain authoritative after deletion.
     ("users", "invited_by_user_id", "=="),
 )
 
@@ -273,7 +275,7 @@ def _query_step(platform, ref):
         phase, index = job.get("stage", 0), job.get("account_index", 0)
         if phase < len(_PHASES):
             kind, field, op = _PHASES[phase]
-            if kind == "token_ledger":
+            if kind in ("token_ledger", "users"):
                 store.raw_put(ref, {**job, "stage": phase + 1, "account_index": 0})
                 return True
             account_id = accounts[index]
@@ -285,10 +287,6 @@ def _query_step(platform, ref):
                 doc = docs[0]
                 if kind == "matches":
                     job = _match_step(platform, job, doc)
-                elif kind == "users":
-                    user = store._decode(kind, doc.to_dict(), doc.reference)
-                    if user is not None:
-                        store.put_user(replace(user, invited_by_user_id=None))
                 else:
                     from game_platform.query_store import TYPES
                     record = store._decode(kind, doc.to_dict(), doc.reference) if kind in TYPES else None
@@ -326,13 +324,6 @@ def _query_step(platform, ref):
                 store.raw_put(store.ref("verification_limits", scope), None)
                 store.raw_put(ref, {**job, "identity_index": identity_index + 1})
                 return True
-            # Same ownership checks as the existing account finalizer, after
-            # releasing identities in individually checkpointed bounded steps.
-            if user.referral_code:
-                referral = store.ref("referrals", user.referral_code)
-                reservation = store.raw_get(referral)
-                if reservation and reservation.get("user_id") in accounts:
-                    store.raw_put(referral, None)
             platform._record_token_movement(user, -user.token_balance, reason="account_deleted")
             store.delete_user(account_id)
             # User records have no child documents; finish the existing cleanup
@@ -396,9 +387,6 @@ def _memory_run(platform, now, limit, max_steps):
                 for event in store.list_experiment_events():
                     if event.user_id == account_id:
                         store.delete_experiment_event(event.id)
-            for other in store.list_users():
-                if other.id not in accounts and other.invited_by_user_id in accounts:
-                    store.put_user(replace(other, invited_by_user_id=None))
             # Local/JSON storage keeps these private support records in its
             # snapshot; remove them under the same operation lock before the
             # user write schedules that snapshot's durable save.
@@ -415,8 +403,6 @@ def _memory_run(platform, now, limit, max_steps):
                 getattr(inner, "_bug_report_limits", {}).pop("user:" + account_id, None)
             for account_id in [*(accounts - {user.id}), user.id]:
                 deleted = store.get_user(account_id)
-                if deleted and deleted.referral_code:
-                    platform._user_ids_by_code.pop(deleted.referral_code, None)
                 if deleted is not None:
                     platform._record_token_movement(deleted, -deleted.token_balance, reason="account_deleted")
                 store.delete_user(account_id)

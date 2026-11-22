@@ -413,19 +413,6 @@ class ScalablePlatform(GamePlatform):
                     "experiment_events", [("user_id", "==", account_id)]
                 ):
                     store.delete_experiment_event(row.id)
-            inviter = self._inviter_of(user)
-            for account_id in (user_id, *user.replaced_user_ids):
-                for row in store._list_all(
-                    "users", [("invited_by_user_id", "==", account_id)]
-                ):
-                    if row.id != user_id:
-                        store.put_user(
-                            replace(
-                                row,
-                                invited_by_user_id=inviter,
-                                updated_at=self._clock(),
-                            )
-                        )
             jobs._delete_finalize(store, {"user_id": user_id})
 
     def _schedule_computer_moves(self, match):
@@ -820,7 +807,7 @@ class ScalablePlatform(GamePlatform):
 
     def finish_external_phone(
         self, verification_id, *, approved, display_name=None, as_user_id=None,
-        invited_by_user_id=None, invite_token=None, campaign_code=None,
+        invite_match_id=None, invite_token=None, campaign_code=None, visitor_id=None,
     ):
         # The provider check happens outside the transaction. Re-read the durable
         # challenge before consuming it, so retries/other instances cannot reuse it.
@@ -833,8 +820,8 @@ class ScalablePlatform(GamePlatform):
                 result = self.login_with_linked_account(
                     kind="phone", identifier=record["identifier"],
                     display_name=display_name or record["identifier"],
-                    as_user_id=as_user_id, invited_by_user_id=invited_by_user_id,
-                    invite_token=invite_token, campaign_code=campaign_code,
+                    as_user_id=as_user_id, invite_match_id=invite_match_id,
+                    invite_token=invite_token, campaign_code=campaign_code, visitor_id=visitor_id,
                 )
                 self._store.raw_put(ref, None)
         if not approved:
@@ -848,9 +835,10 @@ class ScalablePlatform(GamePlatform):
         code,
         display_name=None,
         as_user_id=None,
-        invited_by_user_id=None,
+        invite_match_id=None,
         invite_token=None,
         campaign_code=None,
+        visitor_id=None,
     ):
         ref = self._store.ref("verifications", verification_id)
         error = None
@@ -875,9 +863,10 @@ class ScalablePlatform(GamePlatform):
                     identifier=record["identifier"],
                     display_name=display_name or record["identifier"].split("@")[0],
                     as_user_id=as_user_id,
-                    invited_by_user_id=invited_by_user_id,
+                    invite_match_id=invite_match_id,
                     invite_token=invite_token,
                     campaign_code=campaign_code,
+                    visitor_id=visitor_id,
                 )
                 self._store.raw_put(ref, None)
         if error:

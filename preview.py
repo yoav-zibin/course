@@ -9,12 +9,12 @@ import argparse
 from html import escape
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -99,16 +99,13 @@ void (async () => {{
             else:
                 html = html.replace("</header>", "</header>" + notice, 1)
             return preview_html(html)
-        if request.method == "GET" and path.startswith("r/") and path.count("/") == 1:
-            # A short invite link: like the backend, open the portal with the code as
-            # the inviter (here, so the redirect stays on the preview).
-            return RedirectResponse(f"/portal?{urlencode({'ref': path[2:]})}", status_code=302)
         if path.split("/", 1)[0] not in FORWARDED:
             return Response("This page is not available in the local preview.", status_code=404)
         # Forward only product API headers; the model key never enters the browser.
         headers = {key: request.headers[key] for key in (
             "content-type", "x-user-id", "x-user-password", "idempotency-key",
             "accept-language", "x-campaign-code", "if-none-match",
+            "x-visitor-id", "x-link-open",
         ) if key in request.headers}
         target = "/" + path
         if request.url.query:

@@ -4,6 +4,7 @@ import {Image,View} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {shareInvite} from '../platform/share';
 import {matchInviteUrl} from '../core/links';
+import {performInviteShare,type InviteShareChannel} from '../core/invite-sharing';
 import {GameRenderer} from '../game/GameRenderer';
 import {Button,Card,Copy,Dialog,Empty,Notice,Row,Title,colors} from './components';
 import {text,useApp} from './context';
@@ -16,6 +17,7 @@ import {RemoveSavedMatch} from './RemoveSavedMatch';
 export function MatchStage({showDetails=true}:{showDetails?:boolean}) {
   const {p,run,navigate,notify,openMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
   const match=p.selectedMatch!, game=p.game;
+  const sharingScope=JSON.stringify([p.baseUrl,p.account?.id,match.id]),currentSharingScope=useRef(sharingScope);currentSharingScope.current=sharingScope;
   const [confirm,setConfirm]=useState(''),[clock,setClock]=useState(''),[rendererError,setRendererError]=useState('');
   const [help,setHelp]=useState(false);
   const [frameHeight,setFrameHeight]=useState<number>();
@@ -55,7 +57,9 @@ export function MatchStage({showDetails=true}:{showDetails?:boolean}) {
     const update=()=>{const seconds=Math.max(0,Math.ceil((Date.parse(match.turn_deadline)-Date.now()-offset)/1000));setClock(`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`);};update();const timer=setInterval(update,1000);return()=>clearInterval(timer);
   },[match.turn_deadline,match.server_time]);
   const inviteUrl=!singlePlayer&&waiting&&match.invite_code?matchInviteUrl(match.invite_code,p.baseUrl):null;
-  const shareMatch=()=>run(async()=>{if(inviteUrl&&await shareInvite(inviteUrl)==='copied')notify(copyText('Invite link copied.'));});
+  const recordShare=(channel:InviteShareChannel)=>p.account&&currentSharingScope.current===sharingScope?p.actions.recordInviteShare(match.id,channel):Promise.resolve();
+  const shareMatch=()=>run(async()=>{if(inviteUrl&&await performInviteShare('share_link',()=>shareInvite(inviteUrl),recordShare)==='copied')notify(copyText('Invite link copied.'));});
+  const copyCode=()=>run(async()=>{await performInviteShare('copy_code',async()=>{await Clipboard.setStringAsync(match.invite_code!);return 'copied';},recordShare);notify(copyText('Invite code copied.'));});
   const submit=async(move:any)=>{if(local)await p.actions.practiceMove(move);else await p.actions.submitMove(move);};
   const replay=p.replayIndex;
   return <View style={fittedBoard?{flex:1,minHeight:0,minWidth:0}:{gap:22,minWidth:0}}>
@@ -80,7 +84,7 @@ export function MatchStage({showDetails=true}:{showDetails?:boolean}) {
         {over&&participant&&<Button disabled={Boolean(match.cloud_pending)||!p.network} onPress={()=>run(async()=>{const next=await p.actions.matchAction('rematch');await openMatch(next.id);})}>{copyText("Play again")}</Button>}
       </Row>
     </Card>}
-    {inviteUrl&&<Card><Title small>{copyText('Invite friends')}</Title><Copy selectable style={{fontSize:28,fontWeight:'700',letterSpacing:4,direction:'ltr'}}>{match.invite_code}</Copy><Copy selectable style={{direction:'ltr'}}>{inviteUrl}</Copy><Row><Button secondary onPress={()=>run(async()=>{await Clipboard.setStringAsync(match.invite_code!);notify(copyText('Invite code copied.'));})}>{copyText('Copy code')}</Button><Button onPress={shareMatch}>{copyText('Share link')}</Button></Row><Copy small muted>{copyText('Friends who open this link join an available seat or watch the match.')}</Copy></Card>}
+    {inviteUrl&&<Card><Title small>{copyText('Invite friends')}</Title><Copy selectable style={{fontSize:28,fontWeight:'700',letterSpacing:4,direction:'ltr'}}>{match.invite_code}</Copy><Copy selectable style={{direction:'ltr'}}>{inviteUrl}</Copy><Row><Button secondary onPress={copyCode}>{copyText('Copy code')}</Button><Button onPress={shareMatch}>{copyText('Share link')}</Button></Row><Copy small muted>{copyText('Friends who open this link join an available seat or watch the match.')}</Copy></Card>}
     {game&&(game.tutorial_text||game.game_logic_rules||game.game_ui_rules)&&<Row><View style={{flex:1}}/><Button compact secondary onPress={()=>setHelp(true)}>{t('ui.game.rules','How to play')}</Button></Row>}
     </View>}
     {singlePlayer&&waiting?<Card><Copy muted>{copyText('Private to your account')}</Copy>{owner&&<Button disabled={p.loading||Boolean(match.cloud_pending)||!p.network||!game?.allowed_player_counts.includes(activePlayers)} onPress={()=>run(()=>p.actions.matchAction('start'))}>{t('ui.match.start_match','Start match')}</Button>}</Card>

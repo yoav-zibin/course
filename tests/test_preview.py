@@ -81,8 +81,8 @@ def test_preview_preserves_product_request_headers_and_retry_advice():
         assert response.headers['retry-after'] == '15'
 
 
-def test_preview_short_invite_links_open_the_local_portal():
+def test_preview_personal_referral_urls_are_not_handled_locally():
     with TestClient(preview.create_preview('https://buildplay.fun', transport=httpx.MockTransport(lambda request: httpx.Response(500)))) as client:
         response = client.get('/r/48213', follow_redirects=False)
-        assert response.status_code == 302
-        assert response.headers['location'] == '/portal?ref=48213'
+        assert response.status_code == 404
+        assert "location" not in response.headers

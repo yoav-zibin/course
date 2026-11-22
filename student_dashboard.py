@@ -153,31 +153,40 @@ def report_sample(row):
 
 def build_dashboard(store, roster, *, roster_fetched_at):
     users = {user.id: user for user in all_users(store)}
+    nodes = {node["user_id"]: node for node in store.list_analytics("recruitment_nodes")}
     canonical = {}
 
     def resolve(user_id):
         if user_id in canonical:
             return canonical[user_id]
         current, seen = user_id, set()
-        while current in users and users[current].replaced_by_user_id:
+        while True:
+            merged_into = nodes.get(current, {}).get("merged_into_user_id")
+            if not merged_into and current in users:
+                merged_into = users[current].replaced_by_user_id
+            if not merged_into:
+                break
             if current in seen:
                 raise ValueError("an account merge cycle prevents computing the leaderboard")
             seen.add(current)
-            current = users[current].replaced_by_user_id
+            current = merged_into
         canonical[user_id] = current
         return current
 
     aliases = defaultdict(set)
-    for user_id in users:
+    for user_id in users.keys() | nodes.keys():
         aliases[resolve(user_id)].add(user_id)
-    # Reuse the platform's persisted referral relation: merged accounts are not
-    # new players; references to merged inviters resolve to the surviving owner.
+    # Historical edges survive deletion. A live record is a fallback only when
+    # no durable node exists, never a replacement for a retained inviter edge.
     children = defaultdict(set)
-    for user in users.values():
-        if user.replaced_by_user_id is None and user.invited_by_user_id:
-            parent = resolve(user.invited_by_user_id)
-            if parent in users and parent != user.id:
-                children[parent].add(user.id)
+    for user_id in users.keys() | nodes.keys():
+        node = nodes.get(user_id)
+        inviter = (node.get("inviter_user_id") if node is not None
+                   else users[user_id].invited_by_user_id)
+        if resolve(user_id) == user_id and inviter:
+            parent = resolve(inviter)
+            if parent != user_id:
+                children[parent].add(user_id)
 
     students, cohorts, descendants = [], [], []
     account_owners = defaultdict(list)
@@ -187,7 +196,8 @@ def build_dashboard(store, roster, *, roster_fetched_at):
         roots = {resolve(user_id) for user_id in matched}
         # Name/email may survive only on a merged alias. Include its survivor and
         # every alias so historical reports remain attributable after a merge.
-        account_ids = set().union(*(aliases[root] for root in roots)) if roots else set()
+        account_ids = (set().union(*(aliases[root] for root in roots)) & users.keys()
+                       if roots else set())
         accounts = []
         for user_id in sorted(account_ids, key=lambda uid: (users[uid].created_at, uid)):
             user = users[user_id]
@@ -291,8 +301,10 @@ def build_dashboard(store, roster, *, roster_fetched_at):
                        "accounts, resolving merges and excluding this member's accounts. Unsynced device saves and "
                        "deleted matches are unavailable.",
             "referrals": "Recorded inviter links, transitively through all generations. Merged accounts count once; "
-                         "the member's own accounts are excluded. Recruited-player matches count each started match "
-                         "once even when several recruits played it. Untracked word-of-mouth invitations are unavailable.",
+                         "the member's own accounts are excluded. Historical recruitment nodes preserve counts and "
+                         "ancestry after account deletion. Recruited-player matches use retained started matches only, "
+                         "counted once even when several recruits played it. Deleted matches and untracked "
+                         "word-of-mouth invitations are unavailable.",
             "bug_reports": "Private bug reports attributed by reporter user ID, including merged aliases. Average "
                            "and highest/lowest examples use only assessed scores (0–10); zero counts, unassessed "
                            "reports do not. Legacy feedback is separate.",

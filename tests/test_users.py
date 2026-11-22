@@ -31,21 +31,20 @@ def test_create_and_get_a_guest_user(api: Api) -> None:
         "last_token_grant_day": None,
         "free_tokens_granted": 0,
         "is_verified": False,
-        "referral_code": user["referral_code"],
         "created_at": "2026-01-01T00:01:00Z",
         "updated_at": "2026-01-01T00:01:00Z",
     }
     assert user["picture_url"].startswith("/static/avatars/users/")
     assert len(user["password"]) >= 20
-    assert user["referral_code"].isdigit() and 10000 <= int(user["referral_code"]) <= 99999
+    assert "referral_code" not in user
     # The password is only ever returned on creation (linked logins only to the
-    # owner, through /auth/*), and the referral code and token wallet only to the
+    # owner, through /auth/*), and the token wallet only to the
     # user themself.
     user_without_password = {
         key: user[key] for key in user if key not in ("password", "linked_accounts")
     }
     assert api.ok("GET", f"/users/{user['id']}") == {
-        **user_without_password, "referral_code": None,
+        **user_without_password,
         "token_balance": None, "last_token_grant_day": None,
         "free_tokens_granted": None, "is_verified": None,
         "notifications_enabled": None, "notification_prompt_seen": None,
@@ -184,7 +183,7 @@ def test_public_profile_reads_avoid_locks_but_credentials_check_fresh_state() ->
     for _ in range(3):
         response = api.client.get(f"/users/{user['id']}", headers=headers)
         assert response.status_code == 200
-        assert response.json()["referral_code"]  # authenticated, so it is the caller's own
+        assert response.json()["token_balance"] == 0  # private owner fields remain available
     assert api.client.get(f"/users/{user['id']}").status_code == 200
     # Only the three credential checks enter the transaction. Anonymous public
     # profiles keep their cached read path; auth observes purge claims freshly.

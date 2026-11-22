@@ -133,13 +133,9 @@ class UserCreate(_Request):
     # The user's preferred language (see GET /i18n/locales); responses to their requests
     # are in it unless a request says otherwise.
     locale: LocaleCode = ""
-    # The user whose invite link brought this person here: their 5-digit referral code
-    # or their user id (older links). Recorded only when this creates a new account.
-    # Unknown codes and ids are ignored.
-    invited_by_user_id: str | None = None
-    # The match invite (POST /matches/{id}/invites) the person arrived through, if
-    # any; its creator is recorded as the inviter when [invited_by_user_id] isn't
-    # given. Unknown or unusable tokens are ignored.
+    # A shared match or lobby URL. The server derives its owner; personal
+    # inviter IDs are never accepted. Unknown links do not block signup.
+    invite_match_id: str | None = None
     invite_token: str | None = None
 
 
@@ -184,9 +180,6 @@ class UserOut(BaseModel):
     last_token_grant_day: str | None = None
     free_tokens_granted: int | None = None
     is_verified: bool | None = None
-    # The user's own short invite code (links look like /r/<code>). Only in responses
-    # about the caller's own account; None for other users.
-    referral_code: str | None = None
     notifications_enabled: bool | None = None
     notification_prompt_seen: bool | None = None
     # Deletion lifecycle is private, like the wallet and notification settings.
@@ -198,7 +191,6 @@ class UserOut(BaseModel):
     def of(cls, user: User, *, own: bool = False) -> "UserOut":
         return cls(
             id=user.id,
-            referral_code=user.referral_code if own else None,
             notifications_enabled=user.notifications_enabled if own else None,
             notification_prompt_seen=user.notification_prompt_seen if own else None,
             deletion_requested_at=user.deletion_requested_at if own else None,
@@ -277,13 +269,10 @@ class AuthResponse(BaseModel):
     last_token_grant_day: str | None = None
     is_verified: bool = False
     merged_from_user_id: str | None = None
-    # The user's short invite code, for invite links (/r/<code>).
-    referral_code: str | None = None
 
     @classmethod
     def of(cls, user: User, merged_from_user_id: str | None = None) -> "AuthResponse":
         return cls(
-            referral_code=user.referral_code,
             user_id=user.id,
             display_name=user.display_name,
             email=user.email,
@@ -301,9 +290,8 @@ class AuthResponse(BaseModel):
 class GoogleLogin(_Request):
     # The ID token from the website's Sign in with Google button.
     id_token: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-    # The user whose invite link brought this person here: a 5-digit referral code or
-    # a user id. Recorded only when this creates a new account; unknown ones are ignored.
-    invited_by_user_id: str | None = None
+    # Shared match links can recruit new or existing accounts with no inviter.
+    invite_match_id: str | None = None
     invite_token: str | None = None
 
 
@@ -333,9 +321,8 @@ class VerifyCode(_Request):
     code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     # The new account's display name, used only on first login with this credential.
     display_name: Name | None = None
-    # The user whose invite link brought this person here: a 5-digit referral code or
-    # a user id. Recorded only when this creates a new account; unknown ones are ignored.
-    invited_by_user_id: str | None = None
+    # Shared match links can recruit new or existing accounts with no inviter.
+    invite_match_id: str | None = None
     invite_token: str | None = None
 
 
@@ -1025,6 +1012,11 @@ class InviteCreate(_Request):
         default=None, json_schema_extra={"deprecated": True},
         description="Unsupported. Share the match URL using your device's sharing dialog.",
     )
+
+
+class MatchShare(_Request):
+    # A device share/copy action, without recipient or message content.
+    channel: Literal["copy_code", "share_link"]
 
 
 class InviteAcceptanceOut(BaseModel):

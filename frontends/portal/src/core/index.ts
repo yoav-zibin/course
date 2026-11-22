@@ -1,3 +1,5 @@
+import type {InviteShareChannel} from './invite-sharing';
+import {withoutPersonalReferral,cleanAccounts} from './account-data';
 import { useSyncExternalStore } from 'react';
 import { PortalApi, ApiError,InactiveSignInError } from './api';
 import {recordDiagnosticEvent,recordDiagnosticLog,setDiagnosticScope} from './diagnostics';
@@ -19,7 +21,7 @@ import { isOnline, watchConnectivity } from '../platform/connectivity';
 import { configureI18n, setLocale, getLocale, getDirection, gameTexts, localizeGame, subscribeI18n, t, copyText } from '../platform/i18n';
 import bundled from './bundled-tictactoe.json';
 import { browserLogin } from '../platform/browser-login';
-import { rememberUrlAttribution, newAccountAttribution, forgetInviter } from './attribution';
+import { rememberUrlAttribution, newAccountAttribution, forgetMatchAttribution, purgePersonalAttribution } from './attribution';
 import type { Account, AccountData, Game, Match, LocalMatch, ListKind, PortalState, PracticeOptions, InAppNotification } from './types';
 export * from './types';
 export { t } from '../platform/i18n';
@@ -167,7 +169,7 @@ export class PortalStore {
     const game=this.data.responses[`/games/${id}/versions/${version}`]||this.data.responses[`/games/${encodeURIComponent(id)}/versions/${version}`]||(bundled.id===id&&bundled.version===version?bundled:undefined);
     return game?.id===id&&game.version===version?game:undefined;
   }
-  async request(method: string, path: string, body?: any): Promise<any> { if (this.localOnly) throw new Error('This test launch runs entirely on this device.'); const guard = this.capture(); try { const result = await this.api.request(method, path, body, this.state.account); guard(); return result; } catch (error) { guard(); throw error; } }
+  async request(method: string, path: string, body?: any,linkOpen=false): Promise<any> { if (this.localOnly) throw new Error('This test launch runs entirely on this device.'); const guard = this.capture(); try { const result = await this.api.request(method, path, body, this.state.account,undefined,linkOpen); guard(); return result; } catch (error) { guard(); throw error; } }
   private preserveOwnDeletion(path: string, value: any, revision: number) {
     if (revision === this.profileRevision || !path.startsWith('/users') || !this.state.account) return value;
     const own = this.state.profile, ids = new Set([this.state.account.id, this.state.account.canonical_user_id, own?.id].filter(Boolean));
@@ -175,10 +177,10 @@ export class PortalStore {
     const fields = {deletion_requested_at: own.deletion_requested_at ?? null, deletion_scheduled_at: own.deletion_scheduled_at ?? null, deletion_started_at: own.deletion_started_at ?? null};
     return Array.isArray(value) ? value.map(item => ids.has(item?.id) ? {...item,...fields} : item) : ids.has(value?.id) ? {...value,...fields} : value;
   }
-  private async read(path: string, allowCached = true): Promise<any> {
+  private async read(path: string, allowCached = true,linkOpen=false): Promise<any> {
     const guard = this.capture(), ownProfile = !!this.state.account && path === `/users/${encodeURIComponent(this.state.account.id)}`, revision = this.profileRevision;
     if (this.localOnly) { if (allowCached && Object.hasOwn(this.data.responses, path)) return this.cached(path); throw new TypeError('This device launch is offline.'); }
-    try { if (!isOnline() || Date.now() < this.retryAfter) throw new TypeError('Offline'); const result = await this.api.request('GET', path, undefined, this.state.account); guard(); if (ownProfile && revision !== this.profileRevision && this.state.profile) return this.state.profile; this.retryAfter = 0; this.patch({ network: isOnline() }); const matchId = /^\/matches\/([^/]+)$/.exec(path)?.[1]; if (matchId && this.data.conflicts[matchId]?.message.startsWith('The outcome of this unsaved action')) delete this.data.conflicts[matchId]; let saved = await this.cache(path, this.preserveOwnDeletion(path,result,revision)); guard(); const latest=this.preserveOwnDeletion(path,saved,revision); if(!equal(saved,latest)){saved=await this.cache(path,latest);guard();} return ownProfile && revision !== this.profileRevision && this.state.profile ? this.state.profile : saved; }
+    try { if (!isOnline() || Date.now() < this.retryAfter) throw new TypeError('Offline'); const result = await this.api.request('GET', path, undefined, this.state.account,undefined,linkOpen); guard(); if (ownProfile && revision !== this.profileRevision && this.state.profile) return this.state.profile; this.retryAfter = 0; this.patch({ network: isOnline() }); const matchId = /^\/matches\/([^/]+)$/.exec(path)?.[1]; if (matchId && this.data.conflicts[matchId]?.message.startsWith('The outcome of this unsaved action')) delete this.data.conflicts[matchId]; let saved = await this.cache(path, this.preserveOwnDeletion(path,result,revision)); guard(); const latest=this.preserveOwnDeletion(path,saved,revision); if(!equal(saved,latest)){saved=await this.cache(path,latest);guard();} return ownProfile && revision !== this.profileRevision && this.state.profile ? this.state.profile : saved; }
     catch (error) { guard(); if (error instanceof ApiError && error.status < 500) throw error; if (Date.now() >= this.retryAfter) this.retryAfter = Date.now() + 10000; this.patch({ network: false }); if (allowCached && Object.hasOwn(this.data.responses, path)) return this.cached(path); throw error; }
   }
   private async list(kind: ListKind, more = false): Promise<void> {
@@ -342,8 +344,9 @@ export class PortalStore {
       const base = (baseUrl ?? (typeof location !== 'undefined' ? location.origin : process.env.EXPO_PUBLIC_API_URL || 'https://buildplay.fun')).replace(/\/$/, '');
       this.localOnly = localOnly;
       this.api = new PortalApi(base, getLocale, localOnly ? async () => { throw new Error('This test launch runs entirely on this device.'); } : fetch); this.repository = new AccountRepository(base); this.patch({ baseUrl: base, network: !localOnly && isOnline() });
+      await purgePersonalAttribution();
       let accounts: Account[];
-      try { accounts = await loadAccounts(base); accounts = await importNativeLegacy(base || 'https://buildplay.fun', this.repository, accounts); await saveAccounts(accounts, base); await finishNativeImport(base || 'https://buildplay.fun'); }
+      try { accounts = await loadAccounts(base); accounts = cleanAccounts(await importNativeLegacy(base || 'https://buildplay.fun', this.repository, accounts)); await saveAccounts(accounts, base); await finishNativeImport(base || 'https://buildplay.fun'); }
       catch (error) { accounts = await loadAccounts(base).catch(() => []); if(isQuotaError(error))reportCacheFailure('migration',error);else this.patch({ storageError: `Saved data needs attention: ${(error as Error).message}. Existing saves were kept.` }); }
       const id = await loadCurrentAccount(base).catch(() => null);
       // Only old installs without a selection may restore their first login.
@@ -560,7 +563,7 @@ export class PortalStore {
   }
   async openInvite(token: string) {
     const guard = this.capture(), selection = ++this.selection;
-    const preview = await this.request('GET', `/invites/${encodeURIComponent(token)}`); guard(); if (selection !== this.selection) return null;
+    const preview = await this.request('GET', `/invites/${encodeURIComponent(token)}`,undefined,true); guard(); if (selection !== this.selection) return null;
     await this.selectMatch(preview.match.id, token, preview.match); guard();
     return preview;
   }
@@ -575,7 +578,7 @@ export class PortalStore {
     else if (this.selectedInvite?.matchId !== id) this.selectedInvite = null;
     const token = ++this.selection; const guard = this.capture(); await this.reloadData();
     if(removedSavedMatch(this.data,id))throw new RemovedSavedMatchError();
-    const fetched = initialMatch || this.data.local[id] || (this.data.creations?.[id] ? this.data.responses[`/matches/${id}`] : await this.read(`/matches/${encodeURIComponent(id)}`)); guard(); if (token !== this.selection) return;
+    const fetched = initialMatch || this.data.local[id] || (this.data.creations?.[id] ? this.data.responses[`/matches/${id}`] : await this.read(`/matches/${encodeURIComponent(id)}`,true,true)); guard(); if (token !== this.selection) return;
     if (initialMatch?.single_player_state) {
       await this.cache(`/matches/${encodeURIComponent(id)}`,initialMatch); guard();
     }
@@ -611,8 +614,10 @@ export class PortalStore {
   private async saveLogin(response: any, removeIds: string[] = [], intentGuard?:()=>void) {
     let selectionCommitted=false;
     const sessionGuard = this.capture(),guard=()=>{sessionGuard();if(!selectionCommitted)intentGuard?.();};guard();
+    const matchAttribution=await this.attribution();guard();
+    const linkedMatch=matchAttribution.invite_match_id===this.state.selectedMatch?.id?matchAttribution.invite_match_id:undefined;
     const id = response.user_id || response.id; if (!id || !response.password) throw new Error('Invalid account response');
-    const account: Account = { ...response, id, linked: response.linked_accounts ?? response.linked ?? [] };
+    const account: Account = { ...withoutPersonalReferral(response), id, linked: response.linked_accounts ?? response.linked ?? [] };
     const sourceIds = [...new Set([...removeIds, response.merged_from_user_id, ...(!this.state.account ? ['visitor'] : [])].filter((value): value is string => typeof value === 'string' && !!value && value !== id))];
     // This durable write precedes removing an alias from either account index.
     // A failed write leaves the old login and every original namespace intact.
@@ -630,17 +635,21 @@ export class PortalStore {
       if (sourceIds.length) { this.patch({ storageError: 'Linked credentials could not be saved. Previous account entries and their saved data remain available.' }); throw error; }
       this.patch({ storageError: 'Credentials could not be saved on this device. Keep the app open to retain this online session.' });
     }
-    guard(); await forgetInviter();guard(); this.patch({ accounts }); await this.switchAccount(id);
+    guard(); await forgetMatchAttribution();guard(); this.patch({ accounts }); await this.switchAccount(id,undefined,linkedMatch);
   }
-  async switchAccount(id: string,intentGuard?:()=>void) {
+  async switchAccount(id: string,intentGuard?:()=>void,linkedMatch?:string) {
     intentGuard?.();
     const account = this.state.accounts.find(a => a.id === id); if (!account) throw new Error('Account not found on this device');
     const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.dismissedNotificationIds.clear(); this.notificationPromptClaim = null; this.observations.clear();
     const current=()=>{if(transition!==this.generation)throw new Error('Account changed; refresh to continue.');intentGuard?.();};
     await this.writeSelection(id,current).catch(()=>{});current();
+    const target=await newAccountAttribution(this.state.accounts);current();
+    const reopenMatch=linkedMatch||(target.invite_match_id===this.state.selectedMatch?.id?target.invite_match_id:null);
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
     this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts, authConfig, account, locale, storageError, network: !this.localOnly && isOnline() }); const guard = this.capture(); await this.reloadData(); guard();
     this.patch({ games: savedList(this.data.responses['/games']), myMatches: savedList(this.data.responses['/matches']) }); await this.refresh(); guard();
+    if(reopenMatch)await this.selectMatch(reopenMatch);
+    guard();await forgetMatchAttribution();
   }
   async logout(id = this.state.account?.id) {
     const accounts = this.state.accounts.filter(a => a.id !== id);
@@ -963,6 +972,7 @@ export class PortalStore {
     bootstrap: (baseUrl?: string, localOnly = false,initialUrl?:string) => this.bootstrap(baseUrl, localOnly,initialUrl), refresh: () => this.refresh(), refreshMatch: () => this.refreshMatch(),
     rememberAttribution:(url:string)=>rememberUrlAttribution(url,this.state.baseUrl,this.state.accounts),
     request: (method: string, path: string, body?: any) => this.perform(() => this.request(method, path, body), false),
+    recordInviteShare:(id:string,channel:InviteShareChannel)=>this.request('POST',`/matches/${encodeURIComponent(id)}/share`,{channel}).catch(()=>{}),
     searchGames: (query: string) => this.perform(async () => { this.patch({ query, games: [], cursors: { ...this.state.cursors, games: null } }); await this.list('games'); }),
     suggestGames: (query: string) => this.suggestGames(query),
     loadMore: (kind: ListKind) => this.perform(() => this.list(kind, true)),

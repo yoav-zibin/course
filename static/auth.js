@@ -29,7 +29,10 @@ const Auth = (() => {
 
   function load() {
     try {
-      return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) ?? [];
+      const stored = JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) ?? [];
+      const accounts = stored.map(({referral_code: _retiredCode, ...account}) => account);
+      if (stored.some(account => Object.hasOwn(account, "referral_code"))) save(accounts);
+      return accounts;
     } catch {
       return memoryAccounts ?? [];
     }
@@ -98,31 +101,20 @@ const Auth = (() => {
       free_tokens_granted: response.free_tokens_granted,
       last_token_grant_day: response.last_token_grant_day,
       token_balance: response.token_balance,
-      referral_code: response.referral_code ?? null,
     });
     save(rest);
     // This browser has an account now, so a remembered invite has done its job.
-    forgetInviter();
+    forgetMatchAttribution();
     setCurrent(response.user_id);
     return response;
   }
 
-  /** Saves [code] as account [id]'s referral code (accounts saved before codes existed
-   * learn theirs from the server later). */
   function setPicture(id, picture) {
     const all = load(), account = all.find(a => a.id === id);
     if (!account || !picture || account.picture_url === picture) return false;
     account.picture_url = picture;
     save(all);
     return true;
-  }
-
-  function setReferralCode(id, code) {
-    const accounts = load();
-    const account = accounts.find((a) => a.id === id);
-    if (!account || !code || account.referral_code === code) return;
-    account.referral_code = code;
-    save(accounts);
   }
 
   /** Forgets one login without choosing another remembered account. */
@@ -141,9 +133,8 @@ const Auth = (() => {
 
   /** Headers for apiRequest's {user}: the account itself works. */
   function headers(account) {
-    return account
-      ? { "X-User-Id": account.id, "X-User-Password": account.password }
-      : {};
+    return { ...(typeof visitorId === "function" ? {"X-Visitor-Id": visitorId()} : {}),
+      ...(account ? {"X-User-Id": account.id, "X-User-Password": account.password} : {}) };
   }
 
   /** A retained verified session earns at most one reward per UTC visit day. */
@@ -182,70 +173,64 @@ const Auth = (() => {
     dailyLoginPending.set(account.id, pending);return pending;
   }
 
-  // Invite links
-  //
-  // An invite link names its sender: the short form is /r/<referral code>, or
-  // /r/<code>#match=<match id> for a match; the server redirects it to
-  // /portal?ref=<code> (keeping the #match part). Older links carry the sender's user
-  // id instead: /portal#ref=<id> or /portal#match=<match id>&ref=<id>. The first ref this browser sees is
-  // remembered until an account is created or logged in here, so it still counts if
-  // the person looks around first and signs up later. The server records it as the
-  // new account's inviter (and ignores it for accounts that already exist).
+  // Remember only the latest match or invitation. Personal referral links have
+  // retired; remove old browser attribution instead of applying it to signups.
+  const INVITE_KEY = "game-platform.invite-token.v1";
+  const MATCH_KEY = "game-platform.invite-match.v1";
+  const LEGACY_INVITER_KEY = "game-platform.invited-by.v1";
+  const validTarget = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 
-  const INVITER_KEY = "game-platform.invited-by.v1";
-
-  function refInUrl() {
-    for (const part of [location.hash.slice(1), location.search.slice(1)]) {
-      const ref = new URLSearchParams(part).get("ref");
-      if (ref) return ref;
-    }
+  function matchTargetInUrl(raw) {
+    try {
+      const url = new URL(raw, location.origin);
+      if (url.origin !== location.origin || url.username || url.password) return null;
+      const pathInvite = /^\/invite\/([a-z]{4})\/?$/.exec(url.pathname) || /^\/i\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
+      if (pathInvite) return {key: INVITE_KEY, value: pathInvite[1]};
+      const hash = new URLSearchParams(url.hash.slice(1));
+      for (const [kind, key] of [["invite", INVITE_KEY], ["match", MATCH_KEY]]) {
+        const value = hash.get(kind) || url.searchParams.get(kind);
+        if (validTarget(value)) return {key, value};
+      }
+      const next = url.searchParams.get("next");
+      if (next) {
+        const target = new URL(next, location.origin);
+        if (target.origin === location.origin && !target.searchParams.has("next")) return matchTargetInUrl(target.href);
+      }
+    } catch {}
     return null;
   }
 
-  /** Remembers the inviter named in the current URL, unless one is remembered already
-   * or the link is one of this browser's own accounts. */
-  function rememberInviter() {
+  function rememberMatchAttribution() {
     try {
-      const ref = refInUrl();
-      if (!ref || localStorage.getItem(INVITER_KEY)) return;
-      if (load().some((account) => account.id === ref || account.referral_code === ref)) return;
-      localStorage.setItem(INVITER_KEY, ref);
-    } catch {
-      // Storage can be unavailable (private mode); the invite just isn't counted.
-    }
-  }
-
-  function forgetInviter() {
-    try {
-      localStorage.removeItem(INVITER_KEY);
+      localStorage.removeItem(LEGACY_INVITER_KEY);
+      const raw = location.href || `${location.origin}${location.pathname || "/portal"}${location.search || ""}${location.hash || ""}`;
+      const target = matchTargetInUrl(raw);
+      if (!target || load().some(account => account.password === target.value)) return;
+      localStorage.removeItem(target.key === INVITE_KEY ? MATCH_KEY : INVITE_KEY);
+      localStorage.setItem(target.key, target.value);
     } catch {}
   }
 
-  /** [body] for a request that may create an account, plus the remembered inviter. */
+  function forgetMatchAttribution() {
+    for (const key of [LEGACY_INVITER_KEY, INVITE_KEY, MATCH_KEY]) {
+      try { localStorage.removeItem(key); } catch {}
+    }
+  }
+
   function newAccountBody(body) {
-    let ref = null;
+    const {invited_by_user_id: _retiredInviter, referral_code: _retiredCode, invite_token: _oldInvite, invite_match_id: _oldMatch, ...clean} = body;
     try {
-      ref = localStorage.getItem(INVITER_KEY);
+      const token = localStorage.getItem(INVITE_KEY), match = localStorage.getItem(MATCH_KEY);
+      const safe = value => validTarget(value) && !load().some(account => account.password === value);
+      if (safe(token)) return {...clean, invite_token: token};
+      if (safe(match)) return {...clean, invite_match_id: match};
     } catch {}
-    const token = inviteTokenInUrl();
-    const attributed = token ? { ...body, invite_token: token } : body;
-    return ref ? { ...attributed, invited_by_user_id: ref } : attributed;
+    return clean;
   }
 
-  /** A link that credits [account] with everyone who signs up through it: the short
-   * /r/<code> form, or the long one for an account that has no code yet.
-   * [hash] adds more of the portal's hash parameters, e.g. "match=<id>". */
-  function inviteLink(account, hash = "") {
-    if (account.referral_code) {
-      return `${location.origin}/r/${encodeURIComponent(account.referral_code)}${hash ? `#${hash}` : ""}`;
-    }
-    const params = new URLSearchParams(hash);
-    params.set("ref", account.id);
-    return `${location.origin}/portal#${params}`;
-  }
-
-  rememberInviter();
-  window.addEventListener?.("hashchange", rememberInviter);
+  rememberMatchAttribution();
+  window.addEventListener?.("hashchange", rememberMatchAttribution);
+  window.addEventListener?.("popstate", rememberMatchAttribution);
 
   /** Sends a logged-out visitor to the login page, and back here after.
    * Every account page requires a login — a guest account counts and takes
@@ -623,18 +608,6 @@ const Auth = (() => {
     return form;
   }
 
-  /** The match invite token in this page's #invite=, or, on the login page a
-   * logged-out visitor is sent to (/?next=/static/portal.html#invite=<token>),
-   * in the page they will return to. */
-  function inviteTokenInUrl() {
-    const fromHash = (hash) => new URLSearchParams(hash.replace(/^#/, "")).get("invite");
-    const direct = fromHash(location.hash || "");
-    if (direct) return direct;
-    const next = new URLSearchParams(location.search || "").get("next") || "";
-    const at = next.indexOf("#");
-    return at >= 0 ? fromHash(next.slice(at)) : null;
-  }
-
   async function createGuest(displayName = "") {
     const name = displayName.trim() || I18n.t("ui.auth.guest_default_name", { number: accounts().length + 1 }, `Guest ${accounts().length + 1}`);
     const user = await apiRequest("POST", "/users", {
@@ -644,7 +617,6 @@ const Auth = (() => {
       user_id: user.id,
       display_name: user.display_name,
       password: user.password,
-      referral_code: user.referral_code,
       linked_accounts: [],
       merged_from_user_id: null,
     };
@@ -756,19 +728,6 @@ const Auth = (() => {
       }
       panel.append(
         el("button", { type: "button", "data-auth-action": "link", textContent: I18n.t("ui.auth.link_method", {}, "Link a login method"), onclick: () => { hidePanel(); openDialog("link"); } }),
-        el("button", {
-          type: "button",
-          "data-auth-action": "invite",
-          textContent: I18n.t("ui.auth.copy_invite", {}, "Copy my invite link"),
-          title: I18n.t("ui.auth.invite_hint", {}, "Everyone who signs up through this link counts as invited by you"),
-          onclick: () => {
-            hidePanel();
-            navigator.clipboard
-              // Read again: the code may have arrived after the menu was drawn.
-              .writeText(inviteLink(current() ?? account))
-              .then(() => toast(I18n.t("ui.auth.invite_copied", {}, "Copied your invite link")));
-          },
-        }),
         // Feedback about the website, on pages that load the feedback dialog (the portal).
         window.FeedbackDialog ? el("button", {
           type: "button",
@@ -840,8 +799,6 @@ const Auth = (() => {
     removeAll,
     headers,
     claimDailyLogin,
-    inviteLink,
-    setReferralCode,
     setPicture,
     newAccountBody,
     createGuest,

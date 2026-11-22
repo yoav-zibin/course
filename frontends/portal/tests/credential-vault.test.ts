@@ -62,3 +62,20 @@ test('credential slots use canonical HTTP origins and reject opaque or embedded-
   assert.notEqual(credentialKeys('http://127.0.0.1:8000').accounts,credentialKeys('http://127.0.0.1:8001').accounts);
   for(const url of ['file:///private','javascript:void(0)','https://user:password@buildplay.fun'])assert.throws(()=>credentialKeys(url));
 });
+
+
+test('retired codes are scrubbed from saved and legacy metadata without touching credentials',async()=>{
+  const {metadata,secure}=fixture();
+  metadata.values.set(LEGACY_ACCOUNTS_KEY,JSON.stringify([{id:alice.id,display_name:alice.display_name,referral_code:'12345'}]));
+  const production=createCredentialVault(undefined,metadata,secure);
+  assert.deepEqual(await production.loadAccounts(),[alice]);
+  assert.equal(JSON.parse(metadata.values.get(LEGACY_ACCOUNTS_KEY)!)[0].referral_code,undefined);
+  await production.saveAccounts([{...alice,referral_code:'67890'}]);
+  assert.equal(JSON.parse(metadata.values.get(production.keys.accounts)!)[0].referral_code,undefined);
+  assert.equal(secure.values.get(oldPasswordKey),alice.password);
+});
+
+test('denied metadata cleanup still loads a usable account without retired codes',async()=>{
+  const {metadata,secure}=fixture();metadata.values.set(LEGACY_ACCOUNTS_KEY,JSON.stringify([{id:alice.id,display_name:alice.display_name,referral_code:'12345'}]));metadata.failWrites=true;
+  assert.deepEqual(await createCredentialVault(undefined,metadata,secure).loadAccounts(),[alice]);
+});

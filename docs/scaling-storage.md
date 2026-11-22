@@ -59,9 +59,9 @@ Push delivery uses a transactional outbox and supports at-least-once delivery:
 a crash after delivery but before acknowledgement can repeat a notification.
 Match jobs move to `failed_jobs` after five failures. Outbox deliveries retry on
 lease expiry. Shared verification records persist expiry, attempts and request
-rate limits. Linked identities and referral codes have transactional lookup
-reservations. New referral codes use 16 hexadecimal characters; migration retains
-old codes. The compiled QuickJS cache is capped at 2000 versions.
+rate limits. Linked identities have transactional lookup reservations. Shared
+multiplayer invitation codes use transactional reservations; personal referral
+codes are retired. The compiled QuickJS cache is capped at 2000 versions.
 
 The store uses the Firestore SDK's private transaction begin/commit methods to
 support the existing context-manager service boundaries. Emulator and cloud
@@ -92,7 +92,7 @@ integration tests must pass before upgrading that SDK.
   tools are enabled; credentials and game source are not included in summaries.
 * `/v2/admin/referrals/summary` and `/v2/admin/referrals/users`: report summary,
   descending leaderboard, child pages (`parent_id`, empty for roots), and one
-  name-prefix/full-user-ID/referral-code search (`q`). All require master access.
+  name-prefix/full-user-ID search (`q`). All require master access.
   The Invites backoffice negotiates this mode and loads one branch/page at a time.
 
 Cursors are opaque query-bound positions ordered by scattered document ID, not

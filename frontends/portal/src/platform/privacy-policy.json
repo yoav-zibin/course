@@ -7,7 +7,7 @@
     },
     {
       "kind": "paragraph",
-      "text": "Last updated: November 21, 2026."
+      "text": "Last updated: November 22, 2026."
     },
     {
       "kind": "paragraph",
@@ -70,6 +70,10 @@
     {
       "kind": "paragraph",
       "text": "Token transaction records are kept permanently, including after account or match deletion. They contain user IDs, token amounts and starting balances, the reason and time of each movement, and match IDs when applicable. They do not contain names or login details."
+    },
+    {
+      "kind": "paragraph",
+      "text": "Invitation and recruitment history is kept permanently after account or match deletion. It contains internal account, match, invitation and visitor IDs, inviter relationships, conversion events and timestamps. It does not contain names, contact details, login credentials or request/network data."
     },
     {
       "kind": "heading",

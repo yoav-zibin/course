@@ -32,8 +32,8 @@ window.ReferralPages=(()=>{
     $('error').textContent='';
     $('freshness').textContent=I18n.t("ui.invites.report_built", {time:formatTime(result.generated_at)}, "Report built {time}");
     $('summary').replaceChildren(el('div',{class:'cards'},Object.entries(result.summary).map(([label,value])=>el('div',{class:'card'},el('div',{class:'value',textContent:value}),el('div',{textContent:summaryLabel(label)})))));
-    $('search').placeholder=I18n.t("ui.invites.referral_search", {}, "Name prefix, full user ID, or referral code");
-    $('search').setAttribute('aria-label',I18n.t("ui.invites.referral_search", {}, "Name prefix, full user ID, or referral code"));
+    $('search').placeholder=I18n.t("ui.invites.referral_search", {}, "Name prefix or full user ID");
+    $('search').setAttribute('aria-label',I18n.t("ui.invites.referral_search", {}, "Name prefix or full user ID"));
     $('detail').replaceChildren();$('results').replaceChildren();
     await Promise.all([listing($('leaderboard'),{}),listing($('tree'),{parent_id:''})]);
   }

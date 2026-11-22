@@ -38,7 +38,7 @@ def test_batch_rejects_more_than_200_ids(api: Api) -> None:
     assert response.status_code == 400
 
 
-def test_batch_shows_referral_code_only_on_the_callers_own_profile(
+def test_batch_shows_private_wallet_only_on_the_callers_own_profile(
     api: Api,
 ) -> None:
     alice = api.new_user("alice")
@@ -47,5 +47,6 @@ def test_batch_shows_referral_code_only_on_the_callers_own_profile(
         "GET", "/users", as_user=alice, params={"ids": f"{alice},{bob}"}
     )
     by_id = {p["id"]: p for p in profiles}
-    assert by_id[alice]["referral_code"]
-    assert by_id[bob]["referral_code"] is None
+    assert by_id[alice]["token_balance"] == 0
+    assert by_id[bob]["token_balance"] is None
+    assert all("referral_code" not in profile for profile in profiles)

@@ -140,6 +140,23 @@ class SavingStore:
 
     # [Store] interface: reads delegate; writes delegate and schedule a save.
 
+    def get_analytics(self, kind, identity):
+        with self._lock:
+            return self._inner.get_analytics(kind, identity)
+
+    def put_analytics(self, kind, identity, row):
+        with self._lock:
+            self._inner.put_analytics(kind, identity, row)
+            self._set_dirty()
+
+    def page_analytics(self, kind, *, filters=(), limit=50, cursor=None, scope=None):
+        with self._lock:
+            return self._inner.page_analytics(kind, filters=filters, limit=limit, cursor=cursor, scope=scope)
+
+    def list_analytics(self, kind, *, filters=()):
+        with self._lock:
+            return self._inner.list_analytics(kind, filters=filters)
+
     def append_token_movement(self, movement: TokenMovement) -> None:
         with self._lock:
             self._inner.append_token_movement(movement)

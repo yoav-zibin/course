@@ -38,7 +38,7 @@ class Settings:
     think_max_seconds: float = 4.0
     # Percent of the matches a fake user creates that are Speed matches (1 min per move).
     speed_match_percent: int = 20
-    # Percent of new fake users who arrive through another fake user's invite link.
+    # Percent of new fake users who arrive through a remembered multiplayer match link.
     invite_link_percent: int = 30
     # Chance of leaving the match after each move (0 to 1).
     leave_probability: float = 0.03
@@ -64,7 +64,7 @@ class Config:
     allow_remote_target: bool = False
     # Lowers the memory-based cap on browsers at once (None: the memory cap alone).
     max_browsers: int | None = None
-    # Every fake account's id and referral code, one JSON object per line.
+    # Every fake account's id and name, one JSON object per line.
     accounts_file: str = "fake_users.jsonl"
     # Error screenshots go here.
     runs_dir: str = "runs"

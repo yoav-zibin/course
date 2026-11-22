@@ -119,21 +119,18 @@ class User:
     # directly at this user, so there are never replacement chains. Defaults to
     # empty so older data files still load.
     replaced_user_ids: tuple[str, ...] = ()
-    # The user whose invite link brought this user here, recorded once, when the
-    # account is created (see GamePlatform.create_user). None for users who came
-    # without an invite link. It may name an account that was later merged into
-    # another one; GamePlatform.invite_stats resolves it to the survivor.
+    # The owner of the first shared match this account opened while it had no
+    # inviter. None until a match or invite link supplies a valid owner. It may
+    # name an account that was later merged into another one; GamePlatform.invite_stats resolves it to the survivor.
     # Defaults to None so older data files still load.
     invited_by_user_id: str | None = None
     # The match invite (Invite.token) the account was created through, if any, so
     # the invite can tell sign-ups from existing users. Defaults to None so older
     # data files load.
     invited_via_invite_token: str | None = None
-    # A short number for invite links (/r/<code>): 5 digits, 10000 to 99999, unique
-    # across accounts. Given when the account is created (accounts from before codes
-    # get one at startup) and kept through merges, where it keeps crediting the
-    # surviving account. Defaults to None so older data files load.
-    referral_code: str | None = None
+    # The shared match which first recruited this account. Survives release/reuse
+    # of the lobby's short invite code and records attribution for existing users.
+    invited_via_match_id: str | None = None
     # Games the user saved to their library, most recently saved last. Defaults to
     # empty so older data files load.
     saved_game_ids: tuple[str, ...] = ()
@@ -585,6 +582,8 @@ class Invite:
     revoked: bool = False
     # Who used the invite, oldest first; the referral record.
     acceptances: tuple[InviteAcceptance, ...] = ()
+    # Permanent identity of this allocation, independent of its recyclable code.
+    allocation_id: str = ""
     # How many times the link was opened (GET /invites/{token}), whether or not
     # anyone joined; the top of the referral funnel.
     views: int = 0

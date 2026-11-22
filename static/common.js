@@ -218,9 +218,23 @@ class ApiError extends Error {
   }
 }
 
+const VISITOR_KEY = "game-platform.visitor.v1";
+let memoryVisitorId;
+function visitorId() {
+  try {
+    const existing = localStorage.getItem(VISITOR_KEY);
+    if (existing && /^[A-Za-z0-9_-]{1,128}$/.test(existing)) return existing;
+    const value = globalThis.crypto?.randomUUID?.() || `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(VISITOR_KEY, value);
+    return value;
+  } catch {
+    return memoryVisitorId ||= globalThis.crypto?.randomUUID?.() || `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
 /** Calls the API as [user] ({id, password} or null); throws ApiError on failure. */
 async function apiRequest(method, path, { body, user, signal } = {}) {
-  const headers = {};
+  const headers = {"X-Visitor-Id": visitorId()};
   const campaignCode = experimentCampaignCode();
   if (campaignCode) headers["X-Campaign-Code"] = campaignCode;
   if (user) {

@@ -12,6 +12,7 @@ test('the bundled privacy policy matches the canonical public policy and retains
   const urls=policy.blocks.flatMap(block=>block.links?.map(link=>link.url)??[]);
   assert.deepEqual(urls,['https://buildplay.fun/','https://tools.google.com/dlpage/gaoptout','mailto:yoavgamingcoursezibin@gmail.com']);
   assert.ok(policy.blocks.some(block=>block.text.includes('Screenshots may show information visible in the app; review the preview before sending.')));
+  assert.ok(policy.blocks.some(block=>block.text.includes('Invitation and recruitment history is kept permanently after account or match deletion.')));
 });
 
 test('the bundled privacy policy stays readable in every supported language without a network catalog',()=>{

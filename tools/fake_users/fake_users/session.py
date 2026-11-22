@@ -37,7 +37,7 @@ class FakeUser:
         self.page = None
         self.rng = rng or random.Random()
         self.name = self.rng.choice(FIRST_NAMES)
-        self.invite_link = invite_link  # arrive through someone's link (a referral)
+        self.invite_link = invite_link  # arrive through a shared multiplayer match
         self.for_match = for_match  # the link is to a match: join it
         self.page_errors: set[str] = set()
 
@@ -88,7 +88,7 @@ class FakeUser:
         self.page = await self.context.new_page()
         self.page.on("requestfinished", self._on_response_time)
         self.page.on("pageerror", self._on_page_error)
-        # Arriving through a link remembers who sent it (the referral), even before signing up.
+        # Shared match links retain the owner's attribution through signup.
         await self.page.goto(self.invite_link or f"{self.g.target}/portal")
         await self.page.wait_for_load_state()
         # A logged-out visitor is sent to the welcome page (and back after signing up);
@@ -199,6 +199,7 @@ class FakeUser:
         self.g.stats.game_count("matches_created", match)
         if match["status"] != "waiting_for_players":
             return True  # a solo game starts by itself
+        self.g.remember_shared_match(match)
         await self.show_controls()
         if self.g.invite_friend(await self.copy_invite_link()):
             await self.wait_for_people(match["humans"] + 1)

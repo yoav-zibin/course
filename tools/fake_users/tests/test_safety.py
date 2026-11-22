@@ -1,7 +1,9 @@
 """The safety checks: only this machine unless allowed, and Stop closes everything fast."""
 
 import asyncio
+import json
 import time
+from pathlib import Path
 
 import pytest
 
@@ -84,6 +86,30 @@ def test_a_live_change_to_a_remote_target_is_refused(tmp_path):
     assert generator.settings.target_url == "http://127.0.0.1:8000"
 
 
+def test_invited_arrivals_open_shared_matches_and_accounts_keep_only_cleanup_details(tmp_path, monkeypatch):
+    generator = Generator(config(tmp_path, invite_link_percent=100))
+    generator.record_account({"id": "a", "display_name": "Ann", "password": "private"}, invited=False)
+    record = json.loads(Path(generator.config.accounts_file).read_text())
+    assert set(record) == {"id", "display_name", "invited", "target", "created_at"}
+    assert generator.match_links == []
+    generator.remember_shared_match({"id": "m1"})
+    generator.state = "running"
+    arrivals = []
+
+    async def immediate_sleep(seconds):
+        pass
+
+    def arrive(**kwargs):
+        arrivals.append(kwargs)
+        generator.stop_event.set()
+
+    monkeypatch.setattr("fake_users.generator.asyncio.sleep", immediate_sleep)
+    monkeypatch.setattr("fake_users.generator.next_arrival_seconds", lambda *args: 0)
+    monkeypatch.setattr(generator, "_spawn", arrive)
+    asyncio.run(generator._arrival_loop())
+    assert arrivals == [{"invite_link": "http://127.0.0.1:8000/portal#match=m1", "for_match": True}]
+
+
 @pytest.mark.parametrize("context_delay", [0, 0.1])
 def test_stop_closes_every_browser_within_seconds(tmp_path, context_delay):
     log = {"open": 0}
@@ -131,7 +157,7 @@ def test_the_hard_cap_wins_over_max_users_and_pause_stops_new_users(tmp_path):
         await asyncio.sleep(0.5)
         at_cap = generator.active
         # Invited friends count toward the limit too.
-        assert generator.invite_friend("http://127.0.0.1:8000/r/12345") is False
+        assert generator.invite_friend("http://127.0.0.1:8000/portal#match=m1") is False
         await generator.stop()
         paused = Generator(config(tmp_path, users_per_hour=360_000), launcher=launcher, user_factory=ForeverUser)
         await paused.start()

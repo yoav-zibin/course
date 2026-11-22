@@ -2852,15 +2852,6 @@
     "hi": "BuildPlay की गोपनीयता नीति",
     "ar": "سياسة الخصوصية في BuildPlay"
   },
-  "Last updated: November 21, 2026.": {
-    "es": "Última actualización: 21 de noviembre de 2026.",
-    "fr": "Dernière mise à jour : 21 novembre 2026.",
-    "de": "Zuletzt aktualisiert: 21. November 2026.",
-    "pt": "Última atualização: 21 de novembro de 2026.",
-    "zh": "最后更新：2126年11月20日。",
-    "hi": "अंतिम अपडेट: 21 नवंबर 2026।",
-    "ar": "آخر تحديث: 21 نوفمبر 2026."
-  },
   "Information we collect": {
     "es": "Información que recopilamos",
     "fr": "Informations que nous recueillons",
@@ -3706,5 +3697,23 @@
     "zh": "此存档副本已从此设备移除。可在“保留的旧版应用数据”中找到其恢复数据。",
     "hi": "यह सहेजी गई प्रति इस डिवाइस से हटा दी गई है। इसकी पुनर्प्राप्ति का डेटा “पिछले ऐप का सुरक्षित रखा डेटा” में उपलब्ध है।",
     "ar": "أُزيلت هذه النسخة المحفوظة من هذا الجهاز. تتوفر بيانات استعادتها في «بيانات التطبيق السابق المحفوظة»."
+  },
+  "Last updated: November 22, 2026.": {
+    "zh": "最后更新：2026年11月22日。",
+    "ar": "آخر تحديث: 22 نوفمبر 2026.",
+    "fr": "Dernière mise à jour : 22 novembre 2026.",
+    "hi": "अंतिम अपडेट: 22 नवंबर 2026।",
+    "pt": "Última atualização: 22 de novembro de 2026.",
+    "de": "Zuletzt aktualisiert: 22. November 2026.",
+    "es": "Última actualización: 22 de noviembre de 2026."
+  },
+  "Invitation and recruitment history is kept permanently after account or match deletion. It contains internal account, match, invitation and visitor IDs, inviter relationships, conversion events and timestamps. It does not contain names, contact details, login credentials or request/network data.": {
+    "zh": "账户或对局删除后，邀请和招募历史将永久保留。其中包括内部账户、对局、邀请和访客 ID、邀请关系、转化事件及时间戳，不包含姓名、联系方式、登录凭据或请求和网络数据。",
+    "ar": "يُحتفظ بسجل الدعوات والاستقطاب بشكل دائم بعد حذف الحساب أو المباراة. ويتضمن معرّفات داخلية للحسابات والمباريات والدعوات والزوار، وعلاقات الدعوة، وأحداث التحويل والطوابع الزمنية. ولا يتضمن أسماء أو بيانات اتصال أو بيانات اعتماد تسجيل الدخول أو بيانات الطلبات والشبكة.",
+    "fr": "L’historique des invitations et du recrutement est conservé définitivement après la suppression d’un compte ou d’une partie. Il contient les identifiants internes des comptes, parties, invitations et visiteurs, les relations d’invitation, les événements de conversion et les horodatages. Il ne contient ni noms, coordonnées, identifiants de connexion ni données de requête ou réseau.",
+    "hi": "खाता या मैच हटाने के बाद भी आमंत्रण और भर्ती का इतिहास स्थायी रूप से रखा जाता है। इसमें आंतरिक खाता, मैच, आमंत्रण और आगंतुक आईडी, आमंत्रण संबंध, रूपांतरण घटनाएँ और समय शामिल हैं। इसमें नाम, संपर्क विवरण, लॉगिन क्रेडेंशियल या अनुरोध और नेटवर्क डेटा नहीं होते।",
+    "pt": "O histórico de convites e recrutamento é mantido permanentemente após a exclusão de uma conta ou partida. Ele contém IDs internos de contas, partidas, convites e visitantes, relações de convite, eventos de conversão e datas. Não contém nomes, dados de contato, credenciais de acesso nem dados de solicitações ou rede.",
+    "de": "Der Einladungs- und Rekrutierungsverlauf wird nach dem Löschen eines Kontos oder einer Partie dauerhaft aufbewahrt. Er enthält interne Konto-, Partien-, Einladungs- und Besucher-IDs, Einladungsbeziehungen, Konversionsereignisse und Zeitstempel. Er enthält keine Namen, Kontaktdaten, Anmeldedaten oder Anfrage- und Netzwerkdaten.",
+    "es": "El historial de invitaciones y reclutamiento se conserva permanentemente tras eliminar una cuenta o partida. Contiene identificadores internos de cuentas, partidas, invitaciones y visitantes, relaciones de invitación, eventos de conversión y fechas. No contiene nombres, datos de contacto, credenciales de acceso ni datos de solicitudes o red."
   }
 }

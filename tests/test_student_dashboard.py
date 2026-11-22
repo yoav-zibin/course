@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from game_platform.api import create_app
 from game_platform.models import LinkedAccount, Match, Seat, User
+from game_platform.recruitment_history import mark_deleted, mark_merged, record_attribution, record_node
 from game_platform.service import GamePlatform
 from game_platform.store import InMemoryStore
 from game_platform.student_dashboard import CoursePerson, DashboardCache, build_dashboard, parse_roster
@@ -131,6 +132,45 @@ def test_referral_cycles_and_multiple_owned_roots_do_not_count_own_accounts():
         store.put_user(account)
     student = build_dashboard(store, [PERSON], roster_fetched_at="now")["students"][0]
     assert (student["direct_recruits"], student["transitive_recruits"]) == (1, 2)
+
+
+@pytest.mark.parametrize("query", [False, True])
+def test_historical_recruits_survive_deleted_intermediate_accounts_and_live_reparenting(query):
+    store = query_store() if query else InMemoryStore()
+    for account in (user("alice", "Alice"), user("friend"), user("grandchild")):
+        store.put_user(account)
+        record_node(store, account.id, NOW)
+    record_attribution(store, "friend", "alice", via_match_id="match-a", at=NOW)
+    record_attribution(store, "grandchild", "friend", via_match_id="match-b", at=NOW)
+    store.put_match(match("retained", "grandchild", kind="computer"))
+    store.put_match(match("removed", "friend", kind="computer"))
+    mark_deleted(store, "friend", NOW)
+    store.delete_user("friend")
+    store.delete_match("removed")
+    # Account cleanup nulls or reparents live fields; the original graph remains.
+    store.put_user(replace(store.get_user("grandchild"), invited_by_user_id="alice"))
+    student = build_dashboard(store, [PERSON], roster_fetched_at="now")["students"][0]
+    assert (student["direct_recruits"], student["transitive_recruits"]) == (1, 2)
+    assert student["recruits_matches"]["total"] == 1
+    assert student["recruits_matches"]["computer"] == 1
+
+
+@pytest.mark.parametrize("query", [False, True])
+def test_historical_merged_inviter_aliases_count_recruits_once_and_exclude_owned_accounts(query):
+    store = query_store() if query else InMemoryStore()
+    store.put_user(user("alice", "Alice"))
+    store.put_user(user("friend"))
+    record_node(store, "old-alice", NOW)
+    record_attribution(store, "friend", "old-alice", via_match_id="match-a", at=NOW)
+    mark_merged(store, "old-alice", "alice", NOW)
+    record_node(store, "old-friend", NOW)
+    record_attribution(store, "old-friend", "alice", via_match_id="match-b", at=NOW)
+    mark_merged(store, "old-friend", "friend", NOW)
+    # The student may own another root recorded as recruited before name matching.
+    store.put_user(user("own-other", "Example"))
+    record_attribution(store, "own-other", "alice", via_match_id="match-c", at=NOW)
+    student = build_dashboard(store, [PERSON], roster_fetched_at="now")["students"][0]
+    assert (student["direct_recruits"], student["transitive_recruits"]) == (1, 1)
 
 
 def test_participant_batches_deduplicate_shared_matches_and_keep_private_ownership():

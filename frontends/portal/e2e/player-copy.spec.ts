@@ -19,14 +19,13 @@ test('account settings omit the player code while profile editing and notificati
   const user=await createUser(request,'Account copy player');
   const headers={'X-User-Id':user.id,'X-User-Password':user.password};
   const response=await request.get(`/users/${user.id}`,{headers});expect(response.ok()).toBeTruthy();
-  const profile=await response.json();expect(profile.referral_code).toBeTruthy();
+  const profile=await response.json();expect(profile).not.toHaveProperty('referral_code');
   await loginAs(page,user);await page.goto('/portal');
   await page.getByTestId('header-account').click();
   const dialog=page.getByRole('dialog');
   await expect(dialog.getByRole('heading',{name:'Your account',exact:true})).toBeVisible();
   await expect(dialog.getByRole('heading',{name:user.display_name,exact:true})).toBeVisible();
   await expect(dialog).not.toContainText('Your player code');
-  await expect(dialog).not.toContainText(profile.referral_code);
   await expect(dialog.getByRole('heading',{name:'Push notifications',exact:true})).toBeVisible();
   await expect(dialog.getByRole('switch',{name:'Push notifications',exact:true})).toBeVisible();
   await expect(dialog.getByRole('button',{name:'Log out',exact:true})).toBeVisible();
@@ -37,7 +36,7 @@ test('account settings omit the player code while profile editing and notificati
   await expect(dialog.getByRole('heading',{name:nextName,exact:true})).toBeVisible();
   await expect(dialog).not.toContainText('Your player code');
   const saved=await request.get(`/users/${user.id}`,{headers});expect(saved.ok()).toBeTruthy();
-  expect(await saved.json()).toMatchObject({id:user.id,display_name:nextName,referral_code:profile.referral_code});
+  expect(await saved.json()).toMatchObject({id:user.id,display_name:nextName});
   await page.screenshot({path:info.outputPath('account-without-player-code.png')});
 });
 

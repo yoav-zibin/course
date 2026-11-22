@@ -39,11 +39,12 @@ async function fixture(signedIn=false){
   const storage={getItem:(key:string)=>values[key]??null,setItem:(key:string,value:string)=>{values[key]=String(value);},removeItem:(key:string)=>{delete values[key];}};
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:storage});
   if(signedIn){values['game-platform.accounts.v1']=JSON.stringify([{id:'viewer',password:'synthetic-password',display_name:'Viewer'}]);values['game-platform.current-account.v1']='viewer';}
-  const original=globalThis.fetch,calls:{method:string;url:URL}[]=[];
+  const original=globalThis.fetch,calls:{method:string;url:URL;headers:Record<string,string>;body:any}[]=[];
+  let shareFailure=false;
   let hold:(()=>Promise<void>)|null=null;
   const match={id:'invite-match',game_id:'bundled-tictactoe',game_version:1,owner_user_id:'host',status:'waiting_for_players',private:true,invite_code:'abcd',players:[{id:'host',user_id:'host',player_index:0,kind:'human'},{id:'opponent',user_id:'opponent',player_index:1,kind:'human'}],turn_of_player_indices:null,move_count:0,created_at:'2026-01-01T00:00:00Z'};
   globalThis.fetch=(async(input:string|URL|Request,init:RequestInit={})=>{
-    const url=new URL(String(input)),method=init.method||'GET';calls.push({method,url});let response:any=[];
+    const url=new URL(String(input)),method=init.method||'GET';calls.push({method,url,headers:init.headers as Record<string,string>,body:init.body?JSON.parse(init.body as string):undefined});if(shareFailure&&url.pathname.endsWith('/share'))throw new TypeError('Analytics offline');let response:any=[];
     if(url.pathname==='/storage/capabilities')response={pagination:true};
     else if(url.pathname==='/auth/config')response={};
     else if(url.pathname==='/i18n/locales')response={locales:[{code:'en',direction:'ltr'}]};
@@ -57,7 +58,7 @@ async function fixture(signedIn=false){
     return new Response(JSON.stringify(response),{status:200});
   }) as typeof fetch;
   const store=new PortalStore();await store.bootstrap(base);
-  return {store,match,calls,hold:(fn:()=>Promise<void>)=>{hold=fn;},restore:()=>{globalThis.fetch=original;}};
+  return {store,match,calls,failShare:()=>{shareFailure=true;},hold:(fn:()=>Promise<void>)=>{hold=fn;},restore:()=>{globalThis.fetch=original;}};
 }
 
 test('legacy audience flags do not restrict visitor polling or history after opening an invite',async()=>{
@@ -87,4 +88,23 @@ test('an invite response arriving after navigation cannot reopen that match',asy
     f.hold(async()=>{entered();await gate;});const opening=f.store.actions.openInvite('abcd');await started;
     f.store.actions.clearGame();release();assert.equal(await opening,null);assert.equal(f.store.getSnapshot().selectedMatch,null);
   }finally{release();f.restore();}
+});
+
+
+test('opening a match or invitation marks navigation without marking its polling requests',async()=>{
+  const f=await fixture();try{
+    await f.store.actions.selectMatch('invite-match');
+    const opened=f.calls.find(call=>call.url.pathname==='/matches/invite-match');assert.equal(opened?.headers['X-Link-Open'],'1');
+    f.calls.length=0;await f.store.actions.refreshMatch();const polled=f.calls.find(call=>call.url.pathname==='/matches/invite-match');assert.equal(polled?.headers['X-Link-Open'],undefined);
+    await f.store.actions.openInvite('abcd');assert.equal(f.calls.find(call=>call.url.pathname==='/invites/abcd')?.headers['X-Link-Open'],'1');
+  }finally{f.restore();}
+});
+
+
+test('share analytics sends only the channel and stays silent if the connection fails',async()=>{
+  const f=await fixture(true);try{
+    await f.store.actions.recordInviteShare('invite-match','copy_code');
+    const sent=f.calls.find(call=>call.url.pathname==='/matches/invite-match/share');assert.deepEqual(sent?.body,{channel:'copy_code'});assert.equal(sent?.headers['X-User-Id'],'viewer');assert.ok(sent?.headers['X-Visitor-Id']);
+    f.failShare();await f.store.actions.recordInviteShare('invite-match','share_link');assert.equal(f.store.getSnapshot().error,null);
+  }finally{f.restore();}
 });

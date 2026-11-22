@@ -44,6 +44,7 @@ from game_platform.models import (
     Translation,
 )
 from game_platform.move_history import MoveHistory
+from game_platform.store import ANALYTICS_KINDS, analytics_query, analytics_row, record_match_deletion
 from game_platform.observability import timed_external
 from game_platform.scaling_library import LibraryEntry
 from game_platform.paging import Page, decode_cursor, encode_cursor, page_size
@@ -66,13 +67,12 @@ TYPES = {
     "game_test_seeds": GameTestSeeds,
     "feedback": Feedback,
 }
-INTERNAL_COLLECTIONS = frozenset(
+INTERNAL_COLLECTIONS = ANALYTICS_KINDS | frozenset(
     {
         "meta",
         "translation_bundles",
         "counters",
         "identities",
-        "referrals",
         "endpoints",
         "requests",
         "verifications",
@@ -326,13 +326,13 @@ class QueryStore:
                 self.raw_put(ref, data)
             return
         kind = self._kind_for_path(ref.path)
-        if kind == "token_ledger":
+        if kind in ("token_ledger", "funnel_events"):
             if data is None:
-                raise ValueError("token ledger is insert-only")
+                raise ValueError("funnel events are insert-only" if kind == "funnel_events" else "token ledger is insert-only")
             previous = self.raw_get(ref)
             if previous is not None:
                 if previous != data:
-                    raise ValueError("token ledger is insert-only")
+                    raise ValueError("funnel events are insert-only" if kind == "funnel_events" else "token ledger is insert-only")
                 return
             self._local.uow["creates"].add(ref.path)
         if data is not None:
@@ -378,6 +378,33 @@ class QueryStore:
     def close(self):
         self._cache.close()
         self._game_metadata_cache.close()
+
+    def get_analytics(self, kind, identity):
+        analytics_query(kind)
+        return copy.deepcopy(self.raw_get(self.ref(kind, identity)))
+
+    def put_analytics(self, kind, identity, row):
+        row = analytics_row(kind, identity, row)
+        with self.atomic():
+            self.raw_put(self.ref(kind, identity), row)
+
+    def page_analytics(self, kind, *, filters=(), limit=50, cursor=None, scope=None):
+        analytics_query(kind, filters)
+        page_size(limit)
+        query_scope = [self.namespace, kind, list(filters), scope]
+        after = decode_cursor(query_scope, cursor)
+        docs = self._query(kind, filters, limit=limit + 1, after=after)
+        return Page([copy.deepcopy(doc.to_dict()) for doc in docs[:limit]],
+                    encode_cursor(query_scope, docs[limit - 1].id) if len(docs) > limit else None)
+
+    def list_analytics(self, kind, *, filters=()):
+        rows, cursor = [], None
+        while True:
+            page = self.page_analytics(kind, filters=filters, limit=100, cursor=cursor)
+            rows.extend(page.items)
+            cursor = page.next_cursor
+            if cursor is None:
+                return rows
 
     def put_experiment(self, experiment):
         self._put("experiments", experiment.id, experiment)
@@ -1090,7 +1117,9 @@ class QueryStore:
         return self._get("matches", match_id)
 
     def delete_match(self, match_id):
-        self._delete("matches", match_id)
+        with self.atomic():
+            record_match_deletion(self, self.get_match(match_id))
+            self._delete("matches", match_id)
 
     def list_matches_involving(self, user_id):
         return self._list_all("matches", [("participants", "array_contains", user_id)])
@@ -1158,17 +1187,6 @@ class QueryStore:
             raise conflict("identity is already reserved")
         self.raw_put(ref, {"user_id": user_id})
 
-    def reserve_referral(self, user_id):
-        import secrets
-
-        code = secrets.token_hex(8)
-        self._reserve("referrals", code, user_id)
-        return code
-
-    def user_for_referral(self, code):
-        value = self.raw_get(self.ref("referrals", code))
-        return value.get("user_id") if value else None
-
     def find_linked_account(self, kind, identifier):
         value = self.raw_get(self.ref("identities", json.dumps([kind, identifier])))
         return self.get_user(value["user_id"]) if value else None
@@ -1180,8 +1198,6 @@ class QueryStore:
             old_user = ADAPTERS["users"].validate_json(previous["json"]) if previous and not previous.get("tombstone") else None
             # Profile/lifecycle/inbox writes must not re-write hundreds of
             # unchanged identity reservations and exhaust the transaction cap.
-            if user.referral_code and (old_user is None or old_user.referral_code != user.referral_code):
-                self._reserve("referrals", user.referral_code, user.id)
             old_accounts = {(a.kind, a.identifier) for a in old_user.linked_accounts} if old_user else set()
             for account in user.linked_accounts:
                 if (account.kind, account.identifier) in old_accounts:
@@ -1324,7 +1340,10 @@ class QueryStore:
         return self._list("users")
 
     def delete_user(self, user_id):
-        self._delete("users", user_id)
+        from game_platform.recruitment_history import mark_deleted
+        with self.atomic():
+            mark_deleted(self, user_id, at=dt.datetime.now(dt.UTC))
+            self._delete("users", user_id)
 
     def add_game_version(self, game):
         with self.atomic():
@@ -1482,7 +1501,12 @@ class QueryStore:
         return self._get("invites", token)
 
     def delete_invite(self, token):
-        self._delete("invites", token)
+        from game_platform.conversion_funnel import archive_invite
+        with self.atomic():
+            invite = self.get_invite(token)
+            if invite is not None:
+                archive_invite(self, invite, at=dt.datetime.now(dt.UTC), event="released")
+            self._delete("invites", token)
 
     def list_invites(self, *, created_by_user_id=None, match_id=None):
         return self._list_all(

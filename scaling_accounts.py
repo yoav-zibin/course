@@ -30,9 +30,9 @@ maintenance. Deletion semantics mirror ``GamePlatform.admin_delete_user``: owned
 matches are deleted with their invites, the user leaves
 every other match that is not over (through the platform, so v2 payouts and
 computer takeovers keep their normal rules), push subscriptions /
-created invites are deleted, invitees are repointed at the deleted user's own
-inviter, and finally the user record is tombstoned and its referral and
-linked-account reservations are released.
+created invites are archived and deleted, and finally the user record is
+tombstoned and its linked-account reservations are released. Opaque inviter
+IDs and historical recruitment edges remain unchanged after deletion.
 """
 
 import datetime as dt
@@ -450,12 +450,14 @@ def _merge_finalize(store, job):
     )
     absorbed = (source.id, *source.replaced_user_ids)
     invited_by = into.invited_by_user_id
+    attribution = into
     if _inviter_of(store, into) is None:
         source_inviter = _inviter_of(store, source)
         if source_inviter is not None and not _invited_by_descendant(
             store, inviter_id=source_inviter, user_id=into.id
         ):
             invited_by = source_inviter
+            attribution = source
     into = replace(
         into,
         notifications_enabled=into.notifications_enabled and source.notifications_enabled,
@@ -481,15 +483,17 @@ def _merge_finalize(store, job):
         replaced_user_ids=_dedupe((*into.replaced_user_ids, *absorbed)),
         saved_game_ids=_dedupe((*into.saved_game_ids, *source.saved_game_ids)),
         invited_by_user_id=invited_by,
-        invited_via_invite_token=into.invited_via_invite_token
-        or source.invited_via_invite_token,
+        invited_via_invite_token=attribution.invited_via_invite_token,
+        invited_via_match_id=attribution.invited_via_match_id,
         updated_at=_now(),
     )
     store.put_user(into)
+    from game_platform.recruitment_history import mark_merged
     for uid in absorbed:
         old = store.get_user(uid)
         if old is None or old.id == into.id:
             continue
+        mark_merged(store, uid, into.id, at=_now())
         if uid == source.id:
             old = replace(
                 old,
@@ -503,6 +507,17 @@ def _merge_finalize(store, job):
         else:
             old = replace(old, replaced_by_user_id=into.id, updated_at=_now())
         store.put_user(old)
+    target_node = store.get_analytics("recruitment_nodes", into.id)
+    if target_node is not None:
+        graph_inviter = target_node.get("inviter_user_id")
+        graph_match = target_node.get("via_match_id")
+        token = into.invited_via_invite_token
+        if graph_inviter != into.invited_by_user_id or graph_match != into.invited_via_match_id:
+            token = (source.invited_via_invite_token
+                     if graph_inviter == source.invited_by_user_id and graph_match == source.invited_via_match_id
+                     else None)
+        store.put_user(replace(into, invited_by_user_id=graph_inviter,
+                               invited_via_match_id=graph_match, invited_via_invite_token=token))
 
 
 def merge_users(store, *, run_id, source_id=None, into_id=None, max_records=100):
@@ -596,16 +611,19 @@ def _delete_step(store, job, ref, platform):
 
 
 def _delete_stage_record(store, ref, stage, state, user_id):
+    if stage == "invitees":
+        # Older jobs may already be at this phase; keep its checkpoint but
+        # never rewrite the first recruitment relationship after deletion.
+        with store.atomic():
+            job = store.raw_get(ref)
+            _save_stage(store, ref, job, stage, {"complete": True})
+        return True
     kind, filters, apply = _delete_stage_plan(stage, user_id)
     with store.atomic():
         job = store.raw_get(ref)
         state = job.get("stages", {}).get(stage, {})
         if state.get("complete"):
             return True
-        if stage == "invitees" and "new_inviter" not in state:
-            deleted = store.get_user(user_id)
-            state = {**state, "new_inviter": _inviter_of(store, deleted)}
-            job = _save_stage(store, ref, job, stage, state)
         docs = store._query(kind, filters, limit=1, after=state.get("last_id"))
         if not docs:
             _save_stage(store, ref, job, stage, {**state, "complete": True})
@@ -759,22 +777,6 @@ def _delete_stage_plan(stage, user_id):
             [("created_by_user_id", "==", user_id)],
             lambda store, record, state: store.delete_invite(record.token),
         )
-    if stage == "invitees":
-        return (
-            "users",
-            (),
-            lambda store, record, state: (
-                store.put_user(
-                    replace(
-                        record,
-                        invited_by_user_id=state.get("new_inviter"),
-                        updated_at=_now(),
-                    )
-                )
-                if record.id != user_id and _inviter_of(store, record) == user_id
-                else None
-            ),
-        )
     raise ValueError(f"unknown delete stage {stage}")
 
 
@@ -785,11 +787,6 @@ def _delete_finalize(store, job):
         return
     for account in user.linked_accounts:
         ref = store.ref("identities", json.dumps([account.kind, account.identifier]))
-        reservation = store.raw_get(ref)
-        if reservation and reservation.get("user_id") == user_id:
-            store.raw_put(ref, None)
-    if user.referral_code:
-        ref = store.ref("referrals", user.referral_code)
         reservation = store.raw_get(ref)
         if reservation and reservation.get("user_id") == user_id:
             store.raw_put(ref, None)

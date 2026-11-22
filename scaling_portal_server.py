@@ -20,7 +20,7 @@ import uvicorn
 from fastapi import Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from game_platform.api import create_app, short_invite_link
+from game_platform.api import create_app
 from game_platform.config import load_config
 from game_platform.models import Game, GameRules
 from game_platform.query_store import QueryStore
@@ -139,7 +139,6 @@ def main():
     app = create_app(platform, debug_tools=False)
     static = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static), name="workload-static")
-    app.add_api_route("/r/{code}", short_invite_link, methods=["GET"])
 
     @app.get("/portal")
     def portal():

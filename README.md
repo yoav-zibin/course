@@ -254,37 +254,28 @@ another of your accounts.
 
 #### Invite links (referrals)
 
-Every user has a short *referral code*: a 5-digit number from 10000 to 99999, unique
-and separate from the user id. New accounts get one when they're created; accounts from
-before codes get one when the server starts. (Codes of long-inactive accounts aren't
-freed yet; a deleted account's code becomes free again.) The code appears as
-`referral_code` only in responses about your own account: `POST /users`, the
-`/auth/*` logins, and `GET`/`PATCH /users/{id}` when you're that user.
+Only multiplayer matches can be shared. Match invitations are URLs such as
+`https://buildplay.fun/invite/wxyz`; direct links use `/portal#match=<id>`.
+Each waiting multiplayer match automatically receives one unique four-letter
+lowercase code. The lobby offers Copy code and Share link; opening the invitation
+joins a logged-in player if a seat is available, otherwise it opens a spectator
+view. Visitors can log in or continue as a guest before joining. Codes are released
+on start, end, deletion, or daily cleanup after seven days. There is no
+invite-management page or personal referral URL/code.
 
-Match invitations are URLs such as `https://buildplay.fun/invite/wxyz`. Each
-waiting multiplayer match automatically receives one unique four-letter lowercase
-code. The lobby offers Copy code and Share link; opening the URL joins a logged-in
-player if a seat is available, otherwise it opens a spectator view. Visitors can
-log in or continue as a guest before joining. Codes are released on start, end,
-deletion, or daily cleanup after seven days. There is no invite-management page.
+Opening a shared match or invitation records the match owner as the viewer's
+`invited_by_user_id` when the viewer has no inviter. This works for new signups
+and existing accounts, including spectators who do not join. The first valid owner
+wins: later links do not replace an existing inviter. The server resolves merged
+accounts and rejects self-attribution and relationships that would form a cycle.
+Unknown, expired or private match links cannot assign an inviter. Opening a link
+while logged out retains the match context through login or guest signup.
 
-Personal referral links remain `/r/<code>` (for example
-`https://buildplay.fun/r/48213`). `/r/<code>`
-redirects to `/portal?ref=<code>`; the code goes in the query so the browser keeps the
-link's `#match=` part. Older links name the user id instead (`/portal#ref=<userId>`,
-`/portal#match=<id>&ref=<userId>`) and still work, and so does the long form for an
-account that has no code yet. The browser remembers the first `ref` it sees (ignoring
-links from its own accounts) until an account is created, and then sends it as
-`invited_by_user_id` with `POST /users`, `POST /auth/google` or the code verify call:
-a 5-digit value is looked up as a code, anything else as a user id. The server records
-it on the new user only when that call creates an account; logging in to an existing
-account never changes who invited it, and an unknown code or id is ignored, so a bad
-link never blocks signing up.
-
-Invites survive account changes: an inviter that was merged away counts as the account
-it was merged into (so do links with its code), a merged account keeps the inviter of the account merged into it if
-it had none (unless that would make someone their own inviter), and deleting a user
-(`DELETE /admin/users/{id}`) passes the people they invited up to their own inviter.
+Inviter relationships survive account merges: references to an old inviter resolve
+to the surviving account. The survivor keeps its inviter, or inherits the merged
+account's inviter if it has none and the relationship remains cycle-free. Deleting
+a user preserves their historical recruitment node and the original inviter
+relationships of the people they invited.
 
 A user's *total* invites count everyone they brought in transitively: the people they
 invited, the people those people invited, and so on. See `/admin/referrals` under
@@ -367,8 +358,8 @@ without). On iOS, push works only when the portal is installed to the home scree
 | Endpoint | Auth | Description |
 |----------|------|-------------|
 | `GET /health` |  | 200 `{"status": "ok"}` when the server is up and saving data; 503 `"degraded"` when the data file can't be written. For uptime checks and load balancers |
-| `POST /users` |  | Create a guest user `{display_name, locale?, invited_by_user_id?, invite_token?}` (`invited_by_user_id` is the inviter's id or [referral code](#invite-links-referrals)); returns its `password` and `referral_code` |
-| `GET /users/{id}` | optional | Get a user; includes their `referral_code` only when you're that user |
+| `POST /users` |  | Create a guest user `{display_name, locale?, invite_token?, invite_match_id?}` from an optional shared multiplayer link; returns its `password` |
+| `GET /users/{id}` | optional | Get a user |
 | `PATCH /users/{id}` | yes | Change your own `display_name` and/or `locale` (403 for other users) |
 | `GET /i18n/locales` |  | The supported languages (see [Languages](#languages)) |
 | `GET /i18n/{locale}` |  | Every text in one language: UI labels, status labels, error messages |
@@ -563,16 +554,23 @@ legacy rosters.
   and alerts when more than half of the 456,976 available codes are reserved.
   Native Universal Links/App Links configuration and public domain associations
   are documented in the [portal guide](frontends/portal/README.md).
-- **Referrals**: every match invite records how often it was opened (`views`) and who
-  took a seat with it (`acceptances`). A newcomer who signs up with
-  `POST /users {invite_token}` gets the invite's creator as their `invited_by_user_id`,
-  the same field personal invite links set (see
-  [Invite links](#invite-links-referrals)), so they count in `/admin/referrals` and
-  `GET /admin/invites` too. An explicit `invited_by_user_id` wins over the token, and
-  an unknown or dead token is ignored rather than blocking sign-up. Their acceptance is
-  flagged `signed_up`. `GET /users/me/referrals` sums up a user's own invites and
-  everyone they invited either way. Merging accounts carries invites and acceptances
-  over to the surviving account.
+- **Recruitment tracking**: opening a shared multiplayer match or invitation
+  attributes its owner to an authenticated account with no recorded inviter.
+  Signup and login carry the shared match context so this also works for new
+  visitors. Existing inviter relationships are never overwritten; self-links and
+  cycles are excluded. This persisted relation feeds `/admin/referrals`,
+  `GET /admin/invites` and the student leaderboard's direct and transitive
+  recruitment counts. Match invitation `views` count opens, while `acceptances`
+  record users who actually took seats (with `signed_up` when applicable); these
+  engagement counters are separate from recruitment attribution.
+  `GET /users/me/referrals` summarizes a user's own invitations and referred
+  users. Merging accounts carries invitations and acceptances to the survivor.
+  [Permanent recruitment and conversion history](docs/recruitment-history.md)
+  preserves allocation/event evidence and inviter ancestry after account or match
+  deletion. `GET /users/me/recruitment` returns your inviter chain; protected
+  `/admin/recruitment/{user_id}` and `/admin/conversion-funnel` report retained
+  history, with `/admin/conversion-funnel/events` for paginated events and
+  `/admin/conversion-funnel/invites` for archived invitation allocations.
 
 ### Languages
 
@@ -912,8 +910,6 @@ Once the server is running, open these pages in a browser:
   leave, delete or hide), and renders its declarative scene with platform-owned
   boards, pieces and controls. The page polls for other players' moves. Links like
   `/portal#match=<id>` open a match directly, also for people who aren't playing in it.
-- `/r/<code>`: a short invite link. Redirects to `/portal?ref=<code>`, keeping any
-  `#match=<id>`; see [Invite links](#invite-links-referrals).
 - `/static/declarative-test.html`: inspect declarative scenes and their UI events.
   Use the [recorded REST test flow](docs/agent-game-import.md) to verify complete
   matches and publish the tested package.
@@ -933,9 +929,8 @@ Once the server is running, open these pages in a browser:
   computer seats, ended by leaving) and 14-day charts of new users, games and matches.
   The numbers come from `GET /admin/stats`.
 - `/admin/referrals`: referral dashboard (needs [Google admin sign-in](#admin-access)): who
-  brought the most users (a leaderboard by total invites, direct and transitive, with
-  each user's referral code shown as a small `#48213`), a
-  search by name, id or referral code that shows a user's invite chain ("Yoav → Marcelle → Ana") and
+  brought the most users (a leaderboard by total invites, direct and transitive), a
+  search by name or user ID that shows a user's invite chain ("Yoav → Marcelle → Ana") and
   everyone they brought in, and the whole invite tree. The numbers come from
   `GET /admin/invites`; see [Invite links](#invite-links-referrals). It's also a tab
   in `/admin`.
