@@ -78,6 +78,7 @@
   "error.single_player_history_immutable": "a saved match's roster and recorded history cannot be replaced",
   "error.invite_codes_busy": "invite codes are busy; please try again",
   "error.invite_code_format": "invite codes must be four lowercase letters",
+  "error.share_channel_invalid": "unsupported sharing channel",
   "error.targeted_invites_retired": "targeted invites are no longer supported; share the match URL",
   "error.match_no_human_opponents": "this match has no human opponents",
   "error.invite_not_found": "invite not found",

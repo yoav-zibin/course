@@ -78,6 +78,7 @@
   "error.single_player_history_immutable": "सेव किए गए मैच के खिलाड़ियों और दर्ज इतिहास को बदला नहीं जा सकता",
   "error.invite_codes_busy": "आमंत्रण कोड अभी उपलब्ध नहीं हैं; कृपया फिर से कोशिश करें",
   "error.invite_code_format": "आमंत्रण कोड में चार छोटे लैटिन अक्षर होने चाहिए",
+  "error.share_channel_invalid": "साझा करने का असमर्थित माध्यम",
   "error.targeted_invites_retired": "अब किसी विशेष खिलाड़ी को भेजे जाने वाले आमंत्रण समर्थित नहीं हैं; मैच का लिंक साझा करें",
   "error.match_no_human_opponents": "इस मैच में कोई मानव प्रतिद्वंद्वी नहीं है",
   "error.invite_not_found": "आमंत्रण नहीं मिला",

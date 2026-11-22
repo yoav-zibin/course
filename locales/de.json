@@ -78,6 +78,7 @@
   "error.single_player_history_immutable": "Spieler und aufgezeichneter Verlauf einer gespeicherten Partie können nicht ersetzt werden",
   "error.invite_codes_busy": "Einladungscodes sind gerade nicht verfügbar; bitte versuche es erneut",
   "error.invite_code_format": "Einladungscodes müssen aus vier Kleinbuchstaben bestehen",
+  "error.share_channel_invalid": "nicht unterstützter Freigabekanal",
   "error.targeted_invites_retired": "Gezielte Einladungen werden nicht mehr unterstützt; teile den Link zur Partie",
   "error.match_no_human_opponents": "Diese Partie hat keine menschlichen Gegner",
   "error.invite_not_found": "Einladung nicht gefunden",

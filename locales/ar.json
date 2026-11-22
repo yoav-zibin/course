@@ -78,6 +78,7 @@
   "error.single_player_history_immutable": "لا يمكن استبدال قائمة اللاعبين والسجل المسجّل لمباراة محفوظة",
   "error.invite_codes_busy": "رموز الدعوة غير متاحة حاليًا؛ يُرجى المحاولة مرة أخرى",
   "error.invite_code_format": "يجب أن تتكوّن رموز الدعوة من أربعة أحرف لاتينية صغيرة",
+  "error.share_channel_invalid": "قناة مشاركة غير مدعومة",
   "error.targeted_invites_retired": "لم تعد الدعوات الموجّهة مدعومة؛ شارك رابط المباراة",
   "error.match_no_human_opponents": "لا يوجد خصوم بشريون في هذه المباراة",
   "error.invite_not_found": "لم يتم العثور على الدعوة",

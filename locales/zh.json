@@ -78,6 +78,7 @@
   "error.single_player_history_immutable": "已保存对局的玩家名单和历史记录不能替换",
   "error.invite_codes_busy": "邀请码暂时不可用，请重试",
   "error.invite_code_format": "邀请码必须由四个小写字母组成",
+  "error.share_channel_invalid": "不支持的分享渠道",
   "error.targeted_invites_retired": "不再支持定向邀请，请分享对局链接",
   "error.match_no_human_opponents": "这场对局没有人类对手",
   "error.invite_not_found": "找不到该邀请",

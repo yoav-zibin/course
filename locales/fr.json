@@ -78,6 +78,7 @@
   "error.single_player_history_immutable": "les joueurs et l’historique d’une partie sauvegardée ne peuvent pas être remplacés",
   "error.invite_codes_busy": "les codes d’invitation sont indisponibles ; veuillez réessayer",
   "error.invite_code_format": "les codes d’invitation doivent contenir quatre lettres minuscules",
+  "error.share_channel_invalid": "canal de partage non pris en charge",
   "error.targeted_invites_retired": "les invitations individuelles ne sont plus prises en charge ; partagez le lien de la partie",
   "error.match_no_human_opponents": "cette partie n’a aucun adversaire humain",
   "error.invite_not_found": "invitation introuvable",

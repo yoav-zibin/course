@@ -78,6 +78,7 @@
   "error.single_player_history_immutable": "no se pueden sustituir los jugadores ni el historial de una partida guardada",
   "error.invite_codes_busy": "los códigos de invitación no están disponibles; inténtalo de nuevo",
   "error.invite_code_format": "los códigos de invitación deben tener cuatro letras minúsculas",
+  "error.share_channel_invalid": "canal para compartir no compatible",
   "error.targeted_invites_retired": "ya no se admiten invitaciones dirigidas a una persona; comparte el enlace de la partida",
   "error.match_no_human_opponents": "esta partida no tiene oponentes humanos",
   "error.invite_not_found": "invitación no encontrada",
