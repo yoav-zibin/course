@@ -5537,6 +5537,16 @@ class GamePlatform:
             if previous is not None and not previous.moves and match.moves:
                 conversion_funnel.record_event(self._store, "match_played", at=self._clock(),
                     identity="played:" + match.id, user_id=match.moves[0].made_by_user_id, **common)
+            if previous is not None and len(match.moves) > len(previous.moves):
+                played = {move.made_by_user_id for move in previous.moves}
+                for move in match.moves[len(previous.moves):]:
+                    actor = move.made_by_user_id
+                    if actor is not None and actor not in played:
+                        conversion_funnel.record_event(self._store, "player_played", at=move.created_at,
+                            identity=f"player-played:{match.id}:{actor}", user_id=actor,
+                            match_id=match.id, owner_user_id=match.owner_user_id,
+                            invite_allocation_id=common["invite_allocation_id"])
+                        played.add(actor)
             if previous is not None and previous.status != "over" and match.status == "over":
                 conversion_funnel.record_event(self._store, "match_completed", at=self._clock(),
                     identity="completed:" + match.id, end_reason=match.end_reason, **common)

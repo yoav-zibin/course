@@ -184,6 +184,10 @@ def test_share_play_completion_and_revocation_are_permanent_observed_stages(link
     assert counts["distinct_visitors"]["invite_shared"] == 1
     assert counts["events"]["match_played"] == 1
     assert counts["events"]["match_completed"] == 1
+    assert counts["events"]["player_played"] == 2
+    assert counts["distinct_accounts"]["player_played"] == 2
+    assert counts["distinct_accounts"]["match_started"] == 2
+    assert counts["distinct_accounts"]["match_completed"] == 2
     other_match, other_token = lobby(api, owner)
     api.ok("POST", f"/invites/{other_token}/revoke", as_user=owner)
     active = api.platform._store.get_invite(other_token)

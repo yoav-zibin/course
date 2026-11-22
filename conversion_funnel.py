@@ -90,15 +90,18 @@ def _count_event(store, event):
             "events": {}, "distinct_accounts": {}, "distinct_visitors": {}}
         stage = event["event"]
         total["events"][stage] = total["events"].get(stage, 0) + 1
-        for dimension, actor in (("distinct_accounts", event.get("user_id")),
-                                 ("distinct_visitors", event.get("visitor_id"))):
-            if not actor:
-                continue
-            source = json.dumps([identity, stage, dimension, actor], separators=(",", ":"))
-            marker = "distinct:" + hashlib.sha256(source.encode()).hexdigest()
-            if store.get_analytics("funnel_totals", marker) is None:
-                store.put_analytics("funnel_totals", marker, {"id": marker, "seen": True})
-                total[dimension][stage] = total[dimension].get(stage, 0) + 1
+        accounts = {event["user_id"]} if event.get("user_id") else set()
+        if stage in {"match_started", "match_completed", "match_deleted"}:
+            accounts.update(event.get("participant_user_ids", []))
+        dimensions = (("distinct_accounts", accounts),
+                      ("distinct_visitors", {event["visitor_id"]} if event.get("visitor_id") else set()))
+        for dimension, actors in dimensions:
+            for actor in sorted(actors):
+                source = json.dumps([identity, stage, dimension, actor], separators=(",", ":"))
+                marker = "distinct:" + hashlib.sha256(source.encode()).hexdigest()
+                if store.get_analytics("funnel_totals", marker) is None:
+                    store.put_analytics("funnel_totals", marker, {"id": marker, "seen": True})
+                    total[dimension][stage] = total[dimension].get(stage, 0) + 1
         store.put_analytics("funnel_totals", identity, total)
 
 

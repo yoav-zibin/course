@@ -34,11 +34,11 @@ test('short invite attribution survives navigation and supports notification tap
   assert.equal(notificationData({url:'/invite/abcd'},base,'viewer')?.url,`${base}/invite/abcd`);
 });
 
-async function fixture(signedIn=false){
+async function fixture(signedIn=false,savedAccount=false){
   const values:Record<string,string>={};
   const storage={getItem:(key:string)=>values[key]??null,setItem:(key:string,value:string)=>{values[key]=String(value);},removeItem:(key:string)=>{delete values[key];}};
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:storage});
-  if(signedIn){values['game-platform.accounts.v1']=JSON.stringify([{id:'viewer',password:'synthetic-password',display_name:'Viewer'}]);values['game-platform.current-account.v1']='viewer';}
+  if(signedIn||savedAccount){values['game-platform.accounts.v1']=JSON.stringify([{id:'viewer',password:'synthetic-password',display_name:'Viewer'}]);values['game-platform.current-account.v1']=signedIn?'viewer':'visitor';}
   const original=globalThis.fetch,calls:{method:string;url:URL;headers:Record<string,string>;body:any}[]=[];
   let shareFailure=false;
   let hold:(()=>Promise<void>)|null=null;
@@ -106,5 +106,16 @@ test('share analytics sends only the channel and stays silent if the connection 
     await f.store.actions.recordInviteShare('invite-match','copy_code');
     const sent=f.calls.find(call=>call.url.pathname==='/matches/invite-match/share');assert.deepEqual(sent?.body,{channel:'copy_code'});assert.equal(sent?.headers['X-User-Id'],'viewer');assert.ok(sent?.headers['X-Visitor-Id']);
     f.failShare();await f.store.actions.recordInviteShare('invite-match','share_link');assert.equal(f.store.getSnapshot().error,null);
+  }finally{f.restore();}
+});
+
+
+test('saved-account login authenticates the opened ordinary match without recording a second navigation',async()=>{
+  const f=await fixture(false,true);try{
+    await f.store.actions.rememberAttribution(`${base}/portal#match=invite-match`);await f.store.actions.selectMatch('invite-match');
+    await f.store.actions.switchAccount('viewer');
+    const reads=f.calls.filter(call=>call.method==='GET'&&call.url.pathname==='/matches/invite-match');
+    assert.equal(reads.filter(call=>call.headers['X-Link-Open']==='1').length,1);
+    assert.equal(reads.at(-1)?.headers['X-User-Id'],'viewer');assert.equal(reads.at(-1)?.headers['X-Link-Open'],undefined);assert.equal(f.store.getSnapshot().selectedMatch?.id,'invite-match');
   }finally{f.restore();}
 });

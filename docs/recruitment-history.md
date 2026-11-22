@@ -20,7 +20,9 @@ Three database collections retain the primary historical evidence:
   not duplicate them.
 
 The separate `funnel_totals` collection maintains transactional aggregate counters
-and distinct-account/visitor markers so summary reads stay bounded.
+and distinct-account/visitor markers so summary reads stay bounded. Start and
+completion account counts include the match participants; `player_played` counts
+only accounts that actually made a move.
 
 These records survive account and match deletion. They contain no display names,
 email addresses, login identifiers, credentials, network addresses or request
@@ -40,7 +42,7 @@ Protected `GET /admin/conversion-funnel` summarizes conversion evidence, and
 `GET /admin/conversion-funnel/events` pages through the underlying events, and
 `GET /admin/conversion-funnel/invites` pages through archived invitation
 allocations. Tracked stages include invitation creation, successful device copy/share actions, link opening, account
-creation, recruitment, joining, match start, first played move, completion and
+creation, recruitment, joining, match start, first played move, each player's first move, completion and
 account merge/deletion and invitation revocation. A device share action does not prove
 recipient delivery; no recipient or message content is collected. This history is independent of expiring invitation reservations and live match/account
 records. A link view, an account attribution, and a seat acceptance are distinct

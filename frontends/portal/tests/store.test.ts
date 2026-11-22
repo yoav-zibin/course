@@ -478,17 +478,17 @@ test('initial URL attribution reaches signup before the route changes and is for
 });
 test('ordinary match attribution reaches every signup method and reopens the match with authenticated headers',async()=>{
   for(const method of ['guest','google','email','phone'] as const){
-    const saved=browserStorage();saved['game-platform.invited-by.v1']='retired-inviter';let signup:any=null;const matchReads:string[]=[];
+    const saved=browserStorage();saved['game-platform.invited-by.v1']='retired-inviter';let signup:any=null;const matchReads:{account:string;linkOpen:string|undefined}[]=[];
     const match={id:'shared-match',game_id:'bundled-tictactoe',game_version:1,match_kind:'multiplayer',owner_user_id:'host',players:[{id:'host',user_id:'host',kind:'human',player_index:0}],status:'waiting_for_players',state:null,turn_of_player_indices:null,move_count:0,created_at:'2026-01-01T00:00:00Z'};
     const restore=mockedFetch((url,init)=>{
       if(init.method==='POST'&&(url.pathname==='/users'||url.pathname==='/auth/google'||url.pathname.endsWith('/verify'))){signup=JSON.parse(init.body as string);return {id:'new-account',password:'new-credential',display_name:'Player'};}
-      if(url.pathname==='/matches/shared-match'){matchReads.push((init.headers as Record<string,string>)['X-User-Id']||'anonymous');return match;}
+      if(url.pathname==='/matches/shared-match'){matchReads.push({account:(init.headers as Record<string,string>)['X-User-Id']||'anonymous',linkOpen:(init.headers as Record<string,string>)['X-Link-Open']});return match;}
     });
     try{
       const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test',false,'https://local.test/portal?ref=12345#match=shared-match');await store.actions.selectMatch('shared-match');
       if(method==='guest')await store.actions.guest('Player');else if(method==='google')await store.actions.google('synthetic-token');else await store.actions.verifyCode(method,'verification','123456');
       assert.equal(signup.invite_match_id,'shared-match');assert.equal(signup.invite_token,undefined);assert.equal(signup.invited_by_user_id,undefined);assert.equal(saved['game-platform.invited-by.v1'],undefined);assert.equal(saved['game-platform.invite-match.v1'],undefined);
-      assert.equal(store.getSnapshot().selectedMatch?.id,'shared-match');assert.equal(matchReads.at(-1),'new-account');
+      assert.equal(store.getSnapshot().selectedMatch?.id,'shared-match');assert.equal(matchReads.at(-1)?.account,'new-account');assert.equal(matchReads.at(-1)?.linkOpen,undefined);assert.equal(matchReads.filter(read=>read.linkOpen==='1').length,1);
     }finally{restore();}
   }
 });

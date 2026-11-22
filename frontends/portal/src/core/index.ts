@@ -573,12 +573,12 @@ export class PortalStore {
     await this.selectMatch(match.id, token, match); guard();
     return match;
   }
-  async selectMatch(id: string, inviteToken?: string, initialMatch?: Match) {
+  async selectMatch(id: string, inviteToken?: string, initialMatch?: Match,trackOpen=true) {
     if (inviteToken) this.selectedInvite = {matchId: id, token: inviteToken};
     else if (this.selectedInvite?.matchId !== id) this.selectedInvite = null;
     const token = ++this.selection; const guard = this.capture(); await this.reloadData();
     if(removedSavedMatch(this.data,id))throw new RemovedSavedMatchError();
-    const fetched = initialMatch || this.data.local[id] || (this.data.creations?.[id] ? this.data.responses[`/matches/${id}`] : await this.read(`/matches/${encodeURIComponent(id)}`,true,true)); guard(); if (token !== this.selection) return;
+    const fetched = initialMatch || this.data.local[id] || (this.data.creations?.[id] ? this.data.responses[`/matches/${id}`] : await this.read(`/matches/${encodeURIComponent(id)}`,true,trackOpen)); guard(); if (token !== this.selection) return;
     if (initialMatch?.single_player_state) {
       await this.cache(`/matches/${encodeURIComponent(id)}`,initialMatch); guard();
     }
@@ -648,7 +648,9 @@ export class PortalStore {
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
     this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts, authConfig, account, locale, storageError, network: !this.localOnly && isOnline() }); const guard = this.capture(); await this.reloadData(); guard();
     this.patch({ games: savedList(this.data.responses['/games']), myMatches: savedList(this.data.responses['/matches']) }); await this.refresh(); guard();
-    if(reopenMatch)await this.selectMatch(reopenMatch);
+    // Authentication resumes the same opened link; refresh attribution without
+    // recording another navigation in the permanent conversion funnel.
+    if(reopenMatch)await this.selectMatch(reopenMatch,undefined,undefined,false);
     guard();await forgetMatchAttribution();
   }
   async logout(id = this.state.account?.id) {
