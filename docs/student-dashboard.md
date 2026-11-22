@@ -1,9 +1,18 @@
 # Course leaderboard
 
-Open `/admin#students` for the course leaderboard. Its student details link to
-`/bug-reports?student=<roster-id>`, where all report summaries can be filtered by
-student, status, assessment, text and date. The report detail panels retain the
-existing evidence and review controls.
+Open `/admin#students` for the course leaderboard. It is one wide, horizontally
+scrollable table on desktop and mobile, with one row per course member. Headers
+stay visible while scrolling vertically, and names stay visible while scrolling
+horizontally. Each row shows contact and account details, activity and recruitment
+metrics, report counts and scores, and examples of reports with the highest and
+lowest scores in its columns.
+Long account lists and report examples scroll inside their cells to keep rows
+compact; these cells can also receive keyboard focus.
+
+The links column opens `/bug-reports?student=<roster-id>`, where all report
+summaries can be filtered by student, status, assessment, text and date. The
+report detail panels retain the existing evidence and review controls. Linked
+student URLs highlight and focus the matching leaderboard row.
 
 The leaderboard page requires Google sign-in with an email explicitly pinned
 in the VM's private `admin_google_emails` configuration. This fixed allowlist is
@@ -17,7 +26,7 @@ reports when roster attribution is unavailable.
 
 Account attribution follows the instructor's requested rule: an exact roster
 email match, or a whole first/last-name token in the account display name,
-ignoring case and accents. The account details show each match reason. A name
+ignoring case and accents. The account columns show each match reason. A name
 match is a heuristic and can include unrelated people with the same name.
 Merged account IDs are retained for inspection, while metric totals use their
 surviving account. Accounts are attributed for reporting only; the dashboard

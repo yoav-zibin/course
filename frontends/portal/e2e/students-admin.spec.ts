@@ -24,7 +24,7 @@ test.beforeEach(async({page,baseURL})=>{
   await loginAdmin(page);
 });
 
-test('admin students tab shows matched identities and safe report examples',async({page},testInfo)=>{
+test('admin students tab keeps identities, metrics and report examples in one wide table',async({page},testInfo)=>{
   const errors:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
   const withSources={...payload,students:payload.students.map((student,index)=>index?student:{...student,reports:{
@@ -35,26 +35,60 @@ test('admin students tab shows matched identities and safe report examples',asyn
   await expect(page.getByRole('tab',{name:'Students leaderboard',exact:true})).toHaveAttribute('aria-selected','true');
   const dashboard=page.frameLocator('iframe[data-tab="students"]');
   await expect(dashboard.locator('.student-row')).toHaveCount(3);
-  await page.screenshot({path:testInfo.outputPath('students-overview.png')});
-  await dashboard.getByRole('button',{name:'Alice Example',exact:true}).click();
-  const detail=dashboard.locator('#student-detail-course-alice');
-  await expect(detail).toContainText('course-alice@university.example');
-  await expect(detail).toContainText('account-course-alice');
-  await expect(detail).toContainText('google');
-  await expect(detail).toContainText('Match: email; first name');
-  await expect(detail).toContainText('Not provided');
-  await expect(detail).toContainText('A useful report <img src=x onerror=alert(1)>');
-  await expect(detail.locator('.breakdown div').filter({has:dashboard.getByText('Manual reports',{exact:true})})).toContainText('2');
-  await expect(detail.locator('.breakdown div').filter({has:dashboard.getByText('Automatic reports',{exact:true})})).toContainText('1');
-  await expect(detail.locator('.report-card').first()).toContainText('Automatic');
-  await expect(detail).toContainText('The average includes assessed manual and automatic reports; unassessed reports are excluded.');
-  await expect(detail.locator('img')).toHaveCount(0);
-  await expect(detail.getByRole('link',{name:"Browse this person's reports"})).toHaveAttribute('href','/bug-reports?student=course-alice');
-  await expect(detail.getByRole('link',{name:'Open full report'}).first()).toHaveAttribute('href','/bug-reports?student=course-alice&report=report-course-alice');
+  await expect(dashboard.locator('.leaderboard-table')).toHaveCount(1);
+  await expect(dashboard.locator('.leaderboard-table tbody > tr')).toHaveCount(3);
+  await expect(dashboard.locator('.student-detail')).toHaveCount(0);
+  const alice=dashboard.locator('.student-row[data-student-id="course-alice"]');
+  await expect(alice.locator('[data-column="institutional_email"]')).toContainText('course-alice@university.example');
+  await expect(alice.locator('[data-column="personal_email"]')).toHaveText('Not provided');
+  const accounts=alice.locator('[data-column="accounts"]');
+  await expect(accounts).toContainText('account-course-alice');
+  await expect(accounts).toContainText('google');
+  await expect(accounts).toContainText('Match: email; first name');
+  await expect(alice.locator('[data-column="computer"]')).toHaveText('2');
+  await expect(alice.locator('[data-column="pass_and_play"]')).toHaveText('1');
+  await expect(alice.locator('[data-column="multiplayer"]')).toHaveText('3');
+  await expect(alice.locator('[data-column="manual_reports"]')).toHaveText('2');
+  await expect(alice.locator('[data-column="automatic_reports"]')).toHaveText('1');
+  const top=alice.locator('[data-column="top"]');
+  await expect(top).toContainText('A useful report <img src=x onerror=alert(1)>');
+  await expect(top.locator('.report-card').first()).toContainText('Automatic');
+  await expect(top).toContainText('Clear reproduction steps.');
+  await expect(top).toContainText('Updated the game logic.');
+  await expect(top.locator('img')).toHaveCount(0);
+  await expect(alice.locator('td').last()).toHaveAttribute('data-column','links');
+  await expect(alice.getByRole('link',{name:"Browse this person's reports"})).toHaveAttribute('href','/bug-reports?student=course-alice');
+  await expect(top.getByRole('link',{name:'Open full report'}).first()).toHaveAttribute('href','/bug-reports?student=course-alice&report=report-course-alice');
   const frame=page.frames().find(frame=>frame.url().includes('/admin/students?'))!;
   expect(await frame.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await frame.evaluate(()=>document.querySelector('.student-row:has(button[aria-expanded="true"])')?.scrollIntoView({block:'start'}));
-  await page.screenshot({path:testInfo.outputPath('students-expanded.png')});
+  const geometry=await frame.evaluate(()=>{
+    const wrap=document.querySelector('.table-wrap') as HTMLElement;
+    const table=document.querySelector('.leaderboard-table')!;
+    const row=document.querySelector('.student-row')!;
+    wrap.scrollTop=0;
+    const before=row.firstElementChild!.getBoundingClientRect().left;
+    const heading=document.querySelector('.leaderboard-table thead th')!;
+    const headingBefore=heading.getBoundingClientRect().top;
+    wrap.scrollLeft=wrap.scrollWidth;
+    wrap.scrollTop=100;
+    return {overflows:wrap.scrollWidth>wrap.clientWidth,scroll:wrap.scrollLeft,
+      tableDisplay:getComputedStyle(table).display,rowDisplay:getComputedStyle(row).display,
+      pinnedName:Math.abs(row.firstElementChild!.getBoundingClientRect().left-before)<2,
+      pinnedHeader:Math.abs(heading.getBoundingClientRect().top-headingBefore)<2};
+  });
+  expect(geometry.overflows).toBe(true);
+  expect(geometry.scroll).toBeGreaterThan(0);
+  expect(geometry.tableDisplay).toBe('table');
+  expect(geometry.rowDisplay).toBe('table-row');
+  expect(geometry.pinnedName).toBe(true);
+  await frame.evaluate(()=>{
+    const main=document.querySelector('main')!;
+    const wrap=document.querySelector('.table-wrap') as HTMLElement;
+    main.scrollTop=wrap.offsetTop-main.offsetTop;
+    wrap.scrollTop=0;
+  });
+  expect(geometry.pinnedHeader).toBe(true);
+  await page.screenshot({path:testInfo.outputPath('students-wide-table.png')});
   expect(errors).toEqual([]);
 });
 
@@ -72,26 +106,56 @@ test('student sorting includes zero scores and keeps unassessed last; search fin
   await page.getByRole('combobox',{name:'Order',exact:true}).selectOption('desc');
   await expect(rows.first()).toContainText('Alice Example');
   await expect(rows.last()).toContainText('Casey Guest');
+  const tableViewport=page.getByTestId('students-table-scroll');
+  await tableViewport.evaluate(node=>{node.scrollLeft=700;});
   await page.getByRole('searchbox',{name:'Find a person or account',exact:true}).fill('account-course-alice');
   await expect(rows).toHaveCount(1);
+  expect(await tableViewport.evaluate(node=>node.scrollLeft)).toBe(700);
+  await expect(page.getByRole('searchbox')).toBeFocused();
   await expect(rows).toContainText('Alice Example');
-  const name=page.getByRole('button',{name:'Alice Example',exact:true});
-  await name.focus();
-  await page.keyboard.press('Enter');
-  await expect(name).toHaveAttribute('aria-expanded','true');
+  await expect(rows.locator('[data-column="accounts"]')).toContainText('account-course-alice');
+  await expect(rows.locator('button[aria-expanded]')).toHaveCount(0);
   await page.getByRole('searchbox').fill('no-such-person');
   await expect(page.getByText('No people match this search.',{exact:true})).toBeVisible();
   expect(requests).toBe(1);
 });
 
-test('students dashboard retries failed loading and opens a linked person',async({page})=>{
+test('students dashboard retries failed loading and highlights a linked person',async({page})=>{
   let requests=0;
   await page.route('**/admin/students/data',route=>++requests===1?route.fulfill({status:503,json:{detail:'Temporary roster failure'}}):route.fulfill({json:payload}));
   await page.goto('/admin/students?student=course-casey');
   await expect(page.getByRole('alert')).toHaveText('Could not load the students leaderboard. Select Refresh to try again.');
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await expect(page.getByRole('alert')).toBeHidden();
-  await expect(page.getByRole('button',{name:'Casey Guest',exact:true})).toHaveAttribute('aria-expanded','true');
-  await expect(page.locator('#student-detail-course-casey')).toContainText('No assessed reports yet.');
+  const selected=page.locator('.student-row[data-student-id="course-casey"]');
+  await expect(selected).toHaveClass(/is-selected/);
+  await expect(selected).toBeFocused();
+  await expect(selected.locator('[data-column="top"]')).toContainText('No assessed reports yet.');
   await expect(page.locator('#freshness')).toContainText('cached for up to 60 seconds');
+});
+
+test('long account lists and report examples stay readable within a single bounded row',async({page})=>{
+  const alice=payload.students[0];
+  const longPerson={...alice,accounts:Array.from({length:30},(_,index)=>({...alice.accounts[0],id:`account-alias-${index}`})),
+    reports:{...alice.reports,top:alice.reports.top.map(report=>({...report,text:'Detailed report evidence.\n'.repeat(100)}))}};
+  await page.route('**/admin/students/data',route=>route.fulfill({json:{...payload,students:[longPerson]}}));
+  await page.goto('/admin/students');
+  const row=page.locator('.student-row');
+  await expect(row).toHaveCount(1);
+  const accounts=row.locator('.account-list'),reports=row.locator('[data-column="top"] .report-examples');
+  await expect(accounts).toHaveAttribute('tabindex','0');
+  await expect(reports).toHaveAttribute('tabindex','0');
+  await expect(accounts).toHaveAttribute('aria-label',/Alice Example/);
+  await expect(reports).toHaveAttribute('aria-label',/Alice Example/);
+  expect(await row.evaluate(node=>node.getBoundingClientRect().height)).toBeLessThan(380);
+  for(const cell of [accounts,reports]){
+    const dimensions=await cell.evaluate(node=>{
+      node.scrollTop=node.scrollHeight;
+      return {height:node.clientHeight,content:node.scrollHeight,scrolled:node.scrollTop};
+    });
+    expect(dimensions.content).toBeGreaterThan(dimensions.height);
+    expect(dimensions.scrolled).toBeGreaterThan(0);
+  }
+  await expect(accounts).toContainText('account-alias-29');
+  await expect(reports).toContainText('Detailed report evidence.');
 });

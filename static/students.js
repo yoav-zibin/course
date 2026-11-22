@@ -3,30 +3,45 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const state = {data: null, expanded: new Set(), loading: false, error: false};
+const state = {data: null, loading: false, error: false, tableScroll: {left: 0, top: 0}};
 const requestedStudent = new URLSearchParams(location.search).get("student");
 let selectedStudentShown = false;
-if (requestedStudent) state.expanded.add(requestedStudent);
 const count = (value) => I18n.number(Number(value) || 0);
 const isScore = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 10;
+const recruitedLabel = label => `${I18n.t("ui.students.recruits_matches", {}, "Recruited matches")} · ${label}`;
 
 const columns = [
-  {key: "name", label: () => I18n.t("ui.students.person", {}, "Person"), value: row => row.name},
+  {key: "name", kind: "name", label: () => I18n.t("ui.students.person", {}, "Person"), value: row => row.name},
+  {key: "institutional_email", kind: "email", label: () => I18n.t("ui.students.institutional_email", {}, "Columbia / Barnard email"), value: row => row.institutional_email},
+  {key: "personal_email", kind: "email", label: () => I18n.t("ui.students.personal_email", {}, "Personal email"), value: row => row.personal_email},
+  {key: "accounts", kind: "accounts", label: () => I18n.t("ui.students.accounts", {}, "Matched account IDs"), value: row => row.accounts.length},
+  {key: "total_matches", label: () => I18n.t("ui.students.total_matches", {}, "Total matches"), value: row => row.matches.total},
   {key: "computer", label: () => I18n.t("ui.students.computer", {}, "Computer"), value: row => row.matches.computer},
   {key: "pass_and_play", label: () => I18n.t("ui.students.pass_and_play", {}, "Pass & play"), value: row => row.matches.pass_and_play},
   {key: "multiplayer", label: () => I18n.t("ui.students.multiplayer", {}, "Multiplayer"), value: row => row.matches.multiplayer},
+  {key: "waiting", label: () => I18n.t("ui.students.waiting", {}, "Waiting lobbies"), value: row => row.matches.waiting},
   {key: "other_players", label: () => I18n.t("ui.students.other_players", {}, "Other players"), value: row => row.other_players},
   {key: "direct_recruits", label: () => I18n.t("ui.students.direct_recruits", {}, "Direct invites"), value: row => row.direct_recruits},
   {key: "transitive_recruits", label: () => I18n.t("ui.students.transitive_recruits", {}, "All invited players"), value: row => row.transitive_recruits},
   {key: "recruits_matches", label: () => I18n.t("ui.students.recruits_matches", {}, "Recruited matches"), value: row => row.recruits_matches.total},
+  {key: "recruits_computer", label: () => recruitedLabel(I18n.t("ui.students.computer", {}, "Computer")), value: row => row.recruits_matches.computer},
+  {key: "recruits_pass_and_play", label: () => recruitedLabel(I18n.t("ui.students.pass_and_play", {}, "Pass & play")), value: row => row.recruits_matches.pass_and_play},
+  {key: "recruits_multiplayer", label: () => recruitedLabel(I18n.t("ui.students.multiplayer", {}, "Multiplayer")), value: row => row.recruits_matches.multiplayer},
+  {key: "recruits_waiting", label: () => recruitedLabel(I18n.t("ui.students.waiting", {}, "Waiting lobbies")), value: row => row.recruits_matches.waiting},
   {key: "reports", label: () => I18n.t("ui.students.reports", {}, "Bug reports"), value: row => row.reports.total},
-  {key: "average_score", label: () => I18n.t("ui.students.average_score", {}, "Average score"), value: row => row.reports.average_score},
+  {key: "manual_reports", label: () => I18n.t("ui.students.manual_reports", {}, "Manual reports"), value: row => row.reports.manual ?? Math.max(0, row.reports.total - (row.reports.automatic || 0))},
+  {key: "automatic_reports", label: () => I18n.t("ui.students.automatic_reports", {}, "Automatic reports"), value: row => row.reports.automatic || 0},
+  {key: "assessed", label: () => I18n.t("ui.reports.assessed", {}, "Assessed"), value: row => row.reports.assessed},
+  {key: "unassessed", label: () => I18n.t("ui.reports.unassessed", {}, "Not assessed"), value: row => row.reports.unassessed},
+  ...["open", "handling", "escalated", "handled"].map(status => ({key: `status_${status}`,
+    label: () => `${I18n.t("ui.students.reports", {}, "Bug reports")} · ${statusLabel(status)}`,
+    value: row => row.reports.status_counts?.[status] || 0})),
+  {key: "average_score", kind: "score", label: () => I18n.t("ui.students.average_score", {}, "Average score"), value: row => row.reports.average_score},
+  {key: "top", kind: "examples", label: () => I18n.t("ui.students.top", {}, "Highest scoring reports")},
+  {key: "lowest", kind: "examples", label: () => I18n.t("ui.students.lowest", {}, "Lowest scoring reports")},
+  {key: "links", kind: "links", label: () => I18n.t("ui.students.links", {}, "Links")},
 ];
-const sortOptions = [
-  ...columns,
-  {key: "total_matches", label: () => I18n.t("ui.students.total_matches", {}, "Total matches"), value: row => row.matches.total},
-  {key: "accounts", label: () => I18n.t("ui.students.accounts", {}, "Matched account IDs"), value: row => row.accounts.length},
-];
+const sortOptions = columns.filter(column => column.value);
 
 function reportsUrl(student, report) {
   const query = new URLSearchParams({student: student.id});
@@ -38,17 +53,6 @@ function emailNode(email) {
   return email
     ? el("a", {class: "student-email", href: `mailto:${encodeURIComponent(email)}`, textContent: email})
     : el("span", {class: "muted", textContent: I18n.t("ui.students.unavailable", {}, "Not provided")});
-}
-
-function statistic(label, value) {
-  return el("div", {}, el("dt", {textContent: label}), el("dd", {textContent: count(value)}));
-}
-
-function matchBreakdown(matches) {
-  return el("dl", {class: "breakdown"},
-    statistic(I18n.t("ui.students.total_matches", {}, "Total matches"), matches.total),
-    ...columns.slice(1, 4).map(column => statistic(column.label(), matches[column.key])),
-    statistic(I18n.t("ui.students.waiting", {}, "Waiting lobbies"), matches.waiting));
 }
 
 function statusLabel(status) {
@@ -97,79 +101,45 @@ function accountCard(account) {
   return card;
 }
 
-function personDetails(student) {
-  const reports = student.reports;
-  const accounts = el("section", {class: "detail-section full"},
-    el("h3", {textContent: I18n.t("ui.students.accounts_heading", {}, "Matched platform accounts")}),
-    el("div", {class: "account-list"}, student.accounts.length
-      ? student.accounts.map(accountCard)
-      : el("p", {class: "muted", textContent: I18n.t("ui.students.no_accounts", {}, "No platform account matches this person yet.")})));
-  const identity = el("dl", {class: "identity-list"},
-    el("div", {}, el("dt", {textContent: I18n.t("ui.students.institutional_email", {}, "Columbia / Barnard email")}), el("dd", {}, emailNode(student.institutional_email))),
-    el("div", {}, el("dt", {textContent: I18n.t("ui.students.personal_email", {}, "Personal email")}), el("dd", {}, emailNode(student.personal_email))));
-  const activity = el("section", {class: "detail-section"},
-    el("h3", {textContent: I18n.t("ui.students.total_matches", {}, "Total matches")}), matchBreakdown(student.matches),
-    el("dl", {class: "breakdown"}, statistic(I18n.t("ui.students.other_players", {}, "Other players"), student.other_players)));
-  const referrals = el("section", {class: "detail-section"},
-    el("h3", {textContent: I18n.t("ui.students.recruits_matches", {}, "Recruited matches")}),
-    el("dl", {class: "breakdown"},
-      statistic(I18n.t("ui.students.direct_recruits", {}, "Direct invites"), student.direct_recruits),
-      statistic(I18n.t("ui.students.transitive_recruits", {}, "All invited players"), student.transitive_recruits)),
-    matchBreakdown(student.recruits_matches));
-  const reportSummary = el("section", {class: "detail-section full"},
-    el("h3", {textContent: I18n.t("ui.students.reports", {}, "Bug reports")}),
-    el("dl", {class: "breakdown"},
-      statistic(I18n.t("ui.students.reports", {}, "Bug reports"), reports.total),
-      statistic(I18n.t("ui.students.manual_reports", {}, "Manual reports"), reports.manual ?? Math.max(0, reports.total - (reports.automatic || 0))),
-      statistic(I18n.t("ui.students.automatic_reports", {}, "Automatic reports"), reports.automatic || 0),
-      ...Object.entries(reports.status_counts || {}).map(([status, total]) => statistic(statusLabel(status), total))),
-    el("p", {class: "muted", textContent: I18n.t("ui.students.assessed_summary", {
-      assessed: count(reports.assessed), unassessed: count(reports.unassessed),
-    }, "{assessed} assessed · {unassessed} unassessed")}),
-    el("p", {class: "muted", textContent: I18n.t("ui.students.report_source_average", {}, "The average includes assessed manual and automatic reports; unassessed reports are excluded.")}),
-    el("a", {href: reportsUrl(student), target: "_blank", rel: "noopener",
-      textContent: I18n.t("ui.students.reports_for_person", {}, "Browse this person's reports")}));
-  const examples = [
-    [I18n.t("ui.students.top", {}, "Highest scoring reports"), reports.top || [], false],
-    [I18n.t("ui.students.lowest", {}, "Lowest scoring reports"), reports.lowest || [], true],
-  ].map(([label, rows, lowest]) => el("section", {class: "detail-section"},
-    el("h3", {textContent: label}), rows.length
-      ? rows.map(report => reportExample(student, report, lowest))
-      : el("p", {class: "muted", textContent: I18n.t("ui.students.no_assessed", {}, "No assessed reports yet.")})));
-  return el("div", {}, identity, el("div", {class: "detail-grid"}, activity, referrals, accounts, reportSummary, examples));
-}
-
-function personRows(student, rank) {
-  const detailId = `student-detail-${encodeURIComponent(student.id)}`;
-  const detail = el("tr", {class: "student-detail", id: detailId, hidden: !state.expanded.has(student.id)},
-    el("td", {colSpan: columns.length}, personDetails(student)));
-  const toggle = el("button", {type: "button", textContent: student.name,
-    "aria-expanded": String(state.expanded.has(student.id)), "aria-controls": detailId});
-  toggle.addEventListener("click", () => {
-    if (state.expanded.has(student.id)) state.expanded.delete(student.id);
-    else state.expanded.add(student.id);
-    detail.hidden = !state.expanded.has(student.id);
-    toggle.setAttribute("aria-expanded", String(!detail.hidden));
-  });
-  const nameCell = el("td", {},
-    el("div", {class: "student-name"}, el("span", {class: "rank", textContent: count(rank)}), toggle),
-    el("p", {class: "student-meta muted", textContent: I18n.t("ui.students.person_summary", {
-      matches: count(student.matches.total), accounts: count(student.accounts.length),
-    }, "{matches} matches · {accounts} accounts")}),
-    student.institutional_email ? emailNode(student.institutional_email) : null,
-    student.personal_email ? emailNode(student.personal_email) : null);
-  const cells = columns.slice(1).map(column => {
-    const value = column.value(student);
-    const cell = el("td", {class: "numeric", "data-label": column.label()});
-    if (column.key === "reports") {
-      cell.append(el("a", {href: reportsUrl(student), target: "_blank", rel: "noopener", textContent: count(value)}));
-    } else if (column.key === "average_score") {
+function personRow(student, rank) {
+  const cells = columns.map(column => {
+    const kind = column.kind || "numeric";
+    const cell = el(column.key === "name" ? "th" : "td", {
+      class: `column-${kind}${kind === "numeric" || kind === "score" ? " numeric" : ""}`,
+      "data-column": column.key, ...(column.key === "name" ? {scope: "row"} : {}),
+    });
+    if (kind === "name") {
+      cell.append(el("div", {class: "student-name"},
+        el("span", {class: "rank", textContent: count(rank)}),
+        el("span", {class: "student-display-name", textContent: student.name})),
+      el("p", {class: "student-meta muted", textContent: I18n.t("ui.students.person_summary", {
+        matches: count(student.matches.total), accounts: count(student.accounts.length),
+      }, "{matches} matches · {accounts} accounts")}));
+    } else if (kind === "email") {
+      cell.append(emailNode(column.value(student)));
+    } else if (kind === "accounts") {
+      cell.append(el("div", {class: "account-list", tabIndex: 0, role: "region",
+        "aria-label": `${column.label()} · ${student.name}`}, student.accounts.length
+        ? student.accounts.map(accountCard)
+        : el("p", {class: "muted", textContent: I18n.t("ui.students.no_accounts", {}, "No platform account matches this person yet.")})));
+    } else if (kind === "examples") {
+      const reports = student.reports[column.key] || [];
+      cell.append(el("div", {class: "report-examples", tabIndex: 0, role: "region",
+        "aria-label": `${column.label()} · ${student.name}`}, reports.length
+        ? reports.map(report => reportExample(student, report, column.key === "lowest"))
+        : el("p", {class: "muted", textContent: I18n.t("ui.students.no_assessed", {}, "No assessed reports yet.")})));
+    } else if (kind === "links") {
+      cell.append(el("a", {href: reportsUrl(student), target: "_blank", rel: "noopener",
+        textContent: I18n.t("ui.students.reports_for_person", {}, "Browse this person's reports")}));
+    } else if (kind === "score") {
+      const value = column.value(student);
       cell.append(el("span", {class: isScore(value) ? "" : "score-none",
         textContent: isScore(value) ? `${I18n.number(Number(value.toFixed(1)))}/10` : "—"}));
-    } else cell.textContent = count(value);
+    } else cell.textContent = count(column.value(student));
     return cell;
   });
-  return [el("tr", {class: "student-row", "data-student-id": student.id}, nameCell, cells), detail];
+  return el("tr", {class: `student-row${student.id === requestedStudent ? " is-selected" : ""}`,
+    id: `student-row-${encodeURIComponent(student.id)}`, "data-student-id": student.id, tabIndex: -1}, cells);
 }
 
 function renderOverview(students) {
@@ -186,6 +156,11 @@ function renderOverview(students) {
 }
 
 function render() {
+  const focusedStudent = document.activeElement?.classList.contains("student-row")
+    ? document.activeElement.dataset.studentId : null;
+  const previousViewport = $("leaderboard").querySelector(".table-wrap");
+  const viewportHadFocus = document.activeElement === previousViewport;
+  if (previousViewport) state.tableScroll = {left: previousViewport.scrollLeft, top: previousViewport.scrollTop};
   $("error").hidden = !state.error;
   $("error").textContent = state.error ? I18n.t("ui.students.load_failed", {}, "Could not load the students leaderboard. Select Refresh to try again.") : "";
   $("student-dashboard").setAttribute("aria-busy", String(state.loading));
@@ -214,19 +189,30 @@ function render() {
     student.accounts.map(account => [account.id, account.display_name, account.emails]),
   ]).toLocaleLowerCase().includes(query));
   if (matching.length) {
-    const headings = columns.map((item, index) => el("th", {scope: "col", class: index ? "numeric" : "", textContent: item.label()}));
-    $("leaderboard").replaceChildren(el("div", {class: "table-wrap"},
+    const headings = columns.map(item => el("th", {scope: "col", "data-column": item.key,
+      class: `column-${item.kind || "numeric"}${!item.kind || item.kind === "score" ? " numeric" : ""}`,
+      textContent: item.label()}));
+    $("leaderboard").replaceChildren(el("div", {class: "table-wrap", tabIndex: 0, role: "region",
+      "aria-label": I18n.t("ui.admin.tab_students", {}, "Students leaderboard"), "data-testid": "students-table-scroll"},
       el("table", {class: "leaderboard-table"},
         el("thead", {}, el("tr", {}, headings)),
-        el("tbody", {}, matching.flatMap(student => personRows(student, ordered.indexOf(student) + 1))))));
+        el("tbody", {}, matching.map(student => personRow(student, ordered.indexOf(student) + 1))))));
   } else $("leaderboard").replaceChildren(el("p", {class: "empty", textContent: I18n.t("ui.students.no_results", {}, "No people match this search.")}));
-  if (requestedStudent && !selectedStudentShown) {
+  const viewport = $("leaderboard").querySelector(".table-wrap");
+  if (viewport) {
+    viewport.scrollLeft = state.tableScroll.left;
+    viewport.scrollTop = state.tableScroll.top;
+    if (viewportHadFocus) viewport.focus({preventScroll: true});
+  }
+  const revealInitialStudent = requestedStudent && !selectedStudentShown;
+  const focusTarget = revealInitialStudent ? requestedStudent : focusedStudent;
+  if (focusTarget) {
     const selected = Array.from($("leaderboard").querySelectorAll(".student-row"))
-      .find(row => row.dataset.studentId === requestedStudent);
+      .find(row => row.dataset.studentId === focusTarget);
     if (selected) {
       selectedStudentShown = true;
-      selected.scrollIntoView({block: "start"});
-      selected.querySelector("button").focus({preventScroll: true});
+      if (revealInitialStudent) selected.scrollIntoView({block: "nearest", inline: "start"});
+      selected.focus({preventScroll: true});
     }
   }
   $("freshness").textContent = [
