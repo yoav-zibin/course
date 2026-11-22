@@ -4427,7 +4427,8 @@ class GamePlatform:
                 user_id=caller_id, visitor_id=visitor_id, channel=channel,
                 invite_allocation_id=self._allocation_for_token(match.invite_code))
 
-    def view_invite(self, token: str, *, caller_id: str | None = None, visitor_id: str | None = None) -> InviteView:
+    def view_invite(self, token: str, *, caller_id: str | None = None,
+                    visitor_id: str | None = None, track_open: bool = True) -> InviteView:
         """Opens a shared match and reports whether its invite can seat someone.
         Counted as a view in the creator's referral stats."""
         with self._lock:
@@ -4435,8 +4436,9 @@ class GamePlatform:
             match = self._get_match(invite.match_id)
             if caller_id is not None:
                 self._attribute_recruitment(self._resolve_replaced(self._require_user(caller_id)), match=match, visitor_id=visitor_id)
-            conversion_funnel.link_opened(self._store, match, at=self._clock(),
-                user_id=caller_id, visitor_id=visitor_id, invite=invite)
+            if track_open:
+                conversion_funnel.link_opened(self._store, match, at=self._clock(),
+                    user_id=caller_id, visitor_id=visitor_id, invite=invite)
             invite = replace(invite, views=invite.views + 1)
             self._store.put_invite(invite)
             conversion_funnel.archive_invite(self._store, invite)

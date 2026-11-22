@@ -29,11 +29,19 @@ for(const kind of ['match','invite'] as const)test(`anonymous ${kind} link survi
 
 for(const kind of ['match','invite'] as const)test(`a saved existing account receives attribution after opening an anonymous ${kind} link`,async({page,request})=>{
   const {host,match}=await lobby(request),existing=await createUser(request,uniqueName('Existing recruit'));
+  let release!:()=>void,started!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;}),anonymousStarted=new Promise<void>(resolve=>{started=resolve;});
+  const source=kind==='invite'?`/invites/${match.invite_code}`:`/matches/${match.id}`;
+  await page.route(`**${source}`,async route=>{if(!route.request().headers()['x-user-id']){started();await gate;}await route.continue();});
   await page.addInitScript(account=>{localStorage.setItem('game-platform.accounts.v1',JSON.stringify([account]));localStorage.setItem('game-platform.current-account.v1','visitor');},existing);
-  await page.goto(kind==='invite'?`/invite/${match.invite_code}`:`/portal#match=${match.id}`);
-  if(kind==='invite')await page.getByRole('button',{name:'Log in to join',exact:true}).click();else await page.getByTestId('header-account').click();
-  await page.getByRole('button',{name:`Sign in as ${existing.display_name}`,exact:true}).click();
-  await expect(page.getByTestId('header-account')).toHaveAccessibleDescription(existing.display_name);
-  await expect.poll(()=>inviter(request,existing.id)).toBe(host.id);
-  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('game-platform.invite-match.v1')||localStorage.getItem('game-platform.invite-token.v1'))).toBeNull();
+  try{
+    await page.goto(kind==='invite'?`/invite/${match.invite_code}`:`/portal#match=${match.id}`);await anonymousStarted;
+    // The source detail has not returned, so rendered selectedMatch cannot be
+    // the account handoff's only source of match/invitation context.
+    await page.getByTestId('header-account').click();await page.getByRole('button',{name:`Sign in as ${existing.display_name}`,exact:true}).click();
+    await expect(page.getByTestId('header-account')).toHaveAccessibleDescription(existing.display_name);
+    await expect.poll(()=>inviter(request,existing.id)).toBe(host.id);
+    await expect.poll(()=>page.evaluate(()=>localStorage.getItem('game-platform.invite-match.v1')||localStorage.getItem('game-platform.invite-token.v1'))).toBeNull();
+    release();
+    await expect.poll(async()=>{const response=await request.get('/admin/conversion-funnel',{headers:E2E_ADMIN_HEADERS,params:{match_id:match.id}});expect(response.ok()).toBeTruthy();return(await response.json()).events.link_opened;}).toBe(1);
+  }finally{release();}
 });

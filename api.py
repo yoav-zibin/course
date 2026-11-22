@@ -1359,10 +1359,12 @@ def list_invites(
 
 @router.get("/invites/{token}")
 def view_invite(platform: Platform, request: Request, token: str, caller_id: OptionalCallerId,
-                x_visitor_id: Annotated[str | None, Header()] = None) -> InviteViewOut:
+                x_visitor_id: Annotated[str | None, Header()] = None,
+                x_link_open: Annotated[str | None, Header()] = None) -> InviteViewOut:
     """What an invite link opens: the match and who invited you. Public: the token is
     the secret. Each call counts as a view in the creator's referral stats."""
-    view = platform.view_invite(token, caller_id=caller_id, visitor_id=x_visitor_id)
+    view = platform.view_invite(token, caller_id=caller_id, visitor_id=x_visitor_id,
+                                track_open=x_link_open != "0")
     reason = code = None
     if view.problem is not None:
         reason, code, _ = i18n.localize_error(view.problem, request.state.locale)

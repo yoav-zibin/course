@@ -41,24 +41,24 @@ async function fixture(signedIn=false,savedAccount=false){
   if(signedIn||savedAccount){values['game-platform.accounts.v1']=JSON.stringify([{id:'viewer',password:'synthetic-password',display_name:'Viewer'}]);values['game-platform.current-account.v1']=signedIn?'viewer':'visitor';}
   const original=globalThis.fetch,calls:{method:string;url:URL;headers:Record<string,string>;body:any}[]=[];
   let shareFailure=false;
-  let hold:(()=>Promise<void>)|null=null;
+  let hold:(()=>Promise<void>)|null=null,holdMatch:(()=>Promise<void>)|null=null;
   const match={id:'invite-match',game_id:'bundled-tictactoe',game_version:1,owner_user_id:'host',status:'waiting_for_players',private:true,invite_code:'abcd',players:[{id:'host',user_id:'host',player_index:0,kind:'human'},{id:'opponent',user_id:'opponent',player_index:1,kind:'human'}],turn_of_player_indices:null,move_count:0,created_at:'2026-01-01T00:00:00Z'};
   globalThis.fetch=(async(input:string|URL|Request,init:RequestInit={})=>{
-    const url=new URL(String(input)),method=init.method||'GET';calls.push({method,url,headers:init.headers as Record<string,string>,body:init.body?JSON.parse(init.body as string):undefined});if(shareFailure&&url.pathname.endsWith('/share'))throw new TypeError('Analytics offline');let response:any=[];
+    const url=new URL(String(input)),method=init.method||'GET';calls.push({method,url,headers:(init.headers as Record<string,string>)||{},body:init.body?JSON.parse(init.body as string):undefined});if(shareFailure&&url.pathname.endsWith('/share'))throw new TypeError('Analytics offline');let response:any=[];
     if(url.pathname==='/storage/capabilities')response={pagination:true};
     else if(url.pathname==='/auth/config')response={};
     else if(url.pathname==='/i18n/locales')response={locales:[{code:'en',direction:'ltr'}]};
     else if(url.pathname.startsWith('/i18n/bundle/'))response={catalog:{messages:{}}};
-    else if(url.pathname==='/invites/abcd'){if(hold)await hold();response={match,usable:false,token:'abcd'};}
+    else if(url.pathname==='/invites/abcd'){if(hold&&!(init.headers as Record<string,string>)['X-User-Id'])await hold();response={match,usable:false,token:'abcd'};}
     else if(url.pathname==='/invites/abcd/accept')response=match;
-    else if(url.pathname==='/matches/invite-match')response=match;
+    else if(url.pathname==='/matches/invite-match'){if(holdMatch&&!(init.headers as Record<string,string>)['X-User-Id'])await holdMatch();response=match;}
     else if(url.pathname==='/v2/matches/invite-match/history')response={items:[],initial_state:null,initial_turn_player_indices:null,total:0,next_start:null};
     else if(url.pathname==='/users/viewer')response={id:'viewer',display_name:'Viewer',token_balance:0};
     else if(url.pathname.startsWith('/v2/')||url.pathname==='/users/me/notifications')response={items:[],next_cursor:null};
     return new Response(JSON.stringify(response),{status:200});
   }) as typeof fetch;
   const store=new PortalStore();await store.bootstrap(base);
-  return {store,match,calls,failShare:()=>{shareFailure=true;},hold:(fn:()=>Promise<void>)=>{hold=fn;},restore:()=>{globalThis.fetch=original;}};
+  return {store,match,calls,failShare:()=>{shareFailure=true;},holdMatch:(fn:()=>Promise<void>)=>{holdMatch=fn;},hold:(fn:()=>Promise<void>)=>{hold=fn;},restore:()=>{globalThis.fetch=original;}};
 }
 
 test('legacy audience flags do not restrict visitor polling or history after opening an invite',async()=>{
@@ -75,7 +75,7 @@ test('accepting a full invitation preserves its spectator result without a redun
   const f=await fixture(true);try{
     await f.store.actions.openInvite('abcd');f.calls.length=0;
     const result=await f.store.actions.acceptInvite('abcd');
-    assert.equal(result.id,f.match.id);assert.equal(f.store.getSnapshot().selectedMatch?.players.length,2);
+    assert.equal(result?.id,f.match.id);assert.equal(f.store.getSnapshot().selectedMatch?.players.length,2);
     assert.equal(f.store.getSnapshot().selectedMatch?.players.some(player=>player.user_id==='viewer'),false);
     assert.equal(f.calls.some(call=>call.url.pathname==='/matches/invite-match'),false);
   }finally{f.restore();}
@@ -116,6 +116,38 @@ test('saved-account login authenticates the opened ordinary match without record
     await f.store.actions.switchAccount('viewer');
     const reads=f.calls.filter(call=>call.method==='GET'&&call.url.pathname==='/matches/invite-match');
     assert.equal(reads.filter(call=>call.headers['X-Link-Open']==='1').length,1);
-    assert.equal(reads.at(-1)?.headers['X-User-Id'],'viewer');assert.equal(reads.at(-1)?.headers['X-Link-Open'],undefined);assert.equal(f.store.getSnapshot().selectedMatch?.id,'invite-match');
+    assert.equal(reads.at(-1)?.headers['X-User-Id'],'viewer');assert.equal(reads.at(-1)?.headers['X-Link-Open'],'0');assert.equal(f.store.getSnapshot().selectedMatch?.id,'invite-match');
   }finally{f.restore();}
+});
+
+
+for(const kind of ['match','invite'] as const)test(`saved-account login completes the ${kind} handoff while its anonymous response is still pending`,async()=>{
+  const f=await fixture(false,true);let release!:()=>void,entered!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{entered=resolve;});
+  try{
+    await f.store.actions.rememberAttribution(kind==='match'?`${base}/portal#match=invite-match`:`${base}/invite/abcd`);
+    const hold=async()=>{entered();await gate;};if(kind==='match')f.holdMatch(hold);else f.hold(hold);
+    const opening=(kind==='match'?f.store.actions.selectMatch('invite-match'):f.store.actions.openInvite('abcd')).catch(error=>error);
+    await started;assert.equal(f.store.getSnapshot().selectedMatch,null);
+    await f.store.actions.switchAccount('viewer');
+    assert.equal(f.store.getSnapshot().selectedMatch?.id,'invite-match');assert.equal(f.store.getSnapshot().account?.id,'viewer');
+    const authenticated=f.calls.filter(call=>call.headers['X-User-Id']==='viewer');
+    if(kind==='match')assert.ok(authenticated.some(call=>call.url.pathname==='/matches/invite-match'&&call.headers['X-Link-Open']==='0'));
+    else assert.equal(authenticated.filter(call=>call.method==='POST'&&call.url.pathname==='/invites/abcd/accept').length,1);
+    assert.equal(f.calls.filter(call=>call.headers['X-Link-Open']==='1').length,1);
+    release();await opening;
+  }finally{release();f.restore();}
+});
+
+test('an explicit watch choice survives saved login without accepting the invitation',async()=>{
+  const f=await fixture(false,true);try{
+    await f.store.actions.rememberAttribution(`${base}/invite/abcd`);await f.store.actions.openInvite('abcd');f.store.actions.watchInvite();await f.store.actions.switchAccount('viewer');
+    assert.equal(f.store.getSnapshot().selectedMatch?.id,'invite-match');assert.equal(f.calls.some(call=>call.method==='POST'&&call.url.pathname.endsWith('/accept')),false);
+    assert.equal(f.calls.filter(call=>call.url.pathname==='/invites/abcd').length,1);
+    assert.equal(f.calls.filter(call=>call.headers['X-Link-Open']==='1').length,1);
+  }finally{f.restore();}
+});
+
+test('overlapping App and core invitation accepts share one request',async()=>{
+  const f=await fixture(true);try{await f.store.actions.openInvite('abcd');f.calls.length=0;const [one,two]=await Promise.all([f.store.actions.acceptInvite('abcd'),f.store.actions.acceptInvite('abcd')]);assert.equal(one?.id,two?.id);assert.equal(f.calls.filter(call=>call.method==='POST'&&call.url.pathname.endsWith('/accept')).length,1);}finally{f.restore();}
 });

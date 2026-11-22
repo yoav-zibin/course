@@ -488,7 +488,7 @@ test('ordinary match attribution reaches every signup method and reopens the mat
       const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test',false,'https://local.test/portal?ref=12345#match=shared-match');await store.actions.selectMatch('shared-match');
       if(method==='guest')await store.actions.guest('Player');else if(method==='google')await store.actions.google('synthetic-token');else await store.actions.verifyCode(method,'verification','123456');
       assert.equal(signup.invite_match_id,'shared-match');assert.equal(signup.invite_token,undefined);assert.equal(signup.invited_by_user_id,undefined);assert.equal(saved['game-platform.invited-by.v1'],undefined);assert.equal(saved['game-platform.invite-match.v1'],undefined);
-      assert.equal(store.getSnapshot().selectedMatch?.id,'shared-match');assert.equal(matchReads.at(-1)?.account,'new-account');assert.equal(matchReads.at(-1)?.linkOpen,undefined);assert.equal(matchReads.filter(read=>read.linkOpen==='1').length,1);
+      assert.equal(store.getSnapshot().selectedMatch?.id,'shared-match');assert.equal(matchReads.at(-1)?.account,'new-account');assert.equal(matchReads.at(-1)?.linkOpen,'0');assert.equal(matchReads.filter(read=>read.linkOpen==='1').length,1);
     }finally{restore();}
   }
 });

@@ -46,7 +46,10 @@ creation, recruitment, joining, match start, first played move, each player's fi
 account merge/deletion and invitation revocation. A device share action does not prove
 recipient delivery; no recipient or message content is collected. This history is independent of expiring invitation reservations and live match/account
 records. A link view, an account attribution, and a seat acceptance are distinct
-events; repeated views do not represent additional recruited accounts.
+events; repeated views do not represent additional recruited accounts. Internal
+authentication restoration reads use `X-Link-Open: 0` and still apply recruitment,
+without adding another funnel navigation. Raw invitation `views` remain request
+counts and can increase during such a read.
 
 The student leaderboard uses historical recruitment nodes, falling back to live
 inviter fields for accounts that have not been backfilled. A retained node always

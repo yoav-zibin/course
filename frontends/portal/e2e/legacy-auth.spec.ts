@@ -38,7 +38,7 @@ test('signed-in legacy menus offer linking and keep the current account when for
   const {alice,bob}=await fixture(page,request);
   await page.locator('.auth-menu-button').click();
   await expect(page.locator('[data-auth-action="link"]')).toBeVisible();
-  await expect(page.locator('[data-auth-action="invite"]')).toBeVisible();
+  await expect(page.locator('[data-auth-action="invite"]')).toHaveCount(0);
   await expect(page.locator('[data-auth-action="logout"]')).toBeVisible();
   await expect(page.locator('[data-auth-action^="switch:"]')).toHaveCount(0);
   await expect(page.locator('[data-auth-action="login"]')).toHaveCount(0);

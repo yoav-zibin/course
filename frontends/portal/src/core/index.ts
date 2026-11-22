@@ -1,3 +1,4 @@
+import {playerLink} from './links';
 import type {InviteShareChannel} from './invite-sharing';
 import {withoutPersonalReferral,cleanAccounts} from './account-data';
 import { useSyncExternalStore } from 'react';
@@ -21,7 +22,7 @@ import { isOnline, watchConnectivity } from '../platform/connectivity';
 import { configureI18n, setLocale, getLocale, getDirection, gameTexts, localizeGame, subscribeI18n, t, copyText } from '../platform/i18n';
 import bundled from './bundled-tictactoe.json';
 import { browserLogin } from '../platform/browser-login';
-import { rememberUrlAttribution, newAccountAttribution, forgetMatchAttribution, purgePersonalAttribution } from './attribution';
+import { rememberUrlAttribution, newAccountAttribution, forgetMatchAttribution, purgePersonalAttribution,type MatchAttribution } from './attribution';
 import type { Account, AccountData, Game, Match, LocalMatch, ListKind, PortalState, PracticeOptions, InAppNotification } from './types';
 export * from './types';
 export { t } from '../platform/i18n';
@@ -64,6 +65,9 @@ export class PortalStore {
   private stopConnectivity?: () => void;
   private observations = new Map<string, any[]>();
   private selectedInvite: {matchId: string; token: string} | null = null;
+  private requestedLink:{kind:'match'|'invite';id:string}|null=null;
+  private inviteMatchIds=new Map<string,string>();
+  private inviteAcceptance:{key:string;pending:Promise<Match|null>}|null=null;
   private retryAfter = 0;
   private syncCompatibilityRetryAfter = 0;
   private api = new PortalApi('', getLocale);
@@ -169,7 +173,7 @@ export class PortalStore {
     const game=this.data.responses[`/games/${id}/versions/${version}`]||this.data.responses[`/games/${encodeURIComponent(id)}/versions/${version}`]||(bundled.id===id&&bundled.version===version?bundled:undefined);
     return game?.id===id&&game.version===version?game:undefined;
   }
-  async request(method: string, path: string, body?: any,linkOpen=false): Promise<any> { if (this.localOnly) throw new Error('This test launch runs entirely on this device.'); const guard = this.capture(); try { const result = await this.api.request(method, path, body, this.state.account,undefined,linkOpen); guard(); return result; } catch (error) { guard(); throw error; } }
+  async request(method: string, path: string, body?: any,linkOpen?:boolean): Promise<any> { if (this.localOnly) throw new Error('This test launch runs entirely on this device.'); const guard = this.capture(); try { const result = await this.api.request(method, path, body, this.state.account,undefined,linkOpen); guard(); return result; } catch (error) { guard(); throw error; } }
   private preserveOwnDeletion(path: string, value: any, revision: number) {
     if (revision === this.profileRevision || !path.startsWith('/users') || !this.state.account) return value;
     const own = this.state.profile, ids = new Set([this.state.account.id, this.state.account.canonical_user_id, own?.id].filter(Boolean));
@@ -177,7 +181,7 @@ export class PortalStore {
     const fields = {deletion_requested_at: own.deletion_requested_at ?? null, deletion_scheduled_at: own.deletion_scheduled_at ?? null, deletion_started_at: own.deletion_started_at ?? null};
     return Array.isArray(value) ? value.map(item => ids.has(item?.id) ? {...item,...fields} : item) : ids.has(value?.id) ? {...value,...fields} : value;
   }
-  private async read(path: string, allowCached = true,linkOpen=false): Promise<any> {
+  private async read(path: string, allowCached = true,linkOpen?:boolean): Promise<any> {
     const guard = this.capture(), ownProfile = !!this.state.account && path === `/users/${encodeURIComponent(this.state.account.id)}`, revision = this.profileRevision;
     if (this.localOnly) { if (allowCached && Object.hasOwn(this.data.responses, path)) return this.cached(path); throw new TypeError('This device launch is offline.'); }
     try { if (!isOnline() || Date.now() < this.retryAfter) throw new TypeError('Offline'); const result = await this.api.request('GET', path, undefined, this.state.account,undefined,linkOpen); guard(); if (ownProfile && revision !== this.profileRevision && this.state.profile) return this.state.profile; this.retryAfter = 0; this.patch({ network: isOnline() }); const matchId = /^\/matches\/([^/]+)$/.exec(path)?.[1]; if (matchId && this.data.conflicts[matchId]?.message.startsWith('The outcome of this unsaved action')) delete this.data.conflicts[matchId]; let saved = await this.cache(path, this.preserveOwnDeletion(path,result,revision)); guard(); const latest=this.preserveOwnDeletion(path,saved,revision); if(!equal(saved,latest)){saved=await this.cache(path,latest);guard();} return ownProfile && revision !== this.profileRevision && this.state.profile ? this.state.profile : saved; }
@@ -353,7 +357,7 @@ export class PortalStore {
       // An explicit visitor marker or a removed selected account stays out.
       const account = (id === null ? accounts[0] : accounts.find(a => a.id === id)) || null;
       this.patch({ accounts, account }); await this.reloadData();
-      const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);if(incoming)await rememberUrlAttribution(incoming,base,accounts);
+      const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);if(incoming)await this.rememberAttribution(incoming);
       const snapshot = this.data, hidden = hiddenMatchIds(snapshot);
       this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']) });
       if (snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) { const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`]; if (match) this.patch({ selectedMatch: this.decorate(match), game: snapshot.responses[`/games/${match.game_id}/versions/${match.game_version}`] || null }); }
@@ -561,20 +565,30 @@ export class PortalStore {
     guard(); if (token !== this.selection) return;
     const game = await this.pinnedGame(id); guard(); if (token === this.selection) this.patch({ selectedGameId: id, game }); return game;
   }
+  private async rememberAttribution(url:string){const target=playerLink(url,this.state.baseUrl);this.requestedLink=target&&(target.kind==='match'||target.kind==='invite')?{kind:target.kind,id:target.id}:null;await rememberUrlAttribution(url,this.state.baseUrl,this.state.accounts);}
   async openInvite(token: string) {
+    this.requestedLink={kind:'invite',id:token};
     const guard = this.capture(), selection = ++this.selection;
     const preview = await this.request('GET', `/invites/${encodeURIComponent(token)}`,undefined,true); guard(); if (selection !== this.selection) return null;
+    this.inviteMatchIds.set(token,preview.match.id);
     await this.selectMatch(preview.match.id, token, preview.match); guard();
     return preview;
   }
-  async acceptInvite(token: string) {
+  async acceptInvite(token:string):Promise<Match|null>{
+    const key=JSON.stringify([this.generation,this.state.baseUrl,this.state.account?.id,token]);
+    if(this.inviteAcceptance?.key===key)return this.inviteAcceptance.pending;
+    const pending=this.acceptInviteNow(token);this.inviteAcceptance={key,pending};
+    try{return await pending;}finally{if(this.inviteAcceptance?.pending===pending)this.inviteAcceptance=null;}
+  }
+  private async acceptInviteNow(token: string) {
     const guard = this.capture(), selection = ++this.selection;
     const match = await this.request('POST', `/invites/${encodeURIComponent(token)}/accept`); guard(); if (selection !== this.selection) return null;
     await this.selectMatch(match.id, token, match); guard();
     return match;
   }
   async selectMatch(id: string, inviteToken?: string, initialMatch?: Match,trackOpen=true) {
-    if (inviteToken) this.selectedInvite = {matchId: id, token: inviteToken};
+    this.requestedLink=inviteToken?{kind:'invite',id:inviteToken}:{kind:'match',id};
+    if (inviteToken) {this.selectedInvite = {matchId: id, token: inviteToken};this.inviteMatchIds.set(inviteToken,id);}
     else if (this.selectedInvite?.matchId !== id) this.selectedInvite = null;
     const token = ++this.selection; const guard = this.capture(); await this.reloadData();
     if(removedSavedMatch(this.data,id))throw new RemovedSavedMatchError();
@@ -597,7 +611,7 @@ export class PortalStore {
     await this.loadProfiles().catch(() => {});
     if (token === this.selection) await this.recoverPresentation(match).catch(() => {});
   }
-  clearMatch() { this.selectedInvite = null; ++this.selection; this.patch({ selectedMatch: null, history: null, replayIndex: null }); void this.repository.mutate(this.identity(), data => { data.selectedId = null; },{optionalCache:true}).catch(error => reportCacheFailure('selection',error)); }
+  clearMatch() { this.requestedLink=null;this.selectedInvite = null; ++this.selection; this.patch({ selectedMatch: null, history: null, replayIndex: null }); void this.repository.mutate(this.identity(), data => { data.selectedId = null; },{optionalCache:true}).catch(error => reportCacheFailure('selection',error)); }
   clearGame() { this.clearMatch(); this.repository.protectGame(this.identity(),null);this.patch({ selectedGameId: null, game: null }); }
   private writeSelection(id:string,guard:()=>void) {
     const write=this.accountSelectionWrites.then(async()=>{
@@ -615,7 +629,6 @@ export class PortalStore {
     let selectionCommitted=false;
     const sessionGuard = this.capture(),guard=()=>{sessionGuard();if(!selectionCommitted)intentGuard?.();};guard();
     const matchAttribution=await this.attribution();guard();
-    const linkedMatch=matchAttribution.invite_match_id===this.state.selectedMatch?.id?matchAttribution.invite_match_id:undefined;
     const id = response.user_id || response.id; if (!id || !response.password) throw new Error('Invalid account response');
     const account: Account = { ...withoutPersonalReferral(response), id, linked: response.linked_accounts ?? response.linked ?? [] };
     const sourceIds = [...new Set([...removeIds, response.merged_from_user_id, ...(!this.state.account ? ['visitor'] : [])].filter((value): value is string => typeof value === 'string' && !!value && value !== id))];
@@ -635,23 +648,44 @@ export class PortalStore {
       if (sourceIds.length) { this.patch({ storageError: 'Linked credentials could not be saved. Previous account entries and their saved data remain available.' }); throw error; }
       this.patch({ storageError: 'Credentials could not be saved on this device. Keep the app open to retain this online session.' });
     }
-    guard(); await forgetMatchAttribution();guard(); this.patch({ accounts }); await this.switchAccount(id,undefined,linkedMatch);
+    guard();this.patch({ accounts });await this.switchAccount(id,undefined,matchAttribution);
   }
-  async switchAccount(id: string,intentGuard?:()=>void,linkedMatch?:string) {
+  async switchAccount(id: string,intentGuard?:()=>void,loginAttribution?:MatchAttribution) {
     intentGuard?.();
     const account = this.state.accounts.find(a => a.id === id); if (!account) throw new Error('Account not found on this device');
     const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.dismissedNotificationIds.clear(); this.notificationPromptClaim = null; this.observations.clear();
     const current=()=>{if(transition!==this.generation)throw new Error('Account changed; refresh to continue.');intentGuard?.();};
     await this.writeSelection(id,current).catch(()=>{});current();
-    const target=await newAccountAttribution(this.state.accounts);current();
-    const reopenMatch=linkedMatch||(target.invite_match_id===this.state.selectedMatch?.id?target.invite_match_id:null);
+    const target=loginAttribution??await newAccountAttribution(this.state.accounts);current();
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
     this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts, authConfig, account, locale, storageError, network: !this.localOnly && isOnline() }); const guard = this.capture(); await this.reloadData(); guard();
     this.patch({ games: savedList(this.data.responses['/games']), myMatches: savedList(this.data.responses['/matches']) }); await this.refresh(); guard();
-    // Authentication resumes the same opened link; refresh attribution without
-    // recording another navigation in the permanent conversion funnel.
-    if(reopenMatch)await this.selectMatch(reopenMatch,undefined,undefined,false);
-    guard();await forgetMatchAttribution();
+    await this.completeLinkLogin(target);guard();
+    const latest=await newAccountAttribution(this.state.accounts);guard();
+    if(equal(latest,target))await forgetMatchAttribution();
+  }
+  private async completeLinkLogin(target:MatchAttribution){
+    const guard=this.capture();
+    try{
+      if(target.invite_token){
+        const token=target.invite_token,active=this.requestedLink?.kind==='invite'&&this.requestedLink.id===token;
+        if(active){
+          // The App may already be accepting the same invitation. Share that
+          // request, and finish the handoff even when its React effect is absent.
+          const selected=this.state.selectedMatch,ownIds=[this.state.account?.id,this.state.account?.canonical_user_id,this.state.profile?.id];
+          if(!(this.selectedInvite?.token===token&&selected?.players.some(player=>player.active!==false&&ownIds.includes(player.user_id))))await this.acceptInvite(token);
+        }else{
+          const matchId=this.inviteMatchIds.get(token);
+          if(matchId){const match=await this.read(`/matches/${encodeURIComponent(matchId)}`,true,false);guard();if(this.requestedLink?.kind==='match'&&this.requestedLink.id===matchId)await this.selectMatch(matchId,undefined,match,false);}
+          else await this.request('GET',`/invites/${encodeURIComponent(token)}`,undefined,false);
+        }
+      }else if(target.invite_match_id){
+        const id=target.invite_match_id,match=await this.read(`/matches/${encodeURIComponent(id)}`,true,false);guard();
+        // Account selection can happen before the anonymous detail fetch has
+        // completed. Restore the requested target, not just rendered state.
+        if(this.requestedLink?.kind==='match'&&this.requestedLink.id===id)await this.selectMatch(id,undefined,match,false);
+      }
+    }catch{guard();/* A stale invite or lost connection must not undo login. */}
   }
   async logout(id = this.state.account?.id) {
     const accounts = this.state.accounts.filter(a => a.id !== id);
@@ -972,7 +1006,8 @@ export class PortalStore {
   actions = {
     refreshNotifications: (more = false) => this.refreshNotifications(more), readNotification: (id: string) => this.perform(() => this.readNotification(id), false), claimNotificationPrompt: () => this.claimNotificationPrompt(), dismissNotificationPrompt: () => this.patch({notificationPrompt: false, notificationPromptReady: false}),
     bootstrap: (baseUrl?: string, localOnly = false,initialUrl?:string) => this.bootstrap(baseUrl, localOnly,initialUrl), refresh: () => this.refresh(), refreshMatch: () => this.refreshMatch(),
-    rememberAttribution:(url:string)=>rememberUrlAttribution(url,this.state.baseUrl,this.state.accounts),
+    rememberAttribution:(url:string)=>this.rememberAttribution(url),
+    watchInvite:()=>{if(this.requestedLink?.kind==='invite')this.requestedLink=this.state.selectedMatch?{kind:'match',id:this.state.selectedMatch.id}:null;},
     request: (method: string, path: string, body?: any) => this.perform(() => this.request(method, path, body), false),
     recordInviteShare:(id:string,channel:InviteShareChannel)=>this.request('POST',`/matches/${encodeURIComponent(id)}/share`,{channel}).catch(()=>{}),
     searchGames: (query: string) => this.perform(async () => { this.patch({ query, games: [], cursors: { ...this.state.cursors, games: null } }); await this.list('games'); }),

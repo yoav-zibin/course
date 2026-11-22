@@ -218,3 +218,17 @@ def test_first_player_conversion_does_not_read_previous_move_pages():
         assert api.move(match, as_user=player, next_turn=0).status_code == 201
         assert api.move(match, as_user=owner, next_turn=1).status_code == 201
     assert summary(cold, match_id=match)['events']['player_played'] == 2
+
+
+def test_internal_invite_restore_recruits_without_another_funnel_open(linked_api):
+    api = linked_api
+    owner, existing = api.new_user('Owner'), api.new_user('Existing')
+    match, token = lobby(api, owner)
+    visitor = {'X-Visitor-Id': 'same-browser-visitor'}
+    assert api.client.get(f'/invites/{token}', headers={**visitor, 'X-Link-Open': '1'}).status_code == 200
+    restored = api.client.get(f'/invites/{token}', headers={**visitor, 'X-Link-Open': '0',
+        'X-User-Id': existing, 'X-User-Password': api.passwords_by_user_id[existing]})
+    assert restored.status_code == 200
+    assert api.platform._store.get_user(existing).invited_by_user_id == owner
+    assert api.platform._store.get_invite(token).views == 2
+    assert summary(api.platform._store, match_id=match)['events']['link_opened'] == 1
