@@ -5538,7 +5538,9 @@ class GamePlatform:
                 conversion_funnel.record_event(self._store, "match_played", at=self._clock(),
                     identity="played:" + match.id, user_id=match.moves[0].made_by_user_id, **common)
             if previous is not None and len(match.moves) > len(previous.moves):
-                played = {move.made_by_user_id for move in previous.moves}
+                # Stable event IDs identify first play without reading old move
+                # pages. QueryStore histories can contain millions of moves.
+                played = set()
                 for move in match.moves[len(previous.moves):]:
                     actor = move.made_by_user_id
                     if actor is not None and actor not in played:

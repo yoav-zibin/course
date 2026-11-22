@@ -195,3 +195,26 @@ def test_share_play_completion_and_revocation_are_permanent_observed_stages(link
     assert archived["revoked"] and archived["revoked_at"]
     api.platform._store.delete_invite(other_token)
     assert summary(api.platform._store, match_id=other_match)["events"]["invite_revoked"] == 1
+
+
+def test_first_player_conversion_does_not_read_previous_move_pages():
+    from unittest.mock import patch
+    from game_platform.query_store import QueryStore
+
+    store = query_store('first_play_without_history')
+    api = Api(store=store)
+    api.platform = ScalablePlatform(store=store, clock=api.platform._clock, computer_move_delay_seconds=0)
+    api.client.app.state.platform = api.platform
+    owner = api.new_user('Owner')
+    match, token = lobby(api, owner)
+    player = signup(api, invite_token=token)
+    api.ok('POST', f'/invites/{token}/accept', as_user=player)
+    api.ok('POST', f'/matches/{match}/start', as_user=owner)
+    assert api.move(match, as_user=owner, next_turn=1).status_code == 201
+    cold = QueryStore(store.client, namespace=store.namespace)
+    api.platform = ScalablePlatform(store=cold, clock=api.platform._clock, computer_move_delay_seconds=0)
+    api.client.app.state.platform = api.platform
+    with patch.object(cold, '_read_moves', side_effect=AssertionError('previous history was loaded')):
+        assert api.move(match, as_user=player, next_turn=0).status_code == 201
+        assert api.move(match, as_user=owner, next_turn=1).status_code == 201
+    assert summary(cold, match_id=match)['events']['player_played'] == 2
