@@ -50,10 +50,9 @@
         "border_color": "#d3ad62"
       },
       "back": {
-        "shape": "image",
+        "shape": "card",
         "width": 70.0,
         "height": 85.0,
-        "back_asset": "card_back",
         "action_outline": "rect"
       },
       "die": {
@@ -101,15 +100,7 @@
         "action_outline": "rect"
       }
     },
-    "assets": {
-      "card_back": {
-        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCAxMTAiPjxyZWN0IHg9IjEiIHk9IjEiIHdpZHRoPSI3OCIgaGVpZ2h0PSIxMDgiIHJ4PSI5IiBmaWxsPSIjMjQzZDY4IiBzdHJva2U9IiNlNGM0NzciIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjYiIHk9IjYiIHdpZHRoPSI2OCIgaGVpZ2h0PSI5OCIgcng9IjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZjFkNiIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTEyIDU1IDQwIDE0IDY4IDU1IDQwIDk2WiIgZmlsbD0iI2I5NDY1YSIgc3Ryb2tlPSIjZmZmMWQ2IiBzdHJva2Utd2lkdGg9IjMiLz48Y2lyY2xlIGN4PSI0MCIgY3k9IjU1IiByPSI2IiBmaWxsPSIjZjJjZjdiIi8+PC9zdmc+",
-        "media_type": "image/svg+xml",
-        "width": 80,
-        "height": 110,
-        "alt": "Decorative card back"
-      }
-    },
+    "assets": {},
     "strings": {
       "title": "Concentration",
       "turn": "Player {n}",

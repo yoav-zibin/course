@@ -19,19 +19,13 @@ def test_accepted_own_turn_rotates_plate_and_every_marble_together(direction, an
     changed.update(move_count=5, last_move_player_index=0)
     frame = UI.reduce(changed)
     pieces = {piece['id']: piece for piece in frame['scene']['pieces']}
-    rotations = [entry for entry in frame['animations'] if 'rotation' in entry['from']]
-    assert {entry['piece_id'] for entry in rotations} == {
-        'plate-art-0', 'marble-0', 'marble-1', 'marble-2', 'marble-4'}
-    for entry in rotations:
-        assert entry['from'] == {'rotation': angle}
-        assert entry['duration_ms'] == 600 and entry.get('delay_ms', 0) == 0
-        assert pieces[entry['piece_id']]['position'] == {'x': 105, 'y': 105}
-        assert pieces[entry['piece_id']]['rotation'] == expected
-    assert len({entry['key'] for entry in rotations}) == 1
-    ring = next(entry for entry in frame['animations'] if entry['piece_id'] == 'last-ring')
-    assert ring['from'] == {'opacity': 0} and ring['delay_ms'] == 600 and ring['duration_ms'] == 0
-    # Repeated snapshots return the same key; the host consumes it once.
-    assert UI.reduce(changed, frame['local_state'])['animations'] == frame['animations']
+    rotation, reveal = frame['timeline']['steps']
+    assert rotation == [{'piece_id': 'plate-0', 'from': {'rotation': angle}, 'duration_ms': 600}]
+    assert pieces['plate-0']['rotation'] == expected
+    assert {p['id'] for p in pieces.values() if p.get('parent') == 'plate-0'} == {
+        'marble-0', 'marble-1', 'marble-2', 'marble-4'}
+    assert reveal == [{'piece_id': 'last-ring', 'from': {'opacity': 0}, 'duration_ms': 0}]
+    assert UI.reduce(changed, frame['local_state'])['timeline'] == frame['timeline']
     assert 'make_move' not in frame
 
 
@@ -43,10 +37,10 @@ def test_local_hole_selection_and_turn_submission_do_not_replay_the_accepted_rot
     frame = UI.reduce(changed)
     selected = tap(changed, frame, 'hole-20')
     assert selected['local_state']['pending'] == 20
-    assert 'animations' not in selected and 'make_move' not in selected
+    assert 'timeline' not in selected and 'make_move' not in selected
     submitted = tap(changed, selected, 'twist-1-counterclockwise')
     assert submitted['make_move'] == {'cell': 20, 'quadrant': 1, 'direction': 'counterclockwise'}
-    assert 'animations' not in submitted
+    assert 'timeline' not in submitted
 
 
 def test_initial_and_winning_placement_without_a_turn_explicitly_settle_immediately():
@@ -65,5 +59,5 @@ def test_browser_flow_fixture_matches_the_accepted_public_view_and_declared_rota
     assert flow['before']['view'] == rules.call('viewFor', state, 'p0', ctx=ctx(), seed=7)
     assert flow['after']['view'] == rules.call('viewFor', result['state'], 'p0', ctx=ctx(), seed=7)
     frame = UI.reduce(flow['after'])
-    assert frame['animations'] == flow['animations']
+    assert frame['timeline'] == flow['timeline']
     assert BODY.server_code == (root / 'games/declarative/twistfive.server.js').read_text()

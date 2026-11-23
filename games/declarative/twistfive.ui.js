@@ -3,9 +3,7 @@
 // the board (or select a plate and use the host's rotate tools / R, Shift+R).
 // A placement that already makes five in a row ends the turn at once.
 //
-// Marbles are drawn as transparent plate-sized pictures with the marble at its
-// slot, centred on their plate and carrying the plate's angle, so a turn
-// animates as one rigid plate with its marbles riding along.
+// Each marble occupies a local hole on its parent plate.
 var CELL = 70, PLATE = 210;
 var COLUMNS = 'ABCDEF';
 var DIRECTIONS = ['clockwise', 'counterclockwise'];
@@ -103,19 +101,16 @@ var gameUI = {
     var pieces = [], targets = [], labels = [], controls = [], paths = [];
     var plateNames = [S.plate_top_left, S.plate_top_right, S.plate_bottom_left, S.plate_bottom_right];
     for (var q = 0; q < 4; q++) {
-      pieces.push({id: 'plate-art-' + q, type: 'plate', board: 'board', position: plateCenter(q),
-                   rotation: view.plates[q], z: 0, aria_label: plateNames[q], actions: []});
-      // Marbles are drawn above their plate, so a tap on one would miss the
-      // plate. While turning, a clear handle above everything selects it.
-      // Every arrow stays a legal destination while a plate is selected.
-      if (twisting) pieces.push({id: 'plate-' + q, type: 'handle', board: 'board', position: plateCenter(q),
-                                 z: 5, aria_label: plateNames[q], actions: ['rotate'], move_targets: ARROW_IDS});
+      pieces.push({id: 'plate-' + q, type: 'plate', board: 'board', position: plateCenter(q),
+                   rotation: view.plates[q], z: 0, aria_label: plateNames[q],
+                   actions: twisting ? ['rotate'] : [], move_targets: twisting ? ARROW_IDS : []});
     }
     var marble = function (id, seat, cell, extra) {
       var q = plateOf(cell);
-      return Object.assign({id: id, type: 'marble', board: 'board', position: plateCenter(q),
-                            asset: (seat === 0 ? 'gold_' : 'black_') + homeSlot(cell, view.plates[q]),
-                            rotation: view.plates[q], z: 2, actions: [],
+      var slot = homeSlot(cell, view.plates[q]);
+      return Object.assign({id: id, type: 'marble', board: 'board', parent: 'plate-' + q,
+                            position: {x: (slot % 3 - 1) * CELL, y: (Math.floor(slot / 3) - 1) * CELL},
+                            asset: seat === 0 ? 'gold' : 'black', z: 2, actions: [],
                             aria_label: fill(S.marble_at, {color: color(seat), cell: cellName(cell)})}, extra || {});
     };
     var newest = -1, newestCell = -1;
@@ -183,20 +178,15 @@ var gameUI = {
       var last = view.last;
       if (last && Number.isInteger(last.quadrant) && last.quadrant >= 0 && last.quadrant < 4 &&
           DIRECTIONS.indexOf(last.direction) >= 0) {
-        var turned = last.quadrant, center = plateCenter(turned);
+        var turned = last.quadrant;
         var before = view.plates[turned] - (last.direction === 'clockwise' ? 90 : -90);
-        var animationKey = 'twist:' + newest + ':' + turned + ':' + view.plates[turned];
-        pieces.forEach(function (piece) {
-          if (piece.id === 'plate-art-' + turned || piece.id.indexOf('marble-') === 0 &&
-              piece.position.x === center.x && piece.position.y === center.y) {
-            result.animations.push({piece_id: piece.id, key: animationKey,
-              from: {rotation: before}, duration_ms: 600});
-          } else if (piece.id === 'last-ring' && plateOf(newestCell) === turned || piece.type === 'win_ring') {
-            // A final-hole highlight appears once its marble reaches that hole.
-            result.animations.push({piece_id: piece.id, key: animationKey,
-              from: {opacity: 0}, duration_ms: 0, delay_ms: 600});
-          }
-        });
+        var rotate = [{piece_id: 'plate-' + turned, from: {rotation: before}, duration_ms: 600}];
+        var reveal = pieces.filter(function (piece) {
+          return piece.id === 'last-ring' && plateOf(newestCell) === turned || piece.type === 'win_ring';
+        }).map(function (piece) { return {piece_id: piece.id, from: {opacity: 0}, duration_ms: 0}; });
+        delete result.animations;
+        result.timeline = {key: 'twist:' + newest + ':' + turned + ':' + view.plates[turned],
+                           steps: reveal.length ? [rotate, reveal] : [rotate]};
       }
     }
     result.local_state = result.make_move ? {key: key, pending: null} : local;

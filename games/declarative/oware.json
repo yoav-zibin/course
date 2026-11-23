@@ -167,7 +167,7 @@
     "action_outline": "ellipse"
    },
    "store": {
-    "shape": "rect",
+    "shape": "counter",
     "width": 180,
     "height": 48,
     "color": "#ad7a3d",

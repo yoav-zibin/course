@@ -198,7 +198,7 @@
         "text_color": "#a7f070"
       },
       "store": {
-        "shape": "rect",
+        "shape": "counter",
         "width": 42,
         "height": 150,
         "color": "#ad7a3d",

@@ -243,7 +243,7 @@ source hash, preserved variant rules and native event examples.
 ```js
 var gameUI = {
   reduce: function (message, localState) {
-    // Return { scene, animations?, local_state?, make_move? } using only JSON data.
+    // Return { scene, timeline?, local_state?, make_move? } using only JSON data.
   },
   getLastMoveAnimations: function (view, scene) {
     // Optional: return ordered paths for the last accepted move, or null.
@@ -318,7 +318,7 @@ The package has these top-level fields:
 | `viewport` | Positive logical `width` and `height`; renderers scale this coordinate system to available space. Optional boolean `camera_enabled` defaults to `true`. Set it to `false` to keep the fitted board fixed. Set `camera_controls` to `true` to show zoom and reset buttons for dense boards; it defaults to `false` and has no effect when the camera is disabled. |
 | `motion` | Optional bounded opponent movement/roll/announcement timing policy. |
 | `boards` | One or more positioned surfaces: `grid`, `hex`, `graph`, `track`, `free` or `zone`. |
-| `piece_types` | Named reusable appearances: `circle`, `rect`, `card`, `dice`, `image` or `text`; dimensions, colors and optional front/back artwork. |
+| `piece_types` | Reusable shapes include `circle`, `rect`, `hex`, `image`, `text`, `group`, `card`, `card_pile`, `dice` and `counter`. Each type can set dimensions, colors and artwork. |
 | `assets` | Optional map of asset IDs to image descriptors. |
 | `strings` | Source-language string table; use translated `state_changed.strings` when rendering labels. |
 | `ui_code` | The source defining `gameUI.reduce`. |
@@ -331,7 +331,7 @@ around the piece center. Uniform `scale` multiplies its dimensions.
 
 Keep the same piece ID when that physical piece moves. Without an explicit
 `motion` policy, for multiplayer and computer matches, the portal animates opponent and computer moves over 1,440 ms.
-Without explicit response `animations`, the viewer's own moves update immediately,
+Without an explicit `timeline` or `animations`, the viewer's own moves update immediately,
 including pieces captured by that move. The host uses `state_changed.last_move_player_index`, rather than the next
 turn, to identify the actor. Unknown actors update immediately. If a snapshot
 combines an own move with computer replies, the portal first applies the last
@@ -348,36 +348,74 @@ For games whose server stores counts rather than individual pieces,
 presentation `local_state` can reconcile identities, as Backgammon does for
 moves, captures, bar entry and bearing off.
 
+### Shared game pieces
+
+| Appearance or layout | What the game supplies |
+| --- | --- |
+| Playing card | A `card` piece with `text: "Q♥"` draws a suited face. `face: "back"` draws the shared back. Custom artwork can represent a special deck. |
+| Deck, discard or reserve | A `card_pile` piece requires a public integer `count` from 0 to 1,000,000. Zero draws an empty slot, one draws a single card, and larger counts progressively add layers. Occupied piles show the exact count. Supply face text or artwork for a face-up discard. |
+| Die | A `dice` piece accepts `die_value` from 0 (blank) to 6. The rules determine the result. A keyed `roll` effect animates it. |
+| Counter | A `counter` piece displays its `count` or a supplied `text` label. |
+| Hand | Each card keeps its own ID and actions. Use one board position as the first row's center and set `hand: {index, count, spacing}` on each card. Optional `columns` and `row_spacing` wrap additional centered rows. |
+
+Give the renderer only the card identities and counts the current viewer may
+see. A face-down card uses covered artwork and a generic accessibility label.
+
+### Groups, pivots and mirrors
+
+Any piece can be a parent. Use the invisible `group` shape for a parent that
+needs no artwork. A root position locates its pivot on its board. A child sets
+`parent` to a same-board piece ID and specifies local `position: {x,y}`
+relative to that parent's artwork center. A `pivot: {x,y}` is an offset from
+the piece center, in unscaled units. Its default is the center. Parents pass
+rotation, scale, opacity, reflection and visibility down through up to eight
+levels. Use `mirror_x` to reflect left/right and `mirror_y` for top/bottom.
+A card's `face` controls the information shown independently of its orientation.
+The root owns selection, drag destinations and action events for the whole
+group. A child follows its parent around the pivot throughout the turn.
+
 ### Animate your own turn and local interactions
 
-A reducer can return `animations` alongside its complete `scene` to explicitly
-request animation of a local interaction or an accepted move, including your
-own turn. The final board position belongs in `scene`; each animation declares
-the starting transforms for one visible piece. For example, a Twist Five plate
-and its marble artwork can turn together around their shared center:
+Return the complete final scene on every call. Supply a `timeline` on an
+accepted move or a local UI event to choreograph the change. The following
+example turns the plate and its attached marble, then fades in a marker while
+a captured piece from the preceding scene fades out.
 
 ```js
 return {
-  scene: {
-    pieces: [
-      {id: 'plate', type: 'plate', board: 'main', position: {x: 105, y: 105}, rotation: 90},
-      {id: 'marble', type: 'marble', board: 'main', position: {x: 105, y: 105}, rotation: 90}
-    ]
-  },
-  animations: [
-    {piece_id: 'plate', key: 'turn:7', from: {rotation: 0}, duration_ms: 600},
-    {piece_id: 'marble', key: 'turn:7', from: {rotation: 0}, duration_ms: 600}
-  ]
+  scene: {pieces: [
+    {id: 'plate', type: 'plate', board: 'main', position: {x: 105, y: 105}, rotation: 90},
+    {id: 'marble', type: 'marble', board: 'main', parent: 'plate', position: {x: 70, y: 0}},
+    {id: 'marker', type: 'ring', board: 'main', position: {x: 105, y: 175}}
+  ]},
+  timeline: {key: 'turn:7', steps: [
+    [{piece_id: 'plate', from: {rotation: 0}, duration_ms: 600}],
+    [{piece_id: 'marker', from: {opacity: 0}, duration_ms: 160},
+     {piece_id: 'captured', exit: true, duration_ms: 160}]
+  ]}
 };
 ```
+
+Each inner array starts together. The next step waits for the longest delay
+plus duration in the current step. Repeat a piece in later steps for keyframes.
+An intermediate `to` overrides the resting pose. The next clip starts there
+unless it supplies `from`. The first clip defaults to the scene pose. Omit `to`
+on a surviving piece's last clip so it lands exactly where the scene puts it.
+An exit draws the artwork visible to the same viewer in the preceding scene, is noninteractive and
+defaults to opacity zero at its end. An exit with no previous artwork is skipped.
+Use a new key for each visual event. A timeline supports up to 128 clips
+and 30 seconds. Adjacent history uses the later snapshot's choreography in
+either direction. Initial loads, history jumps and reduced motion settle immediately.
+
+For a single parallel step, the host also accepts `animations` with a key on
+each entry. Supply either `timeline` or `animations` in a response. Both take
+precedence over last-move paths and inferred movement.
 
 Entries run in parallel. Optional `delay_ms` staggers their starts. Each entry
 requires `piece_id`, an event `key`, and `from` containing at least one of
 `position`, `rotation`, `scale` or `opacity`. The final values come from the
 referenced scene piece. Unspecified starting transforms equal those final
-values; the host does not infer them from a previous scene. Rotation uses
-degrees around the piece center, so use a common center for artwork that
-should turn as a rigid plate. Position is board-relative; an optional `from.board`
+values; the host does not infer them from a previous scene. Rotation uses clockwise degrees around the piece's pivot. Position is board-relative; an optional `from.board`
 is allowed only with `from.position` and otherwise defaults to the piece's final
 board. Positions accept `{x,y}` or `{cell}`. Starting opacity is 0–1, scale is
 greater than 0 and at most 100, and rotation is between -100,000 and 100,000.
@@ -402,16 +440,10 @@ use their resting layers. Repeated path entries for one piece retain each
 entry's own `z`. A delayed scene animation changes layers only when its delay
 has elapsed and returns to its resting layer at its own end.
 
-Older installed clients reject unknown animation fields. When updating content
-that must support them, use the existing scene `Piece.z` for the moved pieces
-instead of emitting an animation `z`. The current host still raises moving
-pieces from older pinned packages by default; game versions and saved pins are
-not rewritten.
-
 This field is supported on `ui_event` and `state_changed` responses. A current
 player's local interactions can animate without submitting a move. Accepted
 own and opponent moves may animate on consecutive forward updates. Initial
-rendering, reloads, reduced-motion settings, backward history and skipped
+rendering, reloads, reduced-motion settings and skipped
 history settle immediately and consume their event keys, preventing delayed
 replay of an old event. Animations never authorize moves or replace validation.
 
@@ -475,11 +507,12 @@ position. All boards and cells must exist.
 Omit the function or return `null`/`undefined` to keep the host's existing
 position-difference animations, including for older pinned rules that do not
 retain last-move data. Return `[]` to explicitly request no positional motion
-for an action. When response `animations` is omitted, declared paths animate
-only a known opponent's forward, adjacent move. Your own moves update immediately, even with
-`motion.animate_own:true`; initial/reconnect snapshots, skipped history,
-backward history and reduced-motion settings also settle immediately. Legacy
-games retain the behavior described above.
+for an action. During live play, with both `timeline` and `animations`
+omitted, paths animate a known opponent's consecutive move. Own moves, initial
+loads, reconnects, history jumps and reduced motion settle immediately.
+Adjacent history plays the path forward or backward, including own turns.
+Paths address roots in board coordinates. Use a timeline to animate a child's
+local position within a group.
 
 The shared React Native host fits the complete declared viewport, boards,
 visible piece bodies and legal destinations at **100%**. In the focused match
@@ -543,7 +576,7 @@ omitted arrays are empty. All element IDs must be unique across the scene.
 | Offer movement | Emit destination `targets`, then reference their IDs in that piece's `move_targets`. |
 | Offer a click, rotation, flip or resize | Set the piece's `actions` to the currently available operations; the host supplies persistent hints and action controls. |
 | Change a die, score or card text | Change the piece's `text` or the relevant label. A `dice` appearance does not generate random results. |
-| Group a polyomino or composite token | Compute positions/rotations for several stable pieces in the reducer. V1 has no implicit group transform; see [Rotation, flipping and placement previews](#rotation-flipping-and-placement-previews). |
+| Group a polyomino or composite token | Give the root its actions and each member a stable ID, a parent and a local offset. |
 
 Each piece requires `id`, `type`, `board` and `position`. It can override its
 type's front artwork with an `asset` ID. A piece type can declare `back_asset`
@@ -712,7 +745,7 @@ Controls have `id`, `label`, `kind` and optional `disabled`/`value`. Kinds are
 choices supply `options` of `{value,label}`. Prefer string choice values for
 portable controls when possible; a choice event preserves the selected
 option's original string, number or Boolean type. Number controls emit
-numbers and text controls emit strings. Parse/validate those values in the
+numbers aligned to `min + n × step` (the base defaults to zero). Text controls emit up to 4,000 Unicode characters. Parse/validate those values in the
 reducer, and validate the final move again on the server. Text inputs send
 their value on change rather than on every keystroke.
 
@@ -731,10 +764,9 @@ Tiles, dominoes and polyominoes use the same building blocks:
   ↻ (clockwise, 90) and ⇋ (flip) buttons of at least 44×44 pixels. Keyboard
   users press R, Shift+R and F on the selected piece. Each sends the event
   above; the reducer keeps the orientation in `local_state` and redraws.
-- **Composite pieces.** Draw each cell of a polyomino or domino as its own
-  stable piece. Give every cell the same `actions` and `move_targets`, mark all
-  of them `selected` together, and map any cell ID back to its shape in the
-  reducer. Rotating or flipping only changes the cells' computed positions.
+- **Composite pieces.** Attach each cell to one root piece. Set `actions` and
+  `move_targets` on the root and use `rotation` and `mirror_x` on that root
+  to change the whole footprint.
 - **Legal placements.** For the current orientation, emit one target per legal
   placement, usually at the cell under the shape's anchor, and list those IDs
   in the pieces' `move_targets`. Illegal placements are simply absent.

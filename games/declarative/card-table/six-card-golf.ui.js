@@ -21,7 +21,6 @@ var gameUI={reduce(message,localState){
  }
  const cardId=uid=>`card-${uid}`;
  const rankName=r=>golfRank(r);
- const cardArt=(c)=>`face-${golfRank(c.r)}-${c.s}`;
  if(e.type==="tap"&&e.id==="stock-reshuffle"&&active&&phase==="play"&&!v.drew)make_move={kind:"draw",from:"stock"};
  if(e.type==="tap"&&e.id&&e.id.startsWith("card-")&&active){
    const uid=e.id.slice(5);
@@ -40,7 +39,6 @@ var gameUI={reduce(message,localState){
  const opponents=n===2?[[380,245]]:n===3?[[250,210],[510,210]]:n===4?[[220,190],[540,190],[220,650]]:n===5?[[220,190],[540,190],[220,530],[540,530]]:[[220,190],[540,190],[220,530],[540,530],[540,790]];
  const cardScale=n===2?1:n===3?0.70:n===4?0.62:n===5?0.56:0.50,colGap=Math.round(124*cardScale),rowGap=Math.round(70*cardScale);
  const positions=new Array(n);positions[me]=n===4?[540,650]:n===5?[380,790]:n===6?[220,790]:[380,n===2?700:575];let opponent=0;for(let pi=0;pi<n;pi++)if(pi!==me)positions[pi]=opponents[opponent++];
- const faceAsset=(c)=>`face-${golfRank(c.r)}-${c.s}`;
  const faceName=(c)=>`${rankName(c.r)} ${["♣","♦","♥","♠"][c.s]}`;
  const faceSuit=(c)=>golfText(m,["suit_clubs","suit_diamonds","suit_hearts","suit_spades"][c.s]);
  const title=golfText(m,"title");labels.push({id:"title",text:title,x:golfCenterX(title,30),y:18,font_size:30,color:"#fff1d6"});
@@ -60,13 +58,13 @@ var gameUI={reduce(message,localState){
      let enabled=false;
      if(canTouch&&phase==="flip")enabled=!c.up;
      if(canTouch&&phase==="play"&&v.drew&&!v.drew.hidden)enabled=!discardDraw||!c.up;
-     pieces.push({id,type:"card",board:"table",position:{x,y},scale:cardScale*(c.up?1:0.94),face:c.up?"front":"back",asset:c.up?faceAsset(c):"card_back",text:"",selected:isSelected,actions:enabled?["tap"]:[],aria_label:c.up?golfText(m,"card_named",{rank:rankName(c.r),suit:faceSuit(c)}):golfText(m,"card_hidden"),animation:{kind:"move",key:`golf:${id}:${c.up?"up":"down"}`,duration_ms:180}});
+     pieces.push({id,type:"card",board:"table",position:{x,y},scale:cardScale*(c.up?1:0.94),face:c.up?"front":"back",text:c.up?faceName(c):"",selected:isSelected,actions:enabled?["tap"]:[],aria_label:c.up?golfText(m,"card_named",{rank:rankName(c.r),suit:faceSuit(c)}):golfText(m,"card_hidden"),animation:{kind:"move",key:`golf:${id}:${c.up?"up":"down"}`,duration_ms:180}});
    }
  }
  const stackX=250,discardX=380,drawnX=510,pileY=n===2?470:n===4?430:350;
- if(v.stockTopUid!=null&&v.stockCount>0){const id=cardId(v.stockTopUid);pieces.push({id,type:"card",board:"table",position:{x:stackX,y:pileY},face:"back",asset:"card_back",actions:active&&phase==="play"&&!v.drew?["tap"]:[],aria_label:golfText(m,"stock",{count:v.stockCount}),animation:{kind:"move",key:`golf:${m.move_count}:${id}`,duration_ms:180}});}else if(v.stockCount===0){pieces.push({id:"stock-reshuffle",type:"card",board:"table",position:{x:stackX,y:pileY},face:"back",asset:"card_back",actions:active&&phase==="play"&&!v.drew?["tap"]:[],aria_label:golfText(m,"stock",{count:0})});}
- if(v.discard&&v.discard.length){const c=v.discard[v.discard.length-1],id=cardId(c.uid);pieces.push({id,type:"card",board:"table",position:{x:discardX,y:pileY},face:"front",asset:faceAsset(c),actions:active&&phase==="play"&&!v.drew?["tap"]:[],aria_label:golfText(m,"card_named",{rank:rankName(c.r),suit:faceSuit(c)}),animation:{kind:"move",key:`golf:${m.move_count}:${id}`,duration_ms:180}});}
- if(v.drew){const c=v.drew, id=cardId(c.uid);pieces.push({id,type:"card",board:"table",position:{x:drawnX,y:pileY},face:c.hidden?"back":"front",asset:c.hidden?"card_back":faceAsset(c),aria_label:c.hidden?golfText(m,"card_hidden"):golfText(m,"card_named",{rank:rankName(c.r),suit:faceSuit(c)}),actions:[],animation:{kind:"move",key:`golf:${m.move_count}:${id}`,duration_ms:180}});}
+ if(v.stockTopUid!=null&&v.stockCount>0){const id=cardId(v.stockTopUid);pieces.push({id,type:"stock",count:v.stockCount,board:"table",position:{x:stackX,y:pileY},face:"back",actions:active&&phase==="play"&&!v.drew?["tap"]:[],aria_label:golfText(m,"stock",{count:v.stockCount}),animation:{kind:"move",key:`golf:${m.move_count}:${id}`,duration_ms:180}});}else if(v.stockCount===0){pieces.push({id:"stock-reshuffle",type:"stock",count:v.stockCount,board:"table",position:{x:stackX,y:pileY},face:"back",actions:active&&phase==="play"&&!v.drew?["tap"]:[],aria_label:golfText(m,"stock",{count:0})});}
+ if(v.discard&&v.discard.length){const c=v.discard[v.discard.length-1],id=cardId(c.uid);pieces.push({id,type:"stock",count:v.discard.length,board:"table",position:{x:discardX,y:pileY},face:"front",text:faceName(c),actions:active&&phase==="play"&&!v.drew?["tap"]:[],aria_label:golfText(m,"card_named",{rank:rankName(c.r),suit:faceSuit(c)}),animation:{kind:"move",key:`golf:${m.move_count}:${id}`,duration_ms:180}});}
+ if(v.drew){const c=v.drew, id=cardId(c.uid);pieces.push({id,type:"card",board:"table",position:{x:drawnX,y:pileY},face:c.hidden?"back":"front",text:c.hidden?"":faceName(c),aria_label:c.hidden?golfText(m,"card_hidden"):golfText(m,"card_named",{rank:rankName(c.r),suit:faceSuit(c)}),actions:[],animation:{kind:"move",key:`golf:${m.move_count}:${id}`,duration_ms:180}});}
  const stockLabel=golfText(m,"stock",{count:v.stockCount||0}),discardLabel=golfText(m,"discard"),drawnLabel=golfText(m,"drawn");labels.push({id:"stock-label",text:stockLabel,x:golfCenterX(stockLabel,13,stackX),y:n===2?545:n===4?505:425,font_size:13,color:"#fff1d6"});labels.push({id:"discard-label",text:discardLabel,x:golfCenterX(discardLabel,13,discardX),y:n===2?545:n===4?505:425,font_size:13,color:"#fff1d6"});if(v.drew)labels.push({id:"drawn-label",text:drawnLabel,x:golfCenterX(drawnLabel,13,drawnX),y:n===2?545:n===4?505:425,font_size:13,color:"#fff1d6"});
  let hint=m.status==="over"?"All cards revealed · lowest score wins.":golfText(m,"waiting",{name:"…"});
  if(active){if(phase==="flip")hint=selected.length?golfText(m,"selected",{count:1}):golfText(m,"phase_flip");else if(v.drew)hint=golfText(m,discardDraw?"phase_discard":"phase_replace");else hint=golfText(m,"phase_draw");}

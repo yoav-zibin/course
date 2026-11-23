@@ -187,15 +187,87 @@ def validate_response(spec, response):
             raise DeclarativeUIError("Choice controls require nonempty options")
         if "min" in control and "max" in control and control["min"] > control["max"]:
             raise DeclarativeUIError("Control min must not exceed max")
+    validate_piece_composition(spec, scene)
+    if "timeline" in response:
+        validate_timeline(spec, scene, response["timeline"])
     validate_move_animations(spec, scene, response.get("last_move_animations"))
     validate_scene_animations(spec, scene, response.get("animations", []))
     return response
 
 
+def validate_piece_composition(spec, scene):
+    pieces = {p["id"]: p for p in scene.get("pieces", [])}
+    for piece in pieces.values():
+        shape = spec["piece_types"][piece["type"]]["shape"]
+        if shape == "card_pile" and "count" not in piece:
+            raise DeclarativeUIError("Card piles require a count")
+        hand = piece.get("hand")
+        if hand and (hand["index"] >= hand["count"] or "parent" in piece):
+            raise DeclarativeUIError("Hand slot must be within its hand on the board")
+        current = piece
+        depth = 0
+        while "parent" in current:
+            parent = pieces.get(current["parent"])
+            if not parent or parent["board"] != current["board"] or "cell" in current["position"]:
+                raise DeclarativeUIError("Children require a same-board parent and local x/y")
+            depth += 1
+            if depth > 8:
+                raise DeclarativeUIError("Cyclic or too deeply nested piece group")
+            current = parent
+
+
+def visible_pieces(scene):
+    """Composition has already checked every parent chain."""
+    pieces = {p["id"]: p for p in scene.get("pieces", [])}
+    def visible(piece):
+        while not piece.get("hidden"):
+            if "parent" not in piece:
+                return True
+            piece = pieces[piece["parent"]]
+        return False
+    return {key: piece for key, piece in pieces.items() if visible(piece)}
+
+
+def validate_timeline(spec, scene, timeline):
+    pieces = visible_pieces(scene)
+    boards = {b["id"]: b for b in spec["boards"]}
+    duration = count = 0
+    last = {}
+    for step in timeline["steps"]:
+        ids = set()
+        length = 0
+        for clip in step:
+            id_ = clip["piece_id"]
+            if id_ in ids or (id_ in pieces) == bool(clip.get("exit")):
+                raise DeclarativeUIError("Invalid timeline target or repeated target within a step")
+            ids.add(id_)
+            count += 1
+            length = max(length, clip.get("delay_ms", 0) +
+                         clip.get("duration_ms", spec.get("motion", {}).get("move_ms", 1440)))
+            for pose in (clip.get("from", {}), clip.get("to", {})):
+                if "position" not in pose:
+                    continue
+                board_id = pose.get("board") or pieces.get(id_, {}).get("board")
+                board = boards.get(board_id)
+                if not board:
+                    raise DeclarativeUIError("Exit positions require an explicit board")
+                if pieces.get(id_, {}).get("parent") and ("cell" in pose["position"] or "board" in pose):
+                    raise DeclarativeUIError("Child animations use local x/y")
+                if "cell" in pose["position"]:
+                    validate_scene_animations(spec, {"pieces": [{"id": id_, "board": board_id}]},
+                                              [{"piece_id": id_, "from": pose}])
+            last[id_] = clip
+        duration += length
+    if count > 128 or duration > 30_000:
+        raise DeclarativeUIError("Timeline exceeds 128 clips or 30000ms")
+    if any("to" in clip and not clip.get("exit") for clip in last.values()):
+        raise DeclarativeUIError("The last clip for a remaining piece must end at its scene pose")
+
+
 def validate_scene_animations(spec, scene, animations):
     """Validate explicit per-response animation references after schema validation."""
     boards = {board["id"]: board for board in spec["boards"]}
-    pieces = {piece["id"]: piece for piece in scene.get("pieces", []) if not piece.get("hidden")}
+    pieces = visible_pieces(scene)
     seen = set()
     for animation in animations:
         piece_id = animation["piece_id"]
@@ -205,6 +277,8 @@ def validate_scene_animations(spec, scene, animations):
         start = animation["from"]
         if "position" not in start:
             continue
+        if "parent" in pieces[piece_id] and ("board" in start or "cell" in start["position"]):
+            raise DeclarativeUIError("Child animations use local x/y")
         board = boards.get(start.get("board", pieces[piece_id]["board"]))
         if board is None:
             raise DeclarativeUIError("Scene animation references an unknown board")
@@ -228,7 +302,7 @@ def validate_move_animations(spec, scene, animations):
     if animations is None:
         return
     boards = {board["id"]: board for board in spec["boards"]}
-    pieces = {piece["id"]: piece for piece in scene.get("pieces", []) if not piece.get("hidden")}
+    pieces = visible_pieces(scene)
 
     def point(item):
         board = boards.get(item["board"])
@@ -248,7 +322,14 @@ def validate_move_animations(spec, scene, animations):
                       "y": (index // board["columns"] + .5) * board["height"] / board["rows"]}
             else:
                 raise DeclarativeUIError("Move animation references an unknown cell")
-        return at["x"] + board.get("x", 0), at["y"] + board.get("y", 0)
+        x, y = at["x"] + board.get("x", 0), at["y"] + board.get("y", 0)
+        if hand := item.get("hand"):
+            columns = hand.get("columns", hand["count"])
+            row, column = divmod(hand["index"], columns)
+            size = min(columns, hand["count"] - row * columns)
+            x += (column - (size - 1) / 2) * hand["spacing"]
+            y += row * hand.get("row_spacing", 0)
+        return x, y
 
     def same(first, second):
         return all(abs(a - b) < .000001 for a, b in zip(first, second))
@@ -259,6 +340,8 @@ def validate_move_animations(spec, scene, animations):
         piece_id = animation["piece_id"]
         if piece_id not in pieces:
             raise DeclarativeUIError("Move animation must reference a visible final scene piece")
+        if "parent" in pieces[piece_id]:
+            raise DeclarativeUIError("Use local timeline clips to animate group members")
         duration += animation.get("duration_ms", spec.get("motion", {}).get("move_ms", 1440))
         if duration > 30000:
             raise DeclarativeUIError("Move animations must finish within 30000ms")

@@ -96,7 +96,7 @@ def test_large_table_does_not_overlap_hand_or_hint():
                'acting_for_player_index':0,'my_player_index':0,'move_count':0}
     frame = ui.reduce(message)
     pieces = frame['scene']['pieces']
-    table_bottom = max(p['position']['y'] for p in pieces if p['id'] != 'card_10D') + 48
+    table_bottom = max(p['position']['y'] for p in pieces if p['id'] not in ('card_10D', 'stock-pile')) + 48
     hand_top = next(p['position']['y'] for p in pieces if p['id'] == 'card_10D') - 48
     hint = next(label for label in frame['scene']['labels'] if label['id'] == 'hint')
     assert table_bottom < hint['y'] < hand_top
@@ -108,7 +108,7 @@ def test_large_table_does_not_overlap_hand_or_hint():
     assert not any(label['id'] == 'hint' for label in ui.reduce(spectator)['scene']['labels'])
     terminal = {**spectator, 'status':'over', 'view':{**spectator['view'], 'over':True}}
     result = next(label for label in ui.reduce(terminal)['scene']['labels'] if label['id'] == 'result')
-    assert result['y'] < min(p['position']['y'] for p in pieces if p['id'] != 'card_10D') - 48
+    assert result['y'] < min(p['position']['y'] for p in pieces if p['id'] not in ('card_10D', 'stock-pile')) - 48
 
 
 def test_scopa_cards_keep_identity_when_moving_from_hand_to_table():

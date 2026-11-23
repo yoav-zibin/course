@@ -142,19 +142,18 @@ action in sequence.
 Games with `gameUI.getLastMoveAnimations(view, scene)` describe their movement
 explicitly using [ordered paths](declarative-games.md#describe-the-last-moves-paths).
 For this API, only known opponent moves animate by default; the viewer's own moves
-settle immediately unless the reducer returns explicit `animations`. Forward adjacent history may play an opponent's declared
-path; backward history and jumps settle immediately. The table's full history
-behavior applies to legacy inferred motion.
+settle immediately unless the reducer returns a `timeline` or explicit `animations`. Adjacent history steps play the later snapshot's declared motion in forward
+or reverse order. Jumps settle immediately.
 Keep last-move details in authoritative state and the safe filtered view so
 animation can be reconstructed without guessing from scene differences.
 
 For animation during the current player's turn, return the complete final
-`scene` and explicit [`animations`](declarative-games.md#animate-your-own-turn-and-local-interactions)
-in the same reducer response. Entries run in parallel from declared starting
-transforms to the scene's final values, enabling a plate and all its marbles to
-rotate together. This also applies to local UI interactions without a move.
-Keep per-piece event keys stable; repeated keys, initial/reload scenes, reduced
-motion and unsafe history jumps settle immediately instead of replaying them.
+`scene` and a [`timeline` or explicit `animations`](declarative-games.md#animate-your-own-turn-and-local-interactions)
+in the same reducer response. Timeline steps run in order, with the entries
+of a step playing together. Turning a parent plate rotates its marbles around
+the same pivot. Local UI interactions can also animate. Keep the timeline key
+stable for repeated snapshots of the same move. Initial loads, reduced motion
+and history jumps settle immediately.
 
 Animations must make the source, destination and effects understandable.
 Preserve object identity through moves, captures, dealing, stacking, rotation
@@ -188,11 +187,10 @@ interaction hints and animation behavior. Authors must be able to customize
 artwork and extend the collection without losing these behaviors. Hidden faces
 and accessible names must obey the same information-visibility rules as the UI.
 
-In the existing schema, these are composed from `boards`, `piece_types`,
-`assets` and scene objects. For example, tokens can use a named `circle` piece
-type and counters can use `text` or `rect` types. The table is a component-library
-requirement, not a declaration of additional schema enums or already-shipped
-component IDs.
+Authors select `card`, `card_pile`, `dice` and `counter` appearances in
+`piece_types`. A pile declares its public count, a hand declares slot indices
+and spacing, and other tokens can use circles, rectangles or custom artwork.
+Composite pieces attach via `parent` and share a pivot and group actions.
 
 ## Acceptance checks
 

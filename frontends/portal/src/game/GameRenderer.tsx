@@ -4,12 +4,14 @@ import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, 
 import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgXml, Text as SvgText } from 'react-native-svg';
 import G from './SceneGroup';
-import type { Board, Control, GameSpec, Json, Piece, Point, Scene, StateMessage, Target, UIEvent } from './types';
-import { assetURI, boardCell, cameraLimits, contentBounds, finiteJSON, knownObject, pieceActions, position, validateMoveAnimations, validateScene, validateSceneAnimations, validateSpec } from './validation';
-import { animateUpdate, canMove, historyChanges, hitPiece, hitTarget, pieceName, pieceSize, presentationSteps, targetBox, targetShape, targetThickness, validEvent } from './interactions';
+import type { Board, Control, GameSpec, Json, Piece, Point, PresentationResult, Scene, StateMessage, Target, UIEvent } from './types';
+import { assetURI, boardCell, cameraLimits, contentBounds, finiteJSON, knownObject, pieceActions, position, validateMoveAnimations, validateScene, validateSceneAnimations, validateTimeline, validateSpec } from './validation';
+import { animateUpdate, canMove, historyChanges, hitPiece, hitTarget, pieceName, pieceSize, presentationSteps, targetBox, targetShape, targetThickness, validNumber, validEvent } from './interactions';
 import { runPresentation } from './runtime';
 import { animateLastMove, moveTracks, trackPosition, type MoveTrack } from './moveAnimations';
 import { animateSceneUpdate, sceneTracks, sceneTransform, type SceneTrack } from './sceneAnimations';
+import {TabletopGraphic} from './TabletopGraphic';
+import {compileTimeline,inferredGroupTracks, pathsTimeline, resolveScene} from './composition';
 import {dragPosition} from './dragPosition';
 import {pieceAnimation,STATIC_PIECE_Z_MAX} from './pieceAnimations';
 
@@ -51,7 +53,7 @@ type Gesture = {
   kind: 'press' | 'pan' | 'pinch'; distance?: number; anchor?: Point; touch: boolean;
   grab:Point;toolbarPiece:string|null;toolbarPreview:string|null;
 };
-type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
+type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];inferGroups?:boolean;moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
 
 function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,frameHeight}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
@@ -74,6 +76,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const alive = useRef(true), revision = useRef(0), renderedRevision = useRef(-1), sent = useRef(false);
   const local = useRef<Json>(null), latest = useRef<StateMessage | null>(null), lastPaint = useRef<StateMessage | null>(null);
   const sceneRef = useRef<Scene>({}), queue = useRef(Promise.resolve());
+  const lastResponse = useRef<PresentationResult | null>(null);
+  const lastTimelineKey = useRef<string | undefined>(undefined);
   const animationKeys = useRef(new Map<string,string>());
   const paintOrder=useRef(new Map<string,number>());
   const selectedRef = useRef<string | null>(null), previewRef = useRef<string | null>(null);
@@ -132,38 +136,78 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const apply = useCallback(async (input: unknown, atRevision: number, stateChange: boolean) => {
     const result = await runPresentation(spec.ui_code,input,local.current);
     if (!alive.current || atRevision !== revision.current) return;
-    knownObject(result,['scene','local_state','make_move','last_move_animations','animations'],['scene']); finiteJSON(result);
-    const next = validateScene(spec,result.scene);
-    const animations = validateMoveAnimations(spec,next,result.last_move_animations);
-    const explicit = result.animations!==undefined;
-    const requested = validateSceneAnimations(spec,next,result.animations);
+    knownObject(result,['scene','local_state','make_move','last_move_animations','animations','timeline'],['scene']); finiteJSON(result);
+    const raw = validateScene(spec,result.scene);
+    const next = resolveScene(spec,raw);
+    const incomingMoves = validateMoveAnimations(spec,raw,result.last_move_animations);
+    const requested = validateSceneAnimations(spec,raw,result.animations);
+    if (result.timeline !== undefined) {
+      validateTimeline(spec,raw,result.timeline);
+      if (result.animations !== undefined) throw new Error('Return timeline or animations');
+    }
     if (result.make_move !== undefined && (stateChange || !canMove(latest.current,sent.current))) throw new Error(copyText("Only a current player interaction may submit a move"));
-    const tracks = explicit?sceneTracks(spec,next,requested,animationKeys.current):undefined;
+    const previous=lastResponse.current;
+    const message=latest.current!;
+    const historyStep=stateChange && !!message.replay && !!lastPaint.current?.replay &&
+      Math.abs((message.move_count??NaN)-(lastPaint.current.move_count??NaN))===1;
+    const reverse=historyStep && message.move_count!<lastPaint.current!.move_count!;
+    const authored=reverse && previous ? previous : result;
+    const groupScene=authored.scene.pieces?.some(p=>p.parent || p.pivot);
+    const changed = JSON.stringify(next)!==JSON.stringify(sceneRef.current);
+    const animations=reverse ? authored.last_move_animations??null : incomingMoves;
+    const incomingTracks=result.animations===undefined ? undefined : sceneTracks(spec,next,requested,animationKeys.current);
+    let explicit=authored.animations!==undefined;
+    let tracks=reverse ? undefined : incomingTracks;
+    let timeline=authored.timeline;
+    if (!timeline && authored.animations && (groupScene || historyStep)) {
+      timeline={key:'transforms',steps:[historyStep ? authored.animations : authored.animations.filter(a=>tracks?.has(a.piece_id))]};
+    } else if (!timeline && !authored.animations && authored.last_move_animations && (groupScene || historyStep)) {
+      timeline=pathsTimeline(authored.last_move_animations,spec.motion?.move_ms??1440);
+    }
+    let timelineGhosts:Piece[]=[];
+    let timelineDuration:number|undefined;
+    let animate = explicit
+      ? !!tracks?.size && (stateChange?animateSceneUpdate(lastPaint.current,message):!!lastPaint.current&&canMove(message,sent.current))
+      : stateChange && (animations===null?animateUpdate(lastPaint.current,message):animateLastMove(lastPaint.current,message));
+    if (timeline) {
+      const plan=compileTimeline(spec,reverse?raw:previous?.scene??{},reverse?previous!.scene:raw,timeline,reverse);
+      const fresh=authored.timeline ? lastTimelineKey.current!==authored.timeline.key :
+        authored.animations ? !!tracks?.size : true;
+      const eligible=authored.last_move_animations && !authored.timeline && !authored.animations
+        ? animateLastMove(lastPaint.current,message)
+        : stateChange ? animateSceneUpdate(lastPaint.current,message) : !!lastPaint.current && canMove(message,sent.current);
+      animate=!!plan.tracks.size && (historyStep || (fresh && eligible));
+      tracks=plan.tracks;
+      explicit=true;
+      timelineGhosts=plan.ghosts;
+      timelineDuration=plan.duration;
+    }
+    if (result.timeline) lastTimelineKey.current=result.timeline.key;
+    animate=animate && !current.current.reducedMotion;
     local.current = result.local_state === undefined ? null : copy(result.local_state);
     renderedRevision.current=atRevision;
-    const changed = JSON.stringify(next)!==JSON.stringify(sceneRef.current);
-    const animate = !current.current.reducedMotion && (explicit
-      ? !!tracks?.size && (stateChange?animateSceneUpdate(lastPaint.current,latest.current!):!!lastPaint.current&&canMove(latest.current,sent.current))
-      : stateChange && (animations===null?animateUpdate(lastPaint.current,latest.current!):animateLastMove(lastPaint.current,latest.current!)));
+    lastResponse.current=result;
+    const inferGroups=Boolean(animate && !explicit && animations===null && groupScene && previous);
+    if (inferGroups) tracks=inferredGroupTracks(spec,previous!.scene,raw);
     if (changed || animate && (tracks?.size || animations?.length)) {
       const before=sceneRef.current;
       sceneRef.current=next;
       const replay=animate&&!explicit&&animations===null&&(Boolean(latest.current?.replay)||spec.motion?.scene_transitions===true);
       const moves=explicit||animations===null?undefined:moveTracks(spec,animations);
       const started=Date.now();
-      setDisplay(old=>({scene:next,previous:before,animate,serial:old.serial+1,replay,ghosts:replay?historyChanges(before,next).removed:[],moves,tracks,started}));
+      setDisplay(old=>({scene:next,previous:before,animate,serial:old.serial+1,replay,ghosts:animate && timeline ? timelineGhosts : replay?historyChanges(before,next).removed:[],moves,tracks,inferGroups,started}));
       if(animate){
         const movement=explicit?0:animations===null?spec.motion?.move_ms??1440:Math.max(0,...[...moves!.values()].map(track=>track.duration));
-        const duration=explicit?Math.max(0,...[...tracks!.values()].map(track=>track.duration+track.delay)):
-          Math.max(movement,...(next.pieces||[]).filter(p=>animations===null||p.animation?.kind!=='move').map(p=>(p.animation?.duration_ms??(p.animation?.kind==='roll'?spec.motion?.roll_ms??650:0))+(p.animation?.delay_ms||0)))+(spec.motion?.roll_settle_ms??0)+(spec.motion?.turn_pause_ms??0);
+        const duration=timelineDuration ?? (explicit?Math.max(0,...[...tracks!.values()].map(track=>track.duration+track.delay)):
+          Math.max(movement,...(next.pieces||[]).filter(p=>animations===null||p.animation?.kind!=='move').map(p=>(p.animation?.duration_ms??(p.animation?.kind==='roll'?spec.motion?.roll_ms??650:0))+(p.animation?.delay_ms||0)))+(spec.motion?.roll_settle_ms??0)+(spec.motion?.turn_pause_ms??0));
         motionUntil.current=Date.now()+duration;setMotionBusy(true);callbacks.current.onAnimationStateChange?.(true);
         if(motionTimer.current)clearTimeout(motionTimer.current);
-        motionTimer.current=setTimeout(()=>{if(alive.current){setMotionBusy(false);setDisplay(old=>({...old,ghosts:[]}));callbacks.current.onAnimationStateChange?.(false);}},duration);
+        motionTimer.current=setTimeout(()=>{if(alive.current){setMotionBusy(false);setDisplay(old=>({...old,animate:false,ghosts:[],tracks:undefined,moves:undefined}));callbacks.current.onAnimationStateChange?.(false);}},duration);
       }else{motionUntil.current=0;setMotionBusy(false);if(motionTimer.current)clearTimeout(motionTimer.current);callbacks.current.onAnimationStateChange?.(false);}
     } else setDisplay(old=>({...old}));
     if(stateChange)lastPaint.current=copy(latest.current!);
     setReady(true);setBusy(false);setError('');
-    callbacks.current.onScene?.(copy(next),copy(latest.current!));
+    callbacks.current.onScene?.(copy(raw),copy(latest.current!));
     if (result.make_move !== undefined) {
       sent.current=true;setBusy(true);
       try { recordDiagnosticEvent('game_move');await callbacks.current.onMove(copy(result.make_move)); }
@@ -273,6 +317,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   function transform(event: UIEvent) { const piece=sceneRef.current.pieces?.find(p=>p.id===selectedRef.current);if(piece)dispatch({...event,id:piece.id}); }
 
   function activatePiece(piece: Piece) {
+    piece = sceneRef.current.pieces?.find(p=>p.id===piece.parent) ?? piece;
     if(!canMove(latest.current,sent.current)||!pieceActions(piece).length)return;
     select(piece.id);showPreview(null);
     if(pieceActions(piece).includes('tap'))dispatch({type:'tap',id:piece.id});
@@ -417,25 +462,34 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const toolsActions=toolsPiece?pieceActions(toolsPiece):[];
   const toolsPreview=gesture.current?display.scene.targets?.find(target=>target.id===gesture.current!.toolbarPreview):previewTarget;
   const now=Date.now();
-  const paint=(display.scene.pieces||[]).filter(piece=>!piece.hidden).map(piece=>{
-    const previous=display.previous.pieces?.find(old=>old.id===piece.id);
-    const options={animate:display.animate&&!reducedMotion&&(display.tracks===undefined||display.tracks.has(piece.id)),
-      effect:replayEffects.get(piece.id),inferMovement:display.moves===undefined&&display.tracks===undefined,
+  const drawables=[
+    ...(!reducedMotion?display.ghosts:[]).map(piece=>({piece,ghost:true})),
+    ...(display.scene.pieces??[]).filter(piece=>!piece.hidden).map(piece=>({piece,ghost:false})),
+  ];
+  const paint=drawables.map(({piece,ghost})=>{
+    const previous=ghost?piece:display.previous.pieces?.find(old=>old.id===piece.id);
+    const options={animate:display.animate&&!reducedMotion&&(display.inferGroups||display.tracks===undefined||display.tracks.has(piece.id)),
+      effect:ghost?'exit' as const:replayEffects.get(piece.id),inferMovement:display.inferGroups||display.moves===undefined&&display.tracks===undefined,
       moveTrack:display.moves?.get(piece.id),sceneTrack:display.tracks?.get(piece.id),pulseEnabled:!reducedMotion};
     const motion=pieceAnimation(spec,piece,previous,{...options,elapsed:now-(display.started??now)});
-    return {piece,previous,options,z:motion.layerActive?motion.z:piece.z??0,
+    return {piece,ghost,previous,options,z:motion.layerActive?motion.z:piece.z??0,
       end:Number.isFinite(motion.layerTransition)?(display.started??now)+motion.layerTransition:Infinity};
   }).sort((a,b)=>a.z-b.z||(a.piece.z??0)-(b.piece.z??0));
-  paintOrder.current=new Map(paint.map((item,index)=>[item.piece.id,index]));
+  paintOrder.current=new Map(paint.filter(item=>!item.ghost).map((item,index)=>[item.piece.id,index]));
   const paintEnd=Math.min(Infinity,...paint.map(item=>item.end));
   useEffect(()=>{
     if(!Number.isFinite(paintEnd))return;
     const timer=setTimeout(()=>setPaintTick(value=>value+1),Math.max(1,paintEnd-Date.now()+1));
     return()=>clearTimeout(timer);
   },[paintEnd]);
-  const renderPiece=(item:typeof paint[number])=><PieceGraphic key={`piece:${item.piece.id}`} piece={item.piece} previous={item.previous}
-    spec={spec} {...item.options} serial={display.serial} enabled={active} selected={item.piece.selected||item.piece.id===selected}
-    started={display.started} concealed={item.piece.id===drag?.id} onPress={()=>activatePiece(item.piece)}/>;
+  const renderPiece=(item:typeof paint[number])=><PieceGraphic key={`${item.ghost?'ghost':'piece'}:${item.piece.id}`} piece={item.piece} previous={item.previous}
+    spec={spec} {...item.options} serial={display.serial} enabled={active&&!item.ghost} selected={item.piece.selected||(item.piece.parent??item.piece.id)===selected}
+    started={display.started} concealed={(item.piece.parent??item.piece.id)===drag?.id} onPress={()=>activatePiece(item.piece)}/>;
+  function draggedPosition(piece:Piece): Point {
+    const root=display.scene.pieces!.find(p=>p.id===drag!.id)!;
+    const center=position(spec,root), at=position(spec,piece);
+    return {x:drag!.at.x+at.x-center.x-(at.board.x??0),y:drag!.at.y+at.y-center.y-(at.board.y??0)};
+  }
   const keyboard=(event: {key:string;shiftKey?:boolean;preventDefault():void;target?:{tagName?:string}})=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(event.target?.tagName||''))return;
     const key=event.key.toLowerCase();
@@ -488,9 +542,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
           enabled={active&&(!selectedPiece?.move_targets?.length||selectedPiece.move_targets.includes(target.id))}
           selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>),
         ...(display.scene.labels||[]).map(label=><SvgText key={`label:${label.id}`} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>),
-        ...(!reducedMotion?display.ghosts:[]).map(piece=><PieceGraphic key={`history-ghost:${piece.id}`} piece={piece} previous={piece} spec={spec} animate={true} serial={display.serial} effect="exit" enabled={false}/>),
         ...paint.filter(item=>item.z>STATIC_PIECE_Z_MAX).map(renderPiece),
-        ...(drag?display.scene.pieces?.filter(piece=>piece.id===drag.id)||[]:[]).map(piece=><PieceGraphic key={`drag:${piece.id}`} piece={{...piece,position:{x:drag!.at.x-(spec.boards.find(b=>b.id===piece.board)?.x||0),y:drag!.at.y-(spec.boards.find(b=>b.id===piece.board)?.y||0)}}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true} dragged/>),
+        ...(drag?display.scene.pieces?.filter(piece=>!piece.hidden && (piece.parent??piece.id)===drag.id)||[]:[]).map(piece=><PieceGraphic key={`drag:${piece.id}`} piece={{...piece,hand:undefined,position:draggedPosition(piece)}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true} dragged/>),
         ]}
       </Svg>
     </View>
@@ -558,7 +611,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
     frame=requestAnimationFrame(tick);return()=>{cancelled=true;cancelAnimationFrame(frame);};
   },[serial,needsAnimation,duration,delay,started]);
   const p=!needsAnimation?1:frameState.serial===serial?frameState.phase:0,eased=spec.motion?.easing==='ease-in-out-quad'?(p<.5?2*p*p:1-(-2*p+2)**2/2):1-(1-p)**3;
-  const authored=animate&&sceneTrack?sceneTransform(sceneTrack,eased):undefined;
+  const authored=animate&&sceneTrack?(sceneTrack.sample ? sceneTrack.sample(p) : sceneTransform(sceneTrack,eased)):undefined;
   const at=authored??(animate&&moveTrack?trackPosition(moveTrack,p*duration,spec.motion?.easing):inferMovement?{x:before.x+(next.x-before.x)*eased,y:before.y+(next.y-before.y)*eased}:next);
   const x=at.x,y=at.y;
   const rotation=authored?.rotation??(inferMovement?(previous?.rotation||0)+((piece.rotation||0)-(previous?.rotation||0))*eased:piece.rotation||0);
@@ -567,7 +620,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const actions=pieceActions(piece),outline=selected?'#b8ff67':enabled&&actions.length?'#79d5ff':'transparent';
   const roll=!sceneTrack&&animate&&newEffect&&piece.animation?.kind==='roll'?(1-p)*360:0;
   const notice=!sceneTrack&&piece.animation?.kind==='notice'?(animate&&newEffect&&p>.02&&p<.96?1:0):1;
-  const fade=effect==='enter'?p:effect==='change'?.25+.75*p:effect==='exit'?(p<.65?1-p/.65*.2:.8*(1-(p-.65)/.35)):1;
+  const fade=sceneTrack?1:effect==='enter'?p:effect==='change'?.25+.75*p:effect==='exit'?(p<.65?1-p/.65*.2:.8*(1-(p-.65)/.35)):1;
   const accessibleName=`${playerText(pieceName(piece))}${enabled&&actions.length?`: ${actions.map(a=>copyText(labels[a])).join(', ')}`:''}`;
   const accessibility:Record<string,unknown>=effect==='exit'||concealed||dragged?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:effect==='exit'?'history-ghost':dragged?'dragged-piece':'held-piece-origin',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
     accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length?onPress:undefined};
@@ -575,10 +628,15 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   // sequences retain their initial target; removing it severs subsequent
   // touchMove/touchEnd delivery even though mouse dragging still appears fine.
   const touchStyle:Record<string,unknown>=Platform.OS==='web'&&actions.includes('move')?{style:{touchAction:'none',userSelect:'none',WebkitUserSelect:'none'}}:{};
-  return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${scale*pulseScale})`} opacity={concealed?0:(authored?.opacity??piece.opacity??1)*notice*fade} {...accessibility} {...touchStyle}>
-    {type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:type.shape==='hex'?<Polygon points={Array.from({length:6},(_,i)=>`${Math.cos((i*60+30)*Math.PI/180)*size.width/2},${Math.sin((i*60+30)*Math.PI/180)*size.height/2}`).join(' ')} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:((type.shape!=='text'&&type.shape!=='image')||piece.face==='back')?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={type.shape==='card'?7:4} fill={piece.face==='back'?'#324a88':type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
-    <Asset spec={spec} id={piece.face==='back'?type.back_asset:piece.asset||type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
-    {(piece.face==='back'||piece.text!==undefined)&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{piece.face==='back'?'◆':playerText(piece.text||'')}</SvgText>}
+  if(type.shape==='group'&&!actions.length)return null;
+  const shared = piece.face==='back' || ['card','card_pile','dice','counter'].includes(type.shape);
+  const customFace = piece.face==='back' ? type.back_asset : piece.asset??type.asset;
+  return <G transform={`translate(${x} ${y}) rotate(${rotation+roll}) scale(${piece.mirror_x||piece.mirror_y ? `${scale*pulseScale*(piece.mirror_x?-1:1)} ${scale*pulseScale*(piece.mirror_y?-1:1)}` : scale*pulseScale})`} opacity={concealed?0:(authored?.opacity??piece.opacity??1)*notice*fade} {...accessibility} {...touchStyle}>
+    {shared ? <TabletopGraphic piece={piece} type={type} width={size.width} height={size.height}
+      artwork={customFace && <Asset spec={spec} id={customFace} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>}/> :
+     type.shape==='group' ? null : type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:type.shape==='hex'?<Polygon points={Array.from({length:6},(_,i)=>`${Math.cos((i*60+30)*Math.PI/180)*size.width/2},${Math.sin((i*60+30)*Math.PI/180)*size.height/2}`).join(' ')} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:type.shape==='rect'?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={4} fill={type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
+    {!shared && <Asset spec={spec} id={piece.asset??type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>}
+    {!shared&&piece.text!==undefined&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{playerText(piece.text||'')}</SvgText>}
     {type.action_outline!=='none'&&(type.action_outline==='ellipse'?<Ellipse rx={size.width/2+4} ry={size.height/2+4} fill="none" stroke={outline} strokeWidth={selected?4:2}/>:<Rect x={-size.width/2-4} y={-size.height/2-4} width={size.width+8} height={size.height+8} rx={8} fill="none" stroke={outline} strokeWidth={selected?4:2}/>)}
     {enabled&&actions.length>0&&<G transform={`translate(${-size.width/2} ${-size.height/2-13})`} pointerEvents="none">{actions.map((action,index)=><G key={action} transform={`translate(${index*22} 0)`}><Rect x={0} y={-9} width={20} height={18} rx={5} fill="#122b3a" stroke="#75ceee"/><SvgText x={10} y={0} textAnchor="middle" alignmentBaseline="central" fill="#ffffff" fontSize={14}>{signs[action]}</SvgText></G>)}</G>}
   </G>;
@@ -618,7 +676,8 @@ function SceneControl({control,enabled,dispatch}:{control:Control;enabled:boolea
   useEffect(()=>{setDraft(String(control.value??''));last.current=control.value;},[control.value]);
   const submit=()=>{
     const value=control.kind==='number'?Number(draft):draft;
-    if(Object.is(last.current,value)||control.kind==='number'&&(!draft.trim()||!Number.isFinite(value)))return;
+    if(control.kind==='number'&&(!draft.trim()||!validNumber(control,value))){setDraft(String(last.current??''));return;}
+    if(Object.is(last.current,value))return;
     last.current=value;dispatch({type:'change',id:control.id,value});
   };
   if(control.kind==='button')return <Tool label={control.label} text={control.label} disabled={!enabled} onPress={()=>dispatch({type:'tap',id:control.id})}/>;
@@ -626,7 +685,7 @@ function SceneControl({control,enabled,dispatch}:{control:Control;enabled:boolea
     <Text style={styles.fieldLabel}>{playerText(control.label)}</Text>
     {control.kind==='choice'?<ScrollView horizontal contentContainerStyle={styles.row}>{control.options?.map((option,index)=><Pressable key={index} accessibilityRole="radio" accessibilityState={{checked:Object.is(option.value,control.value),disabled:!enabled}} disabled={!enabled}
       onPress={()=>dispatch({type:'change',id:control.id,value:option.value})} style={[styles.tool,Object.is(option.value,control.value)&&styles.chosen,!enabled&&styles.disabled]}><Text style={styles.toolText}>{Object.is(option.value,control.value)?'✓ ':''}{playerText(option.label)}</Text></Pressable>)}</ScrollView>:
-      <TextInput accessibilityLabel={playerText(control.label)} editable={enabled} value={draft} maxLength={2000} keyboardType={control.kind==='number'?'numeric':'default'} onChangeText={setDraft} onEndEditing={submit} onSubmitEditing={submit} style={[styles.input,!enabled&&styles.disabled]}/>}
+      <TextInput accessibilityLabel={playerText(control.label)} editable={enabled} value={draft} maxLength={control.kind==='number'?undefined:8000} keyboardType={control.kind==='number'?'numeric':'default'} onChangeText={value=>setDraft(control.kind==='text'?Array.from(value).slice(0,4000).join(''):value)} onEndEditing={submit} onSubmitEditing={submit} style={[styles.input,!enabled&&styles.disabled]}/>}
   </View>;
 }
 

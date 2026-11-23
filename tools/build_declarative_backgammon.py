@@ -249,23 +249,6 @@ def checker_svg(seat, flat=False):
     return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><defs><radialGradient id="disc' + str(seat) + '" cx=".4" cy=".28" r=".75"><stop stop-color="'+light+'"/><stop offset=".65" stop-color="'+color+'"/><stop offset="1" stop-color="'+edge+'"/></radialGradient></defs><ellipse cx="22" cy="24" rx="20" ry="20" fill="#1e0b05" opacity=".5"/><circle cx="22" cy="21" r="20" fill="url(#disc' + str(seat) + ')" stroke="#210e08" stroke-width="1.5"/><circle cx="22" cy="21" r="17.5" fill="none" stroke="'+light+'" stroke-width="1.1"/><circle cx="22" cy="21" r="15.3" fill="none" stroke="'+edge+'" stroke-width="1"/><path d="M9 16A14 14 0 0 1 30 9" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.2"/></svg>')
 
 
-def die_svg(value, used=0):
-    positions = {1: [(32,32)], 2: [(18,18),(46,46)], 3: [(18,18),(32,32),(46,46)],
-        4: [(18,18),(46,18),(18,46),(46,46)], 5: [(18,18),(46,18),(32,32),(18,46),(46,46)],
-        6: [(18,17),(46,17),(18,32),(46,32),(18,47),(46,47)]}
-    parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="ivory" x2=".5" y2="1"><stop stop-color="#fff"/><stop offset=".65" stop-color="#f1eee6"/><stop offset="1" stop-color="#b6b2a8"/></linearGradient><clipPath id="face"><rect x="3" y="2" width="58" height="58" rx="10"/></clipPath></defs>',
-        '<rect x="4" y="5" width="58" height="58" rx="10" fill="#281a0f" opacity=".35"/><rect x="3" y="2" width="58" height="58" rx="10" fill="url(#ivory)" stroke="#625d55" stroke-width="1.5"/>']
-    if value:
-        for x,y in positions[value]:
-            parts.append(f'<circle cx="{x}" cy="{y}" r="5.4" fill="#262522"/><circle cx="{x-1.3}" cy="{y-1.8}" r="1.2" fill="#8e8c83"/>')
-    else:
-        parts.append('<path d="M24 23Q24 14 32 14Q43 14 42 24Q41 29 34 31L32 38" fill="none" stroke="#777266" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="47" r="2.8" fill="#777266"/>')
-    if used:
-        parts.append(f'<rect x="0" y="0" width="{32 if used==1 else 64}" height="64" fill="#767b79" opacity=".72" clip-path="url(#face)"/>')
-    parts.append('</svg>')
-    return ''.join(parts)
-
-
 def target_svg(upper=False):
     triangle = '0,15 48,15 24,176' if upper else '0,205 48,205 24,44'
     parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 220">',
@@ -294,9 +277,6 @@ def specification():
         'help_panel':asset('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 340"><rect x="2" y="2" width="616" height="336" rx="12" fill="#10250e" stroke="#b98a4a" stroke-width="3"/><rect x="9" y="9" width="602" height="322" rx="8" fill="none" stroke="#ffffff" stroke-opacity=".15"/></svg>'),
         'options_panel':asset('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 540"><rect x="2" y="2" width="736" height="536" rx="12" fill="#10250e" stroke="#b98a4a" stroke-width="3"/><rect x="9" y="9" width="722" height="522" rx="8" fill="none" stroke="#ffffff" stroke-opacity=".15"/></svg>'),
         'cube':asset('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54 54"><defs><linearGradient id="red" x2=".5" y2="1"><stop stop-color="#ec2720"/><stop offset="1" stop-color="#900707"/></linearGradient></defs><rect x="3" y="3" width="48" height="48" rx="7" fill="url(#red)" stroke="#680b06" stroke-width="3"/><path d="M9 8H45" stroke="#ff8f72" stroke-opacity=".6"/></svg>')}
-    for value in range(7):
-        for used in range(3):
-            assets[f'die_{value}_used_{used}'] = asset(die_svg(value,used))
     return {'format':'buildplay-ui','version':1,'viewport':{'width':800,'height':600,'camera_enabled':False},
         'motion':{'move_ms':800,'roll_ms':500,'roll_settle_ms':1000,'turn_pause_ms':500,'animate_own':True,'easing':'ease-in-out-quad'},
         'assets':assets,
@@ -311,7 +291,7 @@ def specification():
             'p1':{'action_outline':'ellipse','shape':'image','width':42,'height':42,'asset':'checker_ivory','text_color':'#301f0e'},
             'p0_off':{'action_outline':'none','shape':'image','width':44,'height':10,'asset':'off_red'},
             'p1_off':{'action_outline':'none','shape':'image','width':44,'height':10,'asset':'off_ivory'},
-            'die':{'action_outline':'rect','shape':'image','width':56,'height':56},
+            'die':{'action_outline':'rect','shape':'dice','width':56,'height':56},
             'status':{'action_outline':'none','shape':'image','width':252,'height':54,'asset':'status'},
             'swatch_red':{'action_outline':'none','shape':'image','width':28,'height':28,'asset':'checker_red'},
             'swatch_ivory':{'action_outline':'none','shape':'image','width':28,'height':28,'asset':'checker_ivory'},

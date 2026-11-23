@@ -1,5 +1,7 @@
 """Explicit scene animation responses work during local and accepted own turns."""
 import copy
+import json
+from pathlib import Path
 
 import pytest
 
@@ -95,3 +97,15 @@ def test_explicit_response_and_optional_last_move_hook_can_coexist():
     result = DeclarativeLogic(spec(code)).reduce(state_changed())
     assert result['animations'] == [animation()]
     assert result['last_move_animations'] == []
+
+@pytest.mark.parametrize('case', json.loads((Path(__file__).parent / 'fixtures/declarative/composition-validation.json').read_text()),
+                         ids=lambda case: case['name'])
+def test_shared_composition_contract(case):
+    ui = spec()
+    ui['piece_types'].update(plate={'shape': 'group'}, card={'shape': 'card'}, pile={'shape': 'card_pile'})
+    response = {k: case[k] for k in ('scene', 'timeline') if k in case}
+    if case['valid']:
+        validate_response(ui, response)
+    else:
+        with pytest.raises(DeclarativeUIError):
+            validate_response(ui, response)

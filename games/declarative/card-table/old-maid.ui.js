@@ -12,7 +12,11 @@ let make_move, next={};
 const label=(id,text,y,size=20,x=300,color='#dfede5')=>labels.push({id,text:String(text),x:centeredX(text,size,x),y,font_size:size,color});
 const button=(id,text)=>controls.push({id,kind:'button',label:text});
 const card=(id,c,x,y,ok=false,extra={})=>pieces.push({id,type:cardType(c),board:'table',position:{x,y},text:cardName(c),face:'front',actions:ok?['tap']:[],aria_label:(ok?'Play ':'')+cardName(c),animation:{kind:'move',key:id+'-'+String(c&&typeof c==='object'?JSON.stringify(c):c).replace(/[^A-Za-z0-9_.:-]/g,'_'),duration_ms:380},...extra});
-const hand=(cards,legal,y=490)=>{const cols=Math.min(6,cards.length),rows=Math.ceil(cards.length/6);cards.forEach((c,i)=>{const row=Math.floor(i/6),count=Math.min(6,cards.length-row*6);card('hand-'+c,c,300+(i%6-(count-1)/2)*88,y+row*112,active&&legal.includes(c));});return rows;};
+const hand=(cards,legal,y=490)=>{
+ cards.forEach((c,index)=>card('hand-'+c,c,300,y,active&&legal.includes(c),
+   {hand:{index,count:cards.length,columns:6,spacing:88,row_spacing:112}}));
+ return Math.ceil(cards.length/6);
+};
 label('title',TITLE,24,30,300,'#fff1d6');
 label('turn',m.status==='over'?(GAME==='old-maid'?(names[v.loser]==='You'?'You hold the Old Maid':`${names[v.loser]||'Player'} holds the Old Maid`):Number.isInteger(v.winner)?(names[v.winner]==='You'?'You win':`${names[v.winner]||'Player'} wins`):'Round complete'):active?'Your turn':`Waiting for ${names[v.turnIdx??v.turn??v.cur??(m.turn_of_player_indices||[])[0]]||'player'}`,70);
 if(GAME==='crazy-eights'){
@@ -25,7 +29,7 @@ if(GAME==='crazy-eights'){
   if((e.id==='draw'||e.id==='stock')&&!legal.length)make_move='draw';
  }
  names.forEach((name,i)=>label('score-'+i,`${name} · ${(v.counts||[])[i]||0}`,110+Math.floor(i/3)*26,17,300+(i%3-(Math.min(3,names.length-Math.floor(i/3)*3)-1)/2)*190));
- pieces.push({id:'stock',type:'back',board:'table',position:{x:205,y:270},face:'back',actions:active&&!legal.length&&v.deckCount>0?['tap']:[],aria_label:'Draw a card'});
+ pieces.push({id:'stock',type:'stock',count:v.deckCount||0,board:'table',position:{x:205,y:270},face:'back',actions:active&&!legal.length&&v.deckCount>0?['tap']:[],aria_label:'Draw a card'});
  card('hand-'+v.top,v.top,395,270,false,{animation:{kind:'move',key:'discard-'+v.top,duration_ms:440}});
  label('stock-label',`Draw · ${v.deckCount||0}`,343,18,205);label('discard-label','Discard',343,18,395);
  label('suit',`Match ${suits[v.suit??v.currentSuit??Math.floor(v.top/13)]||''} or rank · 8 is wild`,385,19,300,'#ffe28a');

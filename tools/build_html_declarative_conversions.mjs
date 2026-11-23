@@ -179,6 +179,7 @@ function makeSpec(entry) {
     typeValues.white_piece = {shape:'card',width:64,height:64,color:'#fff9e8',text_color:'#283044',border_color:'#a77b42',font_size:54};
     typeValues.black_piece = {shape:'card',width:64,height:64,color:'#263348',text_color:'#fff5dc',border_color:'#e1bd72',font_size:54};
   }
+  if (['go_fish','crazy_eights'].includes(entry.kind)) typeValues.stock = {shape:'card_pile',width:48,height:64};
   if (entry.kind === 'quoridor') { typeValues.p0 = TYPES.pawn; typeValues.p1 = TYPES.pawn_red; }
   return {format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
     piece_types:typeValues,strings:{...ENGLISH,...sourceStrings(entry)},

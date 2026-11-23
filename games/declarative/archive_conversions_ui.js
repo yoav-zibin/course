@@ -158,7 +158,7 @@ const gameUI = {
       const cardType = card => /[HD]$/.test(card) ? 'red_card' : 'black_card';
       const suits = {S:'♠',H:'♥',D:'♦',C:'♣'};
       label('title', 'Mau-Mau', 260, 12, 27);
-      staticPiece('stock', 'deck', 'table', {x:245,y:180}, {text:'◆'});
+      staticPiece('stock', 'deck', 'table', {x:245,y:180}, {count:s.stock_count ?? 0});
       if (s.discard_top)
         staticPiece(`card_${s.discard_top}`, cardType(s.discard_top), 'table', {x:395,y:180},
           {text:cardText(s.discard_top)});
@@ -294,7 +294,7 @@ const gameUI = {
 
       const colorMatches = dosPlacements.filter(colorMatch).length;
       label('title','Dos',295,12,27);
-      staticPiece('stock','deck','table',{x:90,y:110},{text:'DOS'});
+      staticPiece('stock','deck','table',{x:90,y:110},{count:s.deck_count ?? 0});
       if (active && s.phase === 'play' && !dosPlacements.length && !dosEdit)
         offer({type:'draw'}, '', 'table', {x:90,y:110}, 'dos_hit',
           text('Draw a card ({n} left)', {n:s.deck_count ?? 0}));
@@ -392,7 +392,7 @@ const gameUI = {
       const discardPhase = s.phase === 'discard' || s.phase === 'final_discard';
       label('title', '31', 300, 12, 30);
       if (s.phase !== 'over') {
-        staticPiece('stock', 'deck', 'table', {x:245,y:230}, {text:'◆'});
+        staticPiece('stock', 'deck', 'table', {x:245,y:230}, {count:s.stock_count ?? 0});
         if (s.discard_top)
           staticPiece(`card_${s.discard_top}`, cardType(s.discard_top), 'table', {x:395,y:230},
             {text:cardText(s.discard_top)});

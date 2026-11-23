@@ -189,7 +189,7 @@ def test_round_end_preserves_spent_faces_and_only_offers_the_next_game():
     after['move_count'] = 14
     result = ui.reduce(after, frame['local_state'])
     dice = [piece for piece in result['scene']['pieces'] if piece['type'] == 'die']
-    assert [piece['asset'] for piece in dice] == ['die_2_used_2', 'die_5_used_2']
+    assert [(p['die_value'], p['opacity']) for p in dice] == [(2, .5), (5, .5)]
     assert all(not piece['actions'] for piece in dice)
     assert not result['scene']['targets']
     assert next(piece for piece in result['scene']['pieces'] if piece['id'] == 'next')['actions'] == ['tap']

@@ -52,10 +52,9 @@
         "text_color": "#172743"
       },
       "back": {
-        "shape": "image",
+        "shape": "card",
         "width": 70.0,
-        "height": 85.0,
-        "back_asset": "card_back"
+        "height": 85.0
       },
       "die": {
         "shape": "dice",
@@ -84,12 +83,7 @@
         "color": "#a7f070"
       }
     },
-    "assets": {
-      "card_back": {
-        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCAxMDAiPjxyZWN0IHdpZHRoPSI4MCIgaGVpZ2h0PSIxMDAiIHJ4PSI4IiBmaWxsPSIjMzM0ZDg4Ii8+PHBhdGggZD0iTTEwIDUwTDQwIDEwTDcwIDUwTDQwIDkwWiIgZmlsbD0iI2E3ZjA3MCIvPjwvc3ZnPg==",
-        "media_type": "image/svg+xml"
-      }
-    },
+    "assets": {},
     "strings": {
       "title": "Memory pairs",
       "turn": "Player {n}",

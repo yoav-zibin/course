@@ -1,5 +1,4 @@
 """Build the two-player single-deal Scopa declarative package."""
-import base64
 import copy
 import html
 import json
@@ -117,14 +116,13 @@ def build():
           'motion':{'scene_transitions':True,'easing':'ease-in-out-quad'},
           'boards':[{'id':'table','kind':'free','x':0,'y':0,'width':640,'height':590,
                      'color':'#316f68','line_color':'#e9dcb7'}],
-          'piece_types':{key:{'shape':'image','asset':'card_face_soft','width':76,'height':96,
+          'piece_types':{key:{'shape':'card','width':76,'height':96,
                               'text_color':color}
                          for key,color in [('red','#b02e35'),('black','#1c2b31')]},
-          'assets':{'card_face_soft':{'media_type':'image/svg+xml','uri':'data:image/svg+xml;base64,'+
-                    base64.b64encode((DEST/'card_face_soft.svg').read_bytes()).decode()}},
           'strings':STRINGS[0],
           'ui_code':'const SOURCE_STRINGS='+json.dumps(STRINGS[0],ensure_ascii=False)+';\n'+
                     (DEST/'scopa_ui.js').read_text(encoding='utf-8')}
+    ui['piece_types']['stock'] = {'shape':'card_pile','width':50,'height':68}
     payload = {'name':'Scopa (Declarative)','description':RULES[0],'allowed_player_counts':[2],
                'all_state_public':False,'server_code':code,'declarative_ui':ui,
                'rules':RULES[0],'ui_instructions':UI[0],

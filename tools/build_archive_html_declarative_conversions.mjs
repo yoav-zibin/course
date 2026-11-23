@@ -325,9 +325,9 @@ function typesFor(kind) {
   };
   if (kind === 'thirty_one' || kind === 'mau_mau') {
     const [width,height] = kind === 'thirty_one' ? [92,126] : [70,96];
-    types.red_card = {shape:'image',asset:'card_face_soft',width,height,text_color:'#b02e35'};
-    types.black_card = {shape:'image',asset:'card_face_soft',width,height,text_color:'#1c2b31'};
-    types.deck = {shape:'image',asset:'card_back_soft',width,height,text_color:'#fff1d9'};
+    types.red_card = {shape:'card',width,height,text_color:'#b02e35'};
+    types.black_card = {shape:'card',width,height,text_color:'#1c2b31'};
+    types.deck = {shape:'card_pile',width,height,text_color:'#fff1d9'};
     if (kind === 'thirty_one') types.knock_button = {shape:'card',width:150,height:52,
       color:'#f8d994',text_color:'#533b35',border_color:'#fff1c8',font_size:22};
     if (kind === 'mau_mau') {
@@ -339,7 +339,7 @@ function typesFor(kind) {
     for (const [key,text] of [['R','#ffffff'],['B','#ffffff'],['G','#ffffff'],
       ['Y','#26313a'],['W','#26313a']])
       types[`dos_${key}`] = {shape:'image',asset:`dos_${key}`,width:76,height:96,text_color:text};
-    types.deck = {shape:'image',asset:'dos_deck',width:76,height:96,text_color:'#ffffff'};
+    types.deck = {shape:'card_pile',width:76,height:96,text_color:'#ffffff'};
   }
   if (kind === 'kisolo') {
     types.pit = {shape:'circle',width:66,height:54,color:'#70452b',text_color:'#fff3d4',border_color:'#4d2e1d'};
@@ -366,13 +366,6 @@ function typesFor(kind) {
     types.stone_1 = {shape:'circle',width:48,height:48,color:'#263b4a',text_color:'#ffffff',border_color:'#10232f'};
   }
   return types;
-}
-
-function softCardAssets() {
-  return Object.fromEntries(['card_face_soft','card_back_soft'].map(key => [key, {
-    media_type:'image/svg+xml',
-    uri:`data:image/svg+xml;base64,${fs.readFileSync(path.join(OUT,`${key}.svg`)).toString('base64')}`
-  }]));
 }
 
 function kisoloAssets() {
@@ -414,7 +407,7 @@ function gobbletAssets() {
 }
 
 function dosAssets() {
-  const colors = {R:'#bd3846',B:'#2863a6',G:'#23825f',Y:'#f0c84d',W:'#f9f4e8',deck:'#253b59'};
+  const colors = {R:'#bd3846',B:'#2863a6',G:'#23825f',Y:'#f0c84d',W:'#f9f4e8'};
   const marks = {
     R:'<circle cx="13" cy="13" r="4"/>',
     B:'<rect x="9" y="9" width="8" height="8" rx="1"/>',
@@ -617,8 +610,7 @@ function build(entry) {
     piece_types:typesFor(entry.kind),strings,
     ...(entry.kind === 'kisolo' ? {assets:kisoloAssets()} :
       entry.kind === 'dos' ? {assets:dosAssets()} :
-      entry.kind === 'gobblet' ? {assets:gobbletAssets()} :
-        ['thirty_one','mau_mau'].includes(entry.kind) ? {assets:softCardAssets()} : {}),
+      entry.kind === 'gobblet' ? {assets:gobbletAssets()} : {}),
     ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title})};\nconst SOURCE_KEYS=${JSON.stringify(keys)};\n`+(entry.kind === 'kisolo' ? compactUi() : UI)};
   const tutorial=custom ? {text:rules,html:`<meta name="viewport" content="width=device-width,initial-scale=1"><main><h1>How to play</h1><p>${rules}</p><p>${ui}</p></main>`} : source.tutorial;
   if(custom) {

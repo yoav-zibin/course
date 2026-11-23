@@ -148,7 +148,7 @@ const gameUI = {
           ...(hint && hint.from === from && seat === s.cur && i === count - 1 ? {selected: true} : {}),
           ...(motionEvents[id] ? {animation: motionEvents[id]} : {}),
           actions: destinations.length ? ['move'] : [],
-          ...(destinations.length ? {draggable: true, move_targets: destinations} : {})});
+          ...(destinations.length ? {move_targets: destinations} : {})});
         if (destinations.length) sources[id] = from;
       }
     };
@@ -271,7 +271,7 @@ const gameUI = {
         roll && roll.known ? 'roll:' + roll.cur + ':' + roll.turn : null;
       dice.push({id: 'die_' + i, type: 'die', board: 'main',
         position: {x: isDouble ? 420 + i * 62 : 452 + i * 78, y: 220}, z: 100,
-        asset: 'die_' + (value || 0) + '_used_' + used,
+        die_value: value || 0, opacity: used === 2 ? 0.5 : 1,
         aria_label: label,
         ...(rollKey ? {animation: {kind: 'roll', key: rollKey}} : {}),
         actions: canRoll ? ['tap'] : []});
@@ -343,7 +343,7 @@ const gameUI = {
       targets.length = 0;
       controls.length = 0;
       labels.length = 0;
-      for (const piece of pieces) { piece.actions = []; delete piece.move_targets; delete piece.draggable; }
+      for (const piece of pieces) { piece.actions = []; delete piece.move_targets; }
       pieces.push({id: 'help_panel', type: 'help_panel', board: 'main', position: {x: 360, y: 220}, actions: [], z: 1000});
       labels.push({id: 'help_title', text: t('help_title'), x: 102, y: 204, font_size: 24, color: '#fff3cf'});
       ['help_select', 'help_dice', 'help_hit', 'help_bar', 'help_home'].forEach((key, i) =>
@@ -355,7 +355,7 @@ const gameUI = {
     }
     if (setup) {
       targets.length = 0; controls.length = 0; labels.length = 0;
-      for (const piece of pieces) { piece.actions = []; delete piece.move_targets; delete piece.draggable; }
+      for (const piece of pieces) { piece.actions = []; delete piece.move_targets; }
       pieces.push({id: 'options_panel', type: 'options_panel', board: 'main', position: {x: 380, y: 220}, actions: [], z: 1200});
       labels.push({id: 'options_title', text: t('options'), x: 100, y: 125, font_size: 27, color: '#fff3cf'});
       labels.push({id: 'pieces_label', text: t('pieces'), x: 100, y: 158, font_size: 17, color: '#ffffff'});

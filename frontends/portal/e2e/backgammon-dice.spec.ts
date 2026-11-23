@@ -35,6 +35,15 @@ for(const [kind,ui] of [['current',game.declarative_ui],['reviewed legacy',revie
   test(`${kind} Backgammon dice retain spent faces and highlight only eligible roll actions`,async({page,request,baseURL,isMobile})=>{
     await mount(page,request,baseURL,ui);await send(page,message(40));
     const dice=page.locator('g[aria-label^="Die "]');
+    const checkFace=async(index:number,pips:number,spent:boolean)=>{
+      const die=dice.nth(index);
+      if(kind==='current'){
+        await expect(die).toHaveAttribute('opacity',spent?'0.5':'1');
+        await expect(die.locator('circle')).toHaveCount(pips);
+      }else{
+        await expect(die.locator('rect[fill="#767b79"]')).toHaveCount(spent?1:0);
+      }
+    };
     const cue=':scope > rect[stroke="#79d5ff"]';
     await expect(dice).toHaveCount(2);
     const roll=page.getByRole('button',{name:'Die 1: roll dice: Select',exact:true});
@@ -49,9 +58,9 @@ for(const [kind,ui] of [['current',game.declarative_ui],['reviewed legacy',revie
     await send(page,message(42,{needRoll:false,dice:[5],moves:[5]}));
     await expect(dice).toHaveCount(2);
     await expect(dice.nth(0)).toHaveAttribute('aria-label',/Die 1: 2.*used/i);
-    await expect(dice.nth(0).locator('rect[fill="#767b79"]')).toBeVisible();
+    await checkFace(0,2,true);
     await expect(dice.nth(1)).toHaveAttribute('aria-label','Die 2: 5');
-    await expect(dice.nth(1).locator('rect[fill="#767b79"]')).toHaveCount(0);
+    await checkFace(1,5,false);
 
     // A new viewer intentionally gets fresh presentation-local state. Supply
     // the same bounded accepted-roll history as the real pass-and-play host.
@@ -59,8 +68,8 @@ for(const [kind,ui] of [['current',game.declarative_ui],['reviewed legacy',revie
       presentation_history:[{view:message(41,{needRoll:false,dice:[2,5],moves:[2,5]}).view,
         move_count:41,last_move_player_index:0}]});
     await send(page,ready);await expect(dice.locator(cue)).toHaveCount(2);
-    await expect(dice.nth(0).locator('rect[fill="#767b79"]')).toBeVisible();
-    await expect(dice.nth(1).locator('rect[fill="#767b79"]')).toBeVisible();
+    await checkFace(0,2,true);
+    await checkFace(1,5,true);
     await send(page,{...ready,acting_for_player_index:null});
     await expect(dice).toHaveCount(2);await expect(dice.locator(cue)).toHaveCount(0);
     await send(page,{...ready,replay:{index:43}});

@@ -32,7 +32,7 @@ export function moveTracks(spec: GameSpec, animations: MoveAnimation[]): Map<str
   return tracks;
 }
 
-export function trackLayer(track:MoveTrack,elapsed:number):{active:boolean;z?:number;transition:number} {
+export function trackLayer(track:{segments:{start:number;end:number;z?:number}[]},elapsed:number):{active:boolean;z?:number;transition:number} {
   const segment=track.segments.find(item=>elapsed>=item.start&&elapsed<item.end);
   let transition=Infinity;
   for(const item of track.segments){

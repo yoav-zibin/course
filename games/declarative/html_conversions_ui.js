@@ -369,6 +369,7 @@ const gameUI = {
           intent_ids:offers.map((move,i)=>({id:`intent_${i}`,move}))}};
       }
     } else if (KIND === 'crazy_eights') {
+      staticPiece('stock_pile','stock','table',{x:565,y:57},{count:s.deckCount||0});
       label('table', text('Top card {card} · suit {suit} · {n} cards to draw', {card:cardText(cardFromNumber(s.top)),suit:SUITS[s.suit]||'',n:s.deckCount||0}), 22, 94, 16);
       const hand = Array.isArray(s.hand) ? s.hand : [];
       const playable = new Set(s.playable || []);
@@ -384,6 +385,7 @@ const gameUI = {
       });
       if (active) intent('draw', text('Draw a card ({n} left)', {n:s.deckCount||0}), null, null, 'control');
     } else if (KIND === 'go_fish') {
+      staticPiece('stock_pile','stock','table',{x:565,y:57},{count:s.deckCount||0});
       const hand = Array.isArray(s.hand) ? s.hand : [];
       hand.forEach((card, i) => staticPiece(`hand_${i}`, 'card', 'table', cardPos(i), {text: cardText(card)}));
       const rankSet = [...new Set(hand.map(card => String(card).replace(/[♠♥♦♣]$/, '')))].sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));

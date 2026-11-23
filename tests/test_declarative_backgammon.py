@@ -114,13 +114,13 @@ def test_two_central_dice_replace_the_roll_button_and_only_offer_legal_rolls(bod
     ui = DeclarativeLogic(body.declarative_ui)
     ctx = context()
 
-    def check_roll_controls(result, expected_assets, expected_actions):
+    def check_roll_controls(result, expected_faces, expected_actions):
         viewer = result['turn'][0]
         changed = message(rules, result, ctx, viewer)
         frame = ui.reduce(changed)
         assert [piece['id'] for piece in dice(frame)] == ['die_0', 'die_1']
         assert [piece['position'] for piece in dice(frame)] == [{'x': 452, 'y': 220}, {'x': 530, 'y': 220}]
-        assert [piece['asset'] for piece in dice(frame)] == expected_assets
+        assert [(piece['die_value'], piece['opacity']) for piece in dice(frame)] == expected_faces
         assert [piece['actions'] for piece in dice(frame)] == expected_actions
         assert not frame['scene']['controls']
         other = next(player['id'] for player in ctx['players'] if player['id'] != viewer)
@@ -142,12 +142,12 @@ def test_two_central_dice_replace_the_roll_button_and_only_offer_legal_rolls(bod
     result = rules.call('applyMove', result['state'], 'a',
                         {'action': 'configure', 'difficulty': 1, 'goal': 5, 'cube_enabled': True}, ctx=ctx, seed=7)
     ctx['move_count'] = 1
-    check_roll_controls(result, ['die_0_used_0', 'die_0_used_0'], [['tap'], []])
+    check_roll_controls(result, [(0, 1), (0, 1)], [['tap'], []])
     # The first player has now rolled: only the other opening die is actionable.
     result = apply_with_counted_random(body.server_code, result['state'], ctx,
                                        {'action': 'roll'}, (.1,))['result']
     ctx['move_count'] += 1
-    check_roll_controls(result, ['die_1_used_0', 'die_0_used_0'], [[], ['tap']])
+    check_roll_controls(result, [(1, 1), (0, 1)], [[], ['tap']])
     result = apply_with_counted_random(body.server_code, result['state'], ctx,
                                        {'action': 'roll'}, (.8,))['result']
     ctx['move_count'] += 1
@@ -162,7 +162,7 @@ def test_two_central_dice_replace_the_roll_button_and_only_offer_legal_rolls(bod
         result = rules.call('applyMove', result['state'], actor, move, ctx=ctx, seed=7)
         ctx['move_count'] += 1
     assert result['state']['needRoll']
-    check_roll_controls(result, ['die_1_used_2', 'die_5_used_2'], [['tap'], ['tap']])
+    check_roll_controls(result, [(1, .5), (5, .5)], [['tap'], ['tap']])
 
 
 def test_doubles_show_four_dice_and_gray_one_per_authoritative_move(body):
@@ -184,7 +184,7 @@ def test_doubles_show_four_dice_and_gray_one_per_authoritative_move(body):
         ctx['move_count'] = used + 1
         changed = message(rules, result, ctx, 'a')
         frame = ui.reduce(changed, local)
-        assert [piece['asset'] for piece in dice(frame)] == [f'die_{value}_used_{2 if index < used else 0}' for index in range(4)]
+        assert [(piece['die_value'], piece['opacity']) for piece in dice(frame)] == [(value, .5 if index < used else 1) for index in range(4)]
         assert all(piece['actions'] == [] for piece in dice(frame))
         assert next(label['text'] for label in frame['scene']['labels'] if label['id'] == 'moves_remaining') == f'Moves remaining: {4 - used}'
         assert 'make_move' not in ui.reduce({'type': 'ui_event', 'event': {'type': 'tap', 'id': 'die_0'}, 'state_changed': changed}, frame['local_state'])
@@ -193,18 +193,18 @@ def test_doubles_show_four_dice_and_gray_one_per_authoritative_move(body):
         result = rules.call('applyMove', result['state'], 'a', move, ctx=ctx, seed=seed)
     assert result['state']['needRoll'] and result['state']['cur'] == 1
     next_frame = ui.reduce(message(rules, result, {**ctx, 'move_count': 5}, 'b'), local)
-    assert all(piece['asset'] == f'die_{value}_used_2' and piece['actions'] == ['tap'] for piece in dice(next_frame))
+    assert all((piece['die_value'], piece['opacity']) == (value, .5) and piece['actions'] == ['tap'] for piece in dice(next_frame))
     assert next_frame['local_state']['roll']['cur'] == 0
     assert next_frame['local_state']['roll']['turn'] == 0
     # A fresh next-turn roll replaces the retained pair and starts unspent.
     fresh = rules.call('applyMove', result['state'], 'b', {'action': 'roll'}, ctx={**ctx, 'move_count': 5}, seed=13)
     assert not fresh['state']['needRoll']
     fresh_frame = ui.reduce(message(rules, fresh, {**ctx, 'move_count': 6}, 'b'), next_frame['local_state'])
-    assert [piece['asset'] for piece in dice(fresh_frame)] == [f'die_{die}_used_0' for die in fresh['state']['dice']]
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(fresh_frame)] == [(die, 1) for die in fresh['state']['dice']]
     assert fresh_frame['local_state']['roll']['cur'] == 1
     assert fresh_frame['local_state']['roll']['turn'] == 1
     earlier = ui.reduce({**message(rules, {'state': state, 'turn': ['a']}, ctx, 'a'), 'replay': True}, fresh_frame['local_state'])
-    assert all(piece['asset'] == 'die_0_used_0' and piece['actions'] == [] for piece in dice(earlier))
+    assert all((piece['die_value'], piece['opacity']) == (0, 1) and piece['actions'] == [] for piece in dice(earlier))
 
 
 def test_ordinary_used_die_keeps_its_face_and_midturn_mount_does_not_invent_a_roll(body):
@@ -217,9 +217,9 @@ def test_ordinary_used_die_keeps_its_face_and_midturn_mount_does_not_invent_a_ro
     result = rules.call('applyMove', state, 'a', {'action': 'move', 'from': 20, 'to': 19}, ctx=ctx, seed=7)
     changed = message(rules, result, {**ctx, 'move_count': 1}, 'a')
     after = ui.reduce(changed, frame['local_state'])
-    assert [piece['asset'] for piece in dice(after)] == ['die_1_used_2', 'die_2_used_0']
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(after)] == [(1, .5), (2, 1)]
     fresh = ui.reduce(changed)
-    assert [piece['asset'] for piece in dice(fresh)] == ['die_2_used_0', 'die_0_used_0']
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(fresh)] == [(2, 1), (0, 1)]
     assert 'unknown' in dice(fresh)[1]['aria_label']
 
 
@@ -245,8 +245,8 @@ def test_roll_metadata_records_the_same_two_random_draws_even_when_the_turn_auto
     # A reload needs no earlier local scene or extra history, even after a
     # blocked roll that never persisted a nonempty authoritative dice array.
     frame = DeclarativeLogic(body.declarative_ui).reduce(changed)
-    used = 2 if blocked else 0
-    assert [piece['asset'] for piece in dice(frame)] == [f'die_1_used_{used}', f'die_5_used_{used}']
+    opacity = .5 if blocked else 1
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(frame)] == [(1, opacity), (5, opacity)]
     assert all(piece['animation']['key'] == 'roll:0:0' for piece in dice(frame))
 
 
@@ -265,7 +265,7 @@ def test_turn_completion_retains_exact_roll_faces_without_local_presentation_mem
         assert result['state']['last_roll'] == original
     changed = message(rules, result, {**ctx, 'move_count': count}, 'b')
     frame = DeclarativeLogic(body.declarative_ui).reduce(changed)
-    assert [piece['asset'] for piece in dice(frame)] == [f'die_{value}_used_2' for value in original['values']]
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(frame)] == [(value, .5) for value in original['values']]
     assert all(piece['actions'] == ['tap'] and piece['animation']['key'] == 'roll:0:0' for piece in dice(frame))
 
 
@@ -296,7 +296,7 @@ def test_finite_match_end_keeps_the_last_roll_when_the_authority_advances_its_tu
     assert result['turn'] is None and result['state']['n'] == 121 and not result['state']['needRoll']
     final = message(rules, result, {**ctx, 'move_count': 292}, 'a')
     frame = ui.reduce(final)
-    assert [piece['asset'] for piece in dice(frame)] == ['die_1_used_2', 'die_2_used_2']
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(frame)] == [(1, .5), (2, .5)]
     assert all(piece['actions'] == [] for piece in dice(frame))
     # Earlier pinned rules can recover the same ended pair from the latest
     # eligible history turn, or retain a pair already observed locally.
@@ -308,7 +308,7 @@ def test_finite_match_end_keeps_the_last_roll_when_the_authority_advances_its_tu
         ([], previous['local_state']),
     ]:
         recovered = ui.reduce({**legacy_final, 'presentation_history': history}, local)
-        assert [piece['asset'] for piece in dice(recovered)] == ['die_1_used_2', 'die_2_used_2']
+        assert [(piece['die_value'], piece['opacity']) for piece in dice(recovered)] == [(1, .5), (2, .5)]
 
 
 def test_legacy_computer_turn_recovers_its_roll_from_filtered_history(body):
@@ -332,7 +332,7 @@ def test_legacy_computer_turn_recovers_its_roll_from_filtered_history(body):
     assert final['view']['dice'] == [] and 'last_roll' not in final['view']
     ui = DeclarativeLogic(body.declarative_ui)
     frame = ui.reduce({**final, 'presentation_history': observations})
-    assert [piece['asset'] for piece in dice(frame)] == [f'die_{value}_used_2' for value in values]
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(frame)] == [(value, .5) for value in values]
     assert all(piece['actions'] == ['tap'] and piece['animation']['key'] == 'roll:0:0' for piece in dice(frame))
     # Polls must not retrigger rolling while only spent halves or labels change.
     again = ui.reduce({**final, 'presentation_history': observations}, frame['local_state'])
@@ -340,7 +340,7 @@ def test_legacy_computer_turn_recovers_its_roll_from_filtered_history(body):
     earlier = {**message(rules, {'state': state, 'turn': ['a']}, ctx, 'b'), 'replay': True,
                'presentation_history': observations}
     replay = ui.reduce(earlier, frame['local_state'])
-    assert all(piece['asset'] == 'die_0_used_0' and piece['actions'] == [] and 'animation' not in piece for piece in dice(replay))
+    assert all((piece['die_value'], piece['opacity']) == (0, 1) and piece['actions'] == [] and 'animation' not in piece for piece in dice(replay))
 
 
 def test_history_never_overrides_a_recorded_roll_or_supplies_future_replay_faces(body):
@@ -353,11 +353,11 @@ def test_history_never_overrides_a_recorded_roll_or_supplies_future_replay_faces
     false_view = {**changed['view'], 'dice': [6, 6, 6, 6], 'moves': [6, 6, 6, 6]}
     ui = DeclarativeLogic(body.declarative_ui)
     frame = ui.reduce({**changed, 'presentation_history': [{'view': false_view, 'move_count': 1}]})
-    assert [piece['asset'] for piece in dice(frame)] == ['die_1_used_0', 'die_5_used_0']
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(frame)] == [(1, 1), (5, 1)]
     partial = {**changed['view'], 'last_roll': None, 'dice': [5], 'moves': [5]}
     replay = ui.reduce({**changed, 'view': partial, 'state': partial, 'move_count': 2, 'replay': True,
                         'presentation_history': [{'view': false_view, 'move_count': 3}]})
-    assert [piece['asset'] for piece in dice(replay)] == ['die_5_used_0', 'die_0_used_0']
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(replay)] == [(5, 1), (0, 1)]
 
 
 def test_legacy_roll_memory_stays_visible_across_an_unobserved_turn(body):
@@ -370,7 +370,7 @@ def test_legacy_roll_memory_stays_visible_across_an_unobserved_turn(body):
     later_view = {**rolled['view'], 'last_roll': None, 'dice': [], 'moves': [], 'needRoll': True, 'n': 2}
     later = {**rolled, 'view': later_view, 'state': later_view, 'move_count': 10}
     retained = ui.reduce(later, first['local_state'])
-    assert [piece['asset'] for piece in dice(retained)] == ['die_1_used_2', 'die_5_used_2']
+    assert [(piece['die_value'], piece['opacity']) for piece in dice(retained)] == [(1, .5), (5, .5)]
     assert [piece['animation'] for piece in dice(retained)] == [piece['animation'] for piece in dice(first)]
 
 

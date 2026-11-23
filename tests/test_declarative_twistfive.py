@@ -182,9 +182,9 @@ def test_placement_offers_every_empty_hole_then_eight_large_previewed_arrows():
     # The plate holding the new marble previews its marbles after the turn.
     tl = next(t for t in arrows if t['id'] == 'twist-0-clockwise')
     assert len(tl['preview']) == 2
-    handles = [p for p in second['scene']['pieces'] if p['type'] == 'handle']
-    assert len(handles) == 4 and all(p['actions'] == ['rotate'] and p['z'] > 2 for p in handles)
-    assert all(not p['actions'] for p in second['scene']['pieces'] if p['type'] != 'handle')
+    handles = [p for p in second['scene']['pieces'] if p['type'] == 'plate']
+    assert len(handles) == 4 and all(p['actions'] == ['rotate'] for p in handles)
+    assert all(not p['actions'] for p in second['scene']['pieces'] if p['type'] != 'plate')
     assert 'change' in [c['id'] for c in second['scene']['controls']]
 
 
@@ -213,8 +213,7 @@ def test_a_winning_hole_is_placed_without_asking_for_a_turn():
 
 
 def test_marbles_ride_their_plate_so_a_turn_animates_rigidly():
-    """Each marble is drawn at its plate's centre with the plate's angle; the
-    picture's home slot turned by that angle must land on the marble's hole."""
+    """A marble's local offset must land on its authoritative hole after the plate turns."""
     game, state = position([0, 1, 2, 9, 30], [6, 7, 13, 25, 31])
     after = game.call('applyMove', state, 'p0', {'cell': 16, 'quadrant': 1, 'direction': 'counterclockwise'}, ctx=ctx(), seed=1)['state']
     after = game.call('applyMove', after, 'p1', {'cell': 20, 'quadrant': 1, 'direction': 'counterclockwise'}, ctx=ctx(), seed=1)['state']
@@ -223,16 +222,16 @@ def test_marbles_ride_their_plate_so_a_turn_animates_rigidly():
     for piece in scene['pieces']:
         if not piece['id'].startswith('marble-'):
             continue
-        q = next(q for q, c in centers.items() if (piece['position']['x'], piece['position']['y']) == c)
-        assert piece['rotation'] == after['plates'][q]
-        slot = int(piece['asset'].split('_')[1])
-        dx, dy = (slot % 3 - 1) * 70, (slot // 3 - 1) * 70
-        angle = math.radians(piece['rotation'])
+        plate = next(p for p in scene['pieces'] if p['id'] == piece['parent'])
+        q = int(plate['id'].split('-')[1])
+        assert plate['rotation'] == after['plates'][q]
+        dx, dy = piece['position']['x'], piece['position']['y']
+        angle = math.radians(plate['rotation'])
         x = centers[q][0] + dx * math.cos(angle) - dy * math.sin(angle)
         y = centers[q][1] + dx * math.sin(angle) + dy * math.cos(angle)
         cell = round((y - 35) / 70) * 6 + round((x - 35) / 70)
         identity = int(piece['id'].split('-')[1])
-        assert after['ids'][cell] == identity and piece['asset'].startswith(('gold_', 'black_')[after['board'][cell]])
+        assert after['ids'][cell] == identity and piece['asset'] == ('gold', 'black')[after['board'][cell]]
 
 
 def test_spectators_and_waiting_players_get_no_actions_and_the_end_shows_the_line():

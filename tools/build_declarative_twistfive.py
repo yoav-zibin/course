@@ -430,17 +430,6 @@ GOLD = marble_svg('#ffc93c', '#b7791f', '#fff6cf')
 BLACK = marble_svg('#2a2a3a', '#08080e', '#8d93a8')
 
 
-def slot_marble_svg(light, dark, shine, slot):
-    """A plate-sized transparent picture with one marble at its unturned slot."""
-    x, y = HOLES[slot % 3] + 2, HOLES[slot // 3] + 2
-    gid = f'tf{light[1:]}s{slot}'
-    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 210">'
-            f'<defs><radialGradient id="{gid}" cx=".35" cy=".3" r=".75">'
-            f'<stop offset="0" stop-color="{shine}"/><stop offset=".45" stop-color="{light}"/><stop offset="1" stop-color="{dark}"/></radialGradient></defs>'
-            f'<circle cx="{x}" cy="{y + 2}" r="25" fill="#000" opacity=".28"/>'
-            f'<circle cx="{x}" cy="{y}" r="25" fill="url(#{gid})" stroke="#0b1320" stroke-width="2"/></svg>')
-
-
 def arrow_svg(clockwise):
     """A round badge with a three-quarter arrow. The counterclockwise one is
     drawn with mirrored coordinates: some renderers ignore SVG transforms."""
@@ -464,12 +453,8 @@ def specification():
               'arrow_ccw': {'uri': uri(arrow_svg(False)), 'media_type': 'image/svg+xml'},
               'ring': {'uri': uri(RING), 'media_type': 'image/svg+xml'},
               'win_ring': {'uri': uri(WIN_RING), 'media_type': 'image/svg+xml'},
-              # Nearly invisible but painted, so it receives taps above the marbles.
-              'handle': {'uri': uri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 206 206"><rect width="206" height="206" rx="22" fill="#ffffff" fill-opacity="0.01"/></svg>'),
-                         'media_type': 'image/svg+xml'}}
-    for slot in range(9):
-        assets[f'gold_{slot}'] = {'uri': uri(slot_marble_svg('#ffc93c', '#b7791f', '#fff6cf', slot)), 'media_type': 'image/svg+xml'}
-        assets[f'black_{slot}'] = {'uri': uri(slot_marble_svg('#2a2a3a', '#08080e', '#8d93a8', slot)), 'media_type': 'image/svg+xml'}
+              'gold': {'uri': uri(GOLD), 'media_type': 'image/svg+xml'},
+              'black': {'uri': uri(BLACK), 'media_type': 'image/svg+xml'}}
     return {'format': 'buildplay-ui', 'version': 1, 'viewport': {'width': 570, 'height': 630},
             'assets': assets,
             'boards': [
@@ -479,9 +464,8 @@ def specification():
                  'color': '#1d2c44', 'alternate_color': '#1d2c44', 'line_color': '#1d2c44'}],
             'piece_types': {
                 'plate': {'shape': 'image', 'width': 206, 'height': 206, 'asset': 'plate_art'},
-                'marble': {'shape': 'image', 'width': 210, 'height': 210, 'asset': 'gold_4'},
+                'marble': {'shape': 'image', 'width': 54, 'height': 54, 'asset': 'gold'},
                 'ring': {'shape': 'image', 'width': 64, 'height': 64, 'asset': 'ring'},
-                'handle': {'shape': 'image', 'width': 206, 'height': 206, 'asset': 'handle'},
                 'win_ring': {'shape': 'image', 'width': 68, 'height': 68, 'asset': 'win_ring'}},
             'strings': strings(),
             'ui_code': 'const SOURCE_STRINGS=' + json.dumps(strings(), ensure_ascii=False) + ';\n' + (DEST / f'{KIND}.ui.js').read_text()}

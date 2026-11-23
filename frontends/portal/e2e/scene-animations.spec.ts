@@ -189,13 +189,66 @@ test('Twist Five rotates the accepted own plate and all its marbles together',as
   await watch(page,labels);await send(page,flow.after);
   await settled(page,labels[0],90);
   parallelRotation(await frames(page),labels,0,90);
-  for(const label of labels){
+  const centers=[[180,240],[180,170],[250,170],[180,240],[250,240]];
+  for(const [index,label] of labels.entries()){
     await settled(page,label,90);
     const position=await page.getByLabel(label,{exact:true}).evaluate(node=>
       /translate\(([-\d.e]+)[, ]+([-\d.e]+)\)/.exec(node.getAttribute('transform')||'')?.slice(1).map(Number));
-    expect(position).toEqual([180,240]);
+    expect(position?.map(Math.round)).toEqual(centers[index]);
   }
   await expect.poll(()=>page.getByLabel('Last marble placed: C2',{exact:true}).getAttribute('opacity')).toBe('1');
   await noMoves(page);await expect(page.getByRole('alert')).toHaveCount(0);
   await page.screenshot({path:info.outputPath('twistfive-own-rotation-final.png'),fullPage:true});
+});
+
+test('shared piles, cards and dice draw the public counts and faces supplied by the game',async({page,request})=>{
+  const spec={...specification(),piece_types:{
+    stock:{shape:'card_pile',width:40,height:56},card:{shape:'card',width:40,height:56},
+    die:{shape:'dice',width:40,height:40},counter:{shape:'counter',width:64,height:40}},
+    ui_code:`const gameUI={reduce(){
+      const piece=(id,type,x,extra)=>({id,type,board:'board',position:{x,y:90},actions:[],...extra});
+      return {scene:{pieces:[
+        ...[0,1,5,52].map((count,i)=>piece('stock'+i,'stock',30+i*55,{count,face:'back',text:'SECRET_FACE'})),
+        piece('face','card',250,{text:'Q♥'}),piece('d','die',305,{die_value:5}),
+        piece('score','counter',360,{count:12,aria_label:'Score'})
+      ]}};
+    }}`};
+  await mount(page,request,spec);
+  const rects=[];
+  for(const n of [0,1,5,52]){
+    const pile=page.getByLabel('Covered piece · '+n,{exact:true});
+    rects.push(await pile.locator('rect').count());
+    if(n)await expect(pile.locator('text')).toHaveText(String(n));
+  }
+  expect(rects).toEqual([...rects].sort((a,b)=>a-b));expect(new Set(rects).size).toBe(4);
+  await expect(page.getByText('SECRET_FACE',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Q♥',{exact:true}).locator('text')).toHaveText(['Q','♥','Q']);
+  await expect(page.getByLabel('5',{exact:true}).locator('circle')).toHaveCount(5);
+  await expect(page.getByLabel('Score',{exact:true}).locator('text')).toHaveText('12');
+});
+
+test('adjacent history plays the same plate turn backward',async({page,request})=>{
+  const game=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/twistfive.json'),'utf8'));
+  const flow=JSON.parse(readFileSync(path.resolve(__dirname,'../../../tests/fixtures/declarative/twistfive-animation-flow.json'),'utf8'));
+  const history=(message:Record<string,unknown>)=>({...message,replay:true,acting_for_player_index:null});
+  await mount(page,request,game.declarative_ui,history(flow.after) as ReturnType<typeof state>);
+  const label='top-left plate';
+  await watch(page,[label]);await send(page,history(flow.before));await settled(page,label,0);
+  expect((await frames(page)).some(frame=>frame.angles[label]>0&&frame.angles[label]<90)).toBe(true);
+  await noMoves(page);
+});
+
+test('selecting a rotated child and its destination submits a drop for the root',async({page,request})=>{
+  const spec={...specification(),ui_code:`const gameUI={reduce(input){
+    const scene={pieces:[
+      {id:'rack',type:'plate',board:'board',position:{x:100,y:90},rotation:90,actions:['move'],move_targets:['dest'],aria_label:'Rack'},
+      {id:'chip',type:'marble',board:'board',parent:'rack',position:{x:90,y:0},actions:[],aria_label:'Attached chip'}],
+      targets:[{id:'dest',board:'board',position:{x:320,y:200},label:'Place rack'}]};
+    return input.event?.type==='drop'?{scene,make_move:input.event}:{scene};
+  }}`};
+  await mount(page,request,spec);
+  await page.getByLabel(/^Attached chip/).click();
+  await page.getByLabel('Place rack',{exact:true}).first().click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__moves)).toEqual([
+    {type:'drop',id:'rack',piece_id:'rack',target_id:'dest'}]);
 });

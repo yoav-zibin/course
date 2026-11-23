@@ -2,7 +2,7 @@ import type { GameSpec, Piece, Point, Scene, SceneAnimation, StateMessage } from
 import { position } from './validation';
 
 type Transform = Point & {rotation:number;scale:number;opacity:number};
-export type SceneTrack = {from:Transform;to:Transform;duration:number;delay:number;z?:number};
+export type SceneTrack = {from:Transform;to:Transform;duration:number;delay:number;z?:number;layers?:{start:number;end:number;z?:number}[];sample?:(phase:number)=>Transform};
 
 // Explicit animations also cover accepted own moves, while reloads and jumps
 // settle immediately. Local UI interactions are checked by the host separately.

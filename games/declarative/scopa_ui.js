@@ -53,6 +53,7 @@ const gameUI = {
     label('title',strings.title,275,12,27);
     label('score',s.over ? text('final',{a:s.scores[0],b:s.scores[1]}) :
       text('sweeps',{a:s.sweeps[0],b:s.sweeps[1]}),195,52,19);
+    scene.pieces.push({id:'stock-pile',type:'stock',board:'table',position:{x:55,y:81},count:s.deck_count,actions:[]});
     label('stock',text('stock',{n:s.deck_count}),260,85,16);
     const extraRows = Math.max(0, Math.ceil(s.table.length / 7) - 2);
     const shift = extraRows * 105;

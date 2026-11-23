@@ -1,0 +1,827 @@
+{
+  "environment": "Local game-test API with an isolated Firestore test store for each package.",
+  "method": "Submitted the full package, ran the server checks, played through offered UI actions, replayed matches through verify-match, recorded human moves and checked that all game-test steps completed.",
+  "package_count": 36,
+  "verified_matches": 270,
+  "verified_moves": 21481,
+  "session_columns": [
+    "mode",
+    "players",
+    "human_seat",
+    "resolution",
+    "orientation",
+    "moves_verified"
+  ],
+  "games": [
+    {
+      "package": "games/declarative/backgammon.json",
+      "package_sha256": "1011f5810edcd25075bfb88f18e14eb7d5dae12eac271e3151f966a71f2f27d3",
+      "submission_id": "ad00aa1d4c3bb92eee0a952fddbee38c",
+      "tested_payload_sha256_without_secret": "df0e24066d47a36450f2f696c4b9097d08ac4439e897a4490d4bce1b86df7210",
+      "presentation_examples": 6,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 3,
+        "moves_made": 604,
+        "terminal_states": 3
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 353],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 199],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 307],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 278],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 210]
+      ]
+    },
+    {
+      "package": "games/declarative/big_two.json",
+      "package_sha256": "d7059e2d86a335c6e1ea6a2cc897851c63d6f6441ebcf2c89503a474b27c272c",
+      "submission_id": "e00a4e03a1be3a4fd860f753a4034e93",
+      "tested_payload_sha256_without_secret": "bd78ce689654263fb6705dda8c649a36ae3bfe9bc94e402911a056ec3fc20590",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 10,
+        "moves_made": 629,
+        "terminal_states": 10
+      },
+      "sessions": [
+        ["pass_and_play", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 41],
+        ["against_computers", 4, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 49],
+        ["against_computers", 4, 3, "iPad Air 11-inch (tablet)", "vertical", 51],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 43],
+        ["multiplayer", 4, null, "MacBook Air 13-inch (laptop)", "vertical", 40]
+      ]
+    },
+    {
+      "package": "games/declarative/card-table/blackjack.json",
+      "package_sha256": "ae48e2be3977499b0c9e66dac89c781fa959d89027e3741c5cf4e3952fbb805d",
+      "submission_id": "7ac73b3648fa93d18350aea49e783bdd",
+      "tested_payload_sha256_without_secret": "2f29699cdbd255fe0e2a6f853c2c4a98c7d815c91737f6058eb84902da5f5e94",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 8,
+        "moves_made": 964,
+        "terminal_states": 8
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 51],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 75],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 97],
+        ["pass_and_play", 5, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 124],
+        ["pass_and_play", 6, null, "MacBook Air 13-inch (laptop)", "vertical", 144],
+        ["pass_and_play", 7, null, "iPhone 16 Pro Max (phone)", "horizontal", 171],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "vertical", 51],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "horizontal", 55],
+        ["against_computers", 7, 6, "Samsung Galaxy Tab S10 (tablet)", "vertical", 165],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "horizontal", 53],
+        ["multiplayer", 3, null, "iPhone 16 Pro Max (phone)", "vertical", 73],
+        ["multiplayer", 4, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 97],
+        ["multiplayer", 5, null, "iPad Air 11-inch (tablet)", "vertical", 128],
+        ["multiplayer", 6, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 142],
+        ["multiplayer", 7, null, "MacBook Air 13-inch (laptop)", "vertical", 162]
+      ]
+    },
+    {
+      "package": "games/declarative/card-table/casino-war.json",
+      "package_sha256": "998e11b01b271ce72275554db84e6b8324d2015cb0ce982afc9c726de8c753c8",
+      "submission_id": "456220840a7ded1f636a105a2b66eacb",
+      "tested_payload_sha256_without_secret": "d7a2118cc0d21723bf3a6e486120903fb88199c2b0d3158c8dd7bf8c0e5fb52b",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 280,
+        "moves_made": 8424,
+        "terminal_states": 280
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 30],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 30],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 30],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 30],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 30]
+      ]
+    },
+    {
+      "package": "games/declarative/card-table/concentration.json",
+      "package_sha256": "219196dad939c41925e079e190078b475cce0ff4e3ea79e9480ec9d319cf6615",
+      "submission_id": "1985759aed9f15fd34b5a87119a7c58e",
+      "tested_payload_sha256_without_secret": "5c06a67d42e467dd3fcea2ec96a776c9116f570d8fb3c6e9304fef508c054da9",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 18,
+        "moves_made": 2054,
+        "terminal_states": 18
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 146],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 162],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 106],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 148],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 82]
+      ]
+    },
+    {
+      "package": "games/declarative/card-table/crazy-eights.json",
+      "package_sha256": "da29fa2c381ef0ad39d7d7987312715e1738b1c6fc33d5b620c332ab17ab3eef",
+      "submission_id": "834f52b7e31d140eb97e2072041be47e",
+      "tested_payload_sha256_without_secret": "624c3ff51f3b2c81d4b00cdb1575ec75880a9f1f63e521a5426b34fae7112760",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 103,
+        "moves_made": 3331,
+        "terminal_states": 103
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 10],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 15],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 17],
+        ["against_computers", 2, 0, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 13],
+        ["against_computers", 2, 1, "MacBook Air 13-inch (laptop)", "vertical", 42],
+        ["against_computers", 4, 3, "iPhone 16 Pro Max (phone)", "horizontal", 44],
+        ["multiplayer", 2, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 22],
+        ["multiplayer", 3, null, "iPad Air 11-inch (tablet)", "horizontal", 14],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "vertical", 28]
+      ]
+    },
+    {
+      "package": "games/declarative/card-table/hearts.json",
+      "package_sha256": "679de3bc0319de24509eb6d08bfea1a4ba413ee55df496c750bbbea795f5d53b",
+      "submission_id": "03278668559bfdc04d19feb49bf6156a",
+      "tested_payload_sha256_without_secret": "2df7441f967fcc036d44cefb7495c581a75b122597099d8b5004a500bba38230",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 59,
+        "moves_made": 3101,
+        "terminal_states": 58
+      },
+      "sessions": [
+        ["pass_and_play", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 52],
+        ["against_computers", 4, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 52],
+        ["against_computers", 4, 3, "iPad Air 11-inch (tablet)", "vertical", 52],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 52],
+        ["multiplayer", 4, null, "MacBook Air 13-inch (laptop)", "vertical", 52]
+      ]
+    },
+    {
+      "package": "games/declarative/card-table/michigan.json",
+      "package_sha256": "cb0e5e84b5c6fd7e44802b8995a87b34d3098ff2d9b80c0bd1d398eb7141abee",
+      "submission_id": "680cee3e5e2f353e63703870cc2c556e",
+      "tested_payload_sha256_without_secret": "be1b9146800137dadb4a6a970238031a6368aa8d85eaa637d1b7167f2da52829",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 133,
+        "moves_made": 6819,
+        "terminal_states": 127
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 51],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 57],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 61],
+        ["pass_and_play", 5, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 47],
+        ["pass_and_play", 6, null, "MacBook Air 13-inch (laptop)", "vertical", 56],
+        ["pass_and_play", 7, null, "iPhone 16 Pro Max (phone)", "horizontal", 49],
+        ["pass_and_play", 8, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 50],
+        ["against_computers", 2, 0, "iPad Air 11-inch (tablet)", "horizontal", 57],
+        ["against_computers", 2, 1, "Samsung Galaxy Tab S10 (tablet)", "vertical", 51],
+        ["against_computers", 8, 7, "MacBook Air 13-inch (laptop)", "horizontal", 48],
+        ["multiplayer", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 57],
+        ["multiplayer", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 55],
+        ["multiplayer", 4, null, "iPad Air 11-inch (tablet)", "vertical", 49],
+        ["multiplayer", 5, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 57],
+        ["multiplayer", 6, null, "MacBook Air 13-inch (laptop)", "vertical", 48],
+        ["multiplayer", 7, null, "iPhone 16 Pro Max (phone)", "horizontal", 47],
+        ["multiplayer", 8, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 44]
+      ]
+    },
+    {
+      "package": "games/declarative/card-table/old-maid.json",
+      "package_sha256": "61069dfa1231cfb71964409d0757eaf151dbae8e41e68bf51934df4bd6550efb",
+      "submission_id": "74eb686a5c43cee3652839e4044b02fe",
+      "tested_payload_sha256_without_secret": "d16587d44ea78dfbb4fc07aef52624867e9c833d4339ba012ab1df8afc256d58",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 96,
+        "moves_made": 5665,
+        "terminal_states": 84
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 6],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 9],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 45],
+        ["pass_and_play", 5, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 72],
+        ["pass_and_play", 6, null, "MacBook Air 13-inch (laptop)", "vertical", 75],
+        ["pass_and_play", 7, null, "iPhone 16 Pro Max (phone)", "horizontal", 74],
+        ["pass_and_play", 8, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 167],
+        ["against_computers", 2, 0, "iPad Air 11-inch (tablet)", "horizontal", 9],
+        ["against_computers", 2, 1, "Samsung Galaxy Tab S10 (tablet)", "vertical", 5],
+        ["against_computers", 8, 7, "MacBook Air 13-inch (laptop)", "horizontal", 139],
+        ["multiplayer", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 6],
+        ["multiplayer", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 16],
+        ["multiplayer", 4, null, "iPad Air 11-inch (tablet)", "vertical", 38],
+        ["multiplayer", 5, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 63],
+        ["multiplayer", 6, null, "MacBook Air 13-inch (laptop)", "vertical", 110],
+        ["multiplayer", 7, null, "iPhone 16 Pro Max (phone)", "horizontal", 97],
+        ["multiplayer", 8, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 141]
+      ]
+    },
+    {
+      "package": "games/declarative/card-table/six-card-golf.json",
+      "package_sha256": "ca2a36d9f7753933fbd572cc5b32fd69c9a7c7c074864e2379576bb505a3cfcb",
+      "submission_id": "9fe7ed5e3bf92ee80feb846eab2c1701",
+      "tested_payload_sha256_without_secret": "d29def933b1df0aacfce6ab2b2d6243a952b1c9a6bd39c42c34fbafa6095ce39",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 49,
+        "moves_made": 2696,
+        "terminal_states": 49
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 20],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 47],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 48],
+        ["pass_and_play", 5, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 47],
+        ["pass_and_play", 6, null, "MacBook Air 13-inch (laptop)", "vertical", 86],
+        ["against_computers", 2, 0, "iPhone 16 Pro Max (phone)", "horizontal", 28],
+        ["against_computers", 2, 1, "Samsung Galaxy S25 Ultra (phone)", "vertical", 34],
+        ["against_computers", 6, 5, "iPad Air 11-inch (tablet)", "horizontal", 68],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "vertical", 34],
+        ["multiplayer", 3, null, "MacBook Air 13-inch (laptop)", "horizontal", 45],
+        ["multiplayer", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 66],
+        ["multiplayer", 5, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 63],
+        ["multiplayer", 6, null, "iPad Air 11-inch (tablet)", "vertical", 86]
+      ]
+    },
+    {
+      "package": "games/declarative/card-table/war.json",
+      "package_sha256": "a781fa93debf4876012c7bed9b8ad82c0eed68c68b82c31db498fd1d01d9ed69",
+      "submission_id": "9ad8c6a31a428e89fe1526dd33d8ab3f",
+      "tested_payload_sha256_without_secret": "83ef60531ad43e9c6e097ed10c45914a38442d92dcf9417bb11ed38aa5064f54",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 2,
+        "moves_made": 2482,
+        "terminal_states": 1
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 174],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 238],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 242],
+        ["against_computers", 2, 0, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 174],
+        ["against_computers", 2, 1, "MacBook Air 13-inch (laptop)", "vertical", 174],
+        ["against_computers", 4, 3, "iPhone 16 Pro Max (phone)", "horizontal", 242],
+        ["multiplayer", 2, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 174],
+        ["multiplayer", 3, null, "iPad Air 11-inch (tablet)", "horizontal", 238],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "vertical", 242]
+      ]
+    },
+    {
+      "package": "games/declarative/catan.json",
+      "package_sha256": "3149d159dde8162c9a30bef07bff6615c8c04644a56ccd1f89ae28433b28fe39",
+      "submission_id": "1a7fe23fe3b3d04596558c05a5389550",
+      "tested_payload_sha256_without_secret": "683902de6df1b640a542d1079a865a67d95bead75ab4e231532f5cef6707dbce",
+      "presentation_examples": 9,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 1,
+        "moves_made": 622,
+        "terminal_states": 1
+      },
+      "sessions": [
+        ["pass_and_play", 3, null, "iPhone 16 Pro Max (phone)", "vertical", 137],
+        ["pass_and_play", 4, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 314],
+        ["against_computers", 3, 0, "iPad Air 11-inch (tablet)", "vertical", 137],
+        ["against_computers", 3, 2, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 137],
+        ["against_computers", 4, 3, "MacBook Air 13-inch (laptop)", "vertical", 314],
+        ["multiplayer", 3, null, "iPhone 16 Pro Max (phone)", "horizontal", 137],
+        ["multiplayer", 4, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 314]
+      ]
+    },
+    {
+      "package": "games/declarative/catch_the_ten.json",
+      "package_sha256": "ca16aadbc4dd027735ff6df7daf29edba75916b98342740f58a659ce923e63f8",
+      "submission_id": "58f34244d8bf0c5dd4f414a92609de86",
+      "tested_payload_sha256_without_secret": "98331f70e30e712fca6889a87663d858c28722f5188b9fa8763a9b98624ada1f",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 27,
+        "moves_made": 1657,
+        "terminal_states": 27
+      },
+      "sessions": [
+        ["pass_and_play", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 44],
+        ["against_computers", 4, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 76],
+        ["against_computers", 4, 3, "iPad Air 11-inch (tablet)", "vertical", 76],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 40],
+        ["multiplayer", 4, null, "MacBook Air 13-inch (laptop)", "vertical", 76]
+      ]
+    },
+    {
+      "package": "games/declarative/conquian.json",
+      "package_sha256": "40ae593d3e304cbba2de403748485acc31200c8e0053261eb5f2569ffb093570",
+      "submission_id": "23d15792132eb65318798ea2051a5799",
+      "tested_payload_sha256_without_secret": "b7d740a7ceb3d199fa6c71b3083565c693be1efb941a42c6b17ee00fabeb5aab",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 93,
+        "moves_made": 2732,
+        "terminal_states": 93
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 30],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 33],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 30],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 32],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 32]
+      ]
+    },
+    {
+      "package": "games/declarative/court_piece.json",
+      "package_sha256": "d0b29cbc87452d5b348db62d38c2a63ee60df9feb60f5296d067481e07ed5dbc",
+      "submission_id": "1899c8e25ce199444e245d41a44185c3",
+      "tested_payload_sha256_without_secret": "d54178a8d4f9ffd5094b8758c0b5c0342f871d71331d71be0fdc2b5f4a9fb0e2",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 73,
+        "moves_made": 3166,
+        "terminal_states": 71
+      },
+      "sessions": [
+        ["pass_and_play", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 41],
+        ["against_computers", 4, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 45],
+        ["against_computers", 4, 3, "iPad Air 11-inch (tablet)", "vertical", 37],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 53],
+        ["multiplayer", 4, null, "MacBook Air 13-inch (laptop)", "vertical", 45]
+      ]
+    },
+    {
+      "package": "games/declarative/crazy_eights.json",
+      "package_sha256": "cac620436c7ddf51d5a9efef398b1879ffb191c89425c77b7be6b3aecb3931d7",
+      "submission_id": "01ca476134e34c15632666ca5184ee8b",
+      "tested_payload_sha256_without_secret": "22475218c0b01e69a4e550d4f4e7da8daf4e938844f67280abb229f5ffae8cbf",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 146,
+        "moves_made": 4127,
+        "terminal_states": 146
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 10],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 15],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 17],
+        ["against_computers", 2, 0, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 13],
+        ["against_computers", 2, 1, "MacBook Air 13-inch (laptop)", "vertical", 42],
+        ["against_computers", 4, 3, "iPhone 16 Pro Max (phone)", "horizontal", 44],
+        ["multiplayer", 2, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 22],
+        ["multiplayer", 3, null, "iPad Air 11-inch (tablet)", "horizontal", 14],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "vertical", 28]
+      ]
+    },
+    {
+      "package": "games/declarative/domineering.json",
+      "package_sha256": "fae93bd8aac31030abf46894cf2776fc2de126bea1c685acf066f4bf26e6ebd3",
+      "submission_id": "32d8ee1ff25900b8bad89c7858db4599",
+      "tested_payload_sha256_without_secret": "5c9a359f1d974e463727b20b04a9562f487b071927ac942c1e9b9851bdd6bc7d",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 94,
+        "moves_made": 1462,
+        "terminal_states": 94
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 16],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 16],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 15],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 16],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 15]
+      ]
+    },
+    {
+      "package": "games/declarative/dos.json",
+      "package_sha256": "f748bcce1d2652bfd5bfab2652d458820aba469db339a137d4a1421891932293",
+      "submission_id": "41a55f6c144869c286dbbac170375d27",
+      "tested_payload_sha256_without_secret": "085e802c43945581199d6d1fa0dbc6ca241f35a54fccac1074baf13230925ff3",
+      "presentation_examples": 7,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 87,
+        "moves_made": 1302,
+        "terminal_states": 87
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 14],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 10],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 10],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 22],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 14]
+      ]
+    },
+    {
+      "package": "games/declarative/go_fish.json",
+      "package_sha256": "d3cba812aa022cf27139a8457314f48900b06a59499fd1ed4eee75bd59573e10",
+      "submission_id": "8a4b05d5682438c25256faf54895c8a1",
+      "tested_payload_sha256_without_secret": "addbea980db67ae249d8f488a1598b7e8f7b0eedaa986e089998987a976549dd",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 37,
+        "moves_made": 2838,
+        "terminal_states": 37
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 54],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 57],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 69],
+        ["pass_and_play", 5, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 87],
+        ["pass_and_play", 6, null, "MacBook Air 13-inch (laptop)", "vertical", 68],
+        ["against_computers", 2, 0, "iPhone 16 Pro Max (phone)", "horizontal", 58],
+        ["against_computers", 2, 1, "Samsung Galaxy S25 Ultra (phone)", "vertical", 47],
+        ["against_computers", 6, 5, "iPad Air 11-inch (tablet)", "horizontal", 114],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "vertical", 57],
+        ["multiplayer", 3, null, "MacBook Air 13-inch (laptop)", "horizontal", 58],
+        ["multiplayer", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 61],
+        ["multiplayer", 5, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 90],
+        ["multiplayer", 6, null, "iPad Air 11-inch (tablet)", "vertical", 91]
+      ]
+    },
+    {
+      "package": "games/declarative/love_letter.json",
+      "package_sha256": "2194c5c32c923e0cc2d5fc7f3edb21731d18b38d4ff3581d3374e5937ff4a7a9",
+      "submission_id": "14876fa7d15fedede4b9012fda8bf50b",
+      "tested_payload_sha256_without_secret": "27faa199fdca533f2c56665749983cfa14fba3b3e2cf387b0451df0e6c3f4741",
+      "presentation_examples": 7,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 18,
+        "moves_made": 1245,
+        "terminal_states": 18
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 64],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 117],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 38],
+        ["against_computers", 2, 0, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 53],
+        ["against_computers", 2, 1, "MacBook Air 13-inch (laptop)", "vertical", 46],
+        ["against_computers", 4, 3, "iPhone 16 Pro Max (phone)", "horizontal", 59],
+        ["multiplayer", 2, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 73],
+        ["multiplayer", 3, null, "iPad Air 11-inch (tablet)", "horizontal", 71],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "vertical", 77]
+      ]
+    },
+    {
+      "package": "games/declarative/mancala.json",
+      "package_sha256": "14e6d0b2e696df1dd50f078ba95d60721f5ad065b35cfa39888ffb9fcff82f20",
+      "submission_id": "85275027cb777e87917beb63a17f6991",
+      "tested_payload_sha256_without_secret": "9e5811d4cfa8446413b737998267afc6de21534ce6318a3c9bb5dde1a7519f8e",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 48,
+        "moves_made": 2155,
+        "terminal_states": 47
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 54],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 57],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 36],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 35],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 53]
+      ]
+    },
+    {
+      "package": "games/declarative/mau_mau.json",
+      "package_sha256": "0b094cc61ca8fc103f070c3d7c24cd4c7db56d37f61916231869474fa20092e1",
+      "submission_id": "0bd499057e685a6556ab962bd47cc5fd",
+      "tested_payload_sha256_without_secret": "14ae0e222fbcb9f3a94562691cb97b62eed55d84dfe9aa349319825bc4c2d21e",
+      "presentation_examples": 10,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 14,
+        "moves_made": 2000,
+        "terminal_states": 14
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 31],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 38],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 14],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 25],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 30]
+      ]
+    },
+    {
+      "package": "games/declarative/memory.json",
+      "package_sha256": "af73a497edb940ecfac4bbc3d9d4fd0c74e9e8d6b6e28e0dac62c54c36d275f6",
+      "submission_id": "b59e873cf7361f0dd57da151720e9149",
+      "tested_payload_sha256_without_secret": "3d7543be65845e7fb9e31267950974de1e7ee0eb713247a7e8fa5768737a53d5",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 17,
+        "moves_made": 2289,
+        "terminal_states": 17
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 146],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 162],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 106],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 148],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 82]
+      ]
+    },
+    {
+      "package": "games/declarative/mille_bornes.json",
+      "package_sha256": "f352aed74207c47f31288bb0ddc38514774937dded02465bff26875bdf83b0be",
+      "submission_id": "ccc912e343337eeb2c477fe004e227aa",
+      "tested_payload_sha256_without_secret": "58514205cfb271403a34cb4ed529a9c7bdb13bc5b7787e3a79432067a28c543a",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 5,
+        "moves_made": 933,
+        "terminal_states": 5
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 116],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 167],
+        ["against_computers", 2, 0, "iPad Air 11-inch (tablet)", "vertical", 136],
+        ["against_computers", 2, 1, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 154],
+        ["against_computers", 3, 2, "MacBook Air 13-inch (laptop)", "vertical", 167],
+        ["multiplayer", 2, null, "iPhone 16 Pro Max (phone)", "horizontal", 150],
+        ["multiplayer", 3, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 154]
+      ]
+    },
+    {
+      "package": "games/declarative/oware.json",
+      "package_sha256": "b1f3c1383d3933c4b96579f548daa0e7766f2fd1d8444853a8200f38c9c1f797",
+      "submission_id": "a95131e5e92086b08b74d7231a0072b5",
+      "tested_payload_sha256_without_secret": "d2de83ac7cde9fe8bf0d78171d576239b21783508a28439d23f698e7790baf38",
+      "presentation_examples": 8,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 43,
+        "moves_made": 1731,
+        "terminal_states": 43
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 26],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 26],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 26],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 26],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 26]
+      ]
+    },
+    {
+      "package": "games/declarative/pedro.json",
+      "package_sha256": "6c627fd6d25d0c4f6e529a700b23f6ad8c2f60a922a2589a86aeac43898cab5c",
+      "submission_id": "b74ed743ccddbc42126c4e81a7d45bd4",
+      "tested_payload_sha256_without_secret": "ad995d241ad4fa58e645a5cc80de5763d8faf88593cedfb1a7c63c93e52ff35e",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 3,
+        "moves_made": 945,
+        "terminal_states": 3
+      },
+      "sessions": [
+        ["pass_and_play", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 232],
+        ["against_computers", 4, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 319],
+        ["against_computers", 4, 3, "iPad Air 11-inch (tablet)", "vertical", 319],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 232],
+        ["multiplayer", 4, null, "MacBook Air 13-inch (laptop)", "vertical", 174]
+      ]
+    },
+    {
+      "package": "games/declarative/pentago.json",
+      "package_sha256": "0e00fa4570d2b845ec4ea0505b0c235fe45cc5ee54c99234e070e5fc4e77adf6",
+      "submission_id": "6d9df1a146dd54837a767b91abb06e28",
+      "tested_payload_sha256_without_secret": "1a7f8ddee8252ee4952555cc9dad5815bf818bcf423837f82752b3151eb36612",
+      "presentation_examples": 8,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 17,
+        "moves_made": 247,
+        "terminal_states": 17
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 10],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 10],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 10],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 10],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 10]
+      ]
+    },
+    {
+      "package": "games/declarative/pig.json",
+      "package_sha256": "7595685c61f93f8c1cfe86e107fcc1381f202ef368afa970f2d436bcdd7312bf",
+      "submission_id": "7c47b51b04b5c431db2d4951e2de4ca2",
+      "tested_payload_sha256_without_secret": "084011c8eacff3a2b32c359718b92d93815acf65cc8fecf2be57dc7e904c82dc",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 119,
+        "moves_made": 2887,
+        "terminal_states": 119
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 20],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 19],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 18],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 17],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 19]
+      ]
+    },
+    {
+      "package": "games/declarative/scopa.json",
+      "package_sha256": "996de3ab751d8c7c0a279118876282a1ebf0ea1b69b6df2a45ed18fa4d2939a6",
+      "submission_id": "8a9ea397683ce6fb2e570ce79bb3e421",
+      "tested_payload_sha256_without_secret": "79c317f5e0ce140fec5719ddc958409afd081425dee50b703e3de29aa22f4e49",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 50,
+        "moves_made": 1800,
+        "terminal_states": 50
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 36],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 36],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 36],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 36],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 36]
+      ]
+    },
+    {
+      "package": "games/declarative/sergeant_major.json",
+      "package_sha256": "b789cd98b465a3646d7a476af31d137b9c1afc829dfdd6121347d63498e9cdfc",
+      "submission_id": "6ae5fc88dead351b9920e853d0c1ec4c",
+      "tested_payload_sha256_without_secret": "ece7c78dfd5aa2509509cbae0af61eaca6d718bc22bfba962868b8def36efe44",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 28,
+        "moves_made": 1510,
+        "terminal_states": 28
+      },
+      "sessions": [
+        ["pass_and_play", 3, null, "iPhone 16 Pro Max (phone)", "vertical", 53],
+        ["against_computers", 3, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 53],
+        ["against_computers", 3, 2, "iPad Air 11-inch (tablet)", "vertical", 53],
+        ["multiplayer", 3, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 53],
+        ["multiplayer", 3, null, "MacBook Air 13-inch (laptop)", "vertical", 53]
+      ]
+    },
+    {
+      "package": "games/declarative/slapjack.json",
+      "package_sha256": "dbc9bb935df58969e86fb56d243ab4b55ac68edcc07c896f92963a2e7624f9dd",
+      "submission_id": "51609f48674a0302ddb0515d915e5c92",
+      "tested_payload_sha256_without_secret": "d19cb526e4260f996b02f7f925a3a0d697101a4b5bbfde7949868523d7846a51",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 8,
+        "moves_made": 887,
+        "terminal_states": 8
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 68],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 59],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 71],
+        ["pass_and_play", 5, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 70],
+        ["pass_and_play", 6, null, "MacBook Air 13-inch (laptop)", "vertical", 144],
+        ["against_computers", 2, 0, "iPhone 16 Pro Max (phone)", "horizontal", 149],
+        ["against_computers", 2, 1, "Samsung Galaxy S25 Ultra (phone)", "vertical", 73],
+        ["against_computers", 6, 5, "iPad Air 11-inch (tablet)", "horizontal", 101],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "vertical", 78],
+        ["multiplayer", 3, null, "MacBook Air 13-inch (laptop)", "horizontal", 51],
+        ["multiplayer", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 134],
+        ["multiplayer", 5, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 67],
+        ["multiplayer", 6, null, "iPad Air 11-inch (tablet)", "vertical", 87]
+      ]
+    },
+    {
+      "package": "games/declarative/snap.json",
+      "package_sha256": "1fcab5ca7fb27a0f376cb92ec9bb87645552b4ae6632f49597e55b4cf0c6fd05",
+      "submission_id": "a2d3fdc4e8687cc7e6e0f68cbd975b49",
+      "tested_payload_sha256_without_secret": "76be4c08ac03b859fe326fffe7c392bfb74c4eafb729b75a2f1dfe153ce21afb",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 8,
+        "moves_made": 691,
+        "terminal_states": 8
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 58],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 69],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 95],
+        ["pass_and_play", 5, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 52],
+        ["pass_and_play", 6, null, "MacBook Air 13-inch (laptop)", "vertical", 91],
+        ["against_computers", 2, 0, "iPhone 16 Pro Max (phone)", "horizontal", 52],
+        ["against_computers", 2, 1, "Samsung Galaxy S25 Ultra (phone)", "vertical", 52],
+        ["against_computers", 6, 5, "iPad Air 11-inch (tablet)", "horizontal", 90],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "vertical", 114],
+        ["multiplayer", 3, null, "MacBook Air 13-inch (laptop)", "horizontal", 52],
+        ["multiplayer", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 124],
+        ["multiplayer", 5, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 87],
+        ["multiplayer", 6, null, "iPad Air 11-inch (tablet)", "vertical", 153]
+      ]
+    },
+    {
+      "package": "games/declarative/thirty_one.json",
+      "package_sha256": "57416a32d22a5f9c3a2c51c39aa2afe4c5f6404fd54c5cbf40fa95ef3a88c48d",
+      "submission_id": "f7db99afaa80984a3f0cc6a22b657cde",
+      "tested_payload_sha256_without_secret": "86a6e570d28a2941f04578b6ef51c850aedde787f1bd9e4826342dfba8a1f102",
+      "presentation_examples": 8,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 150,
+        "moves_made": 1620,
+        "terminal_states": 150
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 47],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 32],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 25],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 41],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 13]
+      ]
+    },
+    {
+      "package": "games/declarative/trivial_pursuit.json",
+      "package_sha256": "910327c06e1ec5589a25763270a35d0451ef41a9dd5b93d491a5b9b0541d4ef5",
+      "submission_id": "98d63858ef4cd09bedf04b9874e72aad",
+      "tested_payload_sha256_without_secret": "1004ec936334c7ecfa05ad81980e784ec78cb331a1244093b3ffbe2e16601697",
+      "presentation_examples": 7,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 1,
+        "moves_made": 715,
+        "terminal_states": 1
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 200],
+        ["pass_and_play", 3, null, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 138],
+        ["pass_and_play", 4, null, "iPad Air 11-inch (tablet)", "vertical", 288],
+        ["against_computers", 2, 0, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 100],
+        ["against_computers", 2, 1, "MacBook Air 13-inch (laptop)", "vertical", 168],
+        ["against_computers", 4, 3, "iPhone 16 Pro Max (phone)", "horizontal", 130],
+        ["multiplayer", 2, null, "Samsung Galaxy S25 Ultra (phone)", "vertical", 196],
+        ["multiplayer", 3, null, "iPad Air 11-inch (tablet)", "horizontal", 132],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "vertical", 308]
+      ]
+    },
+    {
+      "package": "games/declarative/twistfive.json",
+      "package_sha256": "106f5409412a9f13fd8ceaaae6441c88c10b0953110629c760054d2f4f6b4d00",
+      "submission_id": "1d1f9d6562aee0ebcda1d92ba8c69fa5",
+      "tested_payload_sha256_without_secret": "fdf1e57f5a520eb7124e085240563e48263bee1520274ac127495979f00265bd",
+      "presentation_examples": 6,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 37,
+        "moves_made": 548,
+        "terminal_states": 37
+      },
+      "sessions": [
+        ["pass_and_play", 2, null, "iPhone 16 Pro Max (phone)", "vertical", 20],
+        ["against_computers", 2, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 35],
+        ["against_computers", 2, 1, "iPad Air 11-inch (tablet)", "vertical", 20],
+        ["multiplayer", 2, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 26],
+        ["multiplayer", 2, null, "MacBook Air 13-inch (laptop)", "vertical", 20]
+      ]
+    },
+    {
+      "package": "games/declarative/whist.json",
+      "package_sha256": "a34f3e88df38998759682287cbf1c5b451f25fe14e9b0183d8dab1c6121047a9",
+      "submission_id": "ac76707fbae7901bb6ecb17f7bea00b0",
+      "tested_payload_sha256_without_secret": "034992f5c31fb283965e0ca0895c3178eae5f8e0fd6f3e419d6294eb6ea7b4d2",
+      "presentation_examples": 3,
+      "server_check": {
+        "passed": true,
+        "walks_completed": 23,
+        "moves_made": 1196,
+        "terminal_states": 23
+      },
+      "sessions": [
+        ["pass_and_play", 4, null, "iPhone 16 Pro Max (phone)", "vertical", 52],
+        ["against_computers", 4, 0, "Samsung Galaxy S25 Ultra (phone)", "horizontal", 52],
+        ["against_computers", 4, 3, "iPad Air 11-inch (tablet)", "vertical", 52],
+        ["multiplayer", 4, null, "Samsung Galaxy Tab S10 (tablet)", "horizontal", 52],
+        ["multiplayer", 4, null, "MacBook Air 13-inch (laptop)", "vertical", 52]
+      ]
+    }
+  ]
+}

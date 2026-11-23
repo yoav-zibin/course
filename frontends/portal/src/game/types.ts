@@ -9,7 +9,7 @@ export type Board = {
   links?: { from: string; to: string }[];
 };
 export type PieceType = {
-  shape: 'circle' | 'hex' | 'rect' | 'card' | 'dice' | 'image' | 'text'; width?: number; height?: number;
+  shape: 'group' | 'card_pile' | 'counter' | 'circle' | 'hex' | 'rect' | 'card' | 'dice' | 'image' | 'text'; width?: number; height?: number;
   color?: string; border_color?: string; text_color?: string; font_size?: number;
   asset?: string; back_asset?: string; action_outline?: 'rect' | 'ellipse' | 'none';
 };
@@ -27,7 +27,12 @@ export type Piece = {
   id: string; type: string; board: string; position: Position; text?: string; aria_label?: string;
   asset?: string; rotation?: number; scale?: number; opacity?: number; z?: number;
   face?: 'front' | 'back'; move_targets?: string[]; selected?: boolean; hidden?: boolean;
-  draggable?: boolean; actions?: PieceAction[];
+  hand?: {index:number;count:number;spacing:number;columns?:number;row_spacing?:number};
+  parent?: string; pivot?: Point; mirror_x?: boolean; mirror_y?: boolean;
+  count?: number; die_value?: number;
+  /** @deprecated Use move_targets to offer legal destinations. */
+  draggable?: boolean;
+  actions?: PieceAction[];
   animation?: { kind: 'roll' | 'move' | 'notice' | 'pulse'; key: string; duration_ms?: number; delay_ms?: number; z?:number };
 };
 export type HitShape =
@@ -57,6 +62,10 @@ export type SceneAnimation = {
   from: { board?: string; position?: Position; rotation?: number; scale?: number; opacity?: number };
   duration_ms?: number; delay_ms?: number; z?:number;
 };
+export type AnimationClip = Pick<SceneAnimation, 'piece_id' | 'duration_ms' | 'delay_ms' | 'z'> & {
+  from?: SceneAnimation['from']; to?: SceneAnimation['from']; exit?: boolean;
+};
+export type Timeline = {key: string; steps: AnimationClip[][]};
 export type StateMessage = {
   type: 'state_changed'; status: string; move_count?: number; my_player_index?: number | null;
   acting_for_player_index?: number | null; last_move_player_index?: number | null;
@@ -70,4 +79,5 @@ export type PresentationResult = {
   scene: Scene; local_state?: Json; make_move?: Json;
   last_move_animations?: MoveAnimation[] | null;
   animations?: SceneAnimation[];
+  timeline?: Timeline;
 };

@@ -162,6 +162,14 @@ def specification(kind):
         tile='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#ecd3a9"/><path d="M0 20H40 M20 0V40" stroke="#624825" stroke-width="1.5"/></svg>'
         spec['assets']['connect6_cell']={'uri':'data:image/svg+xml;base64,'+base64.b64encode(tile.encode()).decode(),'media_type':'image/svg+xml'}
     if kind=='domineering':spec['boards'].append({'id':'tray','kind':'zone','x':470,'y':400,'width':120,'height':140,'color':'#172743'})
+    if kind == 'pig':
+        types['total'].update(shape='counter', color='#205962')
+    if kind in ('mancala', 'oware'):
+        types['store']['shape'] = 'counter'
+    if kind == 'memory':
+        types['back']['shape'] = 'card'
+        types['back'].pop('back_asset', None)
+        spec['assets'].pop('card_back', None)
     return spec
 
 

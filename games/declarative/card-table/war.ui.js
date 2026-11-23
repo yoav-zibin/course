@@ -23,6 +23,7 @@ var gameUI = {
     labels.push({id:'title',text:t('title'),x:warCenteredX(t('title'),26),y:30,font_size:26,color:'#fff5dc'});
     labels.push({id:'round',text:t('round',{n:s.round||1}),x:warCenteredX(t('round',{n:s.round||1}),18),y:66,font_size:18,color:'#dbe8db'});
     labels.push({id:'pile',text:t('pile',{count:s.pileCount||0}),x:warCenteredX(t('pile',{count:s.pileCount||0}),16),y:96,font_size:16,color:'#ffe28a'});
+    pieces.push({id:'battle-pile',type:'stock',board:'table',position:{x:705,y:60},count:s.pileCount||0,scale:.55,actions:[]});
     const centerY=count===2?370:235;
     const phaseText=(m.status==='over'||m.turn_of_player_indices===null)?(s.winner===null?t('draw'):t('wins_game',{name:(seats[s.winner]||{}).name||t('player',{n:s.winner+1})})):s.stage==='showdown'?t('showdown'):(s.stage==='war'?t('war'):t('battle'));
     labels.push({id:'phase',text:phaseText,x:warCenteredX(phaseText,s.stage==='showdown'?14:16),y:centerY,font_size:s.stage==='showdown'?14:16,color:'#fff5dc'});
@@ -39,9 +40,9 @@ var gameUI = {
       labels.push({id:`player-${i}`,text:name,x:warCenteredX(name,18,x),y:y-143,font_size:18,color:i===s.turnIdx&&m.status==='ongoing'?'#a7f070':'#ffffff'});
       const countText=t('cards_left',{count:(s.counts||[])[i]||0});
       labels.push({id:`count-${i}`,text:countText,x:warCenteredX(countText,14,x),y:y-116,font_size:14,color:'#d9e7df'});
-      if((s.counts||[])[i]>0)pieces.push({id:`deck-${i}`,type:'back',board:'table',position:{x:x-46,y},asset:'card_back',text:'',actions:active&&s.stage!=='showdown'&&i===m.acting_for_player_index?['tap']:[],aria_label:active&&i===m.acting_for_player_index?t('flip_hint'):t('face_down')});
+      pieces.push({id:`deck-${i}`,type:'stock',count:s.counts[i],board:'table',position:{x:x-46,y},text:'',actions:active&&s.stage!=='showdown'&&i===m.acting_for_player_index?['tap']:[],aria_label:active&&i===m.acting_for_player_index?t('flip_hint'):t('face_down')});
       if(card)pieces.push({id:`top-card-${i}`,type:card.suit===1||card.suit===2?'red':'black',board:'table',position:{x,y},text:cardText(card),face:'front',actions:[],aria_label:t('revealed',{rank:card.rank,suit:t('suit_'+['clubs','diamonds','hearts','spades'][card.suit])}),animation:{kind:'move',key:`war-${s.round}-${s.warDepth}-${i}-${card.rank}-${card.suit}`,duration_ms:360}});
-      else if((s.counts||[])[i]>0)pieces.push({id:`top-card-${i}`,type:'back',board:'table',position:{x,y},face:'back',asset:'card_back',text:'',actions:[],aria_label:t('face_down')});
+      else if((s.counts||[])[i]>0)pieces.push({id:`top-card-${i}`,type:'back',board:'table',position:{x,y},face:'back',text:'',actions:[],aria_label:t('face_down')});
 
     }
     if(active&&s.stage==='showdown'&&Array.isArray(s.legalMoves)&&s.legalMoves.some(mv=>mv.continue===true)&&!(seats||[]).some(player=>player.kind==='computer'))controls.push({id:'continue-battle',kind:'button',label:t('next_battle')});

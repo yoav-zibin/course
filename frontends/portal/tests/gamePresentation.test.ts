@@ -61,7 +61,19 @@ test('exact modern Backgammon opening repair preserves saved rules and package p
 
 test('the exact saved Backgammon version9 receives only its dice action cue',async()=>{
   const pkg=read('games/declarative/backgammon.json');
-  const original=structuredClone(pkg.declarative_ui);original.piece_types.die.action_outline='none';
+  // Version 9 added checker layering to the previously reviewed presentation.
+  const original=read('frontends/portal/src/game/reviewedBackgammon.json');
+  const startHandler="    if (message.type === 'ui_event' && active && setup && message.event.type === 'tap' && message.event.id === 'start_game')";
+  const historicalLayering=`    if (!setup && !help) {
+      // Keep moving and captured checkers above board artwork using the
+      // existing piece-order contract, which older installed hosts accept.
+      // Local dialogs rebuild ordinary stacks so checkers never cover their
+      // panels while help or setup owns the interaction.
+      const moving = new Set((gameUI.getLastMoveAnimations(s, out.scene) || []).map(entry => entry.piece_id));
+      for (const piece of pieces) if (moving.has(piece.id)) piece.z = 100000;
+    }`;
+  original.ui_code=original.ui_code.replace(startHandler,historicalLayering+'\n'+startHandler);
+  original.piece_types.die.action_outline='none';
   const input={...game(),version:9,server_code:pkg.server_code,declarative_ui:original};
   const before=JSON.stringify(input),expected=structuredClone(original);
   expected.piece_types.die.action_outline='rect';

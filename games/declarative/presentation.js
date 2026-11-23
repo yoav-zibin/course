@@ -64,7 +64,7 @@ const gameUI = {
       for(let i=0;i<s.board[0];i++)pieces.push({id:'stone_'+i,type:'p0',board:'main',position:{x:35+(i%5)*95,y:50+Math.floor(i/5)*105},text:String(i+1)});
       legal.forEach(move=>controls.push({id:keyOf(move),kind:'button',label:t('take',{n:move.take})}));
     }else if(KIND==='pig'){
-      pieces.push({id:'die',type:'die',board:'main',position:{x:120,y:130},text:String(s.roll||1),rotation:s.roll*15,scale:1});
+      pieces.push({id:'die',type:'die',board:'main',position:{x:120,y:130},die_value:s.roll||1,text:String(s.roll||1),rotation:s.roll*15,scale:1});
       pieces.push({id:'total',type:'total',board:'main',position:{x:340,y:130},text:String(s.total)});
       legal.forEach(move=>controls.push({id:keyOf(move),kind:'button',label:t(move.action)}));
     }else if(KIND==='mancala'){
@@ -111,7 +111,7 @@ const gameUI = {
         ?{id:keyOf(move),board:'main',position:{cell:String(move.cell)},asset:'connect6_cell',
           aria_label:t('position',{r:Math.floor(move.cell/19)+1,c:move.cell%19+1})}
         :{id:keyOf(move),board:'main',position:{cell:String(KIND==='connect4'?move.column:move.cell)},label:t('cell',{n:(KIND==='connect4'?move.column:move.cell)+1})}));
-      if(KIND==='domineering'&&targets.length)pieces.push({id:'domino',type:'domino',board:'tray',position:{x:60,y:70},rotation:s.turn?90:0,draggable:true,move_targets:targets.map(p=>p.id),actions:['move']});
+      if(KIND==='domineering'&&targets.length)pieces.push({id:'domino',type:'domino',board:'tray',position:{x:60,y:70},rotation:s.turn?90:0,move_targets:targets.map(p=>p.id),actions:['move']});
     }
     // Appearance alone is not an interaction. Placed counters, marks and dice
     // stay passive; legal destinations and enabled buttons supply their hints.

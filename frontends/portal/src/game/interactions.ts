@@ -9,7 +9,11 @@ export function canMove(message: StateMessage | null, sent = false): boolean {
 }
 
 export function pieceName(piece: Piece): string {
-  return piece.face === 'back' ? copyText('Covered piece') : piece.aria_label || piece.text || piece.id;
+  if (piece.face === 'back') {
+    const covered = copyText('Covered piece');
+    return piece.count === undefined ? covered : covered + ' · ' + piece.count;
+  }
+  return piece.aria_label || piece.text || String(piece.die_value ?? piece.count ?? piece.id);
 }
 
 export function pieceSize(spec: GameSpec, piece: Piece): { width: number; height: number } {
@@ -82,7 +86,7 @@ export function hitPiece(spec: GameSpec, scene: Scene, at: Point,paintOrder?:Rea
   // Hidden/decorative pieces have no hit geometry. Exclude them before
   // ordering, and use one comparator throughout even during a stale paint.
   const ranked=paintOrder&&candidates.every(piece=>paintOrder.has(piece.id))?paintOrder:undefined;
-  return candidates.sort((a,b)=>{
+  const hit = candidates.sort((a,b)=>{
     if(ranked)return ranked.get(b.id)!-ranked.get(a.id)!;
     return (b.z || 0)-(a.z || 0) || scene.pieces!.indexOf(b)-scene.pieces!.indexOf(a);
   }).find(piece => {
@@ -98,6 +102,7 @@ export function hitPiece(spec: GameSpec, scene: Scene, at: Point,paintOrder?:Rea
     }
     return Math.abs(local.x) <= size.width / 2 && Math.abs(local.y) <= size.height / 2;
   });
+  return hit?.parent ? scene.pieces?.find(p=>p.id===hit.parent) : hit;
 }
 
 // Tie-break when zones overlap: a rectangle ranks by its centre as before; a
@@ -117,6 +122,18 @@ export function hitTarget(spec: GameSpec, scene: Scene, at: Point, piece?: Piece
     .sort((a,b)=>closeness(spec,a,at)-closeness(spec,b,at))[0];
 }
 
+export function validNumber(control: {min?:number; max?:number; step?:number}, value:unknown):boolean {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return false;
+  if (control.min !== undefined && value < control.min || control.max !== undefined && value > control.max) return false;
+  if (!control.step) return true;
+  const base = control.min ?? 0;
+  const steps = (value - base) / control.step;
+  if (!Number.isFinite(steps)) return false;
+  const offset = Math.round(steps) * control.step;
+  const roundingError = 4 * Number.EPSILON * Math.max(Math.abs(value), Math.abs(base), Math.abs(offset));
+  return Math.abs(value - (base + offset)) <= roundingError;
+}
+
 export function validEvent(scene: Scene, event: UIEvent): boolean {
   const piece = scene.pieces?.find(item => item.id === event.id);
   if (piece) {
@@ -124,7 +141,7 @@ export function validEvent(scene: Scene, event: UIEvent): boolean {
     if (event.type === 'drop') return actions.includes('move') && event.piece_id === piece.id
       && !!piece.move_targets?.includes(event.target_id!) && !!scene.targets?.some(target=>target.id===event.target_id);
     if (event.type === 'rotate') return actions.includes('rotate') && Number.isFinite(event.delta) && event.delta !== 0 && Math.abs(event.delta!) <= 360;
-    if (event.type === 'scale') return actions.includes('scale') && Number.isFinite(event.factor) && event.factor! > 0 && event.factor! <= 10;
+    if (event.type === 'scale') return actions.includes('scale') && Number.isFinite(event.factor) && event.factor! > 0 && event.factor! <= 100;
     return actions.includes(event.type as 'tap' | 'flip');
   }
   if (event.type === 'tap' && scene.targets?.some(item=>item.id===event.id)) return true;
@@ -133,9 +150,8 @@ export function validEvent(scene: Scene, event: UIEvent): boolean {
   if (control.kind === 'button') return event.type === 'tap';
   if (event.type !== 'change') return false;
   if (control.kind === 'choice') return !!control.options?.some(option=>Object.is(option.value,event.value));
-  if (control.kind === 'number') return typeof event.value === 'number' && Number.isFinite(event.value)
-    && (control.min === undefined || event.value >= control.min) && (control.max === undefined || event.value <= control.max);
-  return typeof event.value === 'string' && event.value.length <= 2000;
+  if (control.kind === 'number') return validNumber(control, event.value);
+  return typeof event.value === 'string' && Array.from(event.value).length <= 4000;
 }
 
 export function animateUpdate(previous: StateMessage | null, next: StateMessage): boolean {

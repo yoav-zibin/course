@@ -30,7 +30,8 @@ export function pieceAnimation(spec:GameSpec,piece:Piece,previous:Piece|undefine
       piece.animation?.kind==='pulse'?560:spec.motion?.move_ms??1440));
   const delay=sceneTrack?.delay??(moveTrack||effect?0:piece.animation?.delay_ms??0);
   const elapsed=options.elapsed??0;
-  const movement=moveTrack?trackLayer(moveTrack,elapsed):undefined;
+  const layers=sceneTrack?.layers;
+  const movement=layers?trackLayer({segments:layers},elapsed):moveTrack?trackLayer(moveTrack,elapsed):undefined;
   const layerActive=Boolean(needsAnimation&&(movement?movement.active:elapsed>=delay&&elapsed<delay+duration));
   const layerTransition=!needsAnimation?Infinity:movement?movement.transition:
     elapsed<delay?delay:elapsed<delay+duration?delay+duration:Infinity;
