@@ -36,7 +36,7 @@ export function Catalog() {
     <Card><Title small>{t('ui.proposal.title','Missing a game? Propose it')}</Title><Copy muted>{t('ui.proposal.explainer','Tell us which game you would like to play here. Our AI agents will review your proposal and create the game within 24 hours.')}</Copy><Row><Button secondary onPress={()=>setProposal(true)}>{t('ui.proposal.submit','Propose a game')}</Button></Row></Card>
     <Dialog visible={proposal} title={t('ui.proposal.title','Propose a game')} onClose={()=>setProposal(false)}>
       <Field label={t('ui.proposal.name_label','Game name')} value={name} onChangeText={setName} maxLength={120}/><Field label={t('ui.proposal.description_label','Why this game?')} multiline value={description} onChangeText={setDescription} maxLength={2000}/><Field label={t('ui.proposal.rules_label','Link to the rules (optional)')} value={rules} onChangeText={setRules} autoCapitalize="none" keyboardType="url"/>
-      <Button disabled={!name.trim()} onPress={()=>run(async()=>{await p.actions.request('POST','/game-proposals',{name:name.trim(),description:description.trim(),rules_url:rules.trim(),proposer_name:p.account?.display_name||''});setProposal(false);setName('');})}>{t('ui.proposal.submit','Submit proposal')}</Button>
+      <Button disabled={!name.trim()} onPress={()=>run(async()=>{await p.actions.request('POST','/game-proposals',{game_name:name.trim(),description:description.trim(),rules_url:rules.trim(),proposer_name:p.account?.display_name||''});setProposal(false);setName('');})}>{t('ui.proposal.submit','Submit proposal')}</Button>
     </Dialog>
   </>;
 }

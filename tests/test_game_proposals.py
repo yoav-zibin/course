@@ -52,7 +52,34 @@ def test_submit_then_list_with_master_password(api):
     assert response.status_code == 200, response.text
     proposals = response.json()["proposals"]
     assert [p["game_name"] for p in proposals] == ["Azul", "Wingspan"]
-    assert proposals[0]["id"] == created["id"]
+    assert proposals[0] == created
+
+
+def test_submission_with_legacy_name_is_saved_for_review(api):
+    response = api.client.post(
+        "/game-proposals",
+        json={
+            "name": " Azul ",
+            "description": " Tile drafting. ",
+            "rules_url": " https://example.com/azul-rules ",
+            "proposer_name": " Sam ",
+        },
+    )
+    assert response.status_code == 201, response.text
+    created = response.json()
+
+    review_queue = api.client.get("/game-proposals", auth=AUTH)
+    assert review_queue.status_code == 200, review_queue.text
+    assert review_queue.json()["proposals"] == [
+        {
+            "id": created["id"],
+            "game_name": "Azul",
+            "description": "Tile drafting.",
+            "rules_url": "https://example.com/azul-rules",
+            "proposer_name": "Sam",
+            "created_at": created["created_at"],
+        }
+    ]
 
 
 def test_list_and_delete_require_the_master_password(api):

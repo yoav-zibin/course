@@ -98,12 +98,16 @@ def _public_row(row):
 
 def make_router(platform_dependency, master_dependency):
     from fastapi import APIRouter, Depends, HTTPException
-    from pydantic import BaseModel, Field, field_validator
+    from pydantic import AliasChoices, BaseModel, Field, field_validator
 
     router = APIRouter()
 
     class ProposalIn(BaseModel):
-        game_name: str = Field(min_length=1, max_length=120)
+        game_name: str = Field(
+            min_length=1,
+            max_length=120,
+            validation_alias=AliasChoices("game_name", "name"),
+        )
         description: str = Field(default="", max_length=2000)
         rules_url: str = Field(default="", max_length=500)
         proposer_name: str = Field(default="", max_length=120)
