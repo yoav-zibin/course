@@ -90,6 +90,7 @@ def test_account_aliases_matches_referrals_and_scores_are_deduplicated(query):
     assert student["reports"]["total"] == 3
     assert student["reports"]["assessed"] == 2
     assert student["reports"]["unassessed"] == 1
+    assert student["reports"]["total_score"] == 10
     assert student["reports"]["average_score"] == 5
     assert student["reports"]["top"][0]["score"] == 10
     assert student["reports"]["lowest"][0]["score"] == 0
@@ -119,8 +120,34 @@ def test_pagination_reads_all_users_matches_reports_and_never_decompresses_saves
     assert student["account_count"] == 1
     assert student["matches"]["pass_and_play"] == 105
     assert student["reports"]["total"] == 105
+    assert student["reports"]["total_score"] == 840
     assert student["reports"]["average_score"] == 8
     assert len(student["reports"]["top"]) == 3
+
+
+@pytest.mark.parametrize("query", [False, True])
+@pytest.mark.parametrize("scores,total_score,assessed,average", [
+    ([1, 1, 2], 4, 3, 1.33),
+    ([0, 10, None, True, False, -1, 11, 1.5, "2"], 10, 2, 5),
+    ([None], 0, 0, None),
+    ([], 0, 0, None),
+])
+def test_report_score_sum_is_exact_and_counts_only_valid_assessments(query, scores, total_score,
+                                                                  assessed, average):
+    store = query_store() if query else InMemoryStore()
+    store.put_user(user("alice", "Alice"))
+    for index, score in enumerate(scores):
+        store.create_bug_report(report(f"r{index}", "alice", score, automatic=index % 2 == 1),
+                                rate_keys=[])
+    reports = build_dashboard(store, [PERSON], roster_fetched_at="now")["students"][0]["reports"]
+    assert reports["total_score"] == total_score
+    assert type(reports["total_score"]) is int
+    assert reports["total"] == len(scores)
+    assert reports["assessed"] == assessed
+    assert reports["unassessed"] == len(scores) - assessed
+    assert reports["average_score"] == average
+    assert reports["automatic"] == len(scores) // 2
+    assert reports["manual"] == (len(scores) + 1) // 2
 
 
 def test_referral_cycles_and_multiple_owned_roots_do_not_count_own_accounts():

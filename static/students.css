@@ -5,6 +5,18 @@ p { line-height:1.5; }
 .heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; }
 .heading p { margin:.4rem 0; }
 .muted { color:var(--color-text-tertiary); font-size:.875rem; overflow-wrap:anywhere; }
+.score-summary { margin-bottom:1.5rem; }
+.score-summary h3 { margin:0 0 .4rem; font-size:1.125rem; }
+.score-summary p { margin:.4rem 0 .75rem; }
+.score-summary-wrap { max-width:100%; overflow:auto; overscroll-behavior:contain; border:1px solid var(--color-border-2); border-radius:var(--radius-sm); }
+.score-summary-wrap:focus-visible { outline:2px solid var(--color-accent-hover); outline-offset:2px; }
+.score-summary-table { display:table; overflow:visible; width:100%; min-width:0; border-collapse:separate; border-spacing:0; margin:0; }
+.score-summary-table th,.score-summary-table td { padding:.6rem .75rem; border-bottom:1px solid var(--color-border-2); text-align:end; font-size:.9rem; font-variant-numeric:tabular-nums; }
+.score-summary-table thead th { background:var(--color-bg-2); color:var(--color-text-secondary); font-size:.8rem; font-weight:600; }
+.score-summary-table [data-column="name"] { width:40%; text-align:start; overflow-wrap:anywhere; }
+.score-summary-table tbody th { font-weight:600; }
+.score-summary-row:nth-child(odd) { background:var(--color-bg-1); }
+.score-summary-row:last-child th,.score-summary-row:last-child td { border-bottom:0; }
 .overview { display:flex; flex-wrap:wrap; gap:.65rem 1.5rem; padding-bottom:1rem; margin-bottom:1rem; border-bottom:1px solid var(--color-border-2); }
 .overview-card { display:flex; flex-wrap:wrap; align-items:baseline; gap:.4rem; }
 .overview-card strong { font-size:1.35rem; }

@@ -155,6 +155,53 @@ function renderOverview(students) {
   $("overview").hidden = false;
 }
 
+function totalReportScore(student) {
+  const value = student.reports.total_score;
+  if (Number.isInteger(value) && value >= 0) return value;
+  // Older cached responses may omit the sum; a rounded average cannot recover it.
+  return student.reports.assessed === 0 ? 0 : null;
+}
+
+function renderScoreSummary(students) {
+  const previousViewport = $("score-summary-content").querySelector(".score-summary-wrap");
+  const scrollLeft = previousViewport?.scrollLeft || 0;
+  const viewportHadFocus = document.activeElement === previousViewport;
+  const nameOrder = (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+  const ordered = [...students].sort((a, b) => {
+    const av = totalReportScore(a), bv = totalReportScore(b);
+    if (av === null || bv === null) return av === null ? (bv === null ? nameOrder(a, b) : 1) : -1;
+    return bv - av || nameOrder(a, b);
+  });
+  const headings = [
+    ["name", I18n.t("ui.students.person", {}, "Person")],
+    ["total_score", I18n.t("ui.students.total_score", {}, "Total score")],
+    ["reports", I18n.t("ui.students.reports", {}, "Bug reports")],
+    ["average_score", I18n.t("ui.students.average_score", {}, "Average score")],
+  ].map(([key, label]) => el("th", {scope: "col", "data-column": key,
+    ...(key === "total_score" ? {"aria-sort": "descending"} : {}), textContent: label}));
+  const rows = ordered.map(student => {
+    const total = totalReportScore(student);
+    const average = student.reports.average_score;
+    const hasAverage = student.reports.assessed > 0 && isScore(average);
+    return el("tr", {class: "score-summary-row", "data-student-id": student.id},
+      el("th", {scope: "row", "data-column": "name", textContent: student.name}),
+      el("td", {"data-column": "total_score", class: total === null ? "score-none" : "",
+        textContent: total === null ? "—" : count(total)}),
+      el("td", {"data-column": "reports", textContent: count(student.reports.total)}),
+      el("td", {"data-column": "average_score", class: hasAverage ? "" : "score-none",
+        textContent: hasAverage ? `${I18n.number(Number(average.toFixed(2)))}/10` : "—"}));
+  });
+  const viewport = el("div", {class: "score-summary-wrap", tabIndex: 0, role: "region",
+    "aria-labelledby": "score-summary-heading"},
+    el("table", {class: "score-summary-table", "aria-labelledby": "score-summary-heading",
+      "aria-describedby": "score-summary-note"},
+      el("thead", {}, el("tr", {}, headings)), el("tbody", {}, rows)));
+  $("score-summary-content").replaceChildren(viewport);
+  $("score-summary").hidden = false;
+  viewport.scrollLeft = scrollLeft;
+  if (viewportHadFocus) viewport.focus({preventScroll: true});
+}
+
 function render() {
   const focusedStudent = document.activeElement?.classList.contains("student-row")
     ? document.activeElement.dataset.studentId : null;
@@ -173,6 +220,7 @@ function render() {
   const notes = state.data.notes || [];
   $("dashboard-notes").replaceChildren(...notes.map(note => el("li", {textContent: note})));
   $("dashboard-notes").hidden = !notes.length;
+  renderScoreSummary(students);
   renderOverview(students);
   const column = sortOptions.find(option => option.key === $("student-sort").value) || sortOptions[0];
   const direction = $("student-order").value === "asc" ? 1 : -1;

@@ -233,6 +233,7 @@ def build_dashboard(store, roster, *, roster_fetched_at):
             "direct_recruits": len(direct), "transitive_recruits": len(recruited),
             "recruits_matches": empty_matches(),
             "reports": {"total": 0, "manual": 0, "automatic": 0, "assessed": 0, "unassessed": 0,
+                        "total_score": 0,
                         "average_score": None,
                         "status_counts": dict.fromkeys(("open", "handling", "escalated", "handled"), 0),
                         "top": [], "lowest": []},
@@ -281,6 +282,7 @@ def build_dashboard(store, roster, *, roster_fetched_at):
                                        key=lambda report: (report["score"], report["id"]))[:3]
     for index, student in enumerate(students):
         reports = student["reports"]
+        reports["total_score"] = score_totals[index]
         reports["unassessed"] = reports["total"] - reports["assessed"]
         if reports["assessed"]:
             reports["average_score"] = round(score_totals[index] / reports["assessed"], 2)

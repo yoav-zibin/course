@@ -12,7 +12,7 @@ function person(id:string,name:string,score:number|null,recruits:number){
       match_reasons:['email','first name'],created_at:'2026-11-01T10:00:00Z'}],
     matches:matches(2,1,3),other_players:4,direct_recruits:2,transitive_recruits:recruits,
     recruits_matches:matches(3,0,4),reports:{total:3,assessed:score===null?0:2,unassessed:score===null?3:1,
-      average_score:score,status_counts:{open:1,handled:2},top:score===null?[]:[report],lowest:score===null?[]:[report]}};
+      average_score:score,total_score:score===null?0:score*2,status_counts:{open:1,handled:2},top:score===null?[]:[report],lowest:score===null?[]:[report]}};
 }
 const payload={generated_at:'2026-11-21T10:30:00Z',cache_seconds:60,
   roster_source_url:'https://docs.google.com/spreadsheets/d/test-roster/edit',roster_fetched_at:'2026-11-21T10:20:00Z',
@@ -158,4 +158,59 @@ test('long account lists and report examples stay readable within a single bound
   }
   await expect(accounts).toContainText('account-alias-29');
   await expect(reports).toContainText('Detailed report evidence.');
+});
+
+test('top score summary includes all thirteen people and ranks exact sums independently of detailed filters',async({page},testInfo)=>{
+  const teacher=person('course-teacher','Instructor Example',2,0);
+  teacher.role='instructor';
+  teacher.reports={...teacher.reports,total:105,assessed:100,unassessed:5,total_score:200};
+  const precision=person('course-precision','Precision Example',1.33,0);
+  precision.reports={...precision.reports,total:4,assessed:3,unassessed:1,total_score:4};
+  const highAverage=person('course-high-average','High Average Example',10,0);
+  highAverage.reports={...highAverage.reports,total:1,assessed:1,unassessed:0,total_score:10};
+  const zero=person('course-zero','Zero Score Example',0,0);
+  const unassessed=person('course-unassessed','Unassessed Example',null,0);
+  const remaining=Array.from({length:8},(_,index)=>person(`course-other-${index}`,`Other Student ${index}`,null,0));
+  const tied=remaining[0];
+  tied.name='Alphabetical Tie Example';
+  tied.reports={...tied.reports,total:2,assessed:2,unassessed:0,average_score:5,total_score:10};
+  let requests=0;
+  await page.route('**/admin/students/data',route=>{
+    requests++;
+    return route.fulfill({json:{...payload,students:[unassessed,precision,zero,highAverage,...remaining,teacher]}});
+  });
+  await page.goto('/admin/students');
+  const summary=page.locator('.score-summary-table');
+  const rows=summary.locator('.score-summary-row');
+  await expect(rows).toHaveCount(13);
+  await expect(summary.getByRole('columnheader')).toHaveText(['Person','Total score','Bug reports','Average score']);
+  const ids=await rows.evaluateAll(nodes=>nodes.map(node=>(node as HTMLElement).dataset.studentId));
+  expect(ids.slice(0,4)).toEqual(['course-teacher','course-other-0','course-high-average','course-precision']);
+  const teacherRow=summary.locator('[data-student-id="course-teacher"]');
+  await expect(teacherRow).toContainText('Instructor Example');
+  await expect(teacherRow.locator('[data-column="total_score"]')).toHaveText('200');
+  await expect(teacherRow.locator('[data-column="reports"]')).toHaveText('105');
+  await expect(teacherRow.locator('[data-column="average_score"]')).toHaveText('2/10');
+  const precisionRow=summary.locator('[data-student-id="course-precision"]');
+  await expect(precisionRow.locator('[data-column="total_score"]')).toHaveText('4');
+  await expect(precisionRow.locator('[data-column="reports"]')).toHaveText('4');
+  await expect(precisionRow.locator('[data-column="average_score"]')).toHaveText('1.33/10');
+  await expect(summary.locator('[data-student-id="course-zero"] [data-column="average_score"]')).toHaveText('0/10');
+  await expect(summary.locator('[data-student-id="course-unassessed"] [data-column="average_score"]')).toHaveText('—');
+  expect(await summary.evaluate(node=>node.getBoundingClientRect().top<document.getElementById('leaderboard')!.getBoundingClientRect().top)).toBe(true);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  expect(await summary.evaluate(node=>{
+    const average=node.querySelector('thead [data-column="average_score"]')!.getBoundingClientRect();
+    const viewport=node.parentElement!.getBoundingClientRect();
+    return average.right<=viewport.right+1;
+  })).toBe(true);
+  await page.getByRole('combobox',{name:'Sort by',exact:true}).selectOption('average_score');
+  await page.getByRole('combobox',{name:'Order',exact:true}).selectOption('asc');
+  await page.getByRole('searchbox').fill('no-such-person');
+  await expect(page.locator('.student-row')).toHaveCount(0);
+  await expect(rows).toHaveCount(13);
+  expect(await rows.evaluateAll(nodes=>nodes.map(node=>(node as HTMLElement).dataset.studentId))).toEqual(ids);
+  expect(requests).toBe(1);
+  await page.locator('main').evaluate(node=>{node.scrollTop=0;});
+  await page.screenshot({path:testInfo.outputPath('students-score-summary.png')});
 });

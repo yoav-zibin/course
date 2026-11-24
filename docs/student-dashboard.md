@@ -1,7 +1,14 @@
 # Course leaderboard
 
-Open `/admin#students` for the course leaderboard. It is one wide, horizontally
-scrollable table on desktop and mobile, with one row per course member. Headers
+Open `/admin#students` for the course leaderboard. The top table shows the
+instructor and all 12 students, ranked by their total bug report score from
+highest to lowest, with alphabetical name order for ties. It shows each person's
+total score, number of bug reports and average score. All 13 course members stay
+in this table independently of the search and sort controls for the detailed
+table below.
+
+The detailed leaderboard remains one wide, horizontally scrollable table on
+desktop and mobile, with one row per course member. Headers
 stay visible while scrolling vertically, and names stay visible while scrolling
 horizontally. Each row shows contact and account details, activity and recruitment
 metrics, report counts and scores, and examples of reports with the highest and
@@ -52,8 +59,12 @@ columns. See [recruitment history](recruitment-history.md).
 Different students' referral trees can overlap, so their totals are not additive.
 
 Report totals distinguish manual submissions from automatic client-error
-reports. Averages include assessed manual and automatic scores from 0 through
-10. Unassessed reports are counted separately. Highest and lowest examples include the existing review
+reports. The score total is the exact sum of assessed integer scores from 0
+through 10 across manual and automatic reports. Averages use the same assessed
+reports, including scores of zero, and show `—` when none have been assessed.
+The report count includes unassessed reports, which are excluded from score
+totals and averages and are also counted separately in the detailed table.
+Highest and lowest examples include the existing review
 rationale and resolution; the dashboard does not assign scores automatically.
 The data response contains report summaries, without screenshots, diagnostics
 or account passwords. Aggregates are cached briefly and show their generation
