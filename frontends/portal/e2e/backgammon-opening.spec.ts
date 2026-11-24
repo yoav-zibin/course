@@ -75,13 +75,22 @@ test('saved Backgammon opening ties remain clear after computer rerolls and the 
   const ready=(await saved(page,id)).match;
   expect(ready.logicState).toMatchObject({opening:false,opening_roll:[5,6],cur:1,needRoll:false});
   const move=ready.state.legalMoves[0];
+  const board=page.getByTestId('game-stage');
+  const destinations=board.getByRole('button',{name:/^(Point \d+|Bear off)$/});
+  await expect(destinations).toHaveCount(0);
   const checker=page.getByRole('button',{name:`Player 2: Point ${move.from+1}: Move`,exact:true}).last();
-  await expect(checker).toBeEnabled();await checker.scrollIntoViewIfNeeded();
+  await expect(checker).toBeEnabled();
+  await expect(checker.locator('ellipse[stroke="#79d5ff"]')).toBeVisible();
+  await checker.scrollIntoViewIfNeeded();
   // Target artwork can overlap a checker. Real board gestures resolve the
   // source geometrically, rather than requiring that SVG node to be on top.
   const sourceBox=(await checker.boundingBox())!;
   if(isMobile)await page.touchscreen.tap(sourceBox.x+sourceBox.width/2,sourceBox.y+sourceBox.height/2);
   else await page.mouse.click(sourceBox.x+sourceBox.width/2,sourceBox.y+sourceBox.height/2);
+  const legalLabels=[...new Set<number>([...ready.state.legalMoves,...(ready.state.combinedMoves||[])].filter((option:{from:number})=>option.from===move.from)
+    .map((option:{to:number})=>option.to))].map(point=>`Point ${point+1}`).sort();
+  await expect.poll(async()=>(await destinations.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('aria-label')))).sort())
+    .toEqual(legalLabels);
   const destination=page.getByRole('button',{name:`Point ${move.to+1}`,exact:true});
   await destination.scrollIntoViewIfNeeded();const targetBox=(await destination.boundingBox())!;
   if(isMobile)await page.touchscreen.tap(targetBox.x+targetBox.width/2,targetBox.y+targetBox.height/2);

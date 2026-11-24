@@ -26,6 +26,7 @@ export type GameRendererProps = {
   onAnimationStateChange?: (busy:boolean)=>void;
   onScene?: (scene:Scene,message:StateMessage)=>void;
   showToolbar?: boolean;
+  showDestinationsAfterSelection?: boolean;
   frameHeight?: number;
 };
 
@@ -55,7 +56,7 @@ type Gesture = {
 };
 type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];inferGroups?:boolean;moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
 
-function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,frameHeight}: GameRendererProps & {spec: GameSpec}) {
+function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,showDestinationsAfterSelection=false,frameHeight}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
@@ -325,6 +326,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   function activateTarget(target: Target,touch=false) {
     if(!canMove(latest.current,sent.current))return;
     const piece=sceneRef.current.pieces?.find(p=>p.id===selectedRef.current);
+    if(showDestinationsAfterSelection&&!piece?.move_targets?.includes(target.id))return;
     if(piece&&pieceActions(piece).includes('move')&&!piece.move_targets?.includes(target.id))return;
     if(touch&&target.preview?.length&&previewRef.current!==target.id){showPreview(target.id);return;}
     showPreview(null);
@@ -334,6 +336,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
 
   const actions = useRef({boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview});
   actions.current={boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview};
+  const hitVisibleTarget=(scene:Scene,point:Point,piece?:Piece)=>
+    showDestinationsAfterSelection&&!piece?.move_targets?.length ? undefined : hitTarget(spec,scene,point,piece);
   const claimGesture=(event:GestureResponderEvent)=>{
     measureOrigin();
     const e=event.nativeEvent,c=current.current;
@@ -343,7 +347,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     // At the fitted view, empty board space belongs to the containing native
     // scroll view. A piece/destination still owns its complete drag gesture.
     return Date.now()>=motionUntil.current&&renderedRevision.current===revision.current&&
-      canMove(latest.current,sent.current)&&Boolean(hitPiece(spec,scene,point,paintOrder.current)||hitTarget(spec,scene,point,chosen));
+      canMove(latest.current,sent.current)&&Boolean(hitPiece(spec,scene,point,paintOrder.current)||hitVisibleTarget(scene,point,chosen));
   };
   const responders = useMemo(()=>PanResponder.create({
     // Native SVG's own touchable group would otherwise claim the responder
@@ -359,7 +363,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       const mayMove=canMove(latest.current,sent.current)&&Date.now()>=motionUntil.current&&renderedRevision.current===revision.current;
       const piece=mayMove?hitPiece(spec,scene,point,paintOrder.current):undefined;
       const selectedPiece=scene.pieces?.find(p=>p.id===selectedRef.current);
-      const target=mayMove?hitTarget(spec,scene,point,selectedPiece):undefined;
+      const target=mayMove?hitVisibleTarget(scene,point,selectedPiece):undefined;
       if(Platform.OS==='web'){
         // Focus before RN Web grants the board its responder. Letting the
         // browser focus a destination afterward would blur the keyboard-focused
@@ -442,7 +446,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         actions.current.select(null);actions.current.showPreview(null);return;
       }
       const chosen=scene.pieces?.find(p=>p.id===selectedRef.current);
-      const target=hitTarget(spec,scene,point,chosen);
+      const target=hitVisibleTarget(scene,point,chosen);
       // A placement's declared artwork can itself be clicked, and selected
       // pieces always use the matching legal destination.
       if(target&&target.id===g.target&&(!piece||chosen?.move_targets?.includes(target.id)))actions.current.activateTarget(target,g.touch);
@@ -450,9 +454,11 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       else if(target&&target.id===g.target)actions.current.activateTarget(target,g.touch);
     },
     onPanResponderTerminate:()=>{endGesture();setDrag(null);actions.current.select(null);actions.current.showPreview(null);},
-  }),[spec]);
+  }),[spec,showDestinationsAfterSelection]);
 
   const selectedPiece=display.scene.pieces?.find(piece=>piece.id===selected);
+  const visibleTargets=(display.scene.targets||[]).filter(target=>
+    !showDestinationsAfterSelection || (active && selectedPiece?.move_targets?.includes(target.id)));
   const selectedActions=selectedPiece?pieceActions(selectedPiece):[];
   const replayEffects=display.replay?historyChanges(display.previous,display.scene).effects:new Map<string,'enter'|'change'>();
   const previewTarget=display.scene.targets?.find(target=>target.id===preview);
@@ -538,7 +544,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
             {!!cell.text&&<SvgText textAnchor="middle" alignmentBaseline="central" fontSize={Math.min(size.width,size.height)*.42} fill="#102330">{playerText(cell.text)}</SvgText>}
           </G>;
         }),
-        ...(display.scene.targets||[]).map(target=><TargetGraphic key={`target:${target.id}`} target={target} spec={spec}
+        ...visibleTargets.map(target=><TargetGraphic key={`target:${target.id}`} target={target} spec={spec}
           enabled={active&&(!selectedPiece?.move_targets?.length||selectedPiece.move_targets.includes(target.id))}
           selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>),
         ...(display.scene.labels||[]).map(label=><SvgText key={`label:${label.id}`} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>),
