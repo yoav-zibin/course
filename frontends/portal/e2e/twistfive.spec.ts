@@ -60,7 +60,14 @@ test('Twist Five: a full match against the computer, with plate rotation, ends w
     const plate=PLATES[turns%4];
     if(!toolTurnDone){
       // Rotation through the plate itself: select it, then the ↻ tool.
-      await press(page,`${plate} plate: Move, Rotate`,isMobile);
+      const plateControl=page.getByRole('button',{name:`${plate} plate: Move, Rotate`,exact:true});
+      await expect(plateControl).toBeEnabled();
+      await plateControl.scrollIntoViewIfNeeded();
+      const box=(await plateControl.boundingBox())!;
+      // A marble can cover the plate center. The board's pointer handler
+      // resolves the child marble to its parent plate.
+      if(isMobile)await page.touchscreen.tap(box.x+box.width/2,box.y+box.height/2);
+      else await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
       await expect(page.getByRole('button',{name:'Rotate clockwise',exact:true})).toBeVisible();
       await shot(page,'rotate-tool',info.project.name);
       await press(page,'Rotate clockwise',isMobile);
