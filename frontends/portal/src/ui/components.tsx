@@ -62,19 +62,20 @@ export function Notice({children, error, onDismiss}: {children: ReactNode; error
   return <View accessibilityRole="alert" style={[styles.notice, error && {borderColor: colors.error}]}><Copy style={[{flex: 1}, error && {color: colors.error}]}>{children}</Copy>{onDismiss && <Button secondary compact label={copyText("Dismiss message")} onPress={onDismiss}>×</Button>}</View>;
 }
 
-export function DialogContent({title,children,onClose,wide,avoidKeyboard}: {title:string;children:ReactNode;onClose:()=>void;wide?:boolean;avoidKeyboard?:boolean}) {
+export function DialogContent({title,children,onClose,wide,avoidKeyboard,bottomClearance}: {title:string;children:ReactNode;onClose:()=>void;wide?:boolean;avoidKeyboard?:boolean;bottomClearance?:number}) {
   const content=<View style={[styles.modal,wide&&{maxWidth:760}]}><Row style={{justifyContent:'space-between'}}><Title small>{title}</Title><Button compact secondary label={copyText('Close dialog')} onPress={onClose}>×</Button></Row><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:18,paddingBottom:10}}>{children}</ScrollView></View>;
-  return avoidKeyboard&&Platform.OS!=='web'?<KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':'height'} style={styles.modalShade}>{content}</KeyboardAvoidingView>:<View style={styles.modalShade}>{content}</View>;
+  const shade=[styles.modalShade,bottomClearance?{paddingBottom:bottomClearance}:undefined];
+  return avoidKeyboard&&Platform.OS!=='web'?<KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':'height'} style={shade}>{content}</KeyboardAvoidingView>:<View style={shade}>{content}</View>;
 }
-export function Dialog({visible,title,children,onClose,wide,reporting}: {visible:boolean;title:string;children:ReactNode;onClose:()=>void;wide?:boolean;reporting?:boolean}) {
+export function Dialog({visible,title,children,onClose,onDismiss,wide,reporting,bottomClearance}: {visible:boolean;title:string;children:ReactNode;onClose:()=>void;onDismiss?:()=>void;wide?:boolean;reporting?:boolean;bottomClearance?:number}) {
   const id=useRef(Symbol('dialog')).current,captureView=useRef<React.ComponentRef<typeof View>>(null),report=useNativeBugReport();
   useEffect(()=>{if(Platform.OS!=='web'&&visible&&!reporting)return registerNativeDialog(id,captureView);},[visible,reporting,id]);
   // Web fade-out keeps focusable controls mounted after close, including when
   // another dialog opens immediately. Remove the closed web modal at once.
   if(Platform.OS==='web'&&!visible)return null;
-  return <Modal visible={visible} transparent animationType="fade" onRequestClose={()=>{if(report)report.onClose();else onClose();}} accessibilityViewIsModal>
+  return <Modal visible={visible} transparent animationType="fade" onDismiss={onDismiss} onRequestClose={()=>{if(report)report.onClose();else onClose();}} accessibilityViewIsModal accessibilityLabel={title}>
     <View ref={captureView} collapsable={false} style={{flex:1}}>
-    <View style={{flex:1}} accessibilityElementsHidden={Boolean(report&&!reporting)} importantForAccessibility={report&&!reporting?'no-hide-descendants':'auto'}><DialogContent title={title} onClose={onClose} wide={wide} avoidKeyboard={reporting}>{children}</DialogContent></View>
+    <View style={{flex:1}} accessibilityElementsHidden={Boolean(report&&!reporting)} importantForAccessibility={report&&!reporting?'no-hide-descendants':'auto'}><DialogContent title={title} onClose={onClose} wide={wide} avoidKeyboard={reporting} bottomClearance={bottomClearance}>{children}</DialogContent></View>
     {Platform.OS!=='web'&&report&&!reporting&&<View style={[StyleSheet.absoluteFill,{zIndex:2147483646,elevation:99}]}>{report.content}</View>}
     {Platform.OS!=='web'&&<BugButton/>}
     </View>

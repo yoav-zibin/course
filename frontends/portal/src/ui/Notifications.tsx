@@ -38,12 +38,14 @@ export function NotificationItem({item,onOpen}: {item:InAppNotification;onOpen:(
   </Pressable>;
 }
 
-export function NotificationPrompt() {
+export function NotificationPrompt({inline=false}:{inline?:boolean}) {
   const {p, run, notificationDelivery} = useApp();
-  return <Dialog visible={p.notificationPrompt && p.notificationPromptReady} title={copyText('Know when it’s your turn')} onClose={p.actions.dismissNotificationPrompt}>
+  const visible=p.notificationPrompt&&p.notificationPromptReady,title=copyText('Know when it’s your turn');
+  const content=<>
     <Copy>{copyText('Your opponent has the turn. Enable notifications for your next turn, invitations, rematch requests, and match results.')}</Copy>
     <Copy small muted>{copyText('You can change this anytime in your profile.')}</Copy>
     <Button disabled={notificationDelivery.busy || !notificationDelivery.status} onPress={() => run(async () => {p.actions.dismissNotificationPrompt(); await notificationDelivery.enableDevice();})}>{copyText('Enable notifications')}</Button>
     <Button secondary onPress={p.actions.dismissNotificationPrompt}>{copyText('Not now')}</Button>
-  </Dialog>;
+  </>;
+  return inline?visible?<Card><Title small>{title}</Title>{content}</Card>:null:<Dialog visible={visible} title={title} onClose={p.actions.dismissNotificationPrompt}>{content}</Dialog>;
 }

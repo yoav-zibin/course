@@ -1,5 +1,5 @@
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
-import {ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuClosed,ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
 import {logoutAndSignIn,seedAccounts,verifiedSignInFixtures} from './auth-fixtures';
 
 const headers=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
@@ -177,8 +177,7 @@ test('first confirmed turn handoff asks once and profile controls register and d
   await expect(page.getByRole('heading',{name:'Know when it’s your turn',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>(window as any).__notificationPrompts)).toBe(0);
   await page.getByRole('button',{name:'Not now',exact:true}).click();
-  await page.getByTestId('match-menu-button').click();
-  await expect(page.getByTestId('match-menu-button')).toHaveAttribute('aria-expanded','false');
+  await ensureMatchMenuClosed(page);
   const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(bob),data:{move:{cell:3},expected_move_count:1}});expect(moved.ok()).toBeTruthy();
   await page.getByRole('button',{name:'Cell 2',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Know when it’s your turn',exact:true})).toHaveCount(0);

@@ -31,3 +31,10 @@ export async function ensureMatchMenuOpen(page:Page){
   if(await menu.getAttribute('aria-expanded')!=='true')await menu.click();
   await expect(menu).toHaveAttribute('aria-expanded','true');
 }
+
+export async function ensureMatchMenuClosed(page:Page){
+  const menu=page.getByTestId('match-menu-button');
+  await expect(menu).toBeVisible();
+  if(await menu.getAttribute('aria-expanded')==='true')await menu.click();
+  await expect(menu).toHaveAttribute('aria-expanded','false');
+}

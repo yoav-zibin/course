@@ -45,6 +45,14 @@ def android_tree(canvas, *legal_cells, move_count=0):
     return root
 
 
+def android_match_menu(move_count=0):
+    root = ET.Element("hierarchy")
+    dialog = ET.SubElement(root, "node", {"content-desc": "Match menu", "bounds": "[54,180][1026,2100]"})
+    ET.SubElement(dialog, "node", {"text": f"{move_count} moves · 2 players", "bounds": "[100,470][980,520]"})
+    ET.SubElement(dialog, "node", {"content-desc": "Close dialog", "clickable": "true", "bounds": "[880,200][1000,320]"})
+    return root
+
+
 def driver():
     value = smoke.NativeSmoke.__new__(smoke.NativeSmoke)
     value.fixture, value.width, value.height = FIXTURE, 1080, 2400
@@ -76,12 +84,14 @@ def test_initial_local_list_deep_link_keeps_offline_mode_and_restart_resumes_sav
 
 def test_clipped_canvas_is_revealed_then_physical_tap_ignores_bad_virtual_bounds():
     value = driver()
-    trees = iter([android_tree("[0,1770][1080,2328]", 1), android_tree("[0,555][1080,1563]", 1), android_tree("[0,555][1080,1563]", 4)])
+    trees = iter([android_match_menu(), android_tree("[0,1770][1080,2328]", 1), android_tree("[0,555][1080,1563]", 1), android_tree("[0,555][1080,1563]", 4)])
     value.dump = lambda: next(trees)
-    scrolls, touches = [], []
+    scrolls, touches, actions = [], [], []
+    value.tap = lambda label, **options: actions.append(("control", label))
     value.scroll_outside_canvas = lambda canvas, viewport, upwards=True, distance=0: scrolls.append(upwards)
     def command(*args):
         touches.append(args)
+        actions.append(("command", args))
         return value.package + "/.MainActivity" if args[1:3] == ("cmd", "package") else ""
 
     value.command = command
@@ -89,7 +99,7 @@ def test_clipped_canvas_is_revealed_then_physical_tap_ignores_bad_virtual_bounds
 
     def wait(label, **options):
         waited.append(label)
-        return ET.Element("node") if label in {"0 moves", "1 moves", "Game board."} else pytest.fail(label)
+        return ET.Element("node") if label in {"Close dialog", "Match menu", "0 moves", "1 moves", "Game board."} else pytest.fail(label)
 
     value.wait = wait
     value.tap_cell(1)
@@ -100,7 +110,10 @@ def test_clipped_canvas_is_revealed_then_physical_tap_ignores_bad_virtual_bounds
     assert touches[2][6:] == ("--ez", "buildplayLocalUiTest", "true")
     assert touches[3:] == [("shell", "input", "tap", "163", "855")]
     assert value.played_cells == [1]
-    assert waited == ["0 moves", "1 moves", "Game board."]
+    assert waited == ["Close dialog", "0 moves", "Match menu", "Close dialog", "1 moves", "Match menu", "Game board."]
+    physical_touch = actions.index(("command", ("shell", "input", "tap", "163", "855")))
+    assert actions[physical_touch - 1] == ("control", "Close dialog")
+    assert actions[physical_touch + 1] == ("control", "Match menu")
     assert {"assertion": "fitted-camera-after-process-restart", "move_count": 0,
             "occupied_cells": [], "canvas": (0, 555, 1080, 1563)} in value.events
 
@@ -108,7 +121,8 @@ def test_clipped_canvas_is_revealed_then_physical_tap_ignores_bad_virtual_bounds
 def test_a_wrong_previous_physical_cell_cannot_be_accepted_as_progress():
     value = driver()
     value.played_cells = [1]
-    value.dump = lambda: android_tree("[0,555][1080,1563]", 1, 4, move_count=1)
+    trees = iter([android_match_menu(1), android_tree("[0,555][1080,1563]", 1, 4, move_count=1)])
+    value.dump = lambda: next(trees)
     value.command = lambda *args: value.package + "/.MainActivity" if args[1:3] == ("cmd", "package") else ""
     value.wait = lambda *args, **options: ET.Element("node")
     with pytest.raises(RuntimeError, match="did not occupy Cell 1"):
@@ -127,7 +141,7 @@ def test_restart_cannot_accept_a_different_saved_move_count_before_physical_touc
     # A substring wait for "0 moves" could also see "10 moves". The fitted
     # board must confirm the exact saved count before projecting any touch.
     value.wait = lambda *args, **options: ET.Element("node")
-    value.dump = lambda: android_tree("[0,555][1080,1563]", 1, move_count=10)
+    value.dump = lambda: android_match_menu(10)
     with pytest.raises(RuntimeError, match="expected 0-move board"):
         value.tap_cell(1)
     assert not any(args[1:3] == ("input", "tap") for args in commands)

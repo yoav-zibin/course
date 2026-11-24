@@ -41,12 +41,14 @@ test('online matches use the shared navigation and retain their public game thro
     await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
     await expect(backToMatches(page)).toHaveCount(0);
     await activate(page.getByTestId('match-menu-button'),isMobile);
+    await expect(page.getByRole('dialog',{name:'Match menu',exact:true})).toBeVisible();
     await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
     await expect(matchesNavigation(page)).toBeVisible();
     await expect(page.getByText(/^(?:Public match|Invite only)$/)).toHaveCount(0);
     await page.screenshot({path:info.outputPath(`online-navigation-${viewport.width}.png`)});
 
     await activate(matchesNavigation(page),isMobile);
+    await expect(page.getByRole('dialog',{name:'Match menu',exact:true})).toHaveCount(0);
     await expect(page).toHaveURL(/#matches$/);
     await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
     await expect(page.getByTestId(`match-card-${match.id}`).getByRole('heading',{name:`${name} against ${host.display_name}`,exact:true})).toBeVisible();
@@ -91,6 +93,7 @@ test('single-player matches use the shared navigation and resume the played boar
     await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
     await expect(matchesNavigation(page)).toHaveCount(1);
     await activate(matchesNavigation(page),isMobile);
+    await expect(page.getByRole('dialog',{name:'Match menu',exact:true})).toHaveCount(0);
     await expect(page).toHaveURL(/#matches$/);
     await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
     const reopen=page.getByRole('button',{name:'Open match',exact:true});

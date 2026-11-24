@@ -2528,6 +2528,18 @@
     "hi": "रिपोर्ट भेजें",
     "ar": "إرسال البلاغ"
   },
+  "Go to start": {
+    "es": "Ir al inicio", "fr": "Aller au début", "de": "Zum Anfang", "pt": "Ir ao início", "zh": "跳到开始", "hi": "शुरुआत पर जाएँ", "ar": "الانتقال إلى البداية"
+  },
+  "Go to end": {
+    "es": "Ir al final", "fr": "Aller à la fin", "de": "Zum Ende", "pt": "Ir ao fim", "zh": "跳到最后", "hi": "अंत पर जाएँ", "ar": "الانتقال إلى النهاية"
+  },
+  "Previous move": {
+    "es": "Jugada anterior", "fr": "Coup précédent", "de": "Vorheriger Zug", "pt": "Jogada anterior", "zh": "上一步", "hi": "पिछली चाल", "ar": "الحركة السابقة"
+  },
+  "Next move": {
+    "es": "Siguiente jugada", "fr": "Coup suivant", "de": "Nächster Zug", "pt": "Próxima jogada", "zh": "下一步", "hi": "अगली चाल", "ar": "الحركة التالية"
+  },
   "Match menu": {
     "es": "Menú de la partida",
     "fr": "Menu de la partie",

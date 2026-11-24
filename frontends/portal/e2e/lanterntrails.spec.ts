@@ -45,9 +45,8 @@ test('Lantern Trails: a full game against the computer, with tile rotation, ends
   await page.goto(`/portal#game=${id}`);
   await page.getByTestId('play-computer').getByRole('button',{name:'Players: 2',exact:true}).click();
   await page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true}).click();
-  await ensureMatchMenuOpen(page);
-  const outcome=page.getByTestId('match-outcome');
   const stage=page.getByTestId('game-stage');
+  const outcome=stage.getByText(/ wins!$|^Shared win: /).first();
 
   // Start: an edge square, then one of its gates in the tray.
   await expect(page.getByRole('button',{name:/^Start next to /}).first()).toBeVisible({timeout:20000});
@@ -103,8 +102,9 @@ test('Lantern Trails: a full game against the computer, with tile rotation, ends
     if(turns===3)await shot(page,'midgame',info.project.name);
   }
   await expect(outcome).toBeVisible({timeout:60000});
-  await expect(outcome).toHaveText(/won|lost|draw|tie/i);
   await expect(stage.getByText(/ wins!$|^Shared win: /)).toBeVisible();
+  await ensureMatchMenuOpen(page);
+  await expect(page.getByTestId('match-outcome')).toHaveText(/won|lost|draw|tie/i);
   expect(toolTurnDone).toBe(true);
   expect(buttonTurnDone).toBe(true);
   await shot(page,'end',info.project.name);

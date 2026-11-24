@@ -39,9 +39,8 @@ test('Twist Five: a full match against the computer, with plate rotation, ends w
   await page.goto(`/portal#game=${id}`);
   // Online matches are human-only; the computer plays in local practice.
   await page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true}).click();
-  await ensureMatchMenuOpen(page);
-  const outcome=page.getByTestId('match-outcome');
   const stage=page.getByTestId('game-stage');
+  const outcome=stage.getByText(/ wins!$|^Draw$/).first();
   await expect(page.getByRole('button',{name:/^Hole [A-F][1-6]$/}).first()).toBeVisible({timeout:20000});
   await shot(page,'start',info.project.name);
   let turns=0,toolTurnDone=false;
@@ -88,8 +87,9 @@ test('Twist Five: a full match against the computer, with plate rotation, ends w
     if(turns===2)await shot(page,'midgame',info.project.name);
   }
   await expect(outcome).toBeVisible({timeout:30000});
-  await expect(outcome).toHaveText(/won|lost|draw|tie/i);
   await expect(stage.getByText(/ wins!$|^Draw$/)).toBeVisible();
+  await ensureMatchMenuOpen(page);
+  await expect(page.getByTestId('match-outcome')).toHaveText(/won|lost|draw|tie/i);
   expect(toolTurnDone).toBe(true);
   await shot(page,'end',info.project.name);
   expect(errors).toEqual([]);

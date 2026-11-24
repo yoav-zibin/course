@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {BUG_HEIGHT,BUG_WIDTH,MATCH_CONTROLS_HEIGHT,MATCH_CONTROLS_WIDTH,bugBounds,clampBugPoint,isBugDrag,normalizedBugPoint,resolveBugPoint} from '../src/ui/bugPosition';
+import {BUG_HEIGHT,BUG_WIDTH,MATCH_CONTROLS_HEIGHT,MATCH_CONTROLS_WIDTH,MATCH_HISTORY_HEIGHT,MATCH_HISTORY_WIDTH,bugBounds,clampBugPoint,isBugDrag,matchControlsSize,normalizedBugPoint,resolveBugPoint} from '../src/ui/bugPosition';
 
 test('a floating bug control starts inside the safe top-left corner and clamps every edge',()=>{
   const bounds=bugBounds(390,797,{top:44,right:0,bottom:34,left:0});
@@ -42,5 +42,22 @@ test('the entire paired match control stays within safe edges and a resized visu
     assert.equal(point.y+size.height,60+height-21-2);
     assert.ok(point.x>=35+16&&point.y>=60+24);
     assert.deepEqual(normalizedBugPoint(point,bounds),{x:1,y:1});
+  }
+});
+
+test('the history remote fits narrow safe areas and remains clamped after rotation and keyboard changes',()=>{
+  const insets={top:24,right:16,bottom:21,left:16};
+  assert.deepEqual(matchControlsSize(390,insets,true),{width:MATCH_HISTORY_WIDTH,height:MATCH_HISTORY_HEIGHT});
+  assert.deepEqual(matchControlsSize(320,insets,true),{width:278,height:MATCH_HISTORY_HEIGHT});
+  assert.deepEqual(matchControlsSize(320,insets),{width:MATCH_CONTROLS_WIDTH,height:MATCH_CONTROLS_HEIGHT});
+  const saved={x:1,y:1};
+  for(const [width,height] of [[390,844],[844,390],[320,250],[280,220]]){
+    const size=matchControlsSize(width,insets,true);
+    const bounds=bugBounds(width,height,insets,{x:35,y:60},size);
+    const point=resolveBugPoint(saved,bounds);
+    assert.ok(point.x>=35+insets.left&&point.y>=60+insets.top);
+    assert.ok(point.x+size.width<=35+width-insets.right);
+    assert.ok(point.y+size.height<=60+height-insets.bottom);
+    assert.deepEqual(clampBugPoint({x:1e6,y:1e6},bounds),point);
   }
 });

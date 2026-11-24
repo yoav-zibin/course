@@ -25,13 +25,15 @@ import type {InAppNotification} from './core/types';
 import {useNotificationDelivery} from './ui/useNotificationDelivery';
 import {NotificationInbox, NotificationItem, NotificationPrompt} from './ui/Notifications';
 import {PortalHeader} from './ui/PortalHeader';
+import {useMatchHistory,type MatchHistoryController} from './ui/matchHistory';
 
-function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnType<typeof usePortal>;boardVisible:boolean;matchMenuOpen:boolean;onCloseMatchMenu:()=>void}) {
+function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:ReturnType<typeof usePortal>;boardVisible:boolean;matchMenuOpen:boolean;onCloseMatchMenu:()=>void;history:MatchHistoryController}) {
   const {width} = useWindowDimensions();
-  const fittedBoard=boardVisible&&!matchMenuOpen&&!p.selectedMatch?.awaitingHandoff;
+  const fittedBoard=boardVisible&&!p.selectedMatch?.awaitingHandoff;
   const localOnly=useRef(readLocalUiTest()).current;
   const [screen, setScreen] = useState<Screen>('games');
   const [account, setAccount] = useState(false);
+  const [menuDestination,setMenuDestination]=useState<'account'|'inbox'|null>(null);
   const content = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const [notice, setNotice] = useState('');
   const [inbox,setInbox] = useState(false), [notificationBanner,setNotificationBanner] = useState<InAppNotification|null>(null);
@@ -48,13 +50,13 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnTyp
   for(const saved of p.accounts)knownPasswords.current.add(saved.password);
   rememberDiagnosticSecrets(knownPasswords.current);
   useEffect(()=>recordDiagnosticPage({screen,gameId:p.selectedGameId,matchId:p.selectedMatch?.id,matchMenuOpen}),[screen,p.selectedGameId,p.selectedMatch?.id,matchMenuOpen]);
-  useEffect(()=>{const frame=requestAnimationFrame(()=>content.current?.scrollTo({x:0,y:0,animated:false}));return()=>cancelAnimationFrame(frame);},[matchMenuOpen,fittedBoard]);
+  useEffect(()=>{const frame=requestAnimationFrame(()=>content.current?.scrollTo({x:0,y:0,animated:false}));return()=>cancelAnimationFrame(frame);},[fittedBoard]);
   const t = (key: string, fallback: string) => text(p,key,fallback);
   const run = useCallback(async (task: () => Promise<unknown>) => {try { await task(); } catch (error) {setNotice(error instanceof Error ? error.message : String(error));}}, []);
   const routeBase = Platform.OS === 'web' ? window.location.origin : process.env.EXPO_PUBLIC_API_URL || 'https://buildplay.fun';
   const writeRoute = (fragment: string) => { if (Platform.OS === 'web') {const url = new URL(window.location.href); if(url.pathname==='/portal'&&!url.search&&url.hash.slice(1)===fragment)return; url.pathname = '/portal'; url.search = ''; url.hash = fragment; window.history.pushState(null, '', url);}};
   const clearInvite = () => {navigation.current++; acceptingInvite.current=''; setPendingInvite(''); setInvitePreview(null);};
-  const navigate = (next: Screen) => {clearInvite();if(next==='games')p.actions.clearGame();else p.actions.clearMatch(); setScreen(next); writeRoute(next);};
+  const navigate = (next: Screen) => {onCloseMatchMenu();history.stopPlayback();clearInvite();if(next==='games')p.actions.clearGame();else p.actions.clearMatch(); setScreen(next); writeRoute(next);};
   const openGame = async (id: string) => {clearInvite();setScreen('games');writeRoute(`game=${encodeURIComponent(id)}`);await p.actions.selectGame(id);};
   const openMatch = async (id: string) => {clearInvite();setScreen('matches');writeRoute(`match=${encodeURIComponent(id)}`);await p.actions.selectMatch(id);};
   const openInvite = async (token: string) => {
@@ -185,26 +187,37 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnTyp
   useEffect(()=>{if(p.storageError)reportClientIssue('storage_error',p.storageError);},[p.storageError]);
 
   const gameVisible = p.selectedMatch !== null;
-  const showDetails = !boardVisible || matchMenuOpen;
+  const showDetails = !boardVisible;
   // New destinations start at the top; updates within a match keep its position.
   const contentKey = gameVisible ? `match:${p.selectedMatch!.id}` : screen === 'games' && p.selectedGameId ? `game:${p.selectedGameId}` : screen;
-  return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>setAccount(true),navigate,openGame,openMatch}}>
+  const openHeaderDialog=(destination:'account'|'inbox')=>{
+    // iOS presents sibling modals after the current modal finishes dismissing.
+    if(Platform.OS==='ios'&&matchMenuOpen){setMenuDestination(destination);onCloseMatchMenu();return;}
+    onCloseMatchMenu();if(destination==='account')setAccount(true);else setInbox(true);
+  };
+  const menuDismissed=()=>{const destination=menuDestination;setMenuDestination(null);if(destination==='account')setAccount(true);else if(destination==='inbox')setInbox(true);};
+  const header=<PortalHeader width={boardVisible?Math.min(width-80,700):width} insideDialog={boardVisible} locale={p.locale} baseUrl={p.baseUrl} account={p.account} balance={p.profile?.token_balance??p.account?.token_balance??0} unread={p.unreadNotifications} ready={p.ready}
+        gamesLabel={t('ui.portal.nav_games','Games')} matchesLabel={t('ui.portal.nav_matches','Matches')} selected={screen==='games'?'games':'matches'}
+        onGames={()=>navigate('games')} onMatches={()=>navigate('matches')} onAccount={()=>openHeaderDialog('account')} onNotifications={()=>openHeaderDialog('inbox')}/>;
+  const extras=<>
+    <AccountDeletionBanner/>
+    {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {copyText('pending saves')}. {p.pending ? copyText('Your progress is saved locally and will sync to the cloud when connected.') : copyText('Downloaded single-player games keep working offline; progress syncs when you reconnect.')}</Notice>}
+          {notificationBanner&&!inbox&&<View style={{gap:10}}><NotificationItem item={notificationBanner} onOpen={openNotification}/>{!gameVisible&&<Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button>}</View>}
+          {appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
+    <NotificationPrompt inline={boardVisible}/>
+  </>;
+  return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>openHeaderDialog('account'),navigate,openGame,openMatch}}>
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
-      {showDetails&&<PortalHeader width={width} locale={p.locale} baseUrl={p.baseUrl} account={p.account} balance={p.profile?.token_balance??p.account?.token_balance??0} unread={p.unreadNotifications} ready={p.ready}
-        gamesLabel={t('ui.portal.nav_games','Games')} matchesLabel={t('ui.portal.nav_matches','Matches')} selected={screen==='games'?'games':'matches'}
-        onGames={()=>navigate('games')} onMatches={()=>navigate('matches')} onAccount={()=>setAccount(true)} onNotifications={()=>setInbox(true)}/>}
-      {showDetails&&<AccountDeletionBanner/>}
+      {showDetails&&header}
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
-        <ScrollView ref={content} key={contentKey} style={{flex:1,minWidth:0}} scrollEnabled={!fittedBoard} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},boardVisible&&matchMenuOpen&&{paddingBottom:64},fittedBoard&&{height:'100%',maxWidth:'100%',gap:0}]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={content} key={contentKey} style={{flex:1,minWidth:0}} scrollEnabled={!fittedBoard} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},fittedBoard&&{height:'100%',maxWidth:'100%',gap:0}]} keyboardShouldPersistTaps="handled">
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
-          {showDetails&&(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {copyText('pending saves')}. {p.pending ? copyText('Your progress is saved locally and will sync to the cloud when connected.') : copyText('Downloaded single-player games keep working offline; progress syncs when you reconnect.')}</Notice>}
-          {showDetails&&notificationBanner&&!inbox&&<View style={{gap:10}}><NotificationItem item={notificationBanner} onOpen={openNotification}/>{!gameVisible&&<Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button>}</View>}
-          {showDetails&&appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
+          {showDetails&&extras}
           {pendingInvite&&!p.account&&invitePreview?.usable&&<Card><Title small>{copyText('You’re invited to play')}</Title><Copy muted>{copyText('Log in or continue as a guest to join this match.')}</Copy><Row><Button onPress={()=>setAccount(true)}>{copyText('Log in to join')}</Button><Button secondary onPress={()=>{p.actions.watchInvite();clearInvite();writeRoute(`match=${encodeURIComponent(invitePreview.match.id)}`);}}>{copyText('Watch match')}</Button></Row></Card>}
           {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
-            : gameVisible ? <MatchStage showDetails={showDetails}/>
+            : gameVisible ? <MatchStage menuOpen={matchMenuOpen} onCloseMenu={onCloseMatchMenu} menuHeader={header} menuExtras={extras} history={history} onMenuDismissed={menuDismissed}/>
             : screen==='games' ? p.selectedGameId ? <GameDetail /> : <Catalog />
             : screen==='matches' ? <Matches />
             : <LocalMatches />}
@@ -212,20 +225,20 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu}: {p:ReturnTyp
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />
       <NotificationInbox visible={inbox} onClose={()=>setInbox(false)} onOpen={openNotification}/>
-      {showDetails&&<NotificationPrompt/>}
     </SafeAreaView>
   </Context.Provider>;
 }
 export default function App() {
   const p=usePortal();
+  const history=useMatchHistory(p);
   const [menuMatch,setMenuMatch]=useState<string|null>(null);
   const boardVisible=Boolean(p.selectedMatch&&p.selectedMatch.status!=='waiting_for_players');
   const matchKey=JSON.stringify([p.baseUrl,p.account?.id,p.selectedMatch?.id]);
   const matchMenuOpen=boardVisible&&menuMatch===matchKey;
   useEffect(()=>{setMenuMatch(null);},[p.baseUrl,p.account?.id,p.selectedMatch?.id]);
-  const toggleMatchMenu=()=>{setMenuMatch(matchMenuOpen?null:matchKey);recordDiagnosticEvent('match_menu',{expanded:!matchMenuOpen});};
+  const toggleMatchMenu=()=>{if(!matchMenuOpen)history.stopPlayback();setMenuMatch(matchMenuOpen?null:matchKey);recordDiagnosticEvent('match_menu',{expanded:!matchMenuOpen});};
   const embedded=Platform.OS==='web'?document.getElementById('declarative-spec'):null;
-  return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p} boardVisible={boardVisible} matchMenuOpen={matchMenuOpen} onCloseMatchMenu={()=>setMenuMatch(null)}/>}</ErrorBoundary><BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton onMenuPress={boardVisible&&!embedded?toggleMatchMenu:undefined} menuExpanded={matchMenuOpen}/></SafeAreaProvider>;
+  return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p} boardVisible={boardVisible} matchMenuOpen={matchMenuOpen} onCloseMatchMenu={()=>setMenuMatch(null)} history={history}/>}</ErrorBoundary><BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton onMenuPress={boardVisible&&!embedded?toggleMatchMenu:undefined} menuExpanded={matchMenuOpen} history={boardVisible&&!embedded?{...history.controls,disabled:history.controls.disabled||matchMenuOpen}:undefined}/></SafeAreaProvider>;
 }
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},

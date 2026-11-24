@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,ensureMatchMenuClosed,createUser,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL,page,request})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Practice checks require a disposable loopback server.');
@@ -49,6 +49,7 @@ async function reloadMatch(page:Page,id:string){
   await page.reload();await (await refreshed).finished();
   await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('header-matches')).toHaveAttribute('aria-current','page');
+  await ensureMatchMenuClosed(page);
 }
 
 async function randomSeat(page:Page,value:number){
@@ -127,6 +128,7 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
   const id=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
   await ensureMatchMenuOpen(page);
   await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
+  await ensureMatchMenuClosed(page);
   for(let seat=0;seat<4;seat++){
     if(seat){
       await expect(page.getByRole('button',{name:'I’m ready',exact:true})).toBeVisible();await expect(page.getByTestId('game-stage')).toHaveCount(0);
@@ -139,7 +141,7 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
   await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');await reloadMatch(page,id);
   for(let frame=3;frame>=0;frame--){
-    const previous=page.getByRole('button',{name:'← Previous',exact:true});
+    const previous=page.getByRole('button',{name:'Previous move',exact:true});
     if(isMobile)await previous.tap();else await previous.click();
     await expect(page.getByText(`Replay · move ${frame} of 4`,{exact:true})).toBeVisible();
     await expect(page.getByText(`Your seat ${frame+1}`,{exact:true})).toBeVisible();
@@ -147,8 +149,8 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
     await expect(page.getByRole('button',{name:'Advance',exact:true})).toHaveCount(0);
   }
   expect((await savedMatch(page,id)).move_count).toBe(4);
-  await page.getByRole('button',{name:'Live board',exact:true}).click();
-  await expect(page.getByText('Your seat 1',{exact:true})).toBeVisible();await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');
+  await page.getByRole('button',{name:'Go to end',exact:true}).click();
+  await expect(page.getByText('Your seat 1',{exact:true})).toBeVisible();await ensureMatchMenuOpen(page);await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');
   await page.screenshot({path:info.outputPath('pass-replay-private-view.png'),fullPage:true});
 });
 
@@ -169,15 +171,16 @@ for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer pract
   await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toHaveText(humanSeat===count-1?'You won':'You lost');
   expect((await savedMatch(page,id)).move_count).toBe(count);
-  await reloadMatch(page,id);await expect(page.getByTestId('match-outcome')).toHaveText(humanSeat===count-1?'You won':'You lost');
+  await reloadMatch(page,id);await ensureMatchMenuOpen(page);await expect(page.getByTestId('match-outcome')).toHaveText(humanSeat===count-1?'You won':'You lost');
   expect((await savedMatch(page,id)).players[humanSeat].kind).toBe('human');
-  await page.getByRole('button',{name:'← Previous',exact:true}).click();await expect(page.getByText(`Replay · move ${count-1} of ${count}`,{exact:true})).toBeVisible();
+  await ensureMatchMenuClosed(page);await page.getByRole('button',{name:'Previous move',exact:true}).click();await expect(page.getByText(`Replay · move ${count-1} of ${count}`,{exact:true})).toBeVisible();
   await expect(page.getByText(`Your seat ${humanSeat+1}`,{exact:true})).toBeVisible();
   await expect(page.getByText(`Hand belongs to local-player-${humanSeat}`,{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Advance',exact:true})).toHaveCount(0);expect((await savedMatch(page,id)).move_count).toBe(count);
-  await page.getByRole('button',{name:'Live board',exact:true}).click();
+  await page.getByRole('button',{name:'Go to end',exact:true}).click();
   const rematchSeat=humanSeat===0?count-1:0;
   await page.evaluate(value=>{Math.random=()=>value;},rematchSeat===0?0:0.999999);
+  await ensureMatchMenuOpen(page);
   await page.getByRole('button',{name:'Play again',exact:true}).click();
   await expect(page).not.toHaveURL(new RegExp(`#match=${id}$`));await expect(page.getByRole('button',{name:'Advance',exact:true})).toBeVisible();
   const nextId=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!,next=await savedMatch(page,nextId);

@@ -16,18 +16,19 @@ const avatar='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3
 const translated=(source:string,locale:string)=>locale==='en'?source:(copy as Record<string,Record<string,string>>)[source]?.[locale]??source;
 test.beforeEach(async({baseURL})=>{if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Header checks require a disposable loopback server.');});
 
-async function singleLine(page:Page){
-  const header=page.getByTestId('portal-header');
+async function closeTopDialog(page:Page,label='Close dialog'){await page.getByRole('dialog').last().getByRole('button',{name:label,exact:true}).click();}
+async function openMatchMenu(page:Page){const menu=page.getByTestId('match-menu-button');if(await menu.getAttribute('aria-expanded')!=='true')await menu.click();await expect(page.getByTestId('portal-header')).toBeVisible();}
+
+async function menuControlsFit(page:Page){
+  await expect(page.getByRole('dialog')).toBeVisible();
   const controls=[page.getByTestId('header-games'),page.getByTestId('header-matches'),page.getByTestId('header-token-balance'),page.getByTestId('header-notifications'),page.getByTestId('header-account')];
-  const headerBox=(await header.boundingBox())!,boxes=[];
-  expect(headerBox.height).toBeLessThanOrEqual(75);
+  const boxes=[];
   for(const control of controls){
     await expect(control).toBeVisible();const box=(await control.boundingBox())!;boxes.push(box);
     expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(page.viewportSize()!.width+1);
-    expect(Math.abs(box.y+box.height/2-(headerBox.y+headerBox.height/2))).toBeLessThan(2);
   }
   for(let first=0;first<boxes.length;first++)for(let second=first+1;second<boxes.length;second++){
-    const a=boxes[first],b=boxes[second];expect(a.x+a.width<=b.x+.5||b.x+b.width<=a.x+.5).toBe(true);
+    const a=boxes[first],b=boxes[second];expect(a.x+a.width<=b.x+.5||b.x+b.width<=a.x+.5||a.y+a.height<=b.y+.5||b.y+b.height<=a.y+.5).toBe(true);
   }
   const bug=(await page.getByTestId('bug-report-button').boundingBox())!;
   for(const box of boxes)expect(box.x+box.width<=bug.x||bug.x+bug.width<=box.x||box.y+box.height<=bug.y||bug.y+bug.height<=box.y).toBe(true);
@@ -37,7 +38,7 @@ async function singleLine(page:Page){
   return boxes;
 }
 
-for(const locale of ['en','ar'])test(`header stays on one line with long names and exact large balances in ${locale}`,async({page,request},info)=>{
+for(const locale of ['en','ar'])test(`menu header keeps controls readable with long names and exact large balances in ${locale}`,async({page,request},info)=>{
   const user=await createUser(request,'Header fixture account with a deliberately long display name');
   user.picture_url='/header-avatar-unavailable';
   let balance=999;
@@ -49,7 +50,7 @@ for(const locale of ['en','ar'])test(`header stays on one line with long names a
   await page.getByTestId('match-menu-button').click();
   if(locale==='ar'){
     await page.getByTestId('header-account').click();await page.getByRole('button',{name:/Language:.*العربية/}).click();
-    await page.getByRole('button',{name:translated('Close dialog','ar'),exact:true}).click();
+    await closeTopDialog(page,translated('Close dialog','ar'));await openMatchMenu(page);
     await expect.poll(()=>page.evaluate(()=>document.documentElement.dir)).toBe('rtl');
   }
   await expect(page.getByTestId('header-account')).toHaveAccessibleDescription(user.display_name);
@@ -59,14 +60,15 @@ for(const locale of ['en','ar'])test(`header stays on one line with long names a
   for(const nextBalance of [999,hugeBalance]){
     balance=nextBalance;
     await page.getByTestId('header-notifications').click();
+    await expect(page.getByRole('heading',{name:translated('Notifications',locale),exact:true})).toBeVisible();
+    await closeTopDialog(page,translated('Close dialog',locale));await openMatchMenu(page);
     const exact=new Intl.NumberFormat(locale).format(balance);
     await expect(page.getByTestId('header-token-balance')).toHaveAttribute('aria-label',`${exact} ${translated('tokens',locale)}`);
-    await page.getByRole('button',{name:translated('Close dialog',locale),exact:true}).click();
     for(const width of [320,390,799,800,1024,1279,1280,1440]){
       await page.setViewportSize({width,height:844});
-      await expect.poll(async()=>Math.round((await page.getByTestId('portal-header').boundingBox())!.height)).toBeLessThanOrEqual(75);
-      const boxes=await singleLine(page);
-      if(locale==='ar')expect(boxes[0].x).toBeGreaterThan(boxes.at(-1)!.x);
+      await expect(page.getByTestId('portal-header')).toBeVisible();
+      const boxes=await menuControlsFit(page);
+      if(locale==='ar')expect(boxes[0].x).toBeGreaterThan(boxes[1].x);
       if(width===320&&balance===hugeBalance)await page.screenshot({path:info.outputPath(`compact-header-${locale}.png`)});
     }
   }
@@ -80,15 +82,19 @@ test('header icons open inbox, account and the bug form from the match menu with
   await page.route(`**/users/${user.id}`,async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),token_balance:hugeBalance,picture_url:avatar}});});
   await page.route('**/users/me/notifications?*',route=>route.fulfill({json:notificationPage(1)}));
   await page.goto('/portal#local');await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+  await page.getByRole('button',{name:'Cell 1',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);
+  await expect(page.getByTestId('history-play')).toBeEnabled();
   await page.getByTestId('match-menu-button').click();
+  await expect(page.getByRole('dialog',{name:'Match menu',exact:true})).toBeVisible();
   const account=page.getByRole('button',{name:'Account menu',exact:true});
   await expect(account.locator('img')).toHaveCount(1);
   await expect.poll(()=>account.locator('img').evaluate((node:HTMLImageElement)=>node.naturalWidth)).toBeGreaterThan(0);
   const notifications=page.getByRole('button',{name:'Notifications',exact:true});
   await expect(notifications).toHaveAccessibleDescription('Unread notifications: 1');
   await notifications.click();await expect(page.getByRole('heading',{name:'Notifications',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await closeTopDialog(page);await openMatchMenu(page);
   await account.focus();await page.keyboard.press('Enter');await expect(page.getByRole('heading',{name:'Your account',exact:true})).toBeVisible();
+  for(const id of ['history-start','history-previous','history-play','history-next','history-end'])await expect(page.getByTestId(id)).toBeDisabled();
   await expect(page.getByRole('heading',{name:user.display_name,exact:true})).toBeVisible();
   await expect(page.getByText(new RegExp(`${hugeBalance} tokens`))).toBeVisible();
   await page.getByRole('button',{name:'Report a bug or request a feature',exact:true}).click();
@@ -96,7 +102,9 @@ test('header icons open inbox, account and the bug form from the match menu with
   await expect(page.getByRole('img',{name:'Screenshot captured before opening this report',exact:true})).toBeVisible();
   await page.getByRole('dialog',{name:'Report a bug or feature request',exact:true}).getByRole('button',{name:'Close dialog',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Your account',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await closeTopDialog(page);
+  await expect(page.getByTestId('history-play')).toBeEnabled();
+  await openMatchMenu(page);
   const menu=page.getByTestId('match-menu-button');await menu.focus();await page.keyboard.press('Space');
   await expect(page.getByTestId('portal-header')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Report a bug or request a feature',exact:true})).toBeVisible();

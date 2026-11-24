@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuClosed,ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Offline match checks require a disposable loopback server.');
@@ -52,9 +52,10 @@ test('match names and playable packages download without catalog entries and sur
   await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
   await expect(cardTitle).toBeVisible();
   await page.getByRole('button',{name:'Open match',exact:true}).click();await ensureMatchMenuOpen(page);
-  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();await ensureMatchMenuClosed(page);
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByText(/Your move is saved and waiting for server confirmation/)).toBeVisible();
   const queued=()=>page.evaluate(({userId,matchId,gameId,version})=>{
     const key=Object.keys(localStorage).find(key=>key.startsWith('buildplay.shared.v1.')&&key.endsWith(`.${userId}`));

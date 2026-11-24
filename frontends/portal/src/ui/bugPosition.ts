@@ -1,11 +1,17 @@
 import {useSyncExternalStore} from 'react';
 
 export const BUG_WIDTH=36, BUG_HEIGHT=32;
-export const MATCH_CONTROLS_WIDTH=80, MATCH_CONTROLS_HEIGHT=40;
+export const MATCH_CONTROLS_WIDTH=80, MATCH_CONTROLS_HEIGHT=44;
+export const MATCH_HISTORY_WIDTH=280, MATCH_HISTORY_HEIGHT=64;
 export type BugPoint={x:number;y:number};
 export type BugBounds={left:number;top:number;right:number;bottom:number};
 type Insets={top:number;right:number;bottom:number;left:number};
 const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
+
+export function matchControlsSize(width:number,insets:Insets,history=false) {
+  return {width:Math.min(history?MATCH_HISTORY_WIDTH:MATCH_CONTROLS_WIDTH,Math.max(0,width-insets.left-insets.right-10)),
+    height:history?MATCH_HISTORY_HEIGHT:MATCH_CONTROLS_HEIGHT};
+}
 
 /** Keep the entire control inside the visible viewport and its safe area. */
 export function bugBounds(width:number,height:number,insets:Insets,origin:BugPoint={x:0,y:0},size={width:BUG_WIDTH,height:BUG_HEIGHT}):BugBounds {

@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {ensureMatchMenuOpen,createGame,createUser,E2E_ADMIN_CREDENTIALS,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuClosed,ensureMatchMenuOpen,createGame,createUser,E2E_ADMIN_CREDENTIALS,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Player copy checks require a disposable loopback server.');
@@ -54,7 +54,7 @@ test('legacy title tags stay hidden for cached pinned matches after the catalog 
   await loginAs(page,host);await page.goto(`/portal#match=${match.id}`);
   await expect(page.getByTestId('game-stage')).toBeVisible();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name:rawName,exact:true})).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:rawName,exact:true})).toHaveCount(0);await ensureMatchMenuClosed(page);
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   await expect.poll(()=>cachedName(page,gameId,1)).toEqual({id:gameId,version:1,name:rawName});
 
@@ -65,7 +65,7 @@ test('legacy title tags stay hidden for cached pinned matches after the catalog 
   await page.reload();
   await expect(page.getByTestId('game-stage')).toBeVisible();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name:rawName,exact:true})).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:rawName,exact:true})).toHaveCount(0);await ensureMatchMenuClosed(page);
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   await expect.poll(()=>cachedName(page,gameId,1)).toEqual({id:gameId,version:1,name:rawName});
   const pinned=await request.get(`/games/${gameId}/versions/1`);expect(pinned.ok()).toBeTruthy();

@@ -38,9 +38,8 @@ test('Crownfields: a full game against the computer, with tile rotation, ends wi
   await page.goto(`/portal#game=${id}`);
   await page.getByTestId('play-computer').getByRole('button',{name:'Players: 2',exact:true}).click();
   await page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true}).click();
-  await ensureMatchMenuOpen(page);
-  const outcome=page.getByTestId('match-outcome');
   const stage=page.getByTestId('game-stage');
+  const outcome=stage.getByText(/ wins with \d+!$|^Shared win: /).first();
   const pick=page.getByRole('button',{name:/^Choose tile \d+$/});
   const square=page.getByRole('button',{name:/^Start the tile here/});
   const discard=page.getByRole('button',{name:'Discard tile',exact:true});
@@ -81,8 +80,9 @@ test('Crownfields: a full game against the computer, with tile rotation, ends wi
     await page.waitForTimeout(500);
   }
   await expect(outcome).toBeVisible({timeout:60000});
-  await expect(outcome).toHaveText(/won|lost|draw|tie/i);
   await expect(stage.getByText(/ wins with \d+!$|^Shared win: /)).toBeVisible();
+  await ensureMatchMenuOpen(page);
+  await expect(page.getByTestId('match-outcome')).toHaveText(/won|lost|draw|tie/i);
   expect(toolTurn&&buttonTurn&&picks>=6&&lays>=1).toBe(true);
   await shot(page,'end',info.project.name);
   expect(errors).toEqual([]);

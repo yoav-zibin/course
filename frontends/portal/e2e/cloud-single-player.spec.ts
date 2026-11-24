@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuClosed,ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './helpers';
 
 const headers=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
 
@@ -23,12 +23,12 @@ for(const source of ['bundled','downloaded'])test(`pass-and-play keeps offline t
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
   await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
 
-  await context.setOffline(true);
+  await context.setOffline(true);await ensureMatchMenuClosed(page);
   for(const cell of [1,4,2])await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByText('Saved locally · waiting to sync',{exact:true})).toBeVisible();
   await expect(page.getByText(/3 moves/)).toBeVisible();
-  await page.reload();await ensureMatchMenuOpen(page);
-  await expect(page.getByRole('button',{name:'Cell 5',exact:true})).toBeVisible();
+  await page.reload();await expect(page.getByRole('button',{name:'Cell 5',exact:true})).toBeVisible();await ensureMatchMenuOpen(page);
   await expect(page.getByText(/3 moves/)).toBeVisible();
   await expect(page.getByText('Saved locally · waiting to sync',{exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath('offline-private-save.png')});
@@ -45,7 +45,9 @@ for(const source of ['bundled','downloaded'])test(`pass-and-play keeps offline t
   try{
     const second=await other.newPage();await loginAs(second,owner);await second.goto(`/portal#match=${id}`);await ensureMatchMenuOpen(second);
     await expect(second.getByText(/3 moves/)).toBeVisible();
+    await ensureMatchMenuClosed(second);
     for(const cell of [5,3])await second.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();
+    await ensureMatchMenuOpen(second);
     await expect(second.getByTestId('match-outcome')).toBeVisible();
     await expect(second.getByText('Saved in the cloud',{exact:true})).toBeVisible({timeout:30000});
     const finished=await request.get(`/matches/${id}`,{headers:headers(owner)});

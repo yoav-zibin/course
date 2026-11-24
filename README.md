@@ -462,7 +462,8 @@ Game fields: `name`, `description`, `allowed_player_counts` (non-empty, distinct
 
 The persistent bug icon captures the current screen before opening a screenshot
 preview and description field. It floats at the top left outside matches and
-shares a draggable capsule with the menu in the board-only match view. It also
+shares a draggable capsule with the history remote and menu in the match view.
+The menu opens match details and navigation in a closable dialog. The icon also
 remains available over dialogs. Reports include recent console logs, visible
 errors, API timings, UI events, page history and account/device context, with
 credentials removed from diagnostics. The private **Bug reports** admin tab

@@ -5,9 +5,12 @@ sign-in pages, and in the native Portal. It opens a manual bug or feature report
 The Portal's persistent icon replaces the old feedback category picker and
 its game, match, user and footer entry points. The icon floats at the top left
 outside matches. When a match board is showing, it shares one floating capsule
-with the match menu at the bottom right. The menu reveals the game name, players,
-current turn, instructions, history and navigation; closing it returns to the
-board. The capsule can be dragged clear of other controls.
+with the match menu and a history remote at the bottom right. The remote provides
+start, previous move, play/pause, next move and end controls, with a position
+readout. End returns to the live board, and controls are disabled when they have
+no effect. The closable menu dialog contains the game name, players, current
+turn, instructions, navigation and leaving controls. Opening it preserves the
+board's size and position. The capsule can be dragged clear of other controls.
 Its position stays within the visible screen and follows the user across app
 screens and dialogs during the session. The bug icon captures the
 current screen before opening the reporting dialog. The dialog previews the

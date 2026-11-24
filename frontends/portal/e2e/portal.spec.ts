@@ -1,7 +1,7 @@
 import {test,expect,Page,APIRequestContext} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {ensureMatchMenuOpen,createGame,createUser,loginAs,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,ensureMatchMenuClosed,createGame,createUser,loginAs,E2E_ADMIN_HEADERS,uniqueName} from './helpers';
 import sharedCopy from '../src/platform/ui-copy.json';
 
 const fixture=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/tictactoe.json'),'utf8'));
@@ -16,6 +16,7 @@ test('host controls and the offline starter game retain all eight languages with
   const locales=(await (await request.get('/i18n/locales')).json()).locales;
   await page.goto('/portal#local');
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
+  await ensureMatchMenuOpen(page);await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();await ensureMatchMenuClosed(page);
   // Constructed roster fixtures exercise the API's valid 200-codepoint names;
   // they are local layout evidence, not a claim of multiplayer browser play.
   const names=['مرحباالعالم世界🙂Ω'.repeat(20), 'Alice العربية 中文 👩🏽‍🚀🦊'.repeat(20)].map(name=>Array.from(name).slice(0,200).join(''));
@@ -26,6 +27,7 @@ test('host controls and the offline starter game retain all eight languages with
   await ensureMatchMenuOpen(page);
   const board=await page.getByTestId('game-stage').locator('svg').first().elementHandle();
   for(const locale of ['es','fr','de','pt','zh','hi','ar','en']){
+    await ensureMatchMenuOpen(page);
     await page.getByRole('button',{name:copy('Account menu',current),exact:true}).click();
     const entry=locales.find((item:any)=>item.code===locale),endonym=entry.native_name||entry.name||locale;
     const language=page.getByRole('button').filter({hasText:endonym});await language.last().click();
@@ -35,6 +37,7 @@ test('host controls and the offline starter game retain all eight languages with
     const cell=locale==='en'?'Cell {n}':fixture.translations[locale].client_strings.cell;
     await expect(page.getByRole('button',{name:cell.replace('{n}','1'),exact:true})).toBeVisible();
     expect(await board!.evaluate(node=>node===document.querySelector('[data-testid="game-stage"] svg'))).toBe(true);
+    await ensureMatchMenuOpen(page);
     for(const size of [{width:320,height:480},{width:480,height:320},{width:820,height:1180},{width:1180,height:820}]){
       await page.setViewportSize(size);
       for(const name of names){const label=page.getByText(name,{exact:true});await expect(label).toHaveText(name);await expect.poll(async()=>{const box=(await label.boundingBox())!;return box.x>=-1&&box.x+box.width<=size.width+1;}).toBe(true);}
@@ -71,11 +74,12 @@ test('short screens refit the complete board after rotation and resizing without
   }
   await ensureMatchMenuOpen(page);
   const port=await page.getByTestId('match-details').evaluateHandle(node=>{for(let p=node.parentElement;p;p=p.parentElement)if(/auto|scroll/.test(getComputedStyle(p).overflowY))return p;throw new Error('Missing details scroll view');});
-  await page.mouse.move(15,500);await page.mouse.wheel(0,1800);
+  const modalCenter=await port.evaluate(node=>{const box=node.getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2};});
+  await page.mouse.move(modalCenter.x,modalCenter.y);await page.mouse.wheel(0,1800);
   await expect.poll(()=>port.evaluate(node=>node.scrollTop)).toBeGreaterThan(0);
   await page.getByTestId('match-menu-button').click();
   await expect(page.getByTestId('match-menu-button')).toHaveAttribute('aria-expanded','false');
-  await expect.poll(()=>port.evaluate(node=>node.scrollTop)).toBe(0);
+  await expect(page.getByTestId('match-details')).toHaveCount(0);
   await expect(canvas).toHaveAttribute('viewBox','0 0 600 560');
   await expect.poll(async()=>{const box=(await board.boundingBox())!;return box.y>=-1&&box.y+box.height<=1025;}).toBe(true);
   await page.getByRole('button',{name:'Cell 2',exact:true}).click();
@@ -172,26 +176,29 @@ test('full localized instructions remain available between public turns, at game
   await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
   await expect(page.getByTestId('game-instructions')).not.toContainText(created.translations.ar.game_logic_rules);
   await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();
-  await expect(page.getByTestId('game-stage')).toBeVisible();await ensureMatchMenuOpen(page);
+  await expect(page.getByTestId('game-stage')).toBeVisible();
+  const boardBounds=await page.getByTestId('game-stage').boundingBox();await ensureMatchMenuOpen(page);
   await expect(page.getByText('Saved in the cloud',{exact:true})).toBeVisible();
   const helpButton=page.getByRole('button',{name:'How to play',exact:true});
-  const helpBounds=await helpButton.boundingBox(),boardBounds=await page.getByTestId('game-stage').boundingBox();
-  expect(helpBounds).not.toBeNull();expect(boardBounds).not.toBeNull();
-  expect(Math.abs(helpBounds!.x+helpBounds!.width-(boardBounds!.x+boardBounds!.width))).toBeLessThan(4);
-  expect(helpBounds!.y+helpBounds!.height).toBeLessThanOrEqual(boardBounds!.y);
+  await expect(helpButton).toBeVisible();await expect(page.getByRole('dialog',{name:'Match menu',exact:true})).toBeVisible();
+  expect(await page.getByTestId('game-stage').boundingBox()).toEqual(boardBounds);
   for(const [index,cell] of [1,4,2,5,3].entries()){
     if(index){
       await expect(page.getByTestId('game-stage')).toBeVisible();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
+      await ensureMatchMenuOpen(page);
       await page.getByRole('button',{name:'How to play',exact:true}).click();await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
       await page.getByRole('button',{name:'Close dialog',exact:true}).click();
     }
+    await ensureMatchMenuClosed(page);
     const target=page.getByRole('button',{name:`Cell ${cell}`,exact:true});await target.click();await expect(target).toHaveCount(0);
   }
+  await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
   const svg=await page.getByTestId('game-stage').locator('svg').first().elementHandle();
   await page.getByRole('button',{name:'How to play',exact:true}).click();await expect(page.getByTestId('game-instructions')).toContainText(created.game_ui_rules);
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();expect(await svg!.evaluate(node=>node===document.querySelector('[data-testid="game-stage"] svg'))).toBe(true);
-  await page.getByRole('button',{name:'← Previous',exact:true}).click();await expect(page.getByText('Replay · move 4 of 5')).toBeVisible();
+  await ensureMatchMenuClosed(page);await page.getByRole('button',{name:'Previous move',exact:true}).click();await expect(page.getByTestId('history-status')).toHaveText('Replay · move 4 of 5');
+  await ensureMatchMenuOpen(page);
   await page.getByRole('button',{name:'How to play',exact:true}).click();await expect(page.getByTestId('game-instructions')).toContainText(created.game_logic_rules);
   await expect(page.getByTestId('game-stage').locator('[role="button"][aria-disabled="false"]')).toHaveCount(0);
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
@@ -354,15 +361,16 @@ test('bundled public-state game is playable offline without handoffs, persists, 
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Play history',exact:true})).toBeEnabled();
-  await expect(page.getByRole('button',{name:'← Previous',exact:true})).toBeEnabled();
-  await page.reload();await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();await ensureMatchMenuOpen(page);
+  await expect(page.getByRole('button',{name:'Previous move',exact:true})).toBeEnabled();
+  await page.reload();await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
   for(const cell of [4,2,5,3]){await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();await expect(page.getByRole('button',{name:'Cell '+cell,exact:true})).toHaveCount(0);}
+  await ensureMatchMenuOpen(page);
   await expect(page.getByText('Finished',{exact:true}).first()).toBeVisible();
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
-  await page.getByRole('button',{name:'← Previous',exact:true}).click();await expect(page.getByText('Replay · move 4 of 5')).toBeVisible();
-  await page.getByRole('button',{name:'Play history',exact:true}).click();await expect(page.getByText('Replay · move 5 of 5')).toBeVisible();await expect(page.getByRole('button',{name:'Play history',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Live board',exact:true}).click();await expect(page.getByText('Live board',{exact:true}).first()).toBeVisible();
+  await ensureMatchMenuClosed(page);await page.getByRole('button',{name:'Previous move',exact:true}).click();await expect(page.getByTestId('history-status')).toHaveText('Replay · move 4 of 5');
+  await page.getByRole('button',{name:'Play history',exact:true}).click();await expect(page.getByTestId('history-status')).toHaveText('Live board');await expect(page.getByRole('button',{name:'Play history',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Go to end',exact:true})).toBeDisabled();
   await context.setOffline(false);
   await page.goto('/portal#local');
   await expect(page.getByTestId('match-outcome')).toHaveText('Player 1 won');
@@ -381,6 +389,7 @@ test('a genuinely finished local draw stays translated offline in detail and mat
   await page.getByRole('button',{name:/Language:.*Español/}).click();
   await expect(page.locator('html')).toHaveAttribute('lang','es');
   await page.getByRole('button',{name:'Cerrar diálogo',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
   await page.goto('/portal#local');await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
 });
@@ -431,7 +440,6 @@ test('two browser players share turns, a lost reply cannot duplicate a move, and
   await bob.getByRole('button',{name:'Join match',exact:true}).click();
   await expect(page.getByRole('button',{name:'Start match',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Start match',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
-  await ensureMatchMenuOpen(page);await ensureMatchMenuOpen(bob);
   let lost=false;
   await page.route(`**/matches/${match.id}/moves`,async route=>{if(route.request().method()==='POST'&&!lost){lost=true;await route.fetch();await route.abort('failed');}else await route.continue();});
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
@@ -439,9 +447,12 @@ test('two browser players share turns, a lost reply cannot duplicate a move, and
   await expect(page.getByRole('button',{name:'Cell 2',exact:true})).toBeVisible({timeout:20000});
   const state=await request.get(`/matches/${match.id}`,{headers});expect((await state.json()).move_count).toBe(2);
   await page.context().setOffline(true);await page.getByRole('button',{name:'Cell 2',exact:true}).click();
+  await ensureMatchMenuOpen(page);
   await expect(page.getByText(/Your move is saved and waiting/)).toBeVisible();
+  await ensureMatchMenuClosed(page);
   await page.context().setOffline(false);await expect(bob.getByRole('button',{name:'Cell 5',exact:true})).toBeVisible({timeout:20000});
   await bob.getByRole('button',{name:'Cell 5',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 3',exact:true})).toBeVisible();await page.getByRole('button',{name:'Cell 3',exact:true}).click();
+  await ensureMatchMenuOpen(page);await ensureMatchMenuOpen(bob);
   await expect(page.getByText('Finished',{exact:true}).first()).toBeVisible();await expect(bob.getByText('Finished',{exact:true}).first()).toBeVisible();
   expect((await(await request.get(`/matches/${match.id}`,{headers})).json()).move_count).toBe(5);
   await partner.close();

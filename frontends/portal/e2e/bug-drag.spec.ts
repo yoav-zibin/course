@@ -72,17 +72,18 @@ test('dragged bug control remains above native browser modals and fullscreen con
   await expect(page.getByRole('textbox',{name:'Bug or feature request',exact:true})).toBeVisible();
 });
 
-test('bug and menu drag as one control and remain usable after narrow and landscape resizing',async({page,request,isMobile})=>{
+test('bug, menu and history icons drag as one remote and remain usable after narrow and landscape resizing',async({page,request,isMobile})=>{
   const owner=await createUser(request,uniqueName('Grouped control owner'));
   await loginAs(page,owner);await page.goto('/portal#local');
   await page.getByRole('button',{name:'Pass and play',exact:true}).click();
   const group=page.getByTestId('match-floating-controls'),bug=page.getByTestId('bug-report-button'),menu=page.getByTestId('match-menu-button');
   await expect(group).toBeVisible();await expect(menu).toHaveAttribute('aria-expanded','false');
   async function assertPair(){
-    await expect(group.getByRole('button')).toHaveCount(2);
+    await expect(group.getByRole('button')).toHaveCount(7);
     const whole=(await group.boundingBox())!,left=(await bug.boundingBox())!,right=(await menu.boundingBox())!;
     expect(Math.abs(left.y-right.y)).toBeLessThan(1);
     expect(Math.abs(left.x+left.width-right.x)).toBeLessThan(1);
+    for(const id of ['history-start','history-previous','history-play','history-next','history-end']){const button=(await page.getByTestId(id).boundingBox())!;expect(button.x).toBeGreaterThanOrEqual(whole.x);expect(button.x+button.width).toBeLessThanOrEqual(whole.x+whole.width);}
     expect(left.x).toBeGreaterThanOrEqual(whole.x);expect(right.x+right.width).toBeLessThanOrEqual(whole.x+whole.width);
     expect(whole.x).toBeGreaterThanOrEqual(0);expect(whole.y).toBeGreaterThanOrEqual(0);
     expect(whole.x+whole.width).toBeLessThanOrEqual(page.viewportSize()!.width);
@@ -101,7 +102,8 @@ test('bug and menu drag as one control and remain usable after narrow and landsc
     await expect.poll(async()=>{const box=(await group.boundingBox())!;return box.x>=0&&box.y>=0&&box.x+box.width<=viewport.width&&box.y+box.height<=viewport.height;}).toBe(true);
     await assertPair();
     if(isMobile)await menu.tap();else await menu.click();
-    await expect(menu).toHaveAttribute('aria-expanded','true');await expect(page.getByTestId('portal-header')).toBeVisible();
+    await expect(menu).toHaveAttribute('aria-expanded','true');await expect(page.getByRole('dialog',{name:'Match menu',exact:true})).toBeVisible();await expect(page.getByTestId('portal-header')).toBeVisible();
+    for(const id of ['history-start','history-previous','history-play','history-next','history-end'])await expect(page.getByTestId(id)).toBeDisabled();
     if(isMobile)await menu.tap();else await menu.click();
     await expect(menu).toHaveAttribute('aria-expanded','false');await expect(page.getByTestId('portal-header')).toHaveCount(0);
   }

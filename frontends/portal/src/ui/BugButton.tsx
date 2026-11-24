@@ -1,17 +1,19 @@
 import React,{useEffect,useMemo,useRef} from 'react';
-import {findNodeHandle,PanResponder,Platform,Pressable,StyleSheet,View,useWindowDimensions} from 'react-native';
+import {findNodeHandle,PanResponder,Platform,Pressable,StyleSheet,Text,View,useWindowDimensions} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BugGlyph} from './BugGlyph';
 import {MenuGlyph} from './MenuGlyph';
+import {HistoryGlyph,historyButtons} from './HistoryGlyph';
+import type {MatchHistoryControls} from './matchHistory';
 import {copyText} from '../platform/i18n';
 import {bugButtonLabel,openBugReport} from './bugControl';
-import {BUG_HEIGHT,BUG_WIDTH,MATCH_CONTROLS_HEIGHT,MATCH_CONTROLS_WIDTH,bugBounds,isBugDrag,normalizedBugPoint,resolveBugPoint,setBugPosition,useBugPosition} from './bugPosition';
+import {BUG_HEIGHT,BUG_WIDTH,bugBounds,isBugDrag,matchControlsSize,normalizedBugPoint,resolveBugPoint,setBugPosition,useBugPosition} from './bugPosition';
 import {recordDiagnosticEvent,recordDiagnosticLog} from '../core/diagnostics';
 import {protectBugControlGesture} from '../platform/legacy';
 import {createBugGestureProtection} from './bugGestureProtection';
-export function BugButton({onMenuPress,menuExpanded=false}:{onMenuPress?:()=>void;menuExpanded?:boolean}={}){
+export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?:()=>void;menuExpanded?:boolean;history?:MatchHistoryControls}={}){
   const insets=useSafeAreaInsets(),{width,height}=useWindowDimensions(),saved=useBugPosition();
-  const grouped=Boolean(onMenuPress),controlWidth=grouped?MATCH_CONTROLS_WIDTH:BUG_WIDTH,controlHeight=grouped?MATCH_CONTROLS_HEIGHT:BUG_HEIGHT;
+  const grouped=Boolean(onMenuPress),size=grouped?matchControlsSize(width,insets,Boolean(history)):{width:BUG_WIDTH,height:BUG_HEIGHT},controlWidth=size.width,controlHeight=size.height;
   const bounds=bugBounds(width,height,insets,undefined,{width:controlWidth,height:controlHeight}),point=resolveBugPoint(saved??(grouped?{x:1,y:1}:null),bounds);
   const current=useRef({bounds,point});current.current={bounds,point};
   const nativeView=useRef<React.ComponentRef<typeof View>>(null);
@@ -52,13 +54,17 @@ export function BugButton({onMenuPress,menuExpanded=false}:{onMenuPress?:()=>voi
     onShouldBlockNativeResponder:()=>true,
   }),[]);
   useEffect(()=>()=>clearTimeout(releaseTimer.current),[]);
-  const buttonStyle=({pressed,focused}:any)=>[styles.button,{height:controlHeight-2},pressed&&{opacity:.7},focused&&{outlineColor:'#70d5ff',outlineStyle:'solid',outlineWidth:2}];
+  const buttonStyle=({pressed,focused}:any)=>[styles.button,{height:(grouped&&history?44:controlHeight)-2},pressed&&{opacity:.7},focused&&{outlineColor:'#70d5ff',outlineStyle:'solid',outlineWidth:2}];
   return <View ref={nativeView} collapsable={false} onLayout={protectGesture} {...responder.panHandlers} testID={grouped?'match-floating-controls':undefined} style={[styles.position,{left:point.x,top:point.y,width:controlWidth,height:controlHeight}]}>
     <Pressable accessibilityRole="button" accessibilityLabel={bugButtonLabel()} onPressIn={()=>{dragged.current=false;}}
       onPress={()=>{if(!dragged.current)openBugReport();}} style={buttonStyle} testID="bug-report-button"><BugGlyph/></Pressable>
     {onMenuPress&&<Pressable accessibilityRole="button" accessibilityLabel={copyText('Match menu')} accessibilityState={{expanded:menuExpanded}} onPressIn={()=>{dragged.current=false;}}
       onPress={()=>{if(!dragged.current)onMenuPress();}} style={buttonStyle} testID="match-menu-button"><MenuGlyph/></Pressable>}
+    {grouped&&history&&historyButtons(history).map(control=><Pressable key={control.id} accessibilityRole="button" accessibilityLabel={control.label} accessibilityState={{disabled:control.disabled}} disabled={control.disabled} onPressIn={()=>{dragged.current=false;}}
+      onPress={()=>{if(!dragged.current&&!control.disabled){recordDiagnosticEvent('press',{label:control.label});control.onPress();}}} style={state=>[buttonStyle(state),control.disabled&&styles.disabled]} testID={control.id}><HistoryGlyph kind={control.kind}/></Pressable>)}
+    {grouped&&history&&<Text testID="history-status" pointerEvents="none" accessibilityLiveRegion="polite" numberOfLines={1} style={styles.historyStatus}>{history.atEnd?copyText('Live board'):copyText('Replay · move {v0} of {v1}',{v0:history.position,v1:history.total})}</Text>}
   </View>;
 }
-const styles=StyleSheet.create({position:{position:'absolute',flexDirection:'row',backgroundColor:'#171c2a',borderWidth:1,borderColor:'#3b4760',borderRadius:8,zIndex:2147483647,elevation:100},
-  button:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center',borderRadius:7}});
+const styles=StyleSheet.create({position:{position:'absolute',flexDirection:'row',direction:'ltr',backgroundColor:'#171c2a',borderWidth:1,borderColor:'#3b4760',borderRadius:8,zIndex:2147483647,elevation:100},
+  button:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center',borderRadius:7},disabled:{opacity:.35},
+  historyStatus:{position:'absolute',left:4,right:4,bottom:2,height:17,fontSize:11,lineHeight:16,textAlign:'center',color:'#b8c2d5'}});

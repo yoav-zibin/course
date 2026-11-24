@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import bundled from '../src/core/bundled-tictactoe.json';
-import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuClosed,ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Saved-copy removal checks require a disposable loopback server.');
@@ -38,17 +38,18 @@ for(const source of ['list','board'])test(`an old unsynced copy can be removed f
   },{owner,baseURL,other});
   await expect(page.getByRole('button',{name:'Remove saved copy…',exact:true}).first()).toBeVisible();
   if(source==='board'){
+    await ensureMatchMenuClosed(page);
     await expect(page.getByTestId('game-stage')).toBeVisible();
     await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
     await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
     await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
-    await context.setOffline(true);
+    await context.setOffline(true);await ensureMatchMenuOpen(page);
   }
   const before=await read();
   const remove=()=>source==='list'?page.getByTestId(`match-card-${target}`).getByRole('button',{name:'Remove saved copy…',exact:true}):page.getByRole('button',{name:'Remove saved copy…',exact:true});
   await remove().click();await expect(page.getByRole('heading',{name:'Remove this saved copy?',exact:true})).toBeVisible();
   await expect(page.getByText(/A recovery copy is kept in Preserved previous app data\. Any cloud match stays unchanged\./)).toBeVisible();
-  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  await page.getByRole('dialog',{name:'Remove this saved copy?',exact:true}).getByRole('button',{name:'Close dialog',exact:true}).click();
   expect((await read()).data.local[target]).toEqual(before.data.local[target]);
   await remove().click();await page.getByRole('button',{name:'Remove saved copy',exact:true}).click();
   await expect(page).toHaveURL(/#matches$/);

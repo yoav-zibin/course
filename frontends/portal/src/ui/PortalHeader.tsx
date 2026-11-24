@@ -30,9 +30,9 @@ function amount(value:number,locale:string,compact=false){
   catch{return String(value);}
 }
 
-export function PortalHeader({width,locale,baseUrl,account,balance,unread,ready,gamesLabel,matchesLabel,selected,onGames,onMatches,onAccount,onNotifications}:{
+export function PortalHeader({width,locale,baseUrl,account,balance,unread,ready,gamesLabel,matchesLabel,selected,onGames,onMatches,onAccount,onNotifications,insideDialog=false}:{
   width:number;locale:string;baseUrl:string;account:Account|null;balance:number;unread:number;ready:boolean;gamesLabel:string;matchesLabel:string;selected:'games'|'matches';
-  onGames:()=>void;onMatches:()=>void;onAccount:()=>void;onNotifications:()=>void;
+  onGames:()=>void;onMatches:()=>void;onAccount:()=>void;onNotifications:()=>void;insideDialog?:boolean;
 }){
   const narrow=width<380,compact=width<600&&Math.abs(balance)>=1000,exactBalance=amount(balance,locale);
   // Short K/M/B/T units keep balances readable in locales whose compact
@@ -40,7 +40,7 @@ export function PortalHeader({width,locale,baseUrl,account,balance,unread,ready,
   const visibleBalance=amount(balance,compact?'en':locale,compact);
   let avatar:string|undefined;
   try{if(account?.picture_url)avatar=new URL(account.picture_url,baseUrl).href;}catch{/* A malformed or unavailable picture uses the profile icon. */}
-  return <View testID="portal-header" style={[s.header,narrow&&s.narrow]}>
+  return <View testID="portal-header" style={[s.header,narrow&&s.narrow,insideDialog&&{paddingLeft:0,paddingRight:0,flexWrap:'wrap'}]}>
     <View style={[s.navigation,narrow&&{gap:3}]}>{[
       {key:'games',label:gamesLabel,onPress:onGames},{key:'matches',label:matchesLabel,onPress:onMatches},
     ].map(link=><Pressable key={link.key} testID={`header-${link.key}`} accessibilityRole="button" accessibilityLabel={link.label} accessibilityState={{selected:selected===link.key}} {...(Platform.OS==='web'&&selected===link.key?{'aria-current':'page' as const}:{})}

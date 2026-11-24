@@ -183,6 +183,14 @@ class NativeSmoke:
         self.tap_node(self.wait(label, contains=contains, clickable=True, scroll=scroll))
         self.events.append({"action": "tap", "control": label})
 
+    def open_match_menu(self):
+        self.tap("Match menu", scroll=False)
+        self.wait("Close dialog", scroll=False)
+
+    def close_match_menu(self):
+        self.tap("Close dialog", scroll=False)
+        self.wait("Match menu", clickable=True, scroll=False)
+
     def capture(self, stage: str):
         try:
             self.dump()
@@ -340,13 +348,15 @@ class NativeSmoke:
         # injecting view state or disturbing the durably saved match.
         self.command("shell", "am", "force-stop", self.package)
         self.launch()
-        self.tap("Match menu", scroll=False)
+        self.open_match_menu()
         count = len(self.played_cells)
-        self.wait(f"{count} moves", contains=True, timeout=60, scroll=True)
+        self.wait(f"{count} moves", contains=True, timeout=60, scroll=True, dialog=True)
+        details = {label for node in self.dump().iter("node") for label in self.labels(node)}
+        if not any(re.search(rf"(?<!\d){count}\s+moves\b", label) for label in details):
+            raise RuntimeError(f"Process restart did not restore the expected {count}-move board")
+        self.close_match_menu()
         tree, canvas = self.fitted_canvas()
         labels = {label for node in tree.iter("node") for label in self.labels(node)}
-        if not any(re.search(rf"(?<!\d){count}\s+moves\b", label) for label in labels):
-            raise RuntimeError(f"Process restart did not restore the expected {count}-move board")
         for played in self.played_cells:
             if normalized(f"Cell {played}") in labels:
                 raise RuntimeError(f"The previous physical tap did not occupy Cell {played}")
@@ -357,8 +367,6 @@ class NativeSmoke:
     def tap_cell(self, number: int, *, finished: bool = False):
         expected = "Finished" if finished else f"{len(self.played_cells) + 1} moves"
         for attempt in range(4):
-            if attempt and self.find(self.dump(), expected, contains=True) is not None:
-                break
             tree, canvas = self.remount_fitted_board()
             labels = {label for node in tree.iter("node") for label in self.labels(node)}
             if normalized(f"Cell {number}") not in labels:
@@ -369,11 +377,13 @@ class NativeSmoke:
             x, y = fixture_cell_point(self.fixture, number, canvas)
             self.command("shell", "input", "tap", str(x), str(y))
             self.events.append({"action": "native-cell-tap", "cell": number, "attempt": attempt + 1, "x": x, "y": y, "canvas": canvas})
+            self.open_match_menu()
             try:
-                self.wait(expected, contains=True, timeout=8, scroll=True)
+                self.wait(expected, contains=True, timeout=8, scroll=True, dialog=True)
+                self.close_match_menu()
                 break
             except RuntimeError:
-                pass
+                self.close_match_menu()
         else:
             raise RuntimeError(f"Native SVG/QuickJS did not accept Cell {number}")
         self.played_cells.append(number)
@@ -395,8 +405,9 @@ class NativeSmoke:
         self.wait("Match menu")
         self.assert_bug_control("game-board-only")
         self.capture("bug-04-board-only")
-        self.tap("Match menu", scroll=False)
-        self.wait("0 moves", contains=True, scroll=True)
+        self.open_match_menu()
+        self.wait("0 moves", contains=True, scroll=True, dialog=True)
+        self.close_match_menu()
         self.tap_cell(1)
         self.capture("game-01-next-player-board")
 
@@ -404,15 +415,15 @@ class NativeSmoke:
         # restart without requiring a pass-and-play privacy handoff.
         self.command("shell", "am", "force-stop", self.package)
         self.launch()
-        self.tap("Match menu", scroll=False)
-        self.wait("1 moves", contains=True, timeout=60, scroll=True)
+        self.open_match_menu()
+        self.wait("1 moves", contains=True, timeout=60, scroll=True, dialog=True)
+        self.close_match_menu()
         self.assert_public_board()
         self.wait("Cell 4", scroll=True)
         self.events.append({"assertion": "public-board-and-next-turn-restored-after-process-restart"})
         self.capture("game-02-restored-public-board")
 
         # Test navigation from the fitted board after inspecting match details.
-        self.tap("Match menu", scroll=False)
         self.command("shell", "input", "keyevent", "4")
         self.wait("Pass and play", scroll=True)
         self.wait("1 moves", contains=True, scroll=True)
@@ -426,17 +437,21 @@ class NativeSmoke:
         for index, cell in enumerate((4, 2, 5, 3), start=2):
             self.tap_cell(cell, finished=cell == 3)
             self.capture(f"game-{index + 2:02d}-move-{index}")
-        self.wait("Finished", contains=True, scroll=True)
-        self.wait("5 moves", contains=True, scroll=True)
+        self.open_match_menu()
+        self.wait("Finished", contains=True, scroll=True, dialog=True)
+        self.wait("5 moves", contains=True, scroll=True, dialog=True)
         self.events.append({"assertion": "native-quickjs-and-svg-complete-five-move-win"})
         self.capture("game-08-finished")
 
-        self.tap("Previous", contains=True)
+        self.close_match_menu()
+        self.tap("Previous move", scroll=False)
         self.wait("Replay", contains=True, scroll=True)
         self.events.append({"assertion": "native-match-history-is-readable"})
         self.capture("game-09-replay")
-        self.tap("Live board")
-        self.wait("Finished", contains=True, scroll=True)
+        self.tap("Go to end", scroll=False)
+        self.wait("Live board", scroll=False)
+        self.open_match_menu()
+        self.wait("Finished", contains=True, scroll=True, dialog=True)
         self.capture("game-10-live-finished")
         print("Native gameplay passed: bug control over Account and the board-only match, offline screenshot/draft, SVG taps, isolated QuickJS rules, continuous public board, process restart, Back navigation, win and replay.")
 
