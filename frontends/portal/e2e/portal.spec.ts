@@ -72,6 +72,8 @@ test('short screens refit the complete board after rotation and resizing without
     await cell.click();await expect(cell).toHaveCount(0);await expect.poll(savedMoves).toBe(index+1);
     await expect(page.getByRole('button',{name:'I’m ready'})).toHaveCount(0);
   }
+  // Force the modal to overflow independently of the fitted board.
+  await page.setViewportSize({width:390,height:480});
   await ensureMatchMenuOpen(page);
   const port=await page.getByTestId('match-details').evaluateHandle(node=>{for(let p=node.parentElement;p;p=p.parentElement)if(/auto|scroll/.test(getComputedStyle(p).overflowY))return p;throw new Error('Missing details scroll view');});
   const modalCenter=await port.evaluate(node=>{const box=node.getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2};});
@@ -81,7 +83,7 @@ test('short screens refit the complete board after rotation and resizing without
   await expect(page.getByTestId('match-menu-button')).toHaveAttribute('aria-expanded','false');
   await expect(page.getByTestId('match-details')).toHaveCount(0);
   await expect(canvas).toHaveAttribute('viewBox','0 0 600 560');
-  await expect.poll(async()=>{const box=(await board.boundingBox())!;return box.y>=-1&&box.y+box.height<=1025;}).toBe(true);
+  await expect.poll(async()=>{const box=(await board.boundingBox())!;return box.y>=-1&&box.y+box.height<=481;}).toBe(true);
   await page.getByRole('button',{name:'Cell 2',exact:true}).click();
   await expect.poll(savedMoves).toBe(7);expect(page.url()).toBe(route);
 });
@@ -92,9 +94,16 @@ test('empty fitted board space does not scroll or pan and retains real piece tap
   const board=page.getByLabel('Game board. Use pieces and highlighted destinations.');
   const cell=page.getByRole('button',{name:'Cell 9',exact:true});await expect(cell).toBeInViewport();
   const before=await board.evaluate(node=>{const values=[];for(let p:HTMLElement|null=node as HTMLElement;p;p=p.parentElement)values.push(p.scrollTop);return values;});
+  const remote=page.getByTestId('match-floating-controls');
+  await expect.poll(async()=>{
+    const [boardBox,remoteBox]=await Promise.all([board.boundingBox(),remote.boundingBox()]);
+    return Boolean(boardBox&&remoteBox&&boardBox.y+boardBox.height<=remoteBox.y+1);
+  }).toBe(true);
+  const bounds=(await board.boundingBox())!;
+  const startY=Math.floor(bounds.y+bounds.height-5);
   const cdp=await page.context().newCDPSession(page);
-  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:5,y:160,id:1}]});
-  for(let step=1;step<=8;step++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:5,y:160-140*step/8,id:1}]});await page.waitForTimeout(16);}
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:5,y:startY,id:1}]});
+  for(let step=1;step<=8;step++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:5,y:startY-(startY-bounds.y-5)*step/8,id:1}]});await page.waitForTimeout(16);}
   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   expect(await board.evaluate(node=>{const values=[];for(let p:HTMLElement|null=node as HTMLElement;p;p=p.parentElement)values.push(p.scrollTop);return values;})).toEqual(before);
   await expect(board.locator('svg').first()).toHaveAttribute('viewBox','0 0 600 560');await expect(cell).toBeVisible();

@@ -19,9 +19,17 @@ export async function createUser(request:APIRequestContext,name:string){const re
 export async function createGame(request:APIRequestContext,name:string){
   const payload=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../../games/declarative/tictactoe.json'),'utf8'));
   payload.name=name;payload.game_addition_request_id_and_secret=uniqueName('shared-game-secret');
+  return submitGameFixture(request,payload);
+}
+
+export async function submitGameFixture(request:APIRequestContext,payload:object):Promise<string>{
   let response=await request.post('/games/declarative',{data:payload});
-  for(let attempt=0;response.status()===429&&attempt<10;attempt++){await new Promise(resolve=>setTimeout(resolve,1000));response=await request.post('/games/declarative',{data:payload});}
-  expect(response.ok(),await response.text()).toBeTruthy();return(await response.json()).id;
+  for(let attempt=0;response.status()===429&&attempt<10;attempt++){
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    response=await request.post('/games/declarative',{data:payload});
+  }
+  expect(response.status(),await response.text()).toBe(201);
+  return (await response.json()).id;
 }
 export async function loginAs(page:Page,user:any){await page.addInitScript(account=>{localStorage.setItem('game-platform.accounts.v1',JSON.stringify([account]));localStorage.setItem('game-platform.current-account.v1',account.id);},user);}
 

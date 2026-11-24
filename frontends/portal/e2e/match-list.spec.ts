@@ -69,7 +69,11 @@ test('local carousels are newest first, show opponent labels and disappear indep
   await expect(page.getByTestId('computer-local-matches')).toHaveCount(0);await expect(page.getByTestId('pass-local-matches')).toHaveCount(0);
   async function start(computer:boolean){await page.goto('/portal#local');await page.getByRole('button',{name:computer?'Practice with a computer':'Pass and play',exact:true}).click();await expect(page).toHaveURL(/#match=local-/);return new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;}
   const oldComputer=await start(true),newComputer=await start(true),oldPass=await start(false),newPass=await start(false);
-  for(const cell of [1,4,2,5,3])await page.getByRole('button',{name:`Cell ${cell}`,exact:true}).click();
+  for(const cell of [1,4,2,5,3]){
+    const target=page.getByRole('button',{name:`Cell ${cell}`,exact:true});
+    await target.click();
+    await expect(target).toHaveCount(0);
+  }
   await ensureMatchMenuOpen(page);
   await expect(page.getByTestId('match-outcome')).toContainText('won');await page.getByTestId('header-matches').click();
   const computers=page.getByTestId('computer-local-matches'),passes=page.getByTestId('pass-local-matches');

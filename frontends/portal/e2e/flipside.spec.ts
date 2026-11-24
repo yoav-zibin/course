@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type Page} from '@playwright/test';
-import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createUser,loginAs,submitGameFixture,uniqueName} from './helpers';
 
 // Flipside Lords (based on The Duke): a full game against the computer,
 // played only through the visible board: setup, moves, captures, drawing
@@ -25,15 +25,12 @@ test('Flipside Lords: a full game against the computer, with a tile flip, ends w
   const errors:string[]=[];page.on('pageerror',error=>{if(String(error)!==PLATFORM_NOISE)errors.push(String(error));});
   const payload=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../../games/declarative/flipside.json'),'utf8'));
   payload.game_addition_request_id_and_secret=uniqueName('flipside-secret');
-  const submitted=await request.post('/games/declarative',{data:payload});
-  expect(submitted.status(),await submitted.text()).toBe(201);
-  const id=(await submitted.json()).id;
+  const id=await submitGameFixture(request,payload);
   await loginAs(page,{...await createUser(request,'Ana'),linked:[],picture_url:''});
   await page.goto(`/portal#game=${id}`);
   await page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true}).click();
-  await ensureMatchMenuOpen(page);
-  const outcome=page.getByTestId('match-outcome');
   const stage=page.getByTestId('game-stage');
+  const outcome=stage.getByText(/ wins!$|^Draw$/);
 
   // Setup: the Lord on a middle square of the home row, then two Footmen.
   const lord=page.getByRole('button',{name:/^Place your Lord on /}).first();
@@ -49,6 +46,13 @@ test('Flipside Lords: a full game against the computer, with a tile flip, ends w
 
   const mine=page.getByRole('button',{name:/ of (Ivory|Walnut) · Ana \(.*\) on [A-F][1-6]: /});
   const actions=page.getByRole('button',{name:/^(Capture on|Strike|Move to|Command the) /});
+  const drawTroop=async()=>{
+    // A tile examined for moves may still own the board's pointer targets.
+    const selection=page.getByRole('button',{name:'Cancel selection',exact:true});
+    if(await selection.isVisible())await press(page,'Cancel selection',isMobile);
+    await press(page,/^Draw a troop from your bag/,isMobile);
+    await press(page,/^Place the new troop on /,isMobile);
+  };
   let flipped=false,turns=0,draws=0;
   for(;turns<120;turns++){
     // A computer move can replace every troop button with a noninteractive
@@ -79,8 +83,7 @@ test('Flipside Lords: a full game against the computer, with a tile flip, ends w
     const draw=page.getByRole('button',{name:/^Draw a troop from your bag/});
     if(turns%3===0&&await draw.count()){
       await expect(draw.first()).toBeEnabled({timeout:15000});
-      await press(page,/^Draw a troop from your bag/,isMobile);
-      await press(page,/^Place the new troop on /,isMobile);draws++;
+      await drawTroop();draws++;
       if(draws===1)await shot(page,'drawn',info.project.name);
       continue;
     }
@@ -101,11 +104,11 @@ test('Flipside Lords: a full game against the computer, with a tile flip, ends w
         }
       }
     }
-    if(!acted&&await draw.count()){await press(page,/^Draw a troop from your bag/,isMobile);await press(page,/^Place the new troop on /,isMobile);}
+    if(!acted&&await draw.count())await drawTroop();
   }
   await expect(outcome).toBeVisible({timeout:60000});
-  await expect(outcome).toHaveText(/won|lost|draw|tie/i);
-  await expect(stage.getByText(/ wins!$|^Draw$/)).toBeVisible();
+  await ensureMatchMenuOpen(page);
+  await expect(page.getByTestId('match-outcome')).toHaveText(/won|lost|draw|tie/i);
   expect(flipped).toBe(true);
   await shot(page,'end',info.project.name);
   expect(errors).toEqual([]);

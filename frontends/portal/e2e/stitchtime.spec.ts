@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {test,expect,type Page} from '@playwright/test';
-import {ensureMatchMenuOpen,createUser,loginAs,uniqueName} from './helpers';
+import {ensureMatchMenuOpen,createUser,loginAs,submitGameFixture,uniqueName} from './helpers';
 
 // Stitch & Time (based on Patchwork): a full game against the computer, played
 // only through the visible board: buying patches (turned with the host's
@@ -25,24 +25,42 @@ test('Stitch & Time: a full game against the computer, with patch rotation, ends
   const errors:string[]=[];page.on('pageerror',error=>{if(String(error)!==PLATFORM_NOISE)errors.push(String(error));});
   const payload=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../../games/declarative/stitchtime.json'),'utf8'));
   payload.game_addition_request_id_and_secret=uniqueName('stitchtime-secret');
-  const submitted=await request.post('/games/declarative',{data:payload});
-  expect(submitted.status(),await submitted.text()).toBe(201);
-  const id=(await submitted.json()).id;
+  const id=await submitGameFixture(request,payload);
   await loginAs(page,{...await createUser(request,'Ana'),linked:[],picture_url:''});
   await page.goto(`/portal#game=${id}`);
   await page.getByTestId('play-computer').getByRole('button',{name:'Play against the computer',exact:true}).click();
-  await ensureMatchMenuOpen(page);
-  const outcome=page.getByTestId('match-outcome');
   const stage=page.getByTestId('game-stage');
-  const cards=page.getByRole('button',{name:/^Choose this patch: /});
-  const advance=page.getByRole('button',{name:/^Advance past your rival/});
-  const leather=page.getByRole('button',{name:/^Place the leather patch on square /});
+  const outcome=stage.getByText(/ wins with -?\d+!$/);
+  await expect(page).toHaveURL(/#match=local-/);
+  const matchId=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
+  const savedMoves=()=>page.evaluate(matchId=>{
+    for(const key of Object.keys(localStorage)){
+      if(!key.startsWith('buildplay.shared.v1.'))continue;
+      const match=JSON.parse(localStorage.getItem(key)!).local?.[matchId];
+      if(match)return match.move_count as number;
+    }
+    return -1;
+  },matchId);
+  const commitMove=async(action:()=>Promise<void>)=>{
+    const before=await savedMoves();
+    expect(before).toBeGreaterThanOrEqual(0);
+    await action();
+    // Pointer release can finish before the local rules and computer reply
+    // commit. Don't pick another action from the previous position.
+    await expect.poll(savedMoves,{timeout:15000}).toBeGreaterThan(before);
+  };
+  const cards=page.getByRole('button',{name:/^Choose this patch: /,disabled:false});
+  // Intermediate animation frames can show actions that aren't playable.
+  const advance=page.getByRole('button',{name:/^Advance past your rival/,disabled:false});
+  const leather=page.getByRole('button',{name:/^Place the leather patch on square /,disabled:false});
   let toolTurn=false,buttonTurn=false,bought=0,turns=0;
   for(;turns<80;turns++){
-    await expect.poll(async()=>(await outcome.isVisible())||(await leather.count())>0||((await advance.count())>0&&await advance.first().isEnabled()),{timeout:60000}).toBe(true);
+    await expect.poll(async()=>(await outcome.isVisible())||(await leather.count())>0||(await advance.count())>0,{timeout:60000}).toBe(true);
     if(await outcome.isVisible())break;
-    await page.waitForTimeout(300);
-    if(await leather.count()){await press(page,/^Place the leather patch on square /,isMobile);continue;}
+    if(await leather.count()){
+      await commitMove(()=>isMobile?leather.first().tap({timeout:15000}):leather.first().click({timeout:15000}));
+      continue;
+    }
     if(turns===0)await shot(page,'start',info.project.name);
     if(await cards.count()&&turns%4!==3){
       await press(page,/^Choose this patch: /,isMobile);
@@ -59,23 +77,22 @@ test('Stitch & Time: a full game against the computer, with patch rotation, ends
         await shot(page,'placing',info.project.name);
       }
       await page.waitForTimeout(400);
-      const place=page.getByRole('button',{name:'Place patch',exact:true});
       // Turn until it fits (the ghost starts in a good spot), else give up.
       const ready=async()=>expect(page.getByRole('button',{name:'Place patch',exact:true}).last()).toBeEnabled({timeout:2500}).then(()=>true,()=>false);
       for(let k=0;k<4&&!(await ready());k++)await press(page,'Turn patch clockwise',isMobile);
       if(await ready()){
-        await press(page,'Place patch',isMobile);bought++;
+        await commitMove(()=>press(page,'Place patch',isMobile));bought++;
         if(bought===3){await page.waitForTimeout(1500);await shot(page,'midgame',info.project.name);}
         continue;
       }
       await press(page,'Cancel',isMobile);
     }
     if(await outcome.isVisible())break;
-    if(await advance.count())await press(page,/^Advance past your rival/,isMobile);
+    if(await advance.count())await commitMove(()=>press(page,/^Advance past your rival/,isMobile));
   }
   await expect(outcome).toBeVisible({timeout:60000});
-  await expect(outcome).toHaveText(/won|lost|draw|tie/i);
-  await expect(stage.getByText(/ wins with -?\d+!$/)).toBeVisible();
+  await ensureMatchMenuOpen(page);
+  await expect(page.getByTestId('match-outcome')).toHaveText(/won|lost|draw|tie/i);
   expect(toolTurn&&buttonTurn&&bought>=2).toBe(true);
   await shot(page,'end',info.project.name);
   expect(errors).toEqual([]);

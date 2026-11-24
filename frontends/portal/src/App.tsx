@@ -12,6 +12,7 @@ import {AccountDeletionBanner} from './ui/AccountDeletion';
 import {MatchStage} from './ui/MatchStage';
 import {BugReporter} from './ui/BugReporter';
 import {BugButton} from './ui/BugButton';
+import {MATCH_HISTORY_HEIGHT} from './ui/bugPosition';
 import {diagnosticPath,recordDiagnosticPage,recordDiagnosticEvent,rememberDiagnosticSecrets} from './core/diagnostics';
 import {installWebApp} from './ui/webApp';
 import {EmbeddedGameHost} from './game/EmbeddedGameHost';
@@ -211,7 +212,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
       <StatusBar style="light" />
       {showDetails&&header}
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
-        <ScrollView ref={content} key={contentKey} style={{flex:1,minWidth:0}} scrollEnabled={!fittedBoard} contentContainerStyle={[s.content,{padding:gameVisible?0:width<600?14:28},gameVisible && {maxWidth:1500},fittedBoard&&{height:'100%',maxWidth:'100%',gap:0}]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={content} key={contentKey} style={{flex:1,minWidth:0}} scrollEnabled={!fittedBoard} contentContainerStyle={[s.content,gameVisible&&{maxWidth:1500},fittedBoard?s.fittedBoard:{padding:gameVisible?0:width<600?14:28}]} keyboardShouldPersistTaps="handled">
           {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
           {p.storageError && <Notice error>{p.storageError}</Notice>}
           {showDetails&&extras}
@@ -242,5 +243,6 @@ export default function App() {
 }
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},
+  fittedBoard:{height:'100%',maxWidth:'100%',gap:0,paddingBottom:MATCH_HISTORY_HEIGHT+2},
   content:{width:'100%',maxWidth:1240,alignSelf:'center',gap:22,flexGrow:1},loading:{minHeight:300,alignItems:'center',justifyContent:'center',gap:20},
 });

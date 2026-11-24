@@ -47,7 +47,7 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
     {!singlePlayer&&match.cloud_pending&&<Notice>{copyText('Match saved locally. Connect to save it in the cloud and get an invite link.')}</Notice>}
     {singlePlayer&&<Copy small muted>{match.cloud_pending?copyText('Saved locally · waiting to sync'):copyText('Saved in the cloud')}</Copy>}
     <MatchOutcome match={match}/>
-    {(singlePlayer||!participant)&&<Button secondary onPress={()=>navigate('matches')}>{t('ui.match.leave','Leave match')}</Button>}
+    {(singlePlayer||(!participant&&!canLeave))&&<Button secondary onPress={()=>navigate('matches')}>{t('ui.match.leave','Leave match')}</Button>}
     <Row>{match.players.map(player=>{const profile=player.user_id?p.profiles[player.user_id]:null;const label=player.name||profile?.display_name||(player.user_id===p.account?.id?p.account?.display_name:null)||(player.kind==='computer'?copyText("Computer {v0}",{v0:player.player_index+1}):copyText("Player {v0}",{v0:player.player_index+1}));return <Card key={player.player_index} style={{padding:12,flexGrow:1,flexBasis:150,borderColor:turns.includes(player.player_index)?colors.accent:colors.border}}>
       <Row>{profile?.picture_url&&<Image source={{uri:new URL(profile.picture_url,p.baseUrl).href}} style={{width:32,height:32,borderRadius:16}}/>}<Copy style={{fontWeight:'600'}}>{player.kind==='computer'?'◈ ':''}{label}</Copy>{player.active===false&&<Copy small muted>{copyText("Left")}</Copy>}</Row>
       {turns.includes(player.player_index)&&!waiting&&!over&&<Copy small style={{color:colors.accent,fontWeight:'700'}}>{copyText('Current turn')}</Copy>}
@@ -60,7 +60,7 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
     {!singlePlayer&&<Card style={{padding:16}}><Row><Copy style={{fontWeight:'700'}}>{match.bet_per_player?copyText("{v0} tokens per person",{v0:match.bet_per_player}):copyText("Free match")}</Copy><View style={{flex:1}}/><Copy muted>{match.token_pot||0} {copyText("tokens in the pot")}</Copy></Row>{over&&match.token_payouts&&seat&&<Copy style={{color:colors.accent}}>{copyText("Your payout:")} {match.token_payouts[String(seat.player_index)]||0} {copyText("tokens")}</Copy>}
       <Row>{availableSeat&&!seat&&p.account&&<Button disabled={Boolean(match.cloud_pending)||!p.network} onPress={()=>run(()=>p.actions.matchAction('join'))}>{t('ui.match.join','Join match')}</Button>}
         {waiting&&owner&&<Button disabled={Boolean(match.cloud_pending)||!p.network||match.players.filter(player=>player.active!==false).length<2||!game?.allowed_player_counts.includes(match.players.filter(player=>player.active!==false).length)} onPress={()=>run(()=>p.actions.matchAction('start'))}>{t('ui.match.start_match','Start match')}</Button>}
-        {participant&&<Button danger disabled={!canLeave||Boolean(match.cloud_pending)||!p.network} onPress={()=>setConfirm('leave')}>{t('ui.match.leave','Leave match')}</Button>}
+        {(participant||canLeave)&&<Button danger disabled={!canLeave||Boolean(match.cloud_pending)||!p.network} onPress={()=>setConfirm('leave')}>{t('ui.match.leave','Leave match')}</Button>}
         {over&&participant&&<Button disabled={Boolean(match.cloud_pending)||!p.network} onPress={()=>run(async()=>{const next=await p.actions.matchAction('rematch');await openMatch(next.id);})}>{copyText("Play again")}</Button>}
       </Row>
     </Card>}
