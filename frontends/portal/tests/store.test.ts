@@ -7,6 +7,7 @@ import { rulesSource } from '../src/game/runtimeSource';
 import { AccountRepository } from '../src/core/repository';
 import { redactedNativeArchive } from '../src/core/native-migration';
 import { setLocale, localizeGame, gameTexts, getDirection, t } from '../src/platform/i18n';
+import { AccountScopeChangedError, visibleErrorMessage } from '../src/core/account-scope';
 import { ApiError } from '../src/core/api';
 import { matchOutcome } from '../src/core/results';
 import { presentationSteps } from '../src/game/interactions';
@@ -193,10 +194,14 @@ test('an older account operation cannot clear the current account loading state'
   });
   try{
     const store=new PortalStore(testRuntime());await store.actions.bootstrap('https://local.test');
-    const old=assert.rejects(store.actions.selectGame('older'),/Account changed/);await oldBegin;
+    const old=assert.rejects(store.actions.selectGame('older'), error=>{
+      assert.ok(error instanceof AccountScopeChangedError);
+      assert.equal(visibleErrorMessage(error),null);
+      return true;
+    });await oldBegin;
     await store.actions.switchAccount('bob');
     const current=store.actions.selectGame('newer');await newBegin;assert.equal(store.getSnapshot().loading,true);
-    releaseOld();await old;assert.equal(store.getSnapshot().loading,true);
+    releaseOld();await old;assert.equal(store.getSnapshot().loading,true);assert.equal(store.getSnapshot().error,null);
     releaseNew();await current;assert.equal(store.getSnapshot().loading,false);
     assert.equal(store.getSnapshot().selectedGameId,'newer');
   }finally{releaseOld();releaseNew();restore();}

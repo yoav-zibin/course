@@ -1,3 +1,4 @@
+import {AccountScopeChangedError} from '../core/account-scope';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import type {usePortal} from '../core';
 import {copyText} from '../platform/i18n';
@@ -38,7 +39,7 @@ export function createMatchHistoryController(options:HistoryOptions){
   };
   const stopPlayback=()=>{epoch++;if(playing){playing=false;changed();}};
   const recordError=(reason:unknown,expectedScope:string)=>{
-    if(disposed||scope!==expectedScope||options.snapshot().scope!==expectedScope)return;
+    if(reason instanceof AccountScopeChangedError||disposed||scope!==expectedScope||options.snapshot().scope!==expectedScope)return;
     const failure=reason instanceof Error?reason:new Error(String(reason));
     error=failure.message;options.onError?.(failure);changed();
   };

@@ -1,3 +1,4 @@
+import {AccountScopeChangedError,visibleErrorMessage} from './core/account-scope';
 import {copyText} from './platform/i18n';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, AppState, BackHandler, Linking, Platform, ScrollView, StyleSheet, View, useWindowDimensions} from 'react-native';
@@ -53,7 +54,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
   useEffect(()=>recordDiagnosticPage({screen,gameId:p.selectedGameId,matchId:p.selectedMatch?.id,matchMenuOpen}),[screen,p.selectedGameId,p.selectedMatch?.id,matchMenuOpen]);
   useEffect(()=>{const frame=requestAnimationFrame(()=>content.current?.scrollTo({x:0,y:0,animated:false}));return()=>cancelAnimationFrame(frame);},[fittedBoard]);
   const t = (key: string, fallback: string) => text(p,key,fallback);
-  const run = useCallback(async (task: () => Promise<unknown>) => {try { await task(); } catch (error) {setNotice(error instanceof Error ? error.message : String(error));}}, []);
+  const run = useCallback(async (task: () => Promise<unknown>) => {try { await task(); } catch (error) {const message=visibleErrorMessage(error);if(message!==null)setNotice(message);}}, []);
   const routeBase = Platform.OS === 'web' ? window.location.origin : process.env.EXPO_PUBLIC_API_URL || 'https://buildplay.fun';
   const writeRoute = (fragment: string) => { if (Platform.OS === 'web') {const url = new URL(window.location.href); if(url.pathname==='/portal'&&!url.search&&url.hash.slice(1)===fragment)return; url.pathname = '/portal'; url.search = ''; url.hash = fragment; window.history.pushState(null, '', url);}};
   const clearInvite = () => {navigation.current++; acceptingInvite.current=''; setPendingInvite(''); setInvitePreview(null);};
@@ -79,7 +80,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
   };
 
   const openNotificationUrl = async (raw: string) => {
-    const scope = notificationScope.current, guard = () => {if (scope !== notificationScope.current) throw new Error('Account changed; refresh to continue.');};
+    const scope = notificationScope.current, guard = () => {if (scope !== notificationScope.current) throw new AccountScopeChangedError();};
     const target = notificationTarget(raw, p.baseUrl); if (!target) throw new Error(copyText('This notification link is unavailable.'));
     if (target.kind === 'invite') {await openInvite(target.id); guard();}
     else if (target.kind === 'rematch') {const next = await p.actions.request('POST', `/matches/${encodeURIComponent(target.id)}/rematch`); guard(); await openMatch(next.id);}

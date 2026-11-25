@@ -1,3 +1,4 @@
+import {visibleErrorMessage} from '../core/account-scope';
 import {copyText,playerText} from '../platform/i18n';
 import React, {useEffect, useRef, useState} from 'react';
 import {Image, Pressable, ScrollView, StyleSheet, View} from 'react-native';
@@ -93,7 +94,7 @@ function MatchCard({match,local=false,carousel=false}: {match: Match;local?: boo
       if(!local&&target.status==='ongoing'&&!preview){const value=await p.actions.request('POST',`/matches/${encodeURIComponent(target.id)}/maybeLeave`);if(epoch===intent.current&&owner===currentScope.current)setPreview(value);return;}
       if(local)await p.actions.deleteLocal(target.id);else await p.actions.leaveMatch(target.id);
       if(epoch===intent.current&&owner===currentScope.current){intent.current++;setConfirmation(null);setPreview(null);await p.actions.refresh();}
-    }catch(failure){if(epoch===intent.current&&owner===currentScope.current)setError(failure instanceof Error?failure.message:String(failure));throw failure;}
+    }catch(failure){if(epoch===intent.current&&owner===currentScope.current)setError(visibleErrorMessage(failure)??'');throw failure;}
   });
   const close=()=>{intent.current++;setConfirmation(null);setPreview(null);setError('');};
   const pending=Boolean(match.cloud_pending||match.pending||match.conflict),ended=match.status==='over',canLeave=local||Boolean(seat&&seat.active!==false);

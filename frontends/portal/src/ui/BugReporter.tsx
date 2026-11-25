@@ -1,3 +1,4 @@
+import {visibleErrorMessage} from '../core/account-scope';
 import {copyText} from '../platform/i18n';
 import React,{useEffect,useRef,useState} from 'react';
 import {Image,Platform,useWindowDimensions} from 'react-native';
@@ -30,7 +31,7 @@ function BugReportForm({p,screenshot,captureError,captured,draft,onClose,onSent}
     {error&&<Notice error>{error}</Notice>}
     <Button disabled={text.trim().length<5||!p.network} onPress={async()=>{
       try{const result=await p.actions.request('POST','/bug-reports',{text:text.trim(),screenshot,diagnostics:diagnosticSnapshot({...captured.current.context as Record<string,unknown>,screenshotCapturedAt:captured.current.capturedAt})});recordDiagnosticEvent('bug_report_sent',{id:result.id});onSent(text);setSent(result.id);}
-      catch(e){setError(e instanceof Error?e.message:String(e));}
+      catch(e){setError(visibleErrorMessage(e)??'');}
     }}>{copyText("Send report")}</Button>
   </>;
 }

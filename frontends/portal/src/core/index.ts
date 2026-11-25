@@ -1,3 +1,4 @@
+import {AccountScopeChangedError,visibleErrorMessage} from './account-scope';
 import {playerLink} from './links';
 import type {InviteShareChannel} from './invite-sharing';
 import {withoutPersonalReferral,cleanAccounts} from './account-data';
@@ -96,15 +97,15 @@ export class PortalStore {
     if (!equal(names[key],metadata)) await this.cache('/portal/match-games',{...names,[key]:metadata});
     this.patch({matchGames:this.downloadedGameNames()});
   }
-  private capture() { const epoch = this.generation, account = this.identity(), base = this.state.baseUrl; return () => { if (epoch !== this.generation || account !== this.identity() || base !== this.state.baseUrl) throw new Error('Account changed; refresh to continue.'); }; }
+  private capture() { const epoch = this.generation, account = this.identity(), base = this.state.baseUrl; return () => { if (epoch !== this.generation || account !== this.identity() || base !== this.state.baseUrl) throw new AccountScopeChangedError(); }; }
   private async perform<T>(run: () => Promise<T>, loading = true): Promise<T> {
     // Bootstrap adopts its origin and initial account within this operation.
     // Explicit account transitions advance generation and own the new UI state.
     const epoch=this.generation;
-    const guard=()=>{if(epoch!==this.generation)throw new Error('Account changed; refresh to continue.');};
+    const guard=()=>{if(epoch!==this.generation)throw new AccountScopeChangedError();};
     if (loading) this.patch({ loading: true }); this.patch({ error: null });
     try { return await run(); }
-    catch (error) { guard();if(!(error instanceof InactiveSignInError))this.patch({ error: error instanceof Error ? error.message : String(error) }); throw error; }
+    catch (error) { guard();const message=visibleErrorMessage(error);if(message!==null&&!(error instanceof InactiveSignInError))this.patch({ error: message }); throw error; }
     finally { if (loading) { try { guard(); this.patch({ loading: false }); } catch { /* The new account owns its loading state. */ } } }
   }
   private awaitingLocalHandoff(match: LocalMatch | undefined, data = this.data): boolean {
@@ -654,7 +655,7 @@ export class PortalStore {
     intentGuard?.();
     const account = this.state.accounts.find(a => a.id === id); if (!account) throw new Error('Account not found on this device');
     const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.dismissedNotificationIds.clear(); this.notificationPromptClaim = null; this.observations.clear();
-    const current=()=>{if(transition!==this.generation)throw new Error('Account changed; refresh to continue.');intentGuard?.();};
+    const current=()=>{if(transition!==this.generation)throw new AccountScopeChangedError();intentGuard?.();};
     await this.writeSelection(id,current).catch(()=>{});current();
     const target=loginAttribution??await newAccountAttribution(this.state.accounts);current();
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
@@ -691,7 +692,7 @@ export class PortalStore {
     const accounts = this.state.accounts.filter(a => a.id !== id);
     if(id!==this.state.account?.id){const guard=this.capture();await saveAccounts(accounts,this.state.baseUrl);guard();this.patch({accounts});return;}
     const transition = ++this.generation; ++this.selection; this.refreshPromise = null; this.syncPromise = null; this.notificationPromise = null; this.dismissedNotificationIds.clear(); this.notificationPromptClaim = null; this.observations.clear();
-    const guard=()=>{if(transition!==this.generation)throw new Error('Account changed; refresh to continue.');};
+    const guard=()=>{if(transition!==this.generation)throw new AccountScopeChangedError();};
     const warning=()=>{guard();this.patch({storageError:'Device storage could not be updated. This session was logged out; saved credentials may remain on this device.'});};
     await saveAccounts(accounts,this.state.baseUrl).catch(warning);guard();
     // Follow any older selection write; it must not resurrect another login.

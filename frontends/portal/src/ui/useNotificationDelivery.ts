@@ -1,3 +1,4 @@
+import {visibleErrorMessage} from '../core/account-scope';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {AppState} from 'react-native';
 import {PortalApi} from '../core/api';
@@ -37,7 +38,7 @@ export function useNotificationDelivery(p: Portal, onOpen: (url: string) => Prom
         if (!stillCurrent()) return;
         if (payload.notification_id) await latest.current.actions.readNotification(payload.notification_id);
         if (stillCurrent()) await latest.current.actions.refreshNotifications();
-      })().catch(reason => {if (stillCurrent()) error.current(reason instanceof Error ? reason.message : String(reason));});},
+      })().catch(reason => {const message=visibleErrorMessage(reason);if (stillCurrent()&&message!==null) error.current(message);});},
     });
     current.current = manager;
     const refresh = async () => {

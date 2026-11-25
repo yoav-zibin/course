@@ -1,3 +1,4 @@
+import {AccountScopeChangedError} from '../core/account-scope';
 import {recordDiagnosticLog,recordDiagnosticEvent} from '../core/diagnostics';
 import {copyText,playerText} from '../platform/i18n';
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +28,7 @@ export type GameRendererProps = {
   onScene?: (scene:Scene,message:StateMessage)=>void;
   showToolbar?: boolean;
   showDestinationsAfterSelection?: boolean;
+  omitPieceId?: string;
   frameHeight?: number;
 };
 
@@ -56,7 +58,7 @@ type Gesture = {
 };
 type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];inferGroups?:boolean;moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
 
-function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,showDestinationsAfterSelection=false,frameHeight}: GameRendererProps & {spec: GameSpec}) {
+function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,showDestinationsAfterSelection=false,omitPieceId,frameHeight}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
@@ -106,7 +108,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   useLayoutEffect(()=>{fitGeometry();},[width,frameHeight,dimensions.width,dimensions.height]);
 
   const report = useCallback((reason: unknown) => {
-    if (!alive.current) return;
+    if (!alive.current || reason instanceof AccountScopeChangedError) return;
     const failure = errorOf(reason); recordDiagnosticLog('error','visible_game_error',failure); setError(failure.message); callbacks.current.onError?.(failure);
   }, []);
 
@@ -140,6 +142,9 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     knownObject(result,['scene','local_state','make_move','last_move_animations','animations','timeline'],['scene']); finiteJSON(result);
     const raw = validateScene(spec,result.scene);
     const next = resolveScene(spec,raw);
+    // A host may provide an equivalent control outside the board. Omit its
+    // board counterpart from both rendering and hit testing.
+    if (omitPieceId && next.pieces) next.pieces = next.pieces.filter(piece => piece.id !== omitPieceId);
     const incomingMoves = validateMoveAnimations(spec,raw,result.last_move_animations);
     const requested = validateSceneAnimations(spec,raw,result.animations);
     if (result.timeline !== undefined) {
@@ -214,7 +219,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       try { recordDiagnosticEvent('game_move');await callbacks.current.onMove(copy(result.make_move)); }
       catch (reason) { if(atRevision===revision.current){sent.current=false;setBusy(false);} report(reason); }
     }
-  },[spec,report]);
+  },[spec,report,omitPieceId]);
 
   const messageJSON = JSON.stringify(message);
   const historyJSON = JSON.stringify(presentationHistory??null);

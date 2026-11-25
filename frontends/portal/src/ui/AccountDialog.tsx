@@ -1,3 +1,4 @@
+import {visibleErrorMessage} from '../core/account-scope';
 import {copyText} from '../platform/i18n';
 import React, {useEffect, useRef, useState} from 'react';
 import {Image, View} from 'react-native';
@@ -26,7 +27,7 @@ export function AccountDialog({visible,onClose}: {visible:boolean;onClose:()=>vo
   const methods=[...verifiedMethods,...(!p.account?[{value:'guest',label:t('ui.auth.guest','Guest')}]:[])];
   const selected=methods.some(item=>item.value===method)?method:methods[0]?.value;
   const allowed=!p.account||approvedLink===epoch;
-  const act=async(task:()=>Promise<unknown>)=>{const own=current.current,rev=revision.current;setError('');try{await task();}catch(e){if(current.current===own&&current.current.visible&&revision.current===rev)setError(e instanceof Error?e.message:String(e));}};
+  const act=async(task:()=>Promise<unknown>)=>{const own=current.current,rev=revision.current;setError('');try{await task();}catch(e){if(current.current===own&&current.current.visible&&revision.current===rev)setError(visibleErrorMessage(e)??'');}};
   const authGuard=()=>{const own=current.current,rev=revision.current;return()=>{if(current.current!==own||!own.visible||revision.current!==rev||p.account&&approvedLink!==own.epoch)throw new InactiveSignInError(copyText('This sign-in request is no longer active. Try again.'));};};
   const authenticate=(task:(guard:()=>void)=>Promise<unknown>)=>{const dialog=current.current.dialog,guard=authGuard();return act(async()=>{guard();await task(guard);if(current.current.visible&&current.current.dialog===dialog)onClose();});};
   return <Dialog visible={visible} title={p.account?t('ui.auth.account','Your account'):t('ui.auth.log_in','Welcome to BuildPlay')} onClose={close}>

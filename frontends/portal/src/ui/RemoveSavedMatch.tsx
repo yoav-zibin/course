@@ -1,3 +1,4 @@
+import {visibleErrorMessage} from '../core/account-scope';
 import React,{useEffect,useRef,useState} from 'react';
 import type {Match} from '../core/types';
 import {copyText} from '../platform/i18n';
@@ -26,7 +27,7 @@ export function RemoveSavedMatch({match,onRemoved}: {match:Match;onRemoved?:()=>
       if(owner===current.current&&removedSelected)onRemoved?.();
       if(epoch===intent.current&&owner===current.current)close();
     }catch(failure){
-      if(epoch===intent.current&&owner===current.current)setError(failure instanceof Error?failure.message:String(failure));
+      if(epoch===intent.current&&owner===current.current)setError(visibleErrorMessage(failure)??'');
       throw failure;
     }finally{if(epoch===intent.current&&owner===current.current)setBusy(false);}
   });

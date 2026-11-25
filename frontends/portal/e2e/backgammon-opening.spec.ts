@@ -7,7 +7,7 @@ const load=(name:string)=>JSON.parse(readFileSync(path.resolve(__dirname,'../../
 const packageBody=load('games/declarative/backgammon.json');
 const originalUI=load('tests/fixtures/declarative/backgammon-v7-ui.json');
 const game={...packageBody,id:'5f5293c3-2a3a-4eec-b631-9debf59be0ca',version:7,
-  name:'Backgammon',renderer_type:'declarative',declarative_ui:originalUI,
+  name:'Backgammon',game_logic_rules:packageBody.rules,renderer_type:'declarative',declarative_ui:originalUI,
   game_schemas:Object.fromEntries(['state','move','view'].map(key=>[key,packageBody.unit_tests[key+'_schema']]))};
 
 async function saved(page:Page,id:string){
@@ -50,6 +50,12 @@ test('saved Backgammon opening ties remain clear after computer rerolls and the 
   const roll=page.getByRole('button',{name:'Roll one die: Select',exact:true});
   await expect(roll).toBeEnabled();
   await expect(page.getByText('Each player rolls one die.',{exact:true})).toBeVisible();
+  await expect(page.getByTestId('game-stage').getByRole('button',{name:'Help: Select',exact:true})).toHaveCount(0);
+  await page.getByTestId('match-menu-button').click();
+  await page.getByRole('dialog',{name:'Match menu',exact:true}).getByRole('button',{name:'How to play',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'How to play',exact:true})).toBeVisible();
+  await page.getByTestId('match-menu-button').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Die 1: 5: Select',exact:true})).toHaveCount(0);
   await expect(page.getByRole('img',{name:'Die 1: 5',exact:true})).toBeVisible();
   for(const moveCount of [4,6]){

@@ -1,3 +1,4 @@
+import {visibleErrorMessage} from '../core/account-scope';
 import React, {useEffect, useRef, useState} from 'react';
 import {View} from 'react-native';
 import {accountDeletion} from '../core/account-deletion';
@@ -33,7 +34,7 @@ export function AccountDeletionBanner() {
     <AccountDeletionStatus testID="account-deletion-warning" onUndo={async()=>{
       const own=scope;setError('');
       try{await p.actions.cancelAccountDeletion();}
-      catch(reason){if(current.current===own)setError(reason instanceof Error?reason.message:String(reason));}
+      catch(reason){if(current.current===own)setError(visibleErrorMessage(reason)??'');}
     }}/>
     {error&&<Notice error>{error}</Notice>}
   </View>;

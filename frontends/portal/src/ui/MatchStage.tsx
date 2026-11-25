@@ -18,6 +18,8 @@ import type {MatchHistoryController} from './matchHistory';
 export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,history,onMenuDismissed}:{menuOpen?:boolean;onCloseMenu:()=>void;menuHeader?:ReactNode;menuExtras?:ReactNode;history:MatchHistoryController;onMenuDismissed?:()=>void}) {
   const {p,run,navigate,notify,openMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
   const match=p.selectedMatch!, game=p.game;
+  const backgammon=game?.id==='5f5293c3-2a3a-4eec-b631-9debf59be0ca';
+  const hasInstructions=Boolean(game&&(game.tutorial_text||game.game_logic_rules||game.game_ui_rules));
   const sharingScope=JSON.stringify([p.baseUrl,p.account?.id,match.id]),currentSharingScope=useRef(sharingScope);currentSharingScope.current=sharingScope;
   const [confirm,setConfirm]=useState(''),[clock,setClock]=useState(''),[rendererError,setRendererError]=useState('');
   const [help,setHelp]=useState(false);
@@ -65,14 +67,14 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
       </Row>
     </Card>}
     {inviteUrl&&<Card><Title small>{copyText('Invite friends')}</Title><Copy selectable style={{fontSize:28,fontWeight:'700',letterSpacing:4,direction:'ltr'}}>{match.invite_code}</Copy><Copy selectable style={{direction:'ltr'}}>{inviteUrl}</Copy><Row><Button secondary onPress={copyCode}>{copyText('Copy code')}</Button><Button onPress={shareMatch}>{copyText('Share link')}</Button></Row><Copy small muted>{copyText('Friends who open this link join an available seat or watch the match.')}</Copy></Card>}
-    {game&&(game.tutorial_text||game.game_logic_rules||game.game_ui_rules)&&<Row><View style={{flex:1}}/><Button compact secondary onPress={()=>setHelp(true)}>{t('ui.game.rules','How to play')}</Button></Row>}
+    {hasInstructions&&<Row><View style={{flex:1}}/><Button compact secondary onPress={()=>setHelp(true)}>{t('ui.game.rules','How to play')}</Button></Row>}
     </View>;
   return <View style={fittedBoard?{flex:1,minHeight:0,minWidth:0}:{gap:22,minWidth:0}}>
     {waiting&&details}
     {singlePlayer&&waiting?<Card><Copy muted>{copyText('Private to your account')}</Copy>{owner&&<Button disabled={p.loading||Boolean(match.cloud_pending)||!p.network||!game?.allowed_player_counts.includes(activePlayers)} onPress={()=>run(()=>p.actions.matchAction('start'))}>{t('ui.match.start_match','Start match')}</Button>}</Card>
       :!singlePlayer&&waiting?<Card><Title small>{owner?copyText("Your lobby is ready"):copyText("Waiting for the host")}</Title><Copy muted>{owner?copyText("Share the match with a friend. Start when the required number of players has joined."):copyText("Join an open seat, then the host can start the game.")}</Copy>{owner&&!game?.allowed_player_counts.includes(match.players.length)&&<Copy small muted>{copyText("This game needs")} {game?.allowed_player_counts.join(', ')} {copyText("players.")}</Copy>}</Card>
       :match.awaitingHandoff?<Card style={{alignItems:'center',padding:40}}><Title small>{copyText("Pass the device")}</Title><Copy muted>{copyText("The next player’s board stays hidden until they are ready.")}</Copy><Button onPress={()=>run(()=>p.actions.revealLocal())}>{copyText("I’m ready")}</Button></Card>
-      :game?.declarative_ui&&message?<View testID="game-stage" style={[{backgroundColor:colors.surface,width:'100%',minWidth:0},fittedBoard&&{flex:1,minHeight:0}]} onLayout={event=>{if(fittedBoard)setFrameHeight(event.nativeEvent.layout.height);}}><GameRenderer spec={game.declarative_ui} message={message} showToolbar={false} showDestinationsAfterSelection={game.id==='5f5293c3-2a3a-4eec-b631-9debf59be0ca'} frameHeight={fittedBoard?frameHeight:undefined} presentationHistory={p.actions.presentationHistory()} contextKey={`${p.account?.id||'visitor'}:${match.id}:${game.version}`} onMove={submit} onAnimationStateChange={history.onAnimationStateChange} onScene={history.onScene} onError={error=>{history.stopPlayback();setRendererError(error.message);reportClientIssue('game_error',error);}}/></View>
+      :game?.declarative_ui&&message?<View testID="game-stage" style={[{backgroundColor:colors.surface,width:'100%',minWidth:0},fittedBoard&&{flex:1,minHeight:0}]} onLayout={event=>{if(fittedBoard)setFrameHeight(event.nativeEvent.layout.height);}}><GameRenderer spec={game.declarative_ui} message={message} showToolbar={false} showDestinationsAfterSelection={backgammon} omitPieceId={backgammon&&hasInstructions?'help':undefined} frameHeight={fittedBoard?frameHeight:undefined} presentationHistory={p.actions.presentationHistory()} contextKey={`${p.account?.id||'visitor'}:${match.id}:${game.version}`} onMove={submit} onAnimationStateChange={history.onAnimationStateChange} onScene={history.onScene} onError={error=>{history.stopPlayback();setRendererError(error.message);reportClientIssue('game_error',error);}}/></View>
       :<Empty>{copyText("Loading the match’s saved game version…")}</Empty>}
     {rendererError&&<Notice error>{rendererError}</Notice>}
     {history.error&&history.error!==p.error&&<Notice error>{history.error}</Notice>}
