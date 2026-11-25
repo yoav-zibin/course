@@ -52,7 +52,9 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
     onPanResponderMove:(_,gesture)=>{
       const next=clampBugPoint({x:start.current.x+gesture.dx,y:start.current.y+gesture.dy},current.current.bounds);
       dragPoint.current=next;
-      dragFrames.move(next,value=>translation.setValue(value));
+      // Native touch events already arrive batched. Update the transform now
+      // so a delayed JavaScript animation callback cannot hold the control still.
+      dragFrames.moveImmediately(next,value=>translation.setValue(value));
     },
     onPanResponderRelease:()=>{
       const placed=finishDrag('released');

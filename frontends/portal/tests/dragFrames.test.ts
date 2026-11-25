@@ -36,3 +36,20 @@ test('drag frames coalesce burst input and include only timing in the final diag
     duration_ms:57,max_js_gap_ms:39,max_schedule_wait_ms:35,max_update_work_ms:2,
   }]);
 });
+
+test('native control motion does not wait for a JavaScript animation callback',()=>{
+  let now=0;
+  const drag=createDragFrames<number>('floating_controls',()=>now,()=>{
+    assert.fail('an immediate transform must not request an animation callback');
+  });
+  const drawn:number[]=[];
+  drag.moveImmediately(10,value=>drawn.push(value));
+  now=16;
+  drag.moveImmediately(12,value=>drawn.push(value));
+  assert.deepEqual(drawn,[10,12]);
+  drag.finish('released');
+  const events=diagnosticSnapshot().events as {name:string;metadata:{surface:string;js_updates:number;max_schedule_wait_ms:number}}[];
+  const trace=events.find(event=>event.name==='drag_performance'&&event.metadata.surface==='floating_controls');
+  assert.equal(trace?.metadata.js_updates,2);
+  assert.equal(trace?.metadata.max_schedule_wait_ms,0);
+});
