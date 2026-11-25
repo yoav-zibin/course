@@ -2,7 +2,6 @@
 
 import copy
 from concurrent.futures import ThreadPoolExecutor
-import datetime as dt
 import fcntl
 import importlib.util
 import json
@@ -12,7 +11,6 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 import urllib.parse
 import uuid
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -81,7 +79,9 @@ def test_delivery_deduplicates_then_recovers_interrupted_handling(state_dir, pen
     assert receipt["report_ids"] == ["report-a"]
     assert review.watch(state_dir, now=200).startswith("Player bug-report repair already queued")
     assert queue.call_count == 1
-    assert review.watch(state_dir, now=100 + 24 * 3600).startswith("Queued repair")
+    assert review.watch(state_dir, now=3599).startswith("Player bug-report repair already queued")
+    assert queue.call_count == 1
+    assert review.watch(state_dir, now=3600).startswith("Queued repair")
     assert queue.call_count == 2
     command = queue.call_args.args[0]
     assert command[:4] == ["/usr/bin/codex", "queue", "--thread", "12345678-1234-1234-1234-123456789abc"]
@@ -89,45 +89,6 @@ def test_delivery_deduplicates_then_recovers_interrupted_handling(state_dir, pen
     assert "UNTRUSTED USER DATA" in command[command.index("--message") + 1]
     # The watcher has only read the queue; it has not changed report status.
     pending.request.assert_not_called()
-
-
-def eastern_timestamp(value):
-    return dt.datetime.fromisoformat(value).replace(tzinfo=ZoneInfo("America/New_York")).timestamp()
-
-
-@pytest.mark.parametrize("queued_local,next_local,elapsed", [
-    ("2026-11-21T15:00:00", "2026-11-21T19:00:00", 4 * 3600),
-    ("2026-11-21T19:00:03", "2026-11-22T19:00:02", 24 * 3600 - 1),
-    ("2026-03-07T19:00:03", "2026-03-08T19:00:02", 23 * 3600 - 1),
-    ("2026-10-31T19:00:03", "2026-11-01T19:00:02", 25 * 3600 - 1),
-])
-def test_daily_recovery_uses_the_eastern_evening_boundary_through_dst(
-        state_dir, pending, monkeypatch, queued_local, next_local, elapsed):
-    queued_at, next_check = eastern_timestamp(queued_local), eastern_timestamp(next_local)
-    assert next_check - queued_at == elapsed
-    boundary = dt.datetime.fromtimestamp(next_check, ZoneInfo("America/New_York")).replace(
-        hour=19, minute=0, second=0, microsecond=0).timestamp()
-    queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
-    monkeypatch.setattr(review.subprocess, "run", queue)
-    review.watch(state_dir, now=queued_at)
-    assert review.watch(state_dir, now=boundary - 1).startswith("Player bug-report repair already queued")
-    assert queue.call_count == 1
-    assert review.watch(state_dir, now=next_check).startswith("Queued repair")
-    assert queue.call_count == 2
-
-
-def test_review_period_changes_at_seven_pm_not_midnight():
-    assert review.review_period(eastern_timestamp("2026-11-21T18:59:59")) == dt.date(2026, 11, 20)
-    assert review.review_period(eastern_timestamp("2026-11-21T19:00:00")) == dt.date(2026, 11, 21)
-    assert review.review_period(eastern_timestamp("2026-11-22T00:00:00")) == dt.date(2026, 11, 21)
-
-
-def test_same_review_period_suppresses_the_former_six_hour_retry(state_dir, pending, monkeypatch):
-    queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
-    monkeypatch.setattr(review.subprocess, "run", queue)
-    review.watch(state_dir, now=100)
-    assert review.watch(state_dir, now=100 + 6 * 3600).startswith("Player bug-report repair already queued")
-    assert queue.call_count == 1
 
 
 def test_new_report_is_not_hidden_by_an_existing_delivery_receipt(state_dir, pending, monkeypatch):
@@ -376,7 +337,7 @@ def test_unconfigured_owner_policy_cannot_reuse_a_submitted_or_stale_flag(state_
     pending.request.assert_not_called()
 
 
-def test_compact_daily_bootstrap_requires_the_complete_batch_workflow_and_safeguards(state_dir, pending, monkeypatch):
+def test_compact_hourly_bootstrap_requires_the_complete_batch_workflow_and_safeguards(state_dir, pending, monkeypatch):
     configure_owner(state_dir)
     queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
     monkeypatch.setattr(review.subprocess, "run", queue)
@@ -386,7 +347,7 @@ def test_compact_daily_bootstrap_requires_the_complete_batch_workflow_and_safegu
     instructions = (review.ROOT / "instructions.txt").read_text()
     assert str((review.ROOT / "instructions.txt").resolve()) in prompt
     assert "Before any report action, read" in prompt
-    assert "daily batch" in prompt and "group duplicates" in prompt
+    assert "hourly batch" in prompt and "group duplicates" in prompt
     assert "fresh review.py get policy only" in prompt
     assert "per-report approval" in prompt and "single pending question" in prompt
     assert "confirm publication before handling each report" in prompt
@@ -406,7 +367,7 @@ def test_missing_trusted_batch_instructions_never_queues_or_saves_a_receipt(stat
     queue = Mock()
     monkeypatch.setattr(review.subprocess, "run", queue)
     monkeypatch.setattr(review, "ROOT", state_dir / "missing-repository-instructions")
-    with pytest.raises(RuntimeError, match="trusted daily repair instructions"):
+    with pytest.raises(RuntimeError, match="trusted hourly repair instructions"):
         review.watch(state_dir, now=100)
     queue.assert_not_called()
     assert not (state_dir / "pending.json").exists()

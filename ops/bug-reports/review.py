@@ -4,7 +4,6 @@
 import argparse
 import base64
 from contextlib import contextmanager
-import datetime as dt
 import fcntl
 import json
 import os
@@ -17,12 +16,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_STATE = Path.home() / ".local/share/buildplay-bug-reports"
-REVIEW_TIME_ZONE = ZoneInfo("America/New_York")
-REVIEW_HOUR = 19
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # Headers contain up to 10k description + 20k review notes + 4k assessment and
 # changes-summary characters. JSON can escape each character to six bytes;
@@ -364,7 +360,7 @@ class BugAPI:
             seen.add(cursor)
 
     def pending_ids(self):
-        # Escalated reports wait for the user's decision; the daily job cannot reopen them.
+        # Escalated reports wait for the user's decision; the hourly job cannot reopen them.
         return {report_id(row.get("id"))
                 for status in ("open", "handling")
                 for page in self.pages(status=status)
@@ -381,11 +377,11 @@ class BugAPI:
 def delivery_prompt(state_dir, config, count):
     instructions = ROOT / "instructions.txt"
     if not instructions.is_file() or not instructions.read_text().strip():
-        raise RuntimeError("The trusted daily repair instructions are unavailable")
+        raise RuntimeError("The trusted hourly repair instructions are unavailable")
     # Keep recurring messages small; the complete, versioned policy is read once
     # from this trusted checkout rather than copied into every conversation turn.
     return (
-        "Handle the daily batch of authorized BuildPlay player reports for yoav-zibin/course "
+        "Handle the hourly batch of authorized BuildPlay player reports for yoav-zibin/course "
         "in THIS existing Codex conversation. Before any report action, read " + str(instructions.resolve()) +
         ", AGENTS.md, docs/bug-reports.md, the backend handoff and the private scheduler config.json. "
         "If those repair instructions are unavailable, stop before report mutations. "
@@ -402,10 +398,8 @@ def delivery_prompt(state_dir, config, count):
 
 
 def review_period(timestamp):
-    """The local date of the latest scheduled 7pm Eastern review boundary."""
-    local = dt.datetime.fromtimestamp(timestamp, REVIEW_TIME_ZONE)
-    day = local.date()
-    return day if local.hour >= REVIEW_HOUR else day - dt.timedelta(days=1)
+    """The UTC hour containing the delivery or scheduled check."""
+    return int(timestamp // 3600)
 
 
 def watch(state_dir, *, dry_run=False, now=None):
@@ -421,7 +415,7 @@ def watch(state_dir, *, dry_run=False, now=None):
     queued_at = pending.get("queued_at", 0)
     if (identifiers.issubset(set(pending.get("report_ids", []))) and
             0 <= now - queued_at and review_period(now) == review_period(queued_at)):
-        return "Player bug-report repair already queued for this 7pm Eastern review period; retrying unfinished work at the next daily check"
+        return "Player bug-report repair already queued for this hour; retrying unfinished work at the next hourly check"
     if dry_run:
         return f"Would queue repair of {len(identifiers)} unhandled player bug reports"
     prompt = delivery_prompt(state_dir, config, len(identifiers))
@@ -432,8 +426,7 @@ def watch(state_dir, *, dry_run=False, now=None):
     )
     if result.returncode or "warn" in (result.stdout + result.stderr).lower():
         raise RuntimeError("Could not confirm Codex queue/resume; no success receipt saved")
-    # A receipt is never a resolution. Recover at the next local 7pm boundary,
-    # including 23-hour and 25-hour review periods around daylight saving time.
+    # A receipt is never a resolution. Recover at the next UTC hour boundary.
     save_json(receipt, {"report_ids": sorted(identifiers), "queued_at": now,
                         "thread_id": config["thread_id"]})
     return f"Queued repair of {len(identifiers)} player bug reports in the existing Codex thread"

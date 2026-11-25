@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the authorized daily player bug-report batch for an existing Codex thread."""
+"""Install the authorized hourly player bug-report batch for an existing Codex thread."""
 
 import argparse
 import json
@@ -13,13 +13,13 @@ import uuid
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = ROOT.parent.parent
 UNIT = "buildplay-bug-reports"
-DAILY_CALENDAR = "*-*-* 19:00:00 America/New_York"
+HOURLY_CALENDAR = "*-*-* *:00:00 UTC"
 
 
 def timer_unit():
     return (
-        "[Unit]\nDescription=Review player bug reports daily at 7pm Eastern as one batch\n\n"
-        "[Timer]\nOnCalendar=" + DAILY_CALENDAR + "\nPersistent=true\nUnit=" + UNIT +
+        "[Unit]\nDescription=Review player bug reports every hour as one batch\n\n"
+        "[Timer]\nOnCalendar=" + HOURLY_CALENDAR + "\nPersistent=true\nUnit=" + UNIT +
         ".service\n\n[Install]\nWantedBy=timers.target\n"
     )
 
@@ -123,7 +123,7 @@ def main():
     service = directory / (UNIT + ".service")
     timer = directory / (UNIT + ".timer")
     service.write_text(
-        "[Unit]\nDescription=Check player bug reports and queue a daily Codex repair batch\n"
+        "[Unit]\nDescription=Check player bug reports and queue an hourly Codex repair batch\n"
         "Wants=network-online.target codex-remote-control.service\n"
         "After=network-online.target codex-remote-control.service\n\n"
         "[Service]\nType=oneshot\nWorkingDirectory=" + str(REPOSITORY).replace("%", "%%") + "\n"

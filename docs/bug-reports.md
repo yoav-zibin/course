@@ -78,7 +78,7 @@ submission, so retrying a failed send includes its API failure and visible error
 
 The screenshot and the description are the user's submitted evidence and can
 contain private information. Reports are private admin data. Their bodies do
-not enter ordinary HTTP request/response logs, and the daily watcher logs
+not enter ordinary HTTP request/response logs, and the hourly watcher logs
 counts and delivery status only. Private automation snapshots are written with
 mode 600 inside a mode-700 state directory. Do not commit them, copy them into
 public issues or print complete records into service journals.
@@ -194,7 +194,7 @@ and preserves status, resolution, commit and submitted evidence. Assessment
 updates the review timestamp, so fetch the report again before a later status
 change. Recording an assessment does not authorize implementation.
 
-## Daily Codex repair workflow
+## Hourly Codex repair workflow
 
 `ops/bug-reports/install.py` installs this user's
 `buildplay-bug-reports.timer` and `.service`. It uses the supported installed
@@ -230,18 +230,15 @@ Unmatched or ambiguous identities stay excluded until verified or clarified.
 belong in source. Ordinary reinstalls preserve both sets of pins for the same
 repository and API origin; a scope change drops prior pins.
 
-The timer reviews feedback once daily at **7:00 pm Eastern** using
-`America/New_York`, so it stays at 7:00 pm through daylight saving changes. It
-uses `Persistent=true` to catch up after downtime. It requests every page of `open` and `handling`
+The timer reviews feedback at the start of **every UTC hour**. It uses
+`Persistent=true` to catch up after downtime. It requests every page of `open` and `handling`
 headers and pending/active individually approved reports and deferred student
 experience concerns from private state, then queues one batch review only when
 reports exist. Other escalated reports stay excluded until Yoav authorizes
 reopening. A private delivery receipt suppresses another delivery of the same
-reports in that evening-to-evening review period; unfinished work recovers at
-the next 7:00 pm check. The period uses the local review boundary rather than
-UTC dates or a rolling 24-hour delay, so afternoon deliveries, timer jitter and
-23-hour or 25-hour daylight saving days do not skip a scheduled review. New
-reports normally join the daily batch or its final arrival check; an explicit
+reports within the same UTC hour. Unfinished work can be delivered again at
+the next hourly check, even when the previous delivery was less than an hour
+earlier. New reports normally join the hourly batch or its final arrival check; an explicit
 manual `watch` can still deliver newly discovered IDs. A process lock prevents
 overlapping watcher invocations. Queue delivery never marks a report handled.
 
@@ -297,7 +294,7 @@ standing approval for that report until Yoav directly decides. The usual single
 pending question rule still applies. When another question is pending, the same
 command saves the concern privately for later recovery without reserving or
 asking a second question. Leave the harmful change unimplemented and escalated
-until its turn; private deferred concerns also enter daily snapshots.
+until its turn; private deferred concerns also enter hourly snapshots.
 
 Ask Yoav for authorization **one report at a time**, showing its report ID,
 server-derived reporter user name (or `Signed-out reporter`) and a concise
@@ -322,7 +319,7 @@ ambiguous replies and delivery receipts grant no
 permission. A lost decision response requires inspecting the private state.
 
 State writes use an exclusive lock and atomic mode-600 replacement. Pending
-questions, deferred student concerns and active approved escalations enter daily
+questions, deferred student concerns and active approved escalations enter hourly
 recovery and snapshots;
 recovery cannot ask about a second report. Confirming handled retires an active
 approval from recovery while preserving its decision history. It also clears a
