@@ -117,3 +117,20 @@ def test_native_rack_hook_uses_retained_move_or_pinned_disc_identity():
     # Neither a missing ID map nor inconsistent provenance invents a path.
     assert invoke({**before, 'turns':1}) is None
     assert invoke({**before, 'disc_ids':None}) is None
+
+
+@pytest.mark.parametrize('columns', ([0, 4, 1, 4, 2], [0, 3, 0, 3, 1, 3, 1]))
+def test_computer_blocks_immediate_losses_and_takes_wins(columns):
+    body = package()
+    rules = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ctx = copy.deepcopy(body.unit_tests['cases'][0]['ctx'])
+    result = rules.call('newMatch', ctx=ctx, seed=7)
+    for index, column in enumerate(columns):
+        ctx['move_count'] = index
+        result = rules.call('applyMove', result['state'], result['turn'][0],
+                            {'column': column}, ctx=ctx, seed=7)
+    ctx['move_count'] = len(columns)
+    for seed in (1, 7):
+        move = rules.call('computerMove', result['state'], result['turn'][0],
+                          ctx=ctx, seed=seed)
+        assert move == {'column': 3}

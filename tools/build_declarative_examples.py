@@ -200,6 +200,8 @@ def illustration(kind, view, caption):
 def package(kind):
     game_schemas=schemas(kind)
     code=f'const KIND={json.dumps(kind)};\n'+(DEST/'engine.js').read_text()
+    if kind=='connect4':
+        code+='\n'+(DEST/'connect4-strategy.js').read_text()
     logic=GameLogic(code,game_schemas=game_schemas)
     ctx={'players':[{'id':'u1','kind':'human','display_name':'Alice','picture_url':'','max_loss':0,'active':True},{'id':'u2','kind':'human','display_name':'Bob','picture_url':'','max_loss':0,'active':True}], 'pot':0,'move_count':0}
     result=logic.call('newMatch',ctx=ctx,seed=7); steps=[]
