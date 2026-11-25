@@ -139,6 +139,48 @@ def test_delivery_deduplicates_then_recovers_interrupted_handling(state_dir, pen
     pending.request.assert_not_called()
 
 
+def test_review_checkpoint_keeps_unchanged_reports_out_of_hourly_delivery(state_dir, pending, monkeypatch):
+    row = {"id": "report-a", "status": "open", "updated_at": "1", "user": None, "reporter_user_id": None}
+    pending.get.side_effect = lambda _: row.copy()
+    pending.pages.side_effect = lambda *, status: [[], [row.copy()] if status == row["status"] else []]
+    queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
+    monkeypatch.setattr(review.subprocess, "run", queue)
+    review.checkpoint_review(state_dir, "report-a", wait_for="evidence", expected_updated_at="1")
+    assert review.watch(state_dir, now=3600) == "No actionable player bug reports"
+    assert review.snapshot(state_dir, actionable=True)["unhandled_reports"] == 0
+    assert review.snapshot(state_dir)["unhandled_reports"] == 1
+    queue.assert_not_called()
+    row["updated_at"] = "2"
+    assert review.watch(state_dir, now=7200).startswith("Queued repair")
+    queue.assert_called_once()
+
+
+def test_review_checkpoint_resumes_only_when_its_blocker_clears(state_dir, pending, monkeypatch):
+    config = review.configuration(state_dir)
+    row = {"id": "report-a", "status": "handling", "updated_at": "1",
+           "user": None, "reporter_user_id": None, "release_commit": "a" * 40}
+    pending.get.side_effect = lambda _: row.copy()
+    pending.pages.side_effect = lambda *, status: [[row.copy()]] if status == row["status"] else []
+    state = review.authorizations(state_dir, config)
+    state["pending"] = {"report_id": "other"}
+    review.save_json(state_dir / "authorizations.json", state)
+    review.checkpoint_review(state_dir, "report-a", wait_for="approval-slot", expected_updated_at="1")
+    def actionable():
+        return review.actionable_review_ids(state_dir, config, pending, state, {"report-a"})
+    assert actionable() == set()
+    state["pending"] = None
+    review.save_json(state_dir / "authorizations.json", state)
+    assert actionable() == {"report-a"}
+    review.checkpoint_review(state_dir, "report-a", wait_for="production", expected_updated_at="1")
+    monkeypatch.setattr(review, "live_web_revision", lambda _: "b" * 40)
+    ancestry = Mock(return_value=False)
+    monkeypatch.setattr(review, "includes_revision", ancestry)
+    assert actionable() == set()
+    ancestry.return_value = True
+    assert actionable() == {"report-a"}
+    ancestry.assert_called_with(config, "a" * 40, "b" * 40)
+
+
 def test_new_report_is_not_hidden_by_an_existing_delivery_receipt(state_dir, pending, monkeypatch):
     queue = Mock(return_value=SimpleNamespace(returncode=0, stdout="Queued", stderr=""))
     monkeypatch.setattr(review.subprocess, "run", queue)

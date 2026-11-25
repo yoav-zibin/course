@@ -257,9 +257,16 @@ headers and pending/active individually approved reports and deferred student
 experience concerns from private state, then queues one batch review only when
 reports exist. Other escalated reports stay excluded until Yoav authorizes
 reopening. A private delivery receipt suppresses another delivery of the same
-reports within the same UTC hour. Unfinished work can be delivered again at
-the next hourly check, even when the previous delivery was less than an hour
-earlier. New reports normally join the hourly batch or its final arrival check; an explicit
+reports within the same UTC hour. Unfinished investigation can be delivered at
+the next hourly check. After reviewing a blocked report, save a checkpoint
+with `review.py checkpoint <id> --wait-for evidence|approval-slot|production
+--expected-updated-at <current-timestamp>`. A checkpoint suppresses unchanged
+reports until their own decision or database version changes, the approval slot
+opens, or their fixing commit goes live, depending on the blocker. When the
+approval slot opens, the watcher selects the oldest unchanged waiting request. Use
+`snapshot --actionable` for the hourly review and `snapshot` for a full audit.
+Keep the completed investigation in the private batch record and reuse it when
+the report returns. New reports normally join the hourly batch or its final arrival check; an explicit
 manual `watch` can still deliver newly discovered IDs. A process lock prevents
 overlapping watcher invocations. Queue delivery never marks a report handled.
 
