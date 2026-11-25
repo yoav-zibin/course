@@ -15,6 +15,7 @@ import { animateSceneUpdate, sceneTracks, sceneTransform, type SceneTrack } from
 import {TabletopGraphic} from './TabletopGraphic';
 import {compileTimeline,inferredGroupTracks, pathsTimeline, resolveScene} from './composition';
 import {dragPosition} from './dragPosition';
+import {useBoardInput,type BoardInputResult} from './BoardInput';
 import {pieceAnimation,STATIC_PIECE_Z_MAX} from './pieceAnimations';
 
 export type GameRendererProps = {
@@ -86,7 +87,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const animationKeys = useRef(new Map<string,string>());
   const paintOrder=useRef(new Map<string,number>());
   const selectedRef = useRef<string | null>(null), previewRef = useRef<string | null>(null);
-  const gesture = useRef<Gesture | null>(null), lastGesture = useRef(0), motionUntil = useRef(0);
+  const gesture = useRef<Gesture | null>(null), motionUntil = useRef(0);
   const endGesture=(outcome:'released'|'cancelled'='cancelled')=>{
     dragFrames.finish(outcome);gesture.current=null;setGestureTick(value=>value+1);
   };
@@ -448,7 +449,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       }
     },
     onPanResponderRelease:event=>{
-      const g=gesture.current;endGesture('released');lastGesture.current=Date.now();
+      const g=gesture.current;endGesture('released');
       if(!g){setDrag(null);return;}
       const at={x:event.nativeEvent.pageX-origin.current.x,y:event.nativeEvent.pageY-origin.current.y};
       if(g.kind==='pinch'||g.kind==='pan'){setDrag(null);return;}
@@ -475,8 +476,6 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   }),[spec,showDestinationsAfterSelection,dragFrames]);
 
   const selectedPiece=display.scene.pieces?.find(piece=>piece.id===selected);
-  const visibleTargets=(display.scene.targets||[]).filter(target=>
-    !showDestinationsAfterSelection || (active && selectedPiece?.move_targets?.includes(target.id)));
   const selectedActions=selectedPiece?pieceActions(selectedPiece):[];
   const previewTarget=display.scene.targets?.find(target=>target.id===preview);
   // Selecting a drag source must not introduce a footer and resize the canvas
@@ -511,17 +510,61 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     const timer=setTimeout(()=>setPaintTick(value=>value+1),Math.max(1,paintEnd-Date.now()+1));
     return()=>clearTimeout(timer);
   },[paintEnd]);
+  function finishBoardInput(result:BoardInputResult) {
+    if(!alive.current||renderedRevision.current!==revision.current)return;
+    if(result.kind==='clear'){
+      select(null);showPreview(null);return;
+    }
+    if(Date.now()<motionUntil.current||!canMove(latest.current,sent.current))return;
+    const scene=sceneRef.current;
+    if(result.kind==='drop'){
+      if(result.target)dispatch({type:'drop',id:result.piece,piece_id:result.piece,target_id:result.target});
+      select(null);showPreview(null);return;
+    }
+    if(selectedRef.current!==result.selected)return;
+    if(result.selected!==result.source)select(result.source);
+    const choice=result.choice;
+    if(choice?.kind==='piece'){
+      const piece=scene.pieces?.find(item=>item.id===choice.id);
+      if(piece)activatePiece(piece);
+    }else if(choice?.kind==='target'){
+      const target=scene.targets?.find(item=>item.id===choice.id);
+      if(target)activateTarget(target,result.touch);
+    }
+  }
+
+  const renderPreview=(target:Target)=>(target.preview||[]).map((cell,index)=>{
+    const point=position(spec,{board:target.board,position:cell.position}),size=targetBox(spec,{...target,position:cell.position,hit_area:undefined,hit_shape:undefined});
+    return <G key={`preview-${index}`} transform={`translate(${point.x} ${point.y}) rotate(${cell.rotation||0})`} opacity={.7} pointerEvents="none">
+      <Rect x={-size.width/2+1} y={-size.height/2+1} width={size.width-2} height={size.height-2} fill={cell.color||target.color||'#b8ef5b'} rx={4}/>
+      <Asset spec={spec} id={cell.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
+      {!!cell.text&&<SvgText textAnchor="middle" alignmentBaseline="central" fontSize={Math.min(size.width,size.height)*.42} fill="#102330">{playerText(cell.text)}</SvgText>}
+    </G>;
+  });
+  const renderHeld=(id:string)=>painting.paint.filter(item=>!item.ghost&&(item.piece.parent??item.piece.id)===id)
+    .map(({piece})=><PieceGraphic key={piece.id} piece={piece} spec={spec} animate={false}
+      serial={display.serial} enabled={false} selected dragged/>);
+  const boardInput=useBoardInput({
+    spec,scene:display.scene,order:painting.order,revision:revision.current,active,selected,
+    selectionRequired:showDestinationsAfterSelection,width,height,view,bounds,camera,
+    onResult:finishBoardInput,onCamera:setSafeCamera,renderHeld,renderPreview,
+  });
+  const targetSource=boardInput.heldId?display.scene.pieces?.find(piece=>piece.id===boardInput.heldId):selectedPiece;
+  const visibleTargets=(display.scene.targets||[]).filter(target=>
+    !showDestinationsAfterSelection || (active && targetSource?.move_targets?.includes(target.id)));
   const draggedId=drag?.id;
   const pieceLayers=useMemo(()=>{
     const lower:React.ReactNode[]=[],upper:React.ReactNode[]=[];
     for(const item of painting.paint){
       const rootId=item.piece.parent??item.piece.id;
-      (item.z<=STATIC_PIECE_Z_MAX?lower:upper).push(<PieceGraphic key={`${item.ghost?'ghost':'piece'}:${item.piece.id}`} piece={item.piece} previous={item.previous}
+      const graphic=<PieceGraphic key={`${item.ghost?'ghost':'piece'}:${item.piece.id}`} piece={item.piece} previous={item.previous}
         spec={spec} {...item.options} serial={display.serial} enabled={active&&!item.ghost} selected={item.piece.selected||rootId===selected}
-        started={display.started} concealed={rootId===draggedId} onPress={()=>actions.current.activatePiece(item.piece)}/>);
+        started={display.started} concealed={rootId===draggedId} onPress={()=>actions.current.activatePiece(item.piece)}/>;
+      (item.z<=STATIC_PIECE_Z_MAX?lower:upper).push(!item.ghost&&pieceActions(item.piece).length&&boardInput.wrapPiece?
+        boardInput.wrapPiece(graphic,rootId):graphic);
     }
     return {lower,upper};
-  },[painting,spec,display.serial,display.started,active,selected,draggedId]);
+  },[painting,spec,display.serial,display.started,active,selected,draggedId,boardInput.wrapPiece]);
   function draggedPosition(piece:Piece): Point {
     const root=display.scene.pieces!.find(p=>p.id===drag!.id)!;
     const center=position(spec,root), at=position(spec,piece);
@@ -546,6 +589,25 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   }}:{};
 
   const canvasWebStyle=Platform.OS==='web'&&(framed||camera.zoom>1)?{...styles.canvas,touchAction:'none'}:undefined;
+  const boardCanvas=<View ref={canvas} collapsable={false} focusable style={[styles.canvas,framed?{flex:1,minHeight:0}:{height},canvasWebStyle]} {...webProps} {...(!boardInput.wrapCanvas&&responders.panHandlers)}
+      onLayout={event=>{setWidth(event.nativeEvent.layout.width);setCanvasHeight(event.nativeEvent.layout.height);measureOrigin();}}
+      accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
+      <Svg width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
+        {[
+        ...spec.boards.map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
+        ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
+        ...pieceLayers.lower,
+        ...(previewTarget&&!boardInput.heldId?renderPreview(previewTarget):[]),
+        ...visibleTargets.map(target=><TargetGraphic key={`target:${target.id}`} target={target} spec={spec}
+          enabled={active&&(!targetSource?.move_targets?.length||targetSource.move_targets.includes(target.id))}
+          selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>),
+        ...(display.scene.labels||[]).map(label=><SvgText key={`label:${label.id}`} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>),
+        ...pieceLayers.upper,
+        ...(drag?display.scene.pieces?.filter(piece=>!piece.hidden && (piece.parent??piece.id)===drag.id)||[]:[]).map(piece=><PieceGraphic key={`drag:${piece.id}`} piece={{...piece,hand:undefined,position:draggedPosition(piece)}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true} dragged/>),
+        ]}
+      </Svg>
+      {boardInput.feedback}
+    </View>;
   return <View ref={surface} style={[styles.container,framed&&{height:frameHeight,minHeight:0}]}>
     {showToolbar&&<View style={styles.toolbar}>
       <Text style={styles.status} accessibilityLiveRegion="polite">{message.replay?copyText("Reviewing match"):busy?copyText("Sending move…"):message.status!=='ongoing'?copyText("Game finished"):active?copyText("Your turn"):copyText("Waiting for a move")}</Text>
@@ -558,32 +620,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     {!ready&&<ActivityIndicator accessibilityLabel={copyText("Loading game board")} color="#91d7c4" style={styles.loading}/>}
     {!!error&&<Text accessibilityRole="alert" style={styles.error}>{playerText(error)}</Text>}
     {!!display.scene.controls?.length&&<View style={styles.controls}>{display.scene.controls.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>}
-    <View ref={canvas} collapsable={false} focusable style={[styles.canvas,framed?{flex:1,minHeight:0}:{height},canvasWebStyle]} {...webProps} {...responders.panHandlers}
-      onLayout={event=>{setWidth(event.nativeEvent.layout.width);setCanvasHeight(event.nativeEvent.layout.height);measureOrigin();}}
-      accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
-      <Svg width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
-        {[
-        ...spec.boards.map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
-        ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
-        ...pieceLayers.lower,
-        ...(previewTarget?.preview||[]).map((cell,index)=>{
-          const target=previewTarget!;
-          const point=position(spec,{board:target.board,position:cell.position}),size=targetBox(spec,{...target,position:cell.position,hit_area:undefined,hit_shape:undefined});
-          return <G key={`preview-${index}`} transform={`translate(${point.x} ${point.y}) rotate(${cell.rotation||0})`} opacity={.7} pointerEvents="none">
-            <Rect x={-size.width/2+1} y={-size.height/2+1} width={size.width-2} height={size.height-2} fill={cell.color||target.color||'#b8ef5b'} rx={4}/>
-            <Asset spec={spec} id={cell.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>
-            {!!cell.text&&<SvgText textAnchor="middle" alignmentBaseline="central" fontSize={Math.min(size.width,size.height)*.42} fill="#102330">{playerText(cell.text)}</SvgText>}
-          </G>;
-        }),
-        ...visibleTargets.map(target=><TargetGraphic key={`target:${target.id}`} target={target} spec={spec}
-          enabled={active&&(!selectedPiece?.move_targets?.length||selectedPiece.move_targets.includes(target.id))}
-          selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>),
-        ...(display.scene.labels||[]).map(label=><SvgText key={`label:${label.id}`} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>),
-        ...pieceLayers.upper,
-        ...(drag?display.scene.pieces?.filter(piece=>!piece.hidden && (piece.parent??piece.id)===drag.id)||[]:[]).map(piece=><PieceGraphic key={`drag:${piece.id}`} piece={{...piece,hand:undefined,position:draggedPosition(piece)}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true} dragged/>),
-        ]}
-      </Svg>
-    </View>
+    {boardInput.wrapCanvas?boardInput.wrapCanvas(boardCanvas):boardCanvas}
     {Boolean(toolsPiece||toolsPreview?.preview?.length)&&<View style={styles.tools}>
       {toolsPiece&&<Text style={styles.selectedLabel} accessibilityLiveRegion="polite">{playerText(pieceName(toolsPiece))}{toolsPiece.move_targets?.length?copyText(" · choose a highlighted destination"):''}</Text>}
       <View style={styles.row}>

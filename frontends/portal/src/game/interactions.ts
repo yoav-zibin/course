@@ -26,12 +26,14 @@ export function pieceSize(spec: GameSpec, piece: Piece): { width: number; height
 export function targetBox(spec: GameSpec, target: Target) { return targetBounds(spec, target); }
 
 function segmentDistance(p: Point, a: Point, b: Point) {
+  'worklet';
   const dx = b.x - a.x, dy = b.y - a.y, length = dx * dx + dy * dy;
   const along = length ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length)) : 0;
   return Math.hypot(p.x - a.x - along * dx, p.y - a.y - along * dy);
 }
 
 function insidePolygon(p: Point, points: Point[]) {
+  'worklet';
   let inside = false;
   for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
     const a = points[i], b = points[j];
@@ -54,19 +56,11 @@ export function targetShape(spec: GameSpec, target: Target) {
 // Distance from `at` to the target's tap zone: 0 inside it, so a margin of m
 // means "within m units of the zone".
 export function targetGap(spec: GameSpec, target: Target, at: Point) {
-  const shape = targetShape(spec, target);
-  if (!shape) {
-    const box = targetBox(spec, target);
-    return Math.hypot(Math.max(box.x - at.x, 0, at.x - box.x - box.width), Math.max(box.y - at.y, 0, at.y - box.y - box.height));
-  }
-  if (shape.kind === 'line') return Math.max(0, segmentDistance(at, shape.from, shape.to) - shape.width / 2);
-  if (insidePolygon(at, shape.points)) return 0;
-  return Math.min(...shape.points.map((p, i) => segmentDistance(at, p, shape.points[(i + 1) % shape.points.length])));
+  return targetGeometryGap(targetGeometry(spec,target),at);
 }
 
 export function targetContains(spec: GameSpec, target: Target, at: Point, margin = 0) {
-  // Rectangles keep their square margin; shapes use true distance.
-  return target.hit_shape ? targetGap(spec, target, at) <= margin : contains(targetBox(spec, target), at, margin);
+  return targetGeometryContains(targetGeometry(spec,target),at,margin);
 }
 
 // Smallest tappable thickness: a line's width, otherwise the shorter box side.
@@ -77,49 +71,84 @@ export function targetThickness(spec: GameSpec, target: Target) {
 }
 
 export function contains(box: Point & {width: number; height: number}, at: Point, margin = 0) {
+  'worklet';
   return at.x >= box.x - margin && at.x <= box.x + box.width + margin
     && at.y >= box.y - margin && at.y <= box.y + box.height + margin;
 }
 
-export function hitPiece(spec: GameSpec, scene: Scene, at: Point,paintOrder?:ReadonlyMap<string,number>): Piece | undefined {
+export function pieceHitOrder(scene:Scene,paintOrder?:ReadonlyMap<string,number>) {
   const candidates=(scene.pieces||[]).filter(piece=>pieceActions(piece).length);
-  // Hidden/decorative pieces have no hit geometry. Exclude them before
-  // ordering, and use one comparator throughout even during a stale paint.
   const ranked=paintOrder&&candidates.every(piece=>paintOrder.has(piece.id))?paintOrder:undefined;
-  const hit = candidates.sort((a,b)=>{
-    if(ranked)return ranked.get(b.id)!-ranked.get(a.id)!;
-    return (b.z || 0)-(a.z || 0) || scene.pieces!.indexOf(b)-scene.pieces!.indexOf(a);
-  }).find(piece => {
-    const center = position(spec, piece), size = pieceSize(spec, piece);
-    const angle = -(piece.rotation || 0) * Math.PI / 180, scale = piece.scale || 1;
-    const dx = (at.x-center.x) / scale, dy = (at.y-center.y) / scale;
-    const local = {x:dx*Math.cos(angle)-dy*Math.sin(angle), y:dx*Math.sin(angle)+dy*Math.cos(angle)};
-    const shape = spec.piece_types[piece.type].shape;
-    if (shape === 'circle') return (local.x/(size.width/2))**2 + (local.y/(size.height/2))**2 <= 1;
-    if (shape === 'hex') {
-      const x = Math.abs(local.x) / (size.width / 2), y = Math.abs(local.y) / (size.height / 2);
-      return y <= Math.sqrt(3) / 2 && x + y / Math.sqrt(3) <= 1;
-    }
-    return Math.abs(local.x) <= size.width / 2 && Math.abs(local.y) <= size.height / 2;
-  });
-  return hit?.parent ? scene.pieces?.find(p=>p.id===hit.parent) : hit;
+  return candidates.sort((a,b)=>ranked?ranked.get(b.id)!-ranked.get(a.id)!:
+    (b.z||0)-(a.z||0)||scene.pieces!.indexOf(b)-scene.pieces!.indexOf(a));
 }
 
-// Tie-break when zones overlap: a rectangle ranks by its centre as before; a
-// line by its distance to the segment, a polygon by its distance outside it and
-// then to its first corner.
-function closeness(spec: GameSpec, target: Target, at: Point) {
-  const shape = targetShape(spec, target);
-  if (shape?.kind === 'line') return segmentDistance(at, shape.from, shape.to);
-  if (shape) return targetGap(spec, target, at) * 1000 + Math.hypot(at.x - shape.points[0].x, at.y - shape.points[0].y);
-  const center = position(spec, target);
-  return Math.hypot(at.x - center.x, at.y - center.y);
+export function pieceGeometry(spec:GameSpec,piece:Piece) {
+  const {x,y}=position(spec,piece),size=pieceSize(spec,piece);
+  const angle=-(piece.rotation||0)*Math.PI/180;
+  return {id:piece.id,root:piece.parent??piece.id,center:{x,y},size,scale:piece.scale||1,
+    cos:Math.cos(angle),sin:Math.sin(angle),shape:spec.piece_types[piece.type].shape};
+}
+
+export function pieceContains(piece:ReturnType<typeof pieceGeometry>,at:Point) {
+  'worklet';
+  const dx=(at.x-piece.center.x)/piece.scale,dy=(at.y-piece.center.y)/piece.scale;
+  const x=dx*piece.cos-dy*piece.sin,y=dx*piece.sin+dy*piece.cos;
+  if(piece.shape==='circle')return (x/(piece.size.width/2))**2+(y/(piece.size.height/2))**2<=1;
+  if(piece.shape==='hex'){
+    const nx=Math.abs(x)/(piece.size.width/2),ny=Math.abs(y)/(piece.size.height/2);
+    return ny<=Math.sqrt(3)/2&&nx+ny/Math.sqrt(3)<=1;
+  }
+  return Math.abs(x)<=piece.size.width/2&&Math.abs(y)<=piece.size.height/2;
+}
+
+export function hitPiece(spec: GameSpec, scene: Scene, at: Point,paintOrder?:ReadonlyMap<string,number>): Piece | undefined {
+  const hit=pieceHitOrder(scene,paintOrder).find(piece=>pieceContains(pieceGeometry(spec,piece),at));
+  return hit?.parent ? scene.pieces?.find(piece=>piece.id===hit.parent) : hit;
+}
+
+export function targetGeometry(spec:GameSpec,target:Target) {
+  const {x,y}=position(spec,target);
+  return {id:target.id,center:{x,y},box:targetBox(spec,target),shape:targetShape(spec,target)};
+}
+
+function targetGeometryGap(target:ReturnType<typeof targetGeometry>,at:Point) {
+  'worklet';
+  const {shape,box}=target;
+  if(!shape)return Math.hypot(Math.max(box.x-at.x,0,at.x-box.x-box.width),Math.max(box.y-at.y,0,at.y-box.y-box.height));
+  if(shape.kind==='line')return Math.max(0,segmentDistance(at,shape.from,shape.to)-shape.width/2);
+  if(insidePolygon(at,shape.points))return 0;
+  let gap=Infinity;
+  for(let i=0;i<shape.points.length;i++){
+    gap=Math.min(gap,segmentDistance(at,shape.points[i],shape.points[(i+1)%shape.points.length]));
+  }
+  return gap;
+}
+
+function targetGeometryContains(target:ReturnType<typeof targetGeometry>,at:Point,margin:number) {
+  'worklet';
+  return target.shape?targetGeometryGap(target,at)<=margin:contains(target.box,at,margin);
+}
+
+// Keep authored scene order when multiple targets have the same score.
+export function closestTarget<T extends ReturnType<typeof targetGeometry>>(targets:T[],at:Point,margin=0):T|undefined {
+  'worklet';
+  let best:T|undefined,bestScore=Infinity;
+  for(const target of targets){
+    if(!targetGeometryContains(target,at,margin))continue;
+    const {shape,center}=target;
+    const score=shape?.kind==='line'?segmentDistance(at,shape.from,shape.to):
+      shape?targetGeometryGap(target,at)*1000+Math.hypot(at.x-shape.points[0].x,at.y-shape.points[0].y):
+      Math.hypot(at.x-center.x,at.y-center.y);
+    if(score<bestScore){best=target;bestScore=score;}
+  }
+  return best;
 }
 
 export function hitTarget(spec: GameSpec, scene: Scene, at: Point, piece?: Piece, margin = 0): Target | undefined {
-  return [...(scene.targets || [])].filter(target => !piece || piece.move_targets?.includes(target.id))
-    .filter(target => targetContains(spec,target,at,margin))
-    .sort((a,b)=>closeness(spec,a,at)-closeness(spec,b,at))[0];
+  const targets=(scene.targets||[]).filter(target=>!piece||piece.move_targets?.includes(target.id));
+  const hit=closestTarget(targets.map(target=>targetGeometry(spec,target)),at,margin);
+  return targets.find(target=>target.id===hit?.id);
 }
 
 export function validNumber(control: {min?:number; max?:number; step?:number}, value:unknown):boolean {
