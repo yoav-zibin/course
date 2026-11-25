@@ -1,35 +1,28 @@
 "use strict";
 
-(() => {
+((I18n) => {
   const $ = id => document.getElementById(id);
-  // The translation script may be unavailable or have failed to initialize.
-  // Keep sign-in independent of it and use the existing English strings.
-  let i18n;
-  try { i18n = I18n; } catch { /* The locale script did not initialize. */ }
-  const translate = (key, params, fallback) => i18n
-    ? i18n.t(key, params, fallback)
-    : fallback.replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ""));
   const copy = {
-    page_title: (params = {}) => translate("ui.admin_signin.page_title", params, "BuildPlay · Admin sign-in"),
-    heading: (params = {}) => translate("ui.admin_signin.heading", params, "Sign in to admin"),
-    intro: (params = {}) => translate("ui.admin_signin.intro", params, "Sign in with the Google account for your email listed in the course roster. Admin access is available to the instructor and the 12 students."),
-    email_note: (params = {}) => translate("ui.admin_signin.email_note", params, "Google shares your name and email with BuildPlay. We save your Google email on your platform account so your activity and bug reports can be attributed to you."),
-    loading: (params = {}) => translate("ui.admin_signin.loading", params, "Loading sign-in…"),
-    needed: (params = {}) => translate("ui.admin_signin.needed", params, "Sign in with Google to continue."),
-    verifying: (params = {}) => translate("ui.admin_signin.verifying", params, "Verifying your Google sign-in…"),
-    complete: (params = {}) => translate("ui.admin_signin.complete", params, "Google sign-in is complete."),
-    identity: (params = {}) => translate("ui.admin_signin.identity", params, "Signed in as {name} ({email})."),
-    continue: (params = {}) => translate("ui.admin_signin.continue", params, "Continue to admin"),
-    change_google: (params = {}) => translate("ui.admin_signin.change_google", params, "Use another Google account"),
-    back: (params = {}) => translate("ui.admin_signin.back", params, "Return to games"),
-    verify_failed: (params = {}) => translate("ui.admin_signin.verify_failed", params, "Google sign-in could not be verified. Sign in again."),
-    not_allowed: (params = {}) => translate("ui.admin_signin.not_allowed", params, "This Google account is not listed for course admin access. Use your Columbia or personal Google account listed in the roster."),
-    complete_failed: (params = {}) => translate("ui.admin_signin.complete_failed", params, "Admin sign-in could not be completed. Try again shortly."),
-    google_failed: (params = {}) => translate("ui.admin_signin.google_failed", params, "Google sign-in could not be verified."),
-    load_google_failed: (params = {}) => translate("ui.admin_signin.load_google_failed", params, "Google sign-in could not be loaded. Check your connection and reload this page."),
-    signout_failed: (params = {}) => translate("ui.admin_signin.signout_failed", params, "Could not sign out. Try again."),
-    load_failed: (params = {}) => translate("ui.admin_signin.load_failed", params, "Could not load admin sign-in. Reload this page to try again."),
-    not_configured: (params = {}) => translate("ui.admin_signin.not_configured", params, "Google sign-in is not configured. Contact the site administrator."),
+    page_title: (params = {}) => I18n.t("ui.admin_signin.page_title", params, "BuildPlay · Admin sign-in"),
+    heading: (params = {}) => I18n.t("ui.admin_signin.heading", params, "Sign in to admin"),
+    intro: (params = {}) => I18n.t("ui.admin_signin.intro", params, "Sign in with the Google account for your email listed in the course roster. Admin access is available to the instructor and the 12 students."),
+    email_note: (params = {}) => I18n.t("ui.admin_signin.email_note", params, "Google shares your name and email with BuildPlay. We save your Google email on your platform account so your activity and bug reports can be attributed to you."),
+    loading: (params = {}) => I18n.t("ui.admin_signin.loading", params, "Loading sign-in…"),
+    needed: (params = {}) => I18n.t("ui.admin_signin.needed", params, "Sign in with Google to continue."),
+    verifying: (params = {}) => I18n.t("ui.admin_signin.verifying", params, "Verifying your Google sign-in…"),
+    complete: (params = {}) => I18n.t("ui.admin_signin.complete", params, "Google sign-in is complete."),
+    identity: (params = {}) => I18n.t("ui.admin_signin.identity", params, "Signed in as {name} ({email})."),
+    continue: (params = {}) => I18n.t("ui.admin_signin.continue", params, "Continue to admin"),
+    change_google: (params = {}) => I18n.t("ui.admin_signin.change_google", params, "Use another Google account"),
+    back: (params = {}) => I18n.t("ui.admin_signin.back", params, "Return to games"),
+    verify_failed: (params = {}) => I18n.t("ui.admin_signin.verify_failed", params, "Google sign-in could not be verified. Sign in again."),
+    not_allowed: (params = {}) => I18n.t("ui.admin_signin.not_allowed", params, "This Google account is not listed for course admin access. Use your Columbia or personal Google account listed in the roster."),
+    complete_failed: (params = {}) => I18n.t("ui.admin_signin.complete_failed", params, "Admin sign-in could not be completed. Try again shortly."),
+    google_failed: (params = {}) => I18n.t("ui.admin_signin.google_failed", params, "Google sign-in could not be verified."),
+    load_google_failed: (params = {}) => I18n.t("ui.admin_signin.load_google_failed", params, "Google sign-in could not be loaded. Check your connection and reload this page."),
+    signout_failed: (params = {}) => I18n.t("ui.admin_signin.signout_failed", params, "Could not sign out. Try again."),
+    load_failed: (params = {}) => I18n.t("ui.admin_signin.load_failed", params, "Could not load admin sign-in. Reload this page to try again."),
+    not_configured: (params = {}) => I18n.t("ui.admin_signin.not_configured", params, "Google sign-in is not configured. Contact the site administrator."),
   };
   let statusCopy = copy.loading, errorKey = "", signedIdentity = null;
   function setStatus(value) { statusCopy = value; $("status").textContent = value ? value() : ""; }
@@ -132,5 +125,12 @@
     showError(errorKey);
     if (signedIdentity) signedIn(signedIdentity);
   });
-  Promise.resolve(i18n?.ready).then(main, main);
-})();
+  Promise.resolve(I18n.ready).then(main, main);
+})((() => {
+  // Sign-in can run with English copy if the locale script is unavailable.
+  try {
+    return I18n;
+  } catch {
+    return {t: (_key, params, fallback) => fallback.replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ""))};
+  }
+})());

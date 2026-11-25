@@ -68,6 +68,15 @@ test('an invalid Google token stays on sign-in with a safe error and no session'
   expect((await context.cookies()).some(item=>item.name==='__Host-buildplay-admin')).toBe(false);
 });
 
+test('admin sign-in remains usable when the translation script fails',async({page})=>{
+  await page.route('**/static/i18n.js?*',route=>route.abort());
+  await googleWidget(page,'invalid-loopback-google-credential');
+  await page.goto('/admin/login');
+  await expect(page.getByRole('button',{name:'Synthetic Google sign-in'})).toBeVisible();
+  await page.getByRole('button',{name:'Synthetic Google sign-in'}).click();
+  await expect(page.getByRole('alert')).toHaveText('Google sign-in could not be verified. Sign in again.');
+});
+
 test('a verified Google account outside the course roster cannot enter admin',async({page,context})=>{
   await googleWidget(page,'loopback-outsider-google-fixture');
   await page.goto('/admin#students');
