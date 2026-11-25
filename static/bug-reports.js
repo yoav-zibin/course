@@ -48,6 +48,14 @@ function statusLabel(status) {
     handled: () => I18n.t("ui.bug_reports.status_handled", {}, "Handled"),
   })[status]?.() || status;
 }
+function workflowLabel(report) {
+  return ({
+    approved: () => I18n.t("ui.bug_reports.workflow_approved", {}, "Approved"),
+    declined: () => I18n.t("ui.bug_reports.workflow_declined", {}, "Declined"),
+    released: () => I18n.t("ui.bug_reports.workflow_released", {}, "Released to main"),
+    rolled_out: () => I18n.t("ui.bug_reports.workflow_rolled_out", {}, "Live and verified"),
+  })[report.workflow_stage]?.() || statusLabel(report.status);
+}
 function scoreLabel(report) {
   return assessed(report)
     ? I18n.t("ui.bug_reports.score", {score: report.score}, "Score: {score}/10")
@@ -116,7 +124,7 @@ function reportCard(row) {
     el("div", {class: "report-heading"},
       el("h2", {}, el("a", {href: reportLink(row), textContent: row.id})),
       translated("span", {class: "report-source"}, () => sourceLabel(row)),
-      translated("p", {class: "muted"}, () => `${statusLabel(row.status)} · ${formatTime(row.created_at)}`)),
+      translated("p", {class: "muted"}, () => `${workflowLabel(row)} · ${formatTime(row.created_at)}`)),
     el("p", {class: "report-text", textContent: row.text}),
     score, studentAttribution(row),
     translated("p", {class: "muted"}, () => I18n.t("ui.bug_reports.from", {
@@ -152,6 +160,19 @@ function reportCard(row) {
         el("details", {}, translated("summary", {}, () => I18n.t("ui.bug_reports.diagnostics", {}, "User and app diagnostics")),
           el("pre", {textContent: JSON.stringify({user: report.user, diagnostics: report.diagnostics}, null, 2)})));
       content.append(assessmentDetails(report));
+      if (report.authorization?.decided_at) {
+        content.append(translated("p", {class: "muted"}, () => report.authorization.decision === "approved"
+          ? I18n.t("ui.bug_reports.approved_at", {time: formatTime(report.authorization.decided_at)}, "Approved {time}")
+          : I18n.t("ui.bug_reports.declined_at", {time: formatTime(report.authorization.decided_at)}, "Declined {time}")));
+      }
+      if (report.release_commit && report.released_at) {
+        content.append(translated("p", {class: "muted"}, () => I18n.t("ui.bug_reports.released_at",
+          {time: formatTime(report.released_at), commit: report.release_commit}, "Released to main {time} ({commit})")));
+      }
+      if (report.rolled_out_at) {
+        content.append(translated("p", {class: "muted"}, () => I18n.t("ui.bug_reports.rolled_out_at",
+          {time: formatTime(report.rolled_out_at)}, "Production rollout verified {time}")));
+      }
       const resolutionLabel = () => I18n.t("ui.bug_reports.resolution", {}, "Resolution or escalation reason");
       const notes = localize(el("textarea", {maxLength: 20000, value: report.resolution || ""}), "aria-label", resolutionLabel);
       const commit = localize(el("input", {class: "commit", value: report.commit || "", maxLength: 128}), "aria-label", () => I18n.t("ui.bug_reports.commit", {}, "Fix commit"));
@@ -176,7 +197,7 @@ function reportCard(row) {
           for (const item of actions.children) item.disabled = true;
           try {
             await request(`/admin/bug-reports/${encodeURIComponent(row.id)}/status`, {
-              status, resolution: notes.value.trim(), commit: commit.value.trim(),
+              status, resolution: notes.value.trim(), commit: status === "handling" ? null : commit.value.trim(),
               expected_status: report.status, expected_updated_at: report.updated_at,
             });
             await refresh();

@@ -1628,6 +1628,16 @@ async def _admin_api_basic(request: Request) -> HTTPBasicCredentials | None:
     return await _basic_auth(request)
 
 
+def _check_admin_automation(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials | None, Depends(_admin_api_basic)],
+) -> None:
+    key = request.app.state.admin_api_key
+    if not key or credentials is None or not secrets.compare_digest(credentials.password.encode(), key.encode()):
+        raise HTTPException(HTTPStatus.UNAUTHORIZED, "An admin API credential is required.")
+    _check_master_write_origin(request)
+
+
 def _check_master_password(
     request: Request,
     credentials: Annotated[HTTPBasicCredentials | None, Depends(_admin_api_basic)],
@@ -2446,7 +2456,8 @@ def create_app(
     from game_platform.game_bugs import make_router as make_game_bugs_router
     app.include_router(make_game_bugs_router(_get_platform, _check_master_password))
     from game_platform.bug_reports import make_router as make_bug_reports_router
-    app.include_router(make_bug_reports_router(_get_platform, _check_master_password, _get_caller_id_or_anonymous))
+    app.include_router(make_bug_reports_router(
+        _get_platform, _check_master_password, _get_caller_id_or_anonymous, _check_admin_automation))
     app.include_router(router)
     from game_platform.scaling_api import install as install_scaling_api
     install_scaling_api(app, debug_tools=debug_tools)

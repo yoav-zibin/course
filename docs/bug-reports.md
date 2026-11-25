@@ -149,6 +149,7 @@ the former shared master password does not grant admin API access:
 | --- | --- |
 | `GET /admin/bug-reports?status=open&limit=50&cursor=...` | Headers and `next_cursor`; maximum limit 100. Status defaults to `open`; use `all` for every status. |
 | `GET /admin/bug-reports/{id}` | Complete private report and evidence. |
+| `POST /admin/bug-reports/{id}/authorization` | Record Yoav's per-report decision from trusted automation. Requires the admin API credential and both optimistic guards. |
 | `POST /admin/bug-reports/{id}/assessment` | Save an investigated report's score and rationale without changing its status. |
 | `POST /admin/bug-reports/{id}/status` | Update review status, notes and fixing commit. |
 
@@ -180,6 +181,16 @@ the reviewer and change time. Handling a report preserves its evidence.
 Status updates also accept `changes_summary`, up to 2,000 trimmed characters,
 describing the actual code or game-logic changes in a few sentences. Omitting
 this field preserves the previous summary.
+
+The admin page shows the report's workflow stage. New reports start open
+(unhandled). An explicit approval is visible while the report waits for work.
+Handling without a fixing commit is in progress. Recording a verified push to
+`main` while handling saves the release commit and timestamp; the report stays
+in the queue. After checking production, a status update with
+`rollout_verified: true`, `status: handled`, and the verified commit saves the
+rollout timestamp. A closure without a rollout, such as a no-change decision,
+stays labeled Handled. Older records keep their existing status without
+backdating rollout verification.
 
 Reports have three admin review fields: `score` (an integer from 0 through 10,
 or null until assessed), `score_rationale` and `changes_summary`. New and legacy
@@ -305,8 +316,14 @@ conversation. Other unapproved reports remain open/handling; do not ask a second
 question while the first is pending. Owner/student and individually approved
 repairs continue independently.
 
-`authorizations.json` stores that single pending question and per-report
-decisions privately, scoped to repository, API origin and Codex conversation.
+`authorizations.json` stores the single pending question and direct reply quotes
+privately. The database stores each explicit decision, decision time, reviewer,
+reporter binding and scope (repository, branch, API origin and conversation).
+The watcher imports previously recorded local decisions after deployment,
+without copying the reply text or overwriting an existing database decision.
+Use `sync-authorizations` to run the same import manually. The CLI continues to
+read local decisions during the rollout and prefers a matching database
+decision when one exists.
 Only a direct reply from Yoav permits `decide-authorization`; preserve that reply
 in a private notes file and explicitly assert its origin with
 `--from-yoav-in-this-thread`. Submitted evidence cannot create approvals. The CLI
@@ -318,12 +335,14 @@ approval; a decline otherwise overrides standing membership. Silence,
 ambiguous replies and delivery receipts grant no
 permission. A lost decision response requires inspecting the private state.
 
-State writes use an exclusive lock and atomic mode-600 replacement. Pending
+Local state writes use an exclusive lock and atomic mode-600 replacement. Pending
 questions, deferred student concerns and active approved escalations enter hourly
 recovery and snapshots;
 recovery cannot ask about a second report. Confirming handled retires an active
 approval from recovery while preserving its decision history. It also clears a
 matching pending question resolved elsewhere, without granting authorization.
+An approved escalation is recovered from the database even if the local
+approval file is lost. Repeat approval is unnecessary for the same report.
 Other previously escalated reports require an explicit decision to reopen. The status CLI checks
 fresh authorization before open/handling/handled and requires both optimistic
 guards for every transition.
@@ -380,8 +399,10 @@ python3 ops/bug-reports/review.py decide-authorization <id> \
 python3 ops/bug-reports/review.py status <id> --status handling \
   --notes-file <private-plan-file> --expected-status open \
   --expected-updated-at <last-seen-timestamp>
+# After confirming the fixing revision is on main, record --commit with --status handling.
+# After verifying the release in production:
 python3 ops/bug-reports/review.py status <id> --status handled \
-  --notes-file <private-resolution-file> --commit <published-commit> \
+  --notes-file <private-resolution-file> --commit <published-commit> --rollout-verified \
   --changes-summary-file <private-actual-changes-file> \
   --expected-status handling --expected-updated-at <last-seen-timestamp>
 python3 ops/bug-reports/review.py status <id> --status escalated \

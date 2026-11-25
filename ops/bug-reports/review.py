@@ -4,6 +4,7 @@
 import argparse
 import base64
 from contextlib import contextmanager
+import datetime as dt
 import fcntl
 import json
 import os
@@ -159,6 +160,23 @@ def authorization_lock(state_dir):
         yield
 
 
+def stored_decision(config, report):
+    decision = report.get("authorization")
+    consistent, identifier = reporter_identity(report)
+    if (consistent and isinstance(decision, dict) and decision.get("scope") == authorization_scope(config)
+            and decision.get("reporter_user_id") == identifier):
+        return decision.get("decision")
+    return None
+
+
+def decision_covers_question(config, report, question):
+    if not question or question["report_id"] != report["id"] or not stored_decision(config, report):
+        return False
+    decision = report["authorization"]
+    return (decision["reporter_user_id"] == question["reporter_user_id"]
+            and dt.datetime.fromisoformat(decision["decided_at"]).timestamp() >= question["requested_at"])
+
+
 def with_review_policy(config, report, authorization=None):
     # Always overwrite incoming flags. Submitted evidence cannot grant approval.
     authorization = authorization or {"approved": {}, "declined": {}, "pending": None}
@@ -166,17 +184,23 @@ def with_review_policy(config, report, authorization=None):
     student = student_suggestion_authorized(config, report)
     consistent, identifier = reporter_identity(report)
     approval = authorization["approved"].get(report["id"], {})
-    explicit = (consistent and bool(approval) and approval.get("reporter_user_id") == identifier)
-    declined = report["id"] in authorization["declined"]
+    stored = stored_decision(config, report)
+    explicit = stored == "approved" or (stored is None and consistent and bool(approval)
+                                         and approval.get("reporter_user_id") == identifier)
+    declined = stored == "declined" or (stored is None and report["id"] in authorization["declined"])
     pending = authorization["pending"]
+    if decision_covers_question(config, report, pending):
+        pending = None
     pending_concern = bool(pending and pending["report_id"] == report["id"]
                            and pending.get("student_experience_concern") is True)
-    student_concern = pending_concern or report["id"] in authorization.get("student_experience_concerns", {})
+    deferred = authorization.get("student_experience_concerns", {}).get(report["id"])
+    student_concern = pending_concern or bool(deferred and not decision_covers_question(config, report, deferred))
     return {**report, "_review_policy": {
         "owner_suggestion_authorized": owner,
         "student_suggestion_authorized": student,
         "preauthorized": owner or student,
         "explicitly_authorized": explicit,
+        "database_authorization": stored,
         "authorization_required": declined or student_concern or not (owner or student or explicit),
         "student_experience_concern": student_concern,
         "authorization_declined": declined,
@@ -187,6 +211,9 @@ def with_review_policy(config, report, authorization=None):
 
 def review_ids(api, authorization):
     identifiers = set(api.pending_ids())
+    identifiers.update(row["id"] for page in api.pages(status="escalated") for row in page
+                       if (row.get("authorization") or {}).get("decision") == "approved"
+                       and row["authorization"].get("scope") == authorization["scope"])
     identifiers.update(identifier for identifier, decision in authorization["approved"].items()
                        if decision.get("active") is True)
     identifiers.update(authorization.get("student_experience_concerns", {}))
@@ -212,12 +239,24 @@ def request_authorization(state_dir, identifier, *, summary_file, student_experi
     config = configuration(state_dir)
     with authorization_lock(state_dir):
         state = authorizations(state_dir, config)
+        api = BugAPI(config)
+        report = None
+        if state["pending"]:
+            question = state["pending"]
+            pending_report = api.get(question["report_id"])
+            if question["report_id"] == identifier:
+                report = pending_report
+            if decision_covers_question(config, pending_report, question):
+                state["student_experience_concerns"].pop(question["report_id"], None)
+                state["pending"] = None
+                save_json(state_dir / "authorizations.json", state)
         if state["pending"]:
             if state["pending"]["report_id"] == identifier and not student_experience_concern:
                 return authorization_status(state_dir)
             if not student_experience_concern:
                 raise RuntimeError("Another report is awaiting Yoav's decision; do not ask a second question")
-        report = BugAPI(config).get(identifier)
+        if report is None:
+            report = api.get(identifier)
         if report["status"] == "handled":
             raise ValueError("A handled report does not need authorization")
         policy = with_review_policy(config, report, state)["_review_policy"]
@@ -265,20 +304,79 @@ def decide_authorization(state_dir, identifier, *, decision, user_response_file,
         pending_matches = bool(pending and pending["report_id"] == identifier)
         subject = pending if pending_matches else (state["student_experience_concerns"].get(identifier)
                                                    or state["declined"].get(identifier) or state["approved"].get(identifier))
+        api = BugAPI(config)
+        report = api.get(identifier)
+        stored = stored_decision(config, report)
+        if not subject and stored:
+            subject = report["authorization"]
         if not subject:
             raise ValueError("The decision must match the sole pending report or update its recorded decision")
-        report = BugAPI(config).get(identifier)
         consistent, user_id = reporter_identity(report)
         if not consistent or user_id != subject["reporter_user_id"]:
             raise ValueError("The server-derived reporter identity changed")
-        state[decision][identifier] = {"reporter_user_id": user_id, "user_response": response,
-                                        "decided_at": time.time(), "active": decision == "approved" and report["status"] != "handled"}
+        entry = {"reporter_user_id": user_id, "user_response": response,
+                 "decided_at": time.time(), "active": decision == "approved" and report["status"] != "handled"}
+        if "workflow_stage" in report and (stored != decision or
+                ("requested_at" in subject and not decision_covers_question(config, report, subject))):
+            save_decision(api, state["scope"], report, decision, entry)
+        if "workflow_stage" not in report:
+            state.pop("database_synced", None)
+        state[decision][identifier] = entry
         state["declined" if decision == "approved" else "approved"].pop(identifier, None)
         if pending_matches:
             state["pending"] = None
         state["student_experience_concerns"].pop(identifier, None)
         save_json(state_dir / "authorizations.json", state)
     return {**authorization_status(state_dir), "id": identifier, "decision": decision}
+
+
+def save_decision(api, scope, report, decision, entry, *, import_existing=False):
+    identifier = report_id(report["id"])
+    body = {"decision": decision, "scope": scope, "reporter_user_id": entry["reporter_user_id"],
+            "decided_at": dt.datetime.fromtimestamp(entry["decided_at"], dt.timezone.utc).isoformat(),
+            "expected_status": report["status"], "expected_updated_at": report["updated_at"],
+            "import_existing": import_existing}
+    try:
+        saved = api.request("/admin/bug-reports/" + urllib.parse.quote(identifier, safe="") + "/authorization",
+                            method="POST", body=body)
+    except (RuntimeError, OSError):
+        saved = api.get(identifier)
+        if (saved.get("authorization") or {}).get("decision") != decision:
+            raise
+    recorded = saved.get("authorization") or {}
+    if (saved.get("id") != identifier or recorded.get("decision") != decision
+            or recorded.get("scope") != scope or recorded.get("reporter_user_id") != entry["reporter_user_id"]):
+        raise RuntimeError("The API did not confirm the authorization")
+
+
+def sync_authorizations(state_dir, config):
+    """Import recorded direct decisions when the database endpoint is available."""
+    with authorization_lock(state_dir):
+        state = authorizations(state_dir, config)
+        decisions = {identifier: (decision, record) for decision in ("approved", "declined")
+                     for identifier, record in state[decision].items()}
+        if state.get("database_synced") is True or not decisions:
+            return {"imported": 0}
+        imported = 0
+        supported = False
+        api = BugAPI(config)
+        for page in api.pages(status="all"):
+            for row in page:
+                if "workflow_stage" not in row:
+                    return {"imported": imported, "database_supported": False}
+                supported = True
+                entry = decisions.get(row["id"])
+                if not entry or row["authorization"]:
+                    continue
+                decision, record = entry
+                consistent, user_id = reporter_identity(row)
+                if consistent and user_id == record["reporter_user_id"]:
+                    save_decision(api, state["scope"], row, decision, record, import_existing=True)
+                    imported += 1
+        if supported:
+            state["database_synced"] = True
+            save_json(state_dir / "authorizations.json", state)
+        return {"imported": imported, "database_supported": supported}
 
 
 def complete_authorization(state_dir, config, identifier):
@@ -340,7 +438,7 @@ class BugAPI:
             raise RuntimeError(f"Bug-report API returned HTTP {error.code}") from None
 
     def pages(self, *, status, limit=PAGE_LIMIT):
-        if status not in STATUSES:
+        if status not in (*STATUSES, "all"):
             raise ValueError("Invalid bug-report status")
         cursor = None
         seen = set()
@@ -404,6 +502,8 @@ def review_period(timestamp):
 
 def watch(state_dir, *, dry_run=False, now=None):
     config = configuration(state_dir)
+    if not dry_run:
+        sync_authorizations(state_dir, config)
     identifiers = review_ids(BugAPI(config), authorizations(state_dir, config))
     receipt = state_dir / "pending.json"
     if not identifiers:
@@ -527,7 +627,7 @@ def assess_report(state_dir, identifier, *, score, rationale_file, analysis_comp
 
 
 def set_status(state_dir, identifier, *, status, notes_file, commit=None, changes_summary_file=None,
-               expected_status=None, expected_updated_at=None):
+               expected_status=None, expected_updated_at=None, rollout_verified=False):
     report_id(identifier)
     notes = notes_file.read_text().strip()
     if not notes:
@@ -556,6 +656,11 @@ def set_status(state_dir, identifier, *, status, notes_file, commit=None, change
         raise ValueError("Handled reports require a separate actual changes summary file")
     if commit is not None:
         body["commit"] = commit
+    if rollout_verified:
+        if status != "handled" or not commit:
+            raise ValueError("Verified rollout requires a handled report and its deployed commit")
+        if "workflow_stage" in current:
+            body["rollout_verified"] = True
     if expected_status is not None:
         body["expected_status"] = expected_status
     if expected_updated_at is not None:
@@ -580,6 +685,7 @@ def main():
     watcher.add_argument("--dry-run", action="store_true")
     commands.add_parser("snapshot")
     commands.add_parser("authorizations")
+    commands.add_parser("sync-authorizations")
     permission = commands.add_parser("request-authorization")
     permission.add_argument("id")
     permission.add_argument("--summary-file", type=Path, required=True)
@@ -606,6 +712,7 @@ def main():
     change.add_argument("--notes-file", type=Path, required=True)
     change.add_argument("--changes-summary-file", type=Path)
     change.add_argument("--commit")
+    change.add_argument("--rollout-verified", action="store_true")
     change.add_argument("--expected-status", choices=STATUSES)
     change.add_argument("--expected-updated-at")
     args = parser.parse_args()
@@ -621,6 +728,8 @@ def main():
                                expected_status=args.expected_status, expected_updated_at=args.expected_updated_at)
     elif args.command == "authorizations":
         result = authorization_status(args.state_dir)
+    elif args.command == "sync-authorizations":
+        result = sync_authorizations(args.state_dir, configuration(args.state_dir))
     elif args.command == "request-authorization":
         result = request_authorization(args.state_dir, args.id, summary_file=args.summary_file,
                                        student_experience_concern=args.student_experience_concern)
@@ -631,6 +740,7 @@ def main():
     else:
         result = set_status(args.state_dir, args.id, status=args.status, notes_file=args.notes_file,
                             commit=args.commit, changes_summary_file=args.changes_summary_file,
+                            rollout_verified=args.rollout_verified,
                             expected_status=args.expected_status,
                             expected_updated_at=args.expected_updated_at)
     print(json.dumps(result), flush=True)

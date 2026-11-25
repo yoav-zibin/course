@@ -266,6 +266,56 @@ def test_status_changes_store_actual_changes_separately_and_preserve_assessment(
     assert api.client.get("/admin/bug-reports/report-1", auth=AUTH).json()["changes_summary"] == first.json()["changes_summary"]
 
 
+def test_report_lifecycle_persists_approval_release_and_verified_rollout(api, monkeypatch):
+    original = row(status="escalated")
+    api.platform._store.create_bug_report(original, rate_keys=[])
+    path = "/admin/bug-reports/report-1"
+    decision = {
+        "decision": "approved", "decided_at": WHEN, "reporter_user_id": original["reporter_user_id"],
+        "scope": {"repository": "yoav-zibin/course", "branch": "main",
+                  "thread_id": "12345678-1234-1234-1234-123456789abc",
+                  "api_origin": ["https", "buildplay.fun", 443]},
+        "expected_status": "escalated", "expected_updated_at": WHEN,
+    }
+    assert api.client.post(path + "/authorization", json=decision).status_code == 401
+    with monkeypatch.context() as browser:
+        browser.setattr("game_platform.admin_auth.admin_session_user_id", lambda _: "course-admin")
+        headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json", "Sec-Fetch-Site": "same-origin"}
+        assert api.client.get(path, headers=headers).status_code == 200
+        assert api.client.post(path + "/authorization", headers=headers, json=decision).status_code == 401
+    assert api.client.post(path + "/authorization", auth=AUTH,
+                           json={**decision, "reporter_user_id": "someone-else"}).status_code == 409
+    saved = api.client.post(path + "/authorization", auth=AUTH, json=decision)
+    assert saved.status_code == 200, saved.text
+    approved = saved.json()
+    assert approved["workflow_stage"] == "approved"
+    assert approved["status"] == "escalated" and approved["resolution"] == original["resolution"]
+    assert api.client.post(path + "/authorization", auth=AUTH, json=decision).status_code == 409
+    assert api.client.post(path + "/authorization", auth=AUTH,
+                           json={**decision, "import_existing": True,
+                                 "expected_updated_at": approved["updated_at"]}).status_code == 409
+    claimed = api.client.post(path + "/status", auth=AUTH, json={
+        "status": "handling", "expected_status": "escalated", "expected_updated_at": approved["updated_at"],
+    }).json()
+    assert claimed["workflow_stage"] == "in_progress"
+    release = api.client.post(path + "/status", auth=AUTH, json={
+        "status": "handling", "commit": "published-sha", "expected_status": "handling",
+        "expected_updated_at": claimed["updated_at"],
+    }).json()
+    assert release["workflow_stage"] == "released" and release["rolled_out_at"] is None
+    closure = {"status": "handled", "resolution": "Confirmed live in production",
+               "expected_status": "handling", "expected_updated_at": release["updated_at"],
+               "rollout_verified": True}
+    assert api.client.post(path + "/status", auth=AUTH, json=closure).status_code == 422
+    rolled_out = api.client.post(path + "/status", auth=AUTH,
+                                  json={**closure, "commit": "published-sha"}).json()
+    assert rolled_out["workflow_stage"] == "rolled_out" and rolled_out["rolled_out_at"]
+    assert rolled_out["released_at"] == release["released_at"]
+    detail = api.client.get(path, auth=AUTH).json()
+    assert detail["authorization"] == approved["authorization"]
+    assert detail["screenshot"] == original["screenshot"] and detail["diagnostics"] == original["diagnostics"]
+
+
 def test_bounded_pagination_excludes_evidence_and_scopes_cursors(api):
     store = api.platform._store
     for index in range(7):

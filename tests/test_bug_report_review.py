@@ -56,6 +56,7 @@ def state_dir(tmp_path):
 def pending(monkeypatch):
     api = Mock()
     api.pending_ids.return_value = {"report-a"}
+    api.pages.return_value = []
     monkeypatch.setattr(review, "BugAPI", Mock(return_value=api))
     return api
 
@@ -689,6 +690,44 @@ def test_direct_approval_is_scoped_to_report_identity_and_recovers_escalations(s
     pending.request.assert_not_called()  # Approval itself never changes report status.
 
 
+def test_database_recovers_approved_escalation_without_local_decisions(state_dir, pending):
+    config = review.configuration(state_dir)
+    report = foreign_report(status="escalated")
+    report["authorization"] = {"scope": review.authorization_scope(config), "decision": "approved",
+                               "reporter_user_id": report["reporter_user_id"]}
+    pending.pending_ids.return_value = set()
+    pending.pages.return_value = [[], [report]]
+    pending.get.return_value = report
+    summary = private_note(state_dir, "summary", "This report previously received approval.")
+    with pytest.raises(ValueError, match="already authorized"):
+        review.request_authorization(state_dir, report["id"], summary_file=summary)
+    assert review.snapshot(state_dir)["unhandled_reports"] == 1
+    assert review.get_report(state_dir, report["id"])["database_authorization"] == "approved"
+    report["authorization"]["decision"] = "declined"
+    assert review.snapshot(state_dir)["unhandled_reports"] == 0
+    assert review.get_report(state_dir, report["id"])["authorization_required"] is True
+
+
+def test_sync_transfers_a_prior_decision_without_the_private_reply(state_dir, pending):
+    config = review.configuration(state_dir)
+    report = {**foreign_report(status="escalated"), "updated_at": "2026-11-25T12:00:00Z"}
+    pending.get.return_value = report
+    review.request_authorization(state_dir, report["id"], summary_file=private_note(state_dir, "summary", "Fix this browser behavior."))
+    private_reply = private_note(state_dir, "reply", "Yoav approved the report. This quote stays private.")
+    review.decide_authorization(state_dir, report["id"], decision="approved",
+                                user_response_file=private_reply, confirmed_direct_reply=True)
+    pending.pages.return_value = [[{**report, "authorization": None, "workflow_stage": "awaiting_approval"}]]
+    pending.request.side_effect = lambda path, *, method, body: {
+        **report, "authorization": {k: body[k] for k in ("scope", "decision", "reporter_user_id", "decided_at")},
+    }
+    assert review.sync_authorizations(state_dir, config)["imported"] == 1
+    assert review.sync_authorizations(state_dir, config)["imported"] == 0
+    assert pending.request.call_count == 1
+    body = pending.request.call_args.kwargs["body"]
+    assert body["expected_status"] == "escalated" and body["expected_updated_at"] == report["updated_at"]
+    assert body["import_existing"] is True and "user_response" not in body
+
+
 def test_pending_recovery_does_not_block_allowlisted_repairs(state_dir, pending):
     report = foreign_report(status="escalated")
     pending.get.return_value = report
@@ -775,8 +814,10 @@ def test_concurrent_recovery_cannot_reserve_two_authorization_questions(state_di
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(reserve, ["question-one", "question-two"]))
     assert results.count(None) == 1
-    assert review.authorization_status(state_dir)["pending_report_id"] in {"question-one", "question-two"}
-    assert pending.get.call_count == 1
+    reserved = review.authorization_status(state_dir)["pending_report_id"]
+    assert reserved in {"question-one", "question-two"}
+    # The second caller checks the pending report for a recovered decision.
+    assert [call.args[0] for call in pending.get.call_args_list] == [reserved, reserved]
     pending.request.assert_not_called()
 
 

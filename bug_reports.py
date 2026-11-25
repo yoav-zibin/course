@@ -17,7 +17,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, StringConstraints, field_validator, model_validator
 from starlette.concurrency import run_in_threadpool
 
 from game_platform import observability
@@ -77,6 +77,7 @@ class BugReportStatusChange(BaseModel):
     resolution: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20_000)] = ""
     commit: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] | None = None
     changes_summary: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2_000)] | None = None
+    rollout_verified: bool = False
     expected_status: ReportStatus | None = None
     expected_updated_at: str | None = Field(default=None, max_length=100)
 
@@ -84,6 +85,8 @@ class BugReportStatusChange(BaseModel):
     def explained_resolution(self):
         if self.status in ("escalated", "handled") and not self.resolution:
             raise ValueError("handled and escalated reports require an explanation")
+        if self.rollout_verified and (self.status != "handled" or not self.commit):
+            raise ValueError("verified rollout requires a handled report and a commit")
         return self
 
 
@@ -96,9 +99,41 @@ class BugReportAssessmentChange(BaseModel):
     expected_updated_at: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
+class BugReportAuthorizationScope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repository: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    branch: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    thread_id: uuid.UUID
+    api_origin: tuple[Literal["https"], Annotated[str, StringConstraints(min_length=1, max_length=253)], Annotated[int, Field(ge=1, le=65535)]]
+
+
+class BugReportAuthorizationChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approved", "declined"]
+    reporter_user_id: str | None = Field(max_length=200)
+    scope: BugReportAuthorizationScope
+    decided_at: AwareDatetime
+    expected_status: ReportStatus
+    expected_updated_at: Annotated[str, StringConstraints(min_length=1, max_length=100)]
+    import_existing: bool = False
+
+
 def reviewed_report(row):
     # Historical reports remain unassessed; zero means a considered decision.
-    return {"score": None, "score_rationale": "", "changes_summary": "", "automatic": False, **row}
+    authorization = row.get("authorization") or {}
+    status = row["status"]
+    stage = {"open": "unhandled", "handling": "in_progress", "escalated": "awaiting_approval", "handled": "handled"}[status]
+    if status == "handled" and row.get("rolled_out_at"):
+        stage = "rolled_out"
+    elif authorization.get("decision") == "declined":
+        stage = "declined"
+    elif status == "handling" and row.get("released_at"):
+        stage = "released"
+    elif status in ("open", "escalated") and authorization.get("decision") == "approved":
+        stage = "approved"
+    return {"score": None, "score_rationale": "", "changes_summary": "", "automatic": False,
+            "authorization": None, "released_at": None, "release_commit": None, "rolled_out_at": None,
+            **row, "workflow_stage": stage}
 
 
 def report_summary(row):
@@ -155,7 +190,21 @@ def changed_report(row, change, *, changed_by, now):
             or (change.get("expected_updated_at") is not None and row["updated_at"] != change["expected_updated_at"])):
         from game_platform.service import ConflictError
         raise ConflictError("this bug report changed; reload it before updating")
-    if "score" in change:
+    if "decision" in change:
+        from game_platform.service import ConflictError
+        decision = BugReportAuthorizationChange.model_validate(change)
+        stored_id = row.get("reporter_user_id")
+        user = row.get("user")
+        if (stored_id != decision.reporter_user_id
+                or (user is not None if stored_id is None else (user or {}).get("id") != stored_id)):
+            raise ConflictError("the reporter identity changed")
+        current = row.get("authorization")
+        if current and (decision.import_existing or current["scope"] != decision.scope.model_dump(mode="json")
+                        or dt.datetime.fromisoformat(current["decided_at"]) >= decision.decided_at):
+            raise ConflictError("this report already has a newer or differently scoped decision")
+        updates = {"authorization": {**decision.model_dump(
+            mode="json", include={"decision", "reporter_user_id", "scope", "decided_at"}), "recorded_by": changed_by}}
+    elif "score" in change:
         # The shared store operation keeps assessment CAS atomic in every
         # backend. Validate its shape here too, so internal callers cannot
         # combine an assessment with an unrelated status or evidence edit.
@@ -164,6 +213,15 @@ def changed_report(row, change, *, changed_by, now):
     else:
         updates = {"status": change["status"], "resolution": change["resolution"],
                    "commit": change.get("commit")}
+        if change["status"] == "handling" and change.get("commit"):
+            if change["commit"] != row.get("release_commit") or not row.get("released_at"):
+                updates.update(release_commit=change["commit"], released_at=now, rolled_out_at=None)
+        elif change["status"] == "handled" and change.get("rollout_verified"):
+            released_at = row.get("released_at") if row.get("release_commit") == change["commit"] else None
+            updates.update(release_commit=change["commit"], released_at=released_at or now,
+                           rolled_out_at=now)
+        elif row["status"] == "handled" and change["status"] != "handled":
+            updates.update(release_commit=None, released_at=None, rolled_out_at=None)
         if change.get("changes_summary") is not None:
             updates["changes_summary"] = change["changes_summary"]
     return {**row, **updates, "updated_at": now, "changed_by": changed_by}
@@ -186,7 +244,7 @@ def clean_diagnostics(value):
     return strings(observability.redact(value, keep_long_strings=True))
 
 
-def make_router(platform_dependency, master_dependency, caller_dependency):
+def make_router(platform_dependency, master_dependency, caller_dependency, automation_dependency):
     router = APIRouter()
 
     @router.post("/bug-reports", status_code=201)
@@ -301,6 +359,11 @@ def make_router(platform_dependency, master_dependency, caller_dependency):
     @private.post("/admin/bug-reports/{report_id}/assessment")
     def set_assessment(report_id: str, payload: BugReportAssessmentChange, request: Request,
                        platform=Depends(platform_dependency)):
+        return update_review(report_id, payload, request, platform)
+
+    @private.post("/admin/bug-reports/{report_id}/authorization", dependencies=[Depends(automation_dependency)])
+    def set_authorization(report_id: str, payload: BugReportAuthorizationChange, request: Request,
+                          platform=Depends(platform_dependency)):
         return update_review(report_id, payload, request, platform)
 
     router.include_router(private)
