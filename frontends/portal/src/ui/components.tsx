@@ -1,3 +1,4 @@
+import {NativeGestureRoot} from './NativeGestureRoot';
 import {registerNativeDialog,useNativeBugReport} from './bugModal';
 import {recordDiagnosticLog,recordDiagnosticEvent} from '../core/diagnostics';
 import {BugButton} from './BugButton';
@@ -74,11 +75,15 @@ export function Dialog({visible,title,children,onClose,onDismiss,wide,reporting,
   // another dialog opens immediately. Remove the closed web modal at once.
   if(Platform.OS==='web'&&!visible)return null;
   return <Modal visible={visible} transparent animationType="fade" onDismiss={onDismiss} onRequestClose={()=>{if(report)report.onClose();else onClose();}} accessibilityViewIsModal accessibilityLabel={title}>
-    <View ref={captureView} collapsable={false} style={{flex:1}}>
-    <View style={{flex:1}} accessibilityElementsHidden={Boolean(report&&!reporting)} importantForAccessibility={report&&!reporting?'no-hide-descendants':'auto'}><DialogContent title={title} onClose={onClose} wide={wide} avoidKeyboard={reporting} bottomClearance={bottomClearance}>{children}</DialogContent></View>
-    {Platform.OS!=='web'&&report&&!reporting&&<View style={[StyleSheet.absoluteFill,{zIndex:2147483646,elevation:99}]}>{report.content}</View>}
-    {Platform.OS!=='web'&&<BugButton/>}
-    </View>
+    <NativeGestureRoot>
+      <View ref={captureView} collapsable={false} style={{flex:1}}>
+        <View style={{flex:1}} accessibilityElementsHidden={Boolean(report&&!reporting)} importantForAccessibility={report&&!reporting?'no-hide-descendants':'auto'}>
+          <DialogContent title={title} onClose={onClose} wide={wide} avoidKeyboard={reporting} bottomClearance={bottomClearance}>{children}</DialogContent>
+        </View>
+        {Platform.OS!=='web'&&report&&!reporting&&<View style={[StyleSheet.absoluteFill,{zIndex:2147483646,elevation:99}]}>{report.content}</View>}
+        {Platform.OS!=='web'&&<BugButton/>}
+      </View>
+    </NativeGestureRoot>
   </Modal>;
 }
 

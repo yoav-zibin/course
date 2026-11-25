@@ -13,6 +13,7 @@ import {AccountDeletionBanner} from './ui/AccountDeletion';
 import {MatchStage} from './ui/MatchStage';
 import {BugReporter} from './ui/BugReporter';
 import {BugButton} from './ui/BugButton';
+import {NativeGestureRoot} from './ui/NativeGestureRoot';
 import {MATCH_HISTORY_HEIGHT} from './ui/bugPosition';
 import {diagnosticPath,recordDiagnosticPage,recordDiagnosticEvent,rememberDiagnosticSecrets} from './core/diagnostics';
 import {installWebApp} from './ui/webApp';
@@ -240,7 +241,17 @@ export default function App() {
   useEffect(()=>{setMenuMatch(null);},[p.baseUrl,p.account?.id,p.selectedMatch?.id]);
   const toggleMatchMenu=()=>{if(!matchMenuOpen)history.stopPlayback();setMenuMatch(matchMenuOpen?null:matchKey);recordDiagnosticEvent('match_menu',{expanded:!matchMenuOpen});};
   const embedded=Platform.OS==='web'?document.getElementById('declarative-spec'):null;
-  return <SafeAreaProvider><ErrorBoundary>{embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:<PortalApp p={p} boardVisible={boardVisible} matchMenuOpen={matchMenuOpen} onCloseMatchMenu={()=>setMenuMatch(null)} history={history}/>}</ErrorBoundary><BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/><BugButton onMenuPress={boardVisible&&!embedded?toggleMatchMenu:undefined} menuExpanded={matchMenuOpen} history={boardVisible&&!embedded?{...history.controls,disabled:history.controls.disabled||matchMenuOpen}:undefined}/></SafeAreaProvider>;
+  return <NativeGestureRoot>
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        {embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:
+          <PortalApp p={p} boardVisible={boardVisible} matchMenuOpen={matchMenuOpen} onCloseMatchMenu={()=>setMenuMatch(null)} history={history}/>}
+      </ErrorBoundary>
+      <BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/>
+      <BugButton onMenuPress={boardVisible&&!embedded?toggleMatchMenu:undefined} menuExpanded={matchMenuOpen}
+        history={boardVisible&&!embedded?{...history.controls,disabled:history.controls.disabled||matchMenuOpen}:undefined}/>
+    </SafeAreaProvider>
+  </NativeGestureRoot>;
 }
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},
