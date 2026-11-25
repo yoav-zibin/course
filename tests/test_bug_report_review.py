@@ -106,6 +106,11 @@ def test_watcher_closes_future_array_at_duplicates_only_after_release_verificati
     assert records["future"]["status"] == "handled" and records["future"]["score"] == 0
     assert all(records[identifier]["status"] == "open" for identifier in
                ("old", "unrelated", "declined", "awaiting-answer"))
+    review.save_json(state_dir / "array-at-duplicate-rule.json", {
+        "scope": review.authorization_scope(config), "verified_revision": revision,
+    })
+    assert review.close_array_at_duplicates(state_dir, config, pending, records.keys()) == {"old"}
+    assert records["old"]["status"] == "handled" and records["old"]["score"] == 0
 
 
 def test_empty_queue_does_not_invoke_codex_and_clears_delivery_receipt(state_dir, pending, monkeypatch):

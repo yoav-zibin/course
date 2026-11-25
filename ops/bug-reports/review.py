@@ -588,6 +588,8 @@ def array_at_candidate(report, rule):
     if report.get("status") not in ("open", "handling"):
         return False
     try:
+        if "enabled_after" not in rule:
+            return bool(_ARRAY_AT_CRASH.search(report["text"]))
         created = dt.datetime.fromisoformat(report["created_at"])
         enabled = dt.datetime.fromisoformat(rule["enabled_after"])
         return created >= enabled and bool(_ARRAY_AT_CRASH.search(report["text"]))

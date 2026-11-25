@@ -360,10 +360,11 @@ approval from recovery while preserving its decision history. It also clears a
 matching pending question resolved elsewhere, without granting authorization.
 An approved escalation is recovered from the database even if the local
 approval file is lost. Repeat approval is unnecessary for the same report.
-The hourly watcher can apply Yoav's standing closure decision for future
-reports matching the known `Array.at` compatibility crash. The private
-`array-at-duplicate-rule.json` binds the decision to this scope, an effective
-timestamp, and a production revision independently checked without `Array.at`.
+The hourly watcher applies Yoav's standing closure decision to existing and
+future reports matching the known `Array.at` compatibility crash. The private
+`array-at-duplicate-rule.json` binds the decision to this scope and a production
+revision independently checked without `Array.at`. An optional effective
+timestamp restricts a narrower rule.
 The watcher confirms that production still contains that release before saving
 score 0 and closing a matching report. Existing escalations and declines keep
 their recorded decisions.
