@@ -99,6 +99,7 @@ test('same-origin embedded pages forward their errors and show one parent icon; 
 });
 
 test('manual report drafts survive capture and upload failures while the icon remains above a browser modal',async({page})=>{
+  await page.addInitScript(()=>{Reflect.deleteProperty(Array.prototype,'at');});
   let requests=0;
   await page.route('**/bug-reports',route=>++requests===1?route.fulfill({status:503,json:{detail:'Temporary failure'}}):route.fulfill({status:201,json:{id:'manual-retry'}}));
   await page.goto('/site-bug-fixture');

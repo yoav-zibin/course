@@ -197,7 +197,7 @@
   function place() {
     if (!overlay || claimed) return;
     const modals = Array.from(document.querySelectorAll("dialog[open]")).filter(node => {try {return node.matches(":modal");} catch {return true;}});
-    const parent = modals.at(-1) || document.fullscreenElement || document.body;
+    const parent = modals[modals.length - 1] || document.fullscreenElement || document.body;
     if (overlay.parentElement !== parent) parent.appendChild(overlay);
     try {if (typeof overlay.showPopover === "function" && !overlay.matches(":popover-open")) overlay.showPopover();} catch { /* Transient DOM update. */ }
     const screen = window.visualViewport, width = screen?.width || innerWidth, height = screen?.height || innerHeight;
