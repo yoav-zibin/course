@@ -1,0 +1,2176 @@
+{
+  "name": "Escape Circuit",
+  "description": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
+  "rules": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
+  "ui_instructions": "Drag a highlighted block, or tap it and choose a highlighted destination. The gate is at the bottom of each tray. Use the zoom controls for more room.",
+  "allowed_player_counts": [
+    2
+  ],
+  "all_state_public": true,
+  "allows_join_mid_match": false,
+  "allows_leave_mid_match": false,
+  "server_code": "const EC_STARTS = [[5, 2, 0, 11, 8, 14, 17, 4, 13, 16], [0, 2, 6, 8, 10, 13, 9, 15, 18, 11]];\nconst EC_GUIDE = {\"13,0,5,11,3,4,12,16,19,2\":0,\"9,0,5,11,3,4,12,16,19,2\":1,\"9,0,5,11,3,4,12,16,18,2\":2,\"9,0,5,11,3,4,12,17,18,2\":3,\"9,0,5,11,3,4,16,17,18,2\":4,\"9,0,5,11,3,8,16,17,18,2\":5,\"9,0,4,11,3,8,16,17,18,2\":6,\"9,0,4,11,3,8,16,17,18,6\":7,\"9,0,4,15,3,8,16,17,18,6\":8,\"9,0,4,15,7,8,16,17,18,6\":9,\"9,1,4,15,7,8,16,17,18,6\":10,\"9,2,4,15,7,8,16,17,18,6\":11,\"9,0,2,15,7,8,16,17,18,6\":12,\"9,0,2,15,7,8,16,17,18,5\":13,\"9,0,2,15,7,8,16,17,18,4\":14,\"5,0,2,15,7,8,16,17,18,4\":15,\"5,0,2,15,7,8,14,16,17,4\":16,\"5,0,2,15,7,8,13,16,17,4\":17,\"5,0,2,14,7,8,13,16,17,4\":18,\"5,0,2,11,14,8,13,16,17,4\":19,\"13,0,2,12,4,7,15,19,5,6\":0,\"9,0,2,12,4,7,15,19,5,6\":1,\"9,0,2,12,4,7,15,18,5,6\":2,\"9,0,2,12,4,7,18,19,5,6\":3,\"9,0,2,12,4,7,17,19,5,6\":4,\"9,0,2,12,4,7,17,18,5,6\":5,\"9,0,2,11,12,4,17,18,5,6\":6,\"9,0,2,11,12,4,17,18,5,7\":7,\"9,0,2,12,15,4,17,18,5,7\":8,\"9,0,2,12,15,4,11,17,18,5\":9,\"9,0,2,12,15,4,11,17,18,6\":10,\"9,0,2,12,15,4,11,17,18,7\":11,\"5,0,2,12,15,4,11,17,18,7\":12,\"5,0,2,12,15,4,11,13,18,7\":13,\"5,0,2,12,15,4,11,14,18,7\":14,\"5,0,2,13,15,4,11,14,18,7\":15,\"5,0,2,13,15,8,11,14,18,7\":16,\"5,0,2,12,13,15,11,14,18,7\":17,\"4,0,2,12,13,15,11,14,18,7\":18,\"4,0,2,12,13,15,11,14,18,6\":19,\"4,0,2,12,13,15,10,11,14,18\":20,\"4,0,6,12,13,15,10,11,14,18\":21,\"4,1,6,12,13,15,10,11,14,18\":22,\"4,2,6,12,13,15,10,11,14,18\":23,\"0,2,6,12,13,15,10,11,14,18\":24,\"0,2,6,12,13,15,11,14,18,9\":25,\"0,2,6,12,13,15,11,14,18,8\":26,\"0,2,6,12,15,9,11,14,18,8\":27,\"0,2,6,12,15,9,11,14,17,8\":28,\"0,2,6,12,15,9,10,11,17,8\":29,\"0,2,6,12,14,9,10,11,17,8\":30,\"0,2,6,12,14,9,10,15,17,8\":31,\"0,2,6,12,14,9,11,15,17,8\":32,\"0,2,6,10,12,9,11,15,17,8\":33,\"0,2,6,10,12,9,11,15,18,8\":34,\"0,2,6,10,12,13,11,15,18,8\":35,\"0,2,6,10,12,13,11,15,18,9\":36,\"0,2,6,10,13,8,11,15,18,9\":37};\n// Shared by the rules and the presentation so both use the same collision checks.\nconst EC_SHAPES = [[2, 2], [2, 1], [2, 1], [1, 2], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1]];\nconst EC_EXIT = 13;\nconst EC_LIMIT = 60;\nconst EC_MASKS = EC_SHAPES.map(([w, h]) => Array.from({length: 20}, (_, at) => {\n  if (at % 4 + w > 4 || Math.floor(at / 4) + h > 5) return 0;\n  let mask = 0;\n  for (let y = 0; y < h; y++) {\n    for (let x = 0; x < w; x++) mask |= 1 << (at + y * 4 + x);\n  }\n  return mask;\n}));\nconst EC_STEPS = Array.from({length: 20}, (_, at) => [\n  at - 4, at + 4, at % 4 ? at - 1 : -1, at % 4 < 3 ? at + 1 : -1,\n]);\nfunction ecOccupied(board) {\n  return board.reduce((mask, at, tile) => mask | EC_MASKS[tile][at], 0);\n}\nfunction ecSlides(board) {\n  const occupied = ecOccupied(board);\n  const moves = [];\n  for (let tile = 0; tile < board.length; tile++) {\n    const from = board[tile];\n    const others = occupied ^ EC_MASKS[tile][from];\n    for (const to of EC_STEPS[from]) {\n      const destination = EC_MASKS[tile][to];\n      if (destination && !(others & destination)) moves.push({tile, to});\n    }\n  }\n  return moves;\n}\nfunction ecResult(state, ctx) {\n  if (state.winner === null) return {state, turn: [ctx.players[state.turn].id]};\n  const humans = ctx.players.filter(player => player.kind === 'human' && player.active !== false);\n  const winner = state.winner >= 0 ? ctx.players[state.winner] : null;\n  const recipients = humans.includes(winner) ? [winner] : humans;\n  const payouts = {};\n  recipients.forEach((player, index) => {\n    payouts[player.id] = Math.floor(ctx.pot / recipients.length) + Number(index < ctx.pot % recipients.length);\n  });\n  return {state, turn: null, payouts};\n}\n\nconst game = {\n  newMatch(ctx) {\n    const start = EC_STARTS[Math.floor(ctx.random() * EC_STARTS.length)];\n    return ecResult({\n      boards: [start.slice(), start.slice()], turn: 0, round: 1, winner: null, last: null,\n    }, ctx);\n  },\n\n  applyMove(state, playerId, move, ctx) {\n    const board = state.boards[state.turn];\n    if (state.winner !== null || ctx.players[state.turn].id !== playerId ||\n        !move || !ecSlides(board).some(({tile, to}) => tile === move.tile && to === move.to)) {\n      throw new InvalidMove('Choose a legal slide on your turn.');\n    }\n    const {tile, to} = move;\n    const changed = board.slice();\n    changed[tile] = to;\n    const boards = state.boards.slice();\n    boards[state.turn] = changed;\n    const last = {seat: state.turn, tile, from: board[tile], to};\n    let {round, winner} = state;\n    // Both runners get one slide per round, including the round of an escape.\n    if (state.turn === 1) {\n      const first = boards[0][0] === EC_EXIT;\n      const second = boards[1][0] === EC_EXIT;\n      if (first && second) winner = -1;\n      else if (first || second) winner = first ? 0 : 1;\n      else if (round === EC_LIMIT) winner = -1;\n      else round++;\n    }\n    return ecResult({boards, turn: 1 - state.turn, round, winner, last}, ctx);\n  },\n\n  viewFor(state) {\n    return state;\n  },\n\n  computerMove(state) {\n    return ecBestSlide(state.boards[state.turn]);\n  },\n\n  randomMove(state, playerId, ctx) {\n    const moves = ecSlides(state.boards[state.turn]);\n    return moves[Math.floor(ctx.random() * moves.length)];\n  },\n};\n\n// Only positions of different shapes matter to the solver. Each canonical\n// position on either solution path has a known distance to the gate.\nfunction ecKey(board) {\n  return [board[0], ...board.slice(1, 3).sort(), ...board.slice(3, 6).sort(),\n    ...board.slice(6).sort()].join(',');\n}\n\nfunction ecBestSlide(board) {\n  const key = ecKey(board);\n  const known = EC_GUIDE[key];\n  const moves = ecSlides(board);\n  const advance = (position, move) => {\n    const next = position.slice();\n    next[move.tile] = move.to;\n    return next;\n  };\n  if (known !== undefined) {\n    const nextOnPath = moves.find(move => EC_GUIDE[ecKey(advance(board, move))] === known - 1);\n    if (nextOnPath) return nextOnPath;\n  }\n\n  // A random move in validation can go off the guide. Look for a short\n  // reconnection and keep the search bounded for the platform's JS budget.\n  const queue = [{position: board, depth: 0, first: null}];\n  const visited = new Set([key]);\n  let best = moves[0];\n  let cost = Infinity;\n  for (let i = 0; i < queue.length && i < 128; i++) {\n    const {position, depth, first} = queue[i];\n    for (const move of (i === 0 ? moves : ecSlides(position))) {\n      const next = advance(position, move);\n      const nextKey = ecKey(next);\n      if (visited.has(nextKey)) continue;\n      visited.add(nextKey);\n      const firstMove = first || move;\n      if (next[0] === EC_EXIT) return firstMove;\n      const estimate = EC_GUIDE[nextKey];\n      if (estimate !== undefined) {\n        if (depth + 1 + estimate < cost) {\n          best = firstMove;\n          cost = depth + 1 + estimate;\n        }\n      } else if (queue.length < 128) {\n        queue.push({position: next, depth: depth + 1, first: firstMove});\n      }\n    }\n  }\n  return best;\n}\n",
+  "declarative_ui": {
+    "format": "buildplay-ui",
+    "version": 1,
+    "viewport": {
+      "width": 700,
+      "height": 570,
+      "camera_controls": true
+    },
+    "boards": [
+      {
+        "id": "mat",
+        "kind": "zone",
+        "x": 0,
+        "y": 0,
+        "width": 700,
+        "height": 570,
+        "background_asset": "mat"
+      },
+      {
+        "id": "tray-0",
+        "kind": "free",
+        "x": 18,
+        "y": 111,
+        "width": 320,
+        "height": 400,
+        "background_asset": "tray_a"
+      },
+      {
+        "id": "tray-1",
+        "kind": "free",
+        "x": 362,
+        "y": 111,
+        "width": 320,
+        "height": 400,
+        "background_asset": "tray_b"
+      }
+    ],
+    "assets": {
+      "mat": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3MDAgNTcwIj48cmVjdCB3aWR0aD0iNzAwIiBoZWlnaHQ9IjU3MCIgcng9IjIxIiBmaWxsPSIjMjAxNTJkIi8+PHBhdGggZD0iTTIwIDc2aDY2MCIgc3Ryb2tlPSIjNTY0MTVlIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4="
+      },
+      "tray_a": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMjAgNDAwIj48cmVjdCB3aWR0aD0iMzIwIiBoZWlnaHQ9IjQwMCIgcng9IjEyIiBmaWxsPSIjMWIxMzI2Ii8+PHJlY3QgeD0iMiIgeT0iMiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iODIiIHk9IjIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjE2MiIgeT0iMiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iMjQyIiB5PSIyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIyIiB5PSI4MiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iODIiIHk9IjgyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIxNjIiIHk9IjgyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIyNDIiIHk9IjgyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIyIiB5PSIxNjIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjgyIiB5PSIxNjIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjE2MiIgeT0iMTYyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIyNDIiIHk9IjE2MiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iMiIgeT0iMjQyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSI4MiIgeT0iMjQyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIxNjIiIHk9IjI0MiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iMjQyIiB5PSIyNDIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjIiIHk9IjMyMiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iODIiIHk9IjMyMiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iMTYyIiB5PSIzMjIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjI0MiIgeT0iMzIyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMiAzODB2MTdoNzdNMjQxIDM5N2g3N3YtMTciIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzc2ZWFkNiIgc3Ryb2tlLXdpZHRoPSI0Ii8+PHBhdGggZD0iTTgyIDMyNWgxNTZ2NzBIODJaIiBmaWxsPSJub25lIiBzdHJva2U9IiM3NmVhZDYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWRhc2hhcnJheT0iNyA2Ii8+PC9zdmc+"
+      },
+      "tray_b": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMjAgNDAwIj48cmVjdCB3aWR0aD0iMzIwIiBoZWlnaHQ9IjQwMCIgcng9IjEyIiBmaWxsPSIjMWIxMzI2Ii8+PHJlY3QgeD0iMiIgeT0iMiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iODIiIHk9IjIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjE2MiIgeT0iMiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iMjQyIiB5PSIyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIyIiB5PSI4MiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iODIiIHk9IjgyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIxNjIiIHk9IjgyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIyNDIiIHk9IjgyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIyIiB5PSIxNjIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjgyIiB5PSIxNjIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjE2MiIgeT0iMTYyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIyNDIiIHk9IjE2MiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iMiIgeT0iMjQyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSI4MiIgeT0iMjQyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cmVjdCB4PSIxNjIiIHk9IjI0MiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iMjQyIiB5PSIyNDIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjIiIHk9IjMyMiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iODIiIHk9IjMyMiIgd2lkdGg9Ijc2IiBoZWlnaHQ9Ijc2IiByeD0iMTAiIGZpbGw9IiMyOTFkMzUiIHN0cm9rZT0iIzRlM2M1NSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iMTYyIiB5PSIzMjIiIHdpZHRoPSI3NiIgaGVpZ2h0PSI3NiIgcng9IjEwIiBmaWxsPSIjMjkxZDM1IiBzdHJva2U9IiM0ZTNjNTUiIHN0cm9rZS13aWR0aD0iMiIvPjxyZWN0IHg9IjI0MiIgeT0iMzIyIiB3aWR0aD0iNzYiIGhlaWdodD0iNzYiIHJ4PSIxMCIgZmlsbD0iIzI5MWQzNSIgc3Ryb2tlPSIjNGUzYzU1IiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMiAzODB2MTdoNzdNMjQxIDM5N2g3N3YtMTciIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2U5YTdmZiIgc3Ryb2tlLXdpZHRoPSI0Ii8+PHBhdGggZD0iTTgyIDMyNWgxNTZ2NzBIODJaIiBmaWxsPSJub25lIiBzdHJva2U9IiNlOWE3ZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWRhc2hhcnJheT0iNyA2Ii8+PC9zdmc+"
+      },
+      "gate": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjYiPjxyZWN0IHg9IjMiIHk9IjIiIHdpZHRoPSIxNTQiIGhlaWdodD0iMjIiIHJ4PSI2IiBmaWxsPSIjYTg5YmI2Ii8+PHBhdGggZD0iTTQ3IDlsNiA3IDYtN20xNCAwIDcgNyA3LTdtMTQgMCA2IDcgNi03IiBmaWxsPSJub25lIiBzdHJva2U9IiMyNjE4MzEiIHN0cm9rZS13aWR0aD0iMi41Ii8+PC9zdmc+"
+      },
+      "gate_open": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNjAgMjYiPjxyZWN0IHg9IjMiIHk9IjIiIHdpZHRoPSIxNTQiIGhlaWdodD0iMjIiIHJ4PSI2IiBmaWxsPSIjZmZjYTgyIi8+PHBhdGggZD0iTTQ3IDlsNiA3IDYtN20xNCAwIDcgNyA3LTdtMTQgMCA2IDcgNi03IiBmaWxsPSJub25lIiBzdHJva2U9IiMyNjE4MzEiIHN0cm9rZS13aWR0aD0iMi41Ii8+PC9zdmc+"
+      },
+      "target": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2OCA2OCI+PGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iMTkiIGZpbGw9IiMyMjE5MmYiIHN0cm9rZT0iI2ZmZjhkOSIgc3Ryb2tlLXdpZHRoPSIzIi8+PGNpcmNsZSBjeD0iMzQiIGN5PSIzNCIgcj0iNiIgZmlsbD0iI2ZmZjhkOSIvPjwvc3ZnPg=="
+      },
+      "core": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTQgMTU0Ij48cmVjdCB4PSIxIiB5PSI0IiB3aWR0aD0iMTUyIiBoZWlnaHQ9IjE0OSIgcng9IjEzIiBmaWxsPSIjYTYzYzM5Ii8+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjE1MiIgaGVpZ2h0PSIxNDUiIHJ4PSIxMyIgZmlsbD0iI2ZmOTY1OCIvPjxwYXRoIGQ9Ik0xMiAxN1YxNFExMiA5IDE4IDlIMTM1IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmQ4OTkiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjeD0iNzcuMCIgY3k9Ijc1LjAiIHI9IjMyIiBmaWxsPSIjZmZkODk5Ii8+PHBhdGggZD0iTTYxLjAgNjguMGgzMmwtMTYgMTlaIiBmaWxsPSIjNmYyODJkIi8+PHBhdGggZD0iTTY1LjAgOTQuMGgyNCIgc3Ryb2tlPSIjNmYyODJkIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg=="
+      },
+      "wide": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTQgNzQiPjxyZWN0IHg9IjEiIHk9IjQiIHdpZHRoPSIxNTIiIGhlaWdodD0iNjkiIHJ4PSIxMyIgZmlsbD0iIzIyNjM3YyIvPjxyZWN0IHg9IjEiIHk9IjEiIHdpZHRoPSIxNTIiIGhlaWdodD0iNjUiIHJ4PSIxMyIgZmlsbD0iIzUxYzhjYiIvPjxwYXRoIGQ9Ik0xMiAxN1YxNFExMiA5IDE4IDlIMTM1IiBmaWxsPSJub25lIiBzdHJva2U9IiNhOGYxZTYiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTQ5LjAgMzQuMGg1NiIgc3Ryb2tlPSIjMWM1YTcxIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg=="
+      },
+      "tall": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NCAxNTQiPjxyZWN0IHg9IjEiIHk9IjQiIHdpZHRoPSI3MiIgaGVpZ2h0PSIxNDkiIHJ4PSIxMyIgZmlsbD0iIzU3NDA4NiIvPjxyZWN0IHg9IjEiIHk9IjEiIHdpZHRoPSI3MiIgaGVpZ2h0PSIxNDUiIHJ4PSIxMyIgZmlsbD0iI2E5OTRmNiIvPjxwYXRoIGQ9Ik0xMiAxN1YxNFExMiA5IDE4IDlINTUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2RmY2RmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNMzcuMCA0Ni4wdjU2IiBzdHJva2U9IiM0OTM0NzgiIHN0cm9rZS13aWR0aD0iOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+"
+      },
+      "chip": {
+        "media_type": "image/svg+xml",
+        "uri": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NCA3NCI+PHJlY3QgeD0iMSIgeT0iNCIgd2lkdGg9IjcyIiBoZWlnaHQ9IjY5IiByeD0iMTMiIGZpbGw9IiM5NDcxM2MiLz48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iNzIiIGhlaWdodD0iNjUiIHJ4PSIxMyIgZmlsbD0iI2Y1ZDQ2ZCIvPjxwYXRoIGQ9Ik0xMiAxN1YxNFExMiA5IDE4IDlINTUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZjBhNiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48Y2lyY2xlIGN4PSIzNy4wIiBjeT0iMzQuMCIgcj0iOSIgZmlsbD0iIzgxNjIzNiIvPjxjaXJjbGUgY3g9IjM1LjAiIGN5PSIzMi4wIiByPSIyIiBmaWxsPSIjZmZmMGE2Ii8+PC9zdmc+"
+      }
+    },
+    "piece_types": {
+      "gate": {
+        "shape": "image",
+        "width": 160,
+        "height": 26,
+        "asset": "gate"
+      },
+      "core": {
+        "shape": "image",
+        "width": 154,
+        "height": 154,
+        "asset": "core"
+      },
+      "wide": {
+        "shape": "image",
+        "width": 154,
+        "height": 74,
+        "asset": "wide"
+      },
+      "tall": {
+        "shape": "image",
+        "width": 74,
+        "height": 154,
+        "asset": "tall"
+      },
+      "chip": {
+        "shape": "image",
+        "width": 74,
+        "height": 74,
+        "asset": "chip"
+      }
+    },
+    "strings": {
+      "core": "Core",
+      "bar": "Bar",
+      "chip": "Chip",
+      "runner": "Player {number}",
+      "you": "{player} (you)",
+      "wins": "{player} wins!",
+      "turn": "{player} to slide",
+      "draw": "Draw",
+      "replay": "Match history",
+      "waiting": "Waiting to start",
+      "your_turn": "Your turn",
+      "choose": "Drag or tap a highlighted block.",
+      "final_slide": "One slide left to tie.",
+      "goal": "Guide the orange core to the gate.",
+      "escaped": "Escaped",
+      "exit": "Exit",
+      "tile_at": "{tile} at {square}",
+      "slide_to": "Slide {tile} to {square}",
+      "server_invalid_slide": "Choose a legal slide on your turn."
+    },
+    "ui_code": "const SOURCE_STRINGS = {\"core\": \"Core\", \"bar\": \"Bar\", \"chip\": \"Chip\", \"runner\": \"Player {number}\", \"you\": \"{player} (you)\", \"wins\": \"{player} wins!\", \"turn\": \"{player} to slide\", \"draw\": \"Draw\", \"replay\": \"Match history\", \"waiting\": \"Waiting to start\", \"your_turn\": \"Your turn\", \"choose\": \"Drag or tap a highlighted block.\", \"final_slide\": \"One slide left to tie.\", \"goal\": \"Guide the orange core to the gate.\", \"escaped\": \"Escaped\", \"exit\": \"Exit\", \"tile_at\": \"{tile} at {square}\", \"slide_to\": \"Slide {tile} to {square}\", \"server_invalid_slide\": \"Choose a legal slide on your turn.\"};\n// Shared by the rules and the presentation so both use the same collision checks.\nconst EC_SHAPES = [[2, 2], [2, 1], [2, 1], [1, 2], [1, 2], [1, 2], [1, 1], [1, 1], [1, 1], [1, 1]];\nconst EC_EXIT = 13;\nconst EC_LIMIT = 60;\nconst EC_MASKS = EC_SHAPES.map(([w, h]) => Array.from({length: 20}, (_, at) => {\n  if (at % 4 + w > 4 || Math.floor(at / 4) + h > 5) return 0;\n  let mask = 0;\n  for (let y = 0; y < h; y++) {\n    for (let x = 0; x < w; x++) mask |= 1 << (at + y * 4 + x);\n  }\n  return mask;\n}));\nconst EC_STEPS = Array.from({length: 20}, (_, at) => [\n  at - 4, at + 4, at % 4 ? at - 1 : -1, at % 4 < 3 ? at + 1 : -1,\n]);\nfunction ecOccupied(board) {\n  return board.reduce((mask, at, tile) => mask | EC_MASKS[tile][at], 0);\n}\nfunction ecSlides(board) {\n  const occupied = ecOccupied(board);\n  const moves = [];\n  for (let tile = 0; tile < board.length; tile++) {\n    const from = board[tile];\n    const others = occupied ^ EC_MASKS[tile][from];\n    for (const to of EC_STEPS[from]) {\n      const destination = EC_MASKS[tile][to];\n      if (destination && !(others & destination)) moves.push({tile, to});\n    }\n  }\n  return moves;\n}\nconst EC_CELL = 80;\n\nfunction ecFill(template, values) {\n  return template.replace(/\\{(\\w+)\\}/g, (_, key) => String(values[key]));\n}\n\nfunction ecPosition(tile, at) {\n  const [width, height] = EC_SHAPES[tile];\n  return {x: (at % 4 + width / 2) * EC_CELL, y: (Math.floor(at / 4) + height / 2) * EC_CELL};\n}\n\nfunction ecSquare(at) {\n  return 'ABCD'[at % 4] + (Math.floor(at / 4) + 1);\n}\n\nconst gameUI = {\n  reduce(message) {\n    const m = message.type === 'ui_event' ? message.state_changed : message;\n    const event = message.type === 'ui_event' ? message.event : null;\n    const view = m.view;\n    const strings = {...SOURCE_STRINGS, ...m.strings};\n    const {turn, winner, boards, last} = view;\n    const acting = m.status === 'ongoing' && !m.replay && winner === null &&\n      m.acting_for_player_index === turn;\n    const legal = acting ? ecSlides(boards[turn]) : [];\n    const tileId = (seat, tile) => `block-${seat}-${tile}`;\n    const targetId = ({tile, to}) => `slide-${tile}-to-${to}`;\n    const tileName = tile => strings[tile === 0 ? 'core' : tile < 6 ? 'bar' : 'chip'];\n    const player = seat => {\n      const fallback = ecFill(strings.runner, {number: seat + 1});\n      return (m.players?.[seat]?.name || fallback).slice(0, 16);\n    };\n    const make_move = event?.type === 'drop'\n      ? legal.find(move => tileId(turn, move.tile) === event.piece_id && targetId(move) === event.target_id)\n      : undefined;\n\n    const pieces = [];\n    const targets = [];\n    const labels = [];\n    const status = winner === -1 ? strings.draw : winner !== null ? ecFill(strings.wins, {player: player(winner)}) :\n      m.replay ? strings.replay : m.status !== 'ongoing' ? strings.waiting :\n      acting ? strings.your_turn : ecFill(strings.turn, {player: player(turn)});\n    const instruction = winner === null && boards[0][0] === EC_EXIT\n      ? strings.final_slide : acting ? strings.choose : strings.goal;\n    labels.push({id: 'status', text: status, x: 20, y: 19, color: '#ffeacd', font_size: 32});\n    labels.push({id: 'instruction', text: instruction, x: 20, y: 53, color: '#d9ccd8', font_size: 23});\n\n    for (let seat = 0; seat < boards.length; seat++) {\n      const board = `tray-${seat}`;\n      const x = seat * 344 + 18;\n      const color = seat === 0 ? '#76ead6' : '#e9a7ff';\n      const escaped = boards[seat][0] === EC_EXIT;\n      const name = m.my_player_index === seat ? ecFill(strings.you, {player: player(seat)}) : player(seat);\n      labels.push({id: `runner-${seat}`, text: name, x, y: 83, color, font_size: 25});\n      labels.push({id: `exit-${seat}`, text: escaped ? strings.escaped : strings.exit,\n        x: x + 120, y: 539, color: escaped ? '#ffca82' : color, font_size: 23});\n      pieces.push({id: `gate-${seat}`, board, type: 'gate', position: {x: 160, y: 406},\n        asset: escaped ? 'gate_open' : 'gate', z: 0, actions: []});\n\n      boards[seat].forEach((at, tile) => {\n        const moves = seat === turn ? legal.filter(move => move.tile === tile) : [];\n        const position = ecPosition(tile, at);\n        const id = tileId(seat, tile);\n        const piece = {id, board, position, type: tile === 0 ? 'core' : tile < 3 ? 'wide' : tile < 6 ? 'tall' : 'chip',\n          aria_label: ecFill(strings.tile_at, {tile: tileName(tile), square: ecSquare(at)}),\n          z: 1, actions: moves.length ? ['move'] : [],\n        };\n        if (moves.length) {\n          piece.move_targets = moves.map(targetId);\n          for (const move of moves) {\n            const area = {x: -34, y: -34, width: 68, height: 68};\n            targets.push({id: targetId(move), board, position: ecPosition(tile, move.to), hit_area: area,\n              asset: 'target', aria_label: ecFill(strings.slide_to, {tile: tileName(tile), square: ecSquare(move.to)})});\n          }\n        }\n        if (last?.seat === seat && last.tile === tile) piece.z = 2;\n        pieces.push(piece);\n      });\n    }\n    return {scene: {pieces, targets, labels}, ...(make_move && {make_move})};\n  },\n\n  getLastMoveAnimations(view) {\n    const last = view.last;\n    if (!last) return [];\n    return [{piece_id: `block-${last.seat}-${last.tile}`, duration_ms: 1440,\n      path: [last.from, last.to].map(at => ({board: `tray-${last.seat}`, position: ecPosition(last.tile, at)}))}];\n  },\n};\n"
+  },
+  "tutorial": {
+    "text": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
+    "html": "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><p>Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.</p>"
+  },
+  "images": [
+    {
+      "caption": "Cover",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#20152d\"/><path d=\"M240 18h320M240 432h320\" stroke=\"#765386\" stroke-width=\"2\"/><path d=\"M390 187h20m-20 76h20\" stroke=\"#f0c4fd\" stroke-width=\"3\"/><path d=\"M403 199l-15 28h11l-3 24 16-32h-11z\" fill=\"#ff9658\"/><g transform=\"translate(38 48) scale(.91)\"><rect x=\"-11\" y=\"-11\" width=\"342\" height=\"442\" rx=\"18\" fill=\"#33223f\" stroke=\"#76ead6\" stroke-width=\"2\"/><rect width=\"320\" height=\"400\" rx=\"12\" fill=\"#1b1326\"/><rect x=\"2\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><path d=\"M2 380v17h77M241 397h77v-17\" fill=\"none\" stroke=\"#76ead6\" stroke-width=\"4\"/><path d=\"M82 325h156v70H82Z\" fill=\"none\" stroke=\"#76ead6\" stroke-width=\"2\" stroke-dasharray=\"7 6\"/><g transform=\"translate(80 400)\"><rect x=\"3\" y=\"2\" width=\"154\" height=\"22\" rx=\"6\" fill=\"#76ead6\"/><path d=\"M47 9l6 7 6-7m14 0 7 7 7-7m14 0 6 7 6-7\" fill=\"none\" stroke=\"#261831\" stroke-width=\"2.5\"/></g><g transform=\"translate(3 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"149\" rx=\"13\" fill=\"#a63c39\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"145\" rx=\"13\" fill=\"#ff9658\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#ffd899\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"77.0\" cy=\"75.0\" r=\"32\" fill=\"#ffd899\"/><path d=\"M61.0 68.0h32l-16 19Z\" fill=\"#6f282d\"/><path d=\"M65.0 94.0h24\" stroke=\"#6f282d\" stroke-width=\"4\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 83)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(163 323)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g></g><g transform=\"translate(464 48) scale(.91)\"><rect x=\"-11\" y=\"-11\" width=\"342\" height=\"442\" rx=\"18\" fill=\"#33223f\" stroke=\"#e9a7ff\" stroke-width=\"2\"/><rect width=\"320\" height=\"400\" rx=\"12\" fill=\"#1b1326\"/><rect x=\"2\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><path d=\"M2 380v17h77M241 397h77v-17\" fill=\"none\" stroke=\"#e9a7ff\" stroke-width=\"4\"/><path d=\"M82 325h156v70H82Z\" fill=\"none\" stroke=\"#e9a7ff\" stroke-width=\"2\" stroke-dasharray=\"7 6\"/><g transform=\"translate(80 400)\"><rect x=\"3\" y=\"2\" width=\"154\" height=\"22\" rx=\"6\" fill=\"#e9a7ff\"/><path d=\"M47 9l6 7 6-7m14 0 7 7 7-7m14 0 6 7 6-7\" fill=\"none\" stroke=\"#261831\" stroke-width=\"2.5\"/></g><g transform=\"translate(3 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"149\" rx=\"13\" fill=\"#a63c39\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"145\" rx=\"13\" fill=\"#ff9658\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#ffd899\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"77.0\" cy=\"75.0\" r=\"32\" fill=\"#ffd899\"/><path d=\"M61.0 68.0h32l-16 19Z\" fill=\"#6f282d\"/><path d=\"M65.0 94.0h24\" stroke=\"#6f282d\" stroke-width=\"4\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 83)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(163 323)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g></g></svg>"
+    },
+    {
+      "caption": "Slide a block",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#20152d\"/><path d=\"M240 18h320M240 432h320\" stroke=\"#765386\" stroke-width=\"2\"/><path d=\"M390 187h20m-20 76h20\" stroke=\"#f0c4fd\" stroke-width=\"3\"/><path d=\"M403 199l-15 28h11l-3 24 16-32h-11z\" fill=\"#ff9658\"/><g transform=\"translate(38 48) scale(.91)\"><rect x=\"-11\" y=\"-11\" width=\"342\" height=\"442\" rx=\"18\" fill=\"#33223f\" stroke=\"#76ead6\" stroke-width=\"2\"/><rect width=\"320\" height=\"400\" rx=\"12\" fill=\"#1b1326\"/><rect x=\"2\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><path d=\"M2 380v17h77M241 397h77v-17\" fill=\"none\" stroke=\"#76ead6\" stroke-width=\"4\"/><path d=\"M82 325h156v70H82Z\" fill=\"none\" stroke=\"#76ead6\" stroke-width=\"2\" stroke-dasharray=\"7 6\"/><g transform=\"translate(80 400)\"><rect x=\"3\" y=\"2\" width=\"154\" height=\"22\" rx=\"6\" fill=\"#76ead6\"/><path d=\"M47 9l6 7 6-7m14 0 7 7 7-7m14 0 6 7 6-7\" fill=\"none\" stroke=\"#261831\" stroke-width=\"2.5\"/></g><g transform=\"translate(3 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"149\" rx=\"13\" fill=\"#a63c39\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"145\" rx=\"13\" fill=\"#ff9658\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#ffd899\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"77.0\" cy=\"75.0\" r=\"32\" fill=\"#ffd899\"/><path d=\"M61.0 68.0h32l-16 19Z\" fill=\"#6f282d\"/><path d=\"M65.0 94.0h24\" stroke=\"#6f282d\" stroke-width=\"4\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 83)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><rect x=\"3\" y=\"243\" width=\"74\" height=\"154\" rx=\"12\" fill=\"none\" stroke=\"#fff5cb\" stroke-width=\"4\"/><g transform=\"translate(163 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(163 323)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g></g><g transform=\"translate(464 48) scale(.91)\"><rect x=\"-11\" y=\"-11\" width=\"342\" height=\"442\" rx=\"18\" fill=\"#33223f\" stroke=\"#e9a7ff\" stroke-width=\"2\"/><rect width=\"320\" height=\"400\" rx=\"12\" fill=\"#1b1326\"/><rect x=\"2\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><path d=\"M2 380v17h77M241 397h77v-17\" fill=\"none\" stroke=\"#e9a7ff\" stroke-width=\"4\"/><path d=\"M82 325h156v70H82Z\" fill=\"none\" stroke=\"#e9a7ff\" stroke-width=\"2\" stroke-dasharray=\"7 6\"/><g transform=\"translate(80 400)\"><rect x=\"3\" y=\"2\" width=\"154\" height=\"22\" rx=\"6\" fill=\"#e9a7ff\"/><path d=\"M47 9l6 7 6-7m14 0 7 7 7-7m14 0 6 7 6-7\" fill=\"none\" stroke=\"#261831\" stroke-width=\"2.5\"/></g><g transform=\"translate(3 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"149\" rx=\"13\" fill=\"#a63c39\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"145\" rx=\"13\" fill=\"#ff9658\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#ffd899\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"77.0\" cy=\"75.0\" r=\"32\" fill=\"#ffd899\"/><path d=\"M61.0 68.0h32l-16 19Z\" fill=\"#6f282d\"/><path d=\"M65.0 94.0h24\" stroke=\"#6f282d\" stroke-width=\"4\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 83)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(163 323)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 163)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g></g></svg>"
+    },
+    {
+      "caption": "One more slide to tie",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#20152d\"/><path d=\"M240 18h320M240 432h320\" stroke=\"#765386\" stroke-width=\"2\"/><path d=\"M390 187h20m-20 76h20\" stroke=\"#f0c4fd\" stroke-width=\"3\"/><path d=\"M403 199l-15 28h11l-3 24 16-32h-11z\" fill=\"#ff9658\"/><g transform=\"translate(38 48) scale(.91)\"><rect x=\"-11\" y=\"-11\" width=\"342\" height=\"442\" rx=\"18\" fill=\"#33223f\" stroke=\"#76ead6\" stroke-width=\"2\"/><rect width=\"320\" height=\"400\" rx=\"12\" fill=\"#1b1326\"/><rect x=\"2\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><path d=\"M2 380v17h77M241 397h77v-17\" fill=\"none\" stroke=\"#76ead6\" stroke-width=\"4\"/><path d=\"M82 325h156v70H82Z\" fill=\"none\" stroke=\"#76ead6\" stroke-width=\"2\" stroke-dasharray=\"7 6\"/><g transform=\"translate(80 400)\"><rect x=\"3\" y=\"2\" width=\"154\" height=\"22\" rx=\"6\" fill=\"#76ead6\"/><path d=\"M47 9l6 7 6-7m14 0 7 7 7-7m14 0 6 7 6-7\" fill=\"none\" stroke=\"#261831\" stroke-width=\"2.5\"/></g><g transform=\"translate(83 243)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"149\" rx=\"13\" fill=\"#a63c39\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"145\" rx=\"13\" fill=\"#ff9658\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#ffd899\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"77.0\" cy=\"75.0\" r=\"32\" fill=\"#ffd899\"/><path d=\"M61.0 68.0h32l-16 19Z\" fill=\"#6f282d\"/><path d=\"M65.0 94.0h24\" stroke=\"#6f282d\" stroke-width=\"4\" stroke-linecap=\"round\"/></g><rect x=\"83\" y=\"243\" width=\"154\" height=\"154\" rx=\"12\" fill=\"none\" stroke=\"#fff5cb\" stroke-width=\"4\"/><g transform=\"translate(3 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(243 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(163 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 323)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g></g><g transform=\"translate(464 48) scale(.91)\"><rect x=\"-11\" y=\"-11\" width=\"342\" height=\"442\" rx=\"18\" fill=\"#33223f\" stroke=\"#e9a7ff\" stroke-width=\"2\"/><rect width=\"320\" height=\"400\" rx=\"12\" fill=\"#1b1326\"/><rect x=\"2\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><path d=\"M2 380v17h77M241 397h77v-17\" fill=\"none\" stroke=\"#e9a7ff\" stroke-width=\"4\"/><path d=\"M82 325h156v70H82Z\" fill=\"none\" stroke=\"#e9a7ff\" stroke-width=\"2\" stroke-dasharray=\"7 6\"/><g transform=\"translate(80 400)\"><rect x=\"3\" y=\"2\" width=\"154\" height=\"22\" rx=\"6\" fill=\"#e9a7ff\"/><path d=\"M47 9l6 7 6-7m14 0 7 7 7-7m14 0 6 7 6-7\" fill=\"none\" stroke=\"#261831\" stroke-width=\"2.5\"/></g><g transform=\"translate(83 163)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"149\" rx=\"13\" fill=\"#a63c39\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"145\" rx=\"13\" fill=\"#ff9658\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#ffd899\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"77.0\" cy=\"75.0\" r=\"32\" fill=\"#ffd899\"/><path d=\"M61.0 68.0h32l-16 19Z\" fill=\"#6f282d\"/><path d=\"M65.0 94.0h24\" stroke=\"#6f282d\" stroke-width=\"4\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(243 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(163 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 323)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g></g></svg>"
+    },
+    {
+      "caption": "Both cores reach the exit",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 450\"><rect width=\"800\" height=\"450\" fill=\"#20152d\"/><path d=\"M240 18h320M240 432h320\" stroke=\"#765386\" stroke-width=\"2\"/><path d=\"M390 187h20m-20 76h20\" stroke=\"#f0c4fd\" stroke-width=\"3\"/><path d=\"M403 199l-15 28h11l-3 24 16-32h-11z\" fill=\"#ff9658\"/><g transform=\"translate(38 48) scale(.91)\"><rect x=\"-11\" y=\"-11\" width=\"342\" height=\"442\" rx=\"18\" fill=\"#33223f\" stroke=\"#76ead6\" stroke-width=\"2\"/><rect width=\"320\" height=\"400\" rx=\"12\" fill=\"#1b1326\"/><rect x=\"2\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><path d=\"M2 380v17h77M241 397h77v-17\" fill=\"none\" stroke=\"#76ead6\" stroke-width=\"4\"/><path d=\"M82 325h156v70H82Z\" fill=\"none\" stroke=\"#76ead6\" stroke-width=\"2\" stroke-dasharray=\"7 6\"/><g transform=\"translate(80 400)\"><rect x=\"3\" y=\"2\" width=\"154\" height=\"22\" rx=\"6\" fill=\"#76ead6\"/><path d=\"M47 9l6 7 6-7m14 0 7 7 7-7m14 0 6 7 6-7\" fill=\"none\" stroke=\"#261831\" stroke-width=\"2.5\"/></g><g transform=\"translate(83 243)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"149\" rx=\"13\" fill=\"#a63c39\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"145\" rx=\"13\" fill=\"#ff9658\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#ffd899\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"77.0\" cy=\"75.0\" r=\"32\" fill=\"#ffd899\"/><path d=\"M61.0 68.0h32l-16 19Z\" fill=\"#6f282d\"/><path d=\"M65.0 94.0h24\" stroke=\"#6f282d\" stroke-width=\"4\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(243 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(163 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 323)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g></g><g transform=\"translate(464 48) scale(.91)\"><rect x=\"-11\" y=\"-11\" width=\"342\" height=\"442\" rx=\"18\" fill=\"#33223f\" stroke=\"#e9a7ff\" stroke-width=\"2\"/><rect width=\"320\" height=\"400\" rx=\"12\" fill=\"#1b1326\"/><rect x=\"2\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"2\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"82\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"162\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"242\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"2\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"82\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"162\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><rect x=\"242\" y=\"322\" width=\"76\" height=\"76\" rx=\"10\" fill=\"#291d35\" stroke=\"#4e3c55\" stroke-width=\"2\"/><path d=\"M2 380v17h77M241 397h77v-17\" fill=\"none\" stroke=\"#e9a7ff\" stroke-width=\"4\"/><path d=\"M82 325h156v70H82Z\" fill=\"none\" stroke=\"#e9a7ff\" stroke-width=\"2\" stroke-dasharray=\"7 6\"/><g transform=\"translate(80 400)\"><rect x=\"3\" y=\"2\" width=\"154\" height=\"22\" rx=\"6\" fill=\"#e9a7ff\"/><path d=\"M47 9l6 7 6-7m14 0 7 7 7-7m14 0 6 7 6-7\" fill=\"none\" stroke=\"#261831\" stroke-width=\"2.5\"/></g><g transform=\"translate(83 243)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"149\" rx=\"13\" fill=\"#a63c39\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"145\" rx=\"13\" fill=\"#ff9658\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#ffd899\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"77.0\" cy=\"75.0\" r=\"32\" fill=\"#ffd899\"/><path d=\"M61.0 68.0h32l-16 19Z\" fill=\"#6f282d\"/><path d=\"M65.0 94.0h24\" stroke=\"#6f282d\" stroke-width=\"4\" stroke-linecap=\"round\"/></g><rect x=\"83\" y=\"243\" width=\"154\" height=\"154\" rx=\"12\" fill=\"none\" stroke=\"#fff5cb\" stroke-width=\"4\"/><g transform=\"translate(3 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(163 3)\"><rect x=\"1\" y=\"4\" width=\"152\" height=\"69\" rx=\"13\" fill=\"#22637c\"/><rect x=\"1\" y=\"1\" width=\"152\" height=\"65\" rx=\"13\" fill=\"#51c8cb\"/><path d=\"M12 17V14Q12 9 18 9H135\" fill=\"none\" stroke=\"#a8f1e6\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M49.0 34.0h56\" stroke=\"#1c5a71\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(243 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(3 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"149\" rx=\"13\" fill=\"#574086\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"145\" rx=\"13\" fill=\"#a994f6\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#dfcdff\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M37.0 46.0v56\" stroke=\"#493478\" stroke-width=\"8\" stroke-linecap=\"round\"/></g><g transform=\"translate(83 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(163 83)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 243)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g><g transform=\"translate(243 323)\"><rect x=\"1\" y=\"4\" width=\"72\" height=\"69\" rx=\"13\" fill=\"#94713c\"/><rect x=\"1\" y=\"1\" width=\"72\" height=\"65\" rx=\"13\" fill=\"#f5d46d\"/><path d=\"M12 17V14Q12 9 18 9H55\" fill=\"none\" stroke=\"#fff0a6\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"37.0\" cy=\"34.0\" r=\"9\" fill=\"#816236\"/><circle cx=\"35.0\" cy=\"32.0\" r=\"2\" fill=\"#fff0a6\"/></g></g></svg>"
+    }
+  ],
+  "unit_tests": {
+    "state_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "boards": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "array",
+            "minItems": 10,
+            "maxItems": 10,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 19
+            },
+            "uniqueItems": true
+          }
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        },
+        "winner": {
+          "enum": [
+            null,
+            -1,
+            0,
+            1
+          ]
+        },
+        "last": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "seat": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "tile": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                },
+                "from": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 19
+                },
+                "to": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 19
+                }
+              },
+              "required": [
+                "seat",
+                "tile",
+                "from",
+                "to"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "boards",
+        "turn",
+        "round",
+        "winner",
+        "last"
+      ]
+    },
+    "move_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tile": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 19
+        }
+      },
+      "required": [
+        "tile",
+        "to"
+      ]
+    },
+    "view_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "boards": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "array",
+            "minItems": 10,
+            "maxItems": 10,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 19
+            },
+            "uniqueItems": true
+          }
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        },
+        "winner": {
+          "enum": [
+            null,
+            -1,
+            0,
+            1
+          ]
+        },
+        "last": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "seat": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "tile": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                },
+                "from": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 19
+                },
+                "to": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 19
+                }
+              },
+              "required": [
+                "seat",
+                "tile",
+                "from",
+                "to"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "boards",
+        "turn",
+        "round",
+        "winner",
+        "last"
+      ]
+    },
+    "cases": [
+      {
+        "name": "The first slide only changes its own tray",
+        "description": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
+        "kind": "initial",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Ada",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Sam",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            }
+          ],
+          "pot": 10,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "view_of_mover": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "view_of_other": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "player_id": "p0",
+        "other_player_id": "p1",
+        "move": {
+          "tile": 3,
+          "to": 12
+        },
+        "expected_state": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              12,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 1,
+          "round": 1,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 3,
+            "from": 8,
+            "to": 12
+          }
+        },
+        "expected_turn": [
+          "p1"
+        ],
+        "expected_view_of_mover": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              12,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 1,
+          "round": 1,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 3,
+            "from": 8,
+            "to": 12
+          }
+        },
+        "expected_view_of_other": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              12,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 1,
+          "round": 1,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 3,
+            "from": 8,
+            "to": 12
+          }
+        },
+        "images": [
+          {
+            "caption": "Mover before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Mover after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          }
+        ]
+      },
+      {
+        "name": "The other seat cannot slide out of turn",
+        "description": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Ada",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Sam",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            }
+          ],
+          "pot": 10,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "view_of_mover": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "view_of_other": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "player_id": "p1",
+        "other_player_id": "p0",
+        "move": {
+          "tile": 3,
+          "to": 12
+        },
+        "expected_state": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "expected_turn": [
+          "p0"
+        ],
+        "expected_view_of_mover": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "expected_view_of_other": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "images": [
+          {
+            "caption": "Mover before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Mover after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          }
+        ],
+        "expected_error": "InvalidMove",
+        "turn": [
+          "p0"
+        ]
+      },
+      {
+        "name": "A core cannot jump to the gate",
+        "description": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Ada",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Sam",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            }
+          ],
+          "pot": 10,
+          "move_count": 0,
+          "seed": 11
+        },
+        "state": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "view_of_mover": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "view_of_other": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "player_id": "p0",
+        "other_player_id": "p1",
+        "move": {
+          "tile": 0,
+          "to": 13
+        },
+        "expected_state": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "expected_turn": [
+          "p0"
+        ],
+        "expected_view_of_mover": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "expected_view_of_other": {
+          "boards": [
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ],
+            [
+              0,
+              2,
+              6,
+              8,
+              10,
+              13,
+              9,
+              15,
+              18,
+              11
+            ]
+          ],
+          "turn": 0,
+          "round": 1,
+          "winner": null,
+          "last": null
+        },
+        "images": [
+          {
+            "caption": "Mover before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Mover after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"54\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"106\" y=\"106\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"106\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          }
+        ],
+        "expected_error": "InvalidMove",
+        "turn": [
+          "p0"
+        ]
+      },
+      {
+        "name": "The second player gets a final slide",
+        "description": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
+        "kind": "intermediate",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Ada",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Sam",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            }
+          ],
+          "pot": 10,
+          "move_count": 72,
+          "seed": 11
+        },
+        "state": {
+          "boards": [
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 0,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 1,
+            "tile": 9,
+            "from": 18,
+            "to": 19
+          }
+        },
+        "view_of_mover": {
+          "boards": [
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 0,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 1,
+            "tile": 9,
+            "from": 18,
+            "to": 19
+          }
+        },
+        "view_of_other": {
+          "boards": [
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 0,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 1,
+            "tile": 9,
+            "from": 18,
+            "to": 19
+          }
+        },
+        "player_id": "p0",
+        "other_player_id": "p1",
+        "move": {
+          "tile": 0,
+          "to": 13
+        },
+        "expected_state": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 1,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "expected_turn": [
+          "p1"
+        ],
+        "expected_view_of_mover": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 1,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "expected_view_of_other": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 1,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "images": [
+          {
+            "caption": "Mover before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Mover after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          }
+        ]
+      },
+      {
+        "name": "Two escapes in the same round draw",
+        "description": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Ada",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Sam",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            }
+          ],
+          "pot": 10,
+          "move_count": 73,
+          "seed": 11
+        },
+        "state": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 1,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "view_of_mover": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 1,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "view_of_other": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 1,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "player_id": "p1",
+        "other_player_id": "p0",
+        "move": {
+          "tile": 0,
+          "to": 13
+        },
+        "expected_state": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 0,
+          "round": 37,
+          "winner": -1,
+          "last": {
+            "seat": 1,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 0,
+          "round": 37,
+          "winner": -1,
+          "last": {
+            "seat": 1,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "expected_view_of_other": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 0,
+          "round": 37,
+          "winner": -1,
+          "last": {
+            "seat": 1,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "images": [
+          {
+            "caption": "Mover before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Mover after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "p0": 5,
+          "p1": 5
+        }
+      },
+      {
+        "name": "Only one core escapes",
+        "description": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
+        "kind": "terminal",
+        "ctx": {
+          "players": [
+            {
+              "id": "p0",
+              "kind": "human",
+              "display_name": "Ada",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            },
+            {
+              "id": "p1",
+              "kind": "human",
+              "display_name": "Sam",
+              "picture_url": "",
+              "max_loss": 5,
+              "active": true
+            }
+          ],
+          "pot": 10,
+          "move_count": 73,
+          "seed": 11
+        },
+        "state": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 1,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "view_of_mover": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 1,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "view_of_other": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ]
+          ],
+          "turn": 1,
+          "round": 37,
+          "winner": null,
+          "last": {
+            "seat": 0,
+            "tile": 0,
+            "from": 9,
+            "to": 13
+          }
+        },
+        "player_id": "p1",
+        "other_player_id": "p0",
+        "move": {
+          "tile": 9,
+          "to": 18
+        },
+        "expected_state": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              18
+            ]
+          ],
+          "turn": 0,
+          "round": 37,
+          "winner": 0,
+          "last": {
+            "seat": 1,
+            "tile": 9,
+            "from": 19,
+            "to": 18
+          }
+        },
+        "expected_turn": null,
+        "expected_view_of_mover": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              18
+            ]
+          ],
+          "turn": 0,
+          "round": 37,
+          "winner": 0,
+          "last": {
+            "seat": 1,
+            "tile": 9,
+            "from": 19,
+            "to": 18
+          }
+        },
+        "expected_view_of_other": {
+          "boards": [
+            [
+              13,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              19
+            ],
+            [
+              9,
+              0,
+              2,
+              4,
+              7,
+              12,
+              5,
+              6,
+              15,
+              18
+            ]
+          ],
+          "turn": 0,
+          "round": 37,
+          "winner": 0,
+          "last": {
+            "seat": 1,
+            "tile": 9,
+            "from": 19,
+            "to": 18
+          }
+        },
+        "images": [
+          {
+            "caption": "Mover before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent before",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Mover after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          },
+          {
+            "caption": "Opponent after",
+            "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 440 298\"><rect width=\"440\" height=\"298\" fill=\"#20152d\"/><g transform=\"translate(10 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#76ead6\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#76ead6\"/><rect x=\"54\" y=\"158\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g><g transform=\"translate(230 14)\"><rect width=\"208\" height=\"260\" rx=\"8\" fill=\"#33223f\" stroke=\"#e9a7ff\"/><rect x=\"52\" y=\"260\" width=\"104\" height=\"8\" rx=\"3\" fill=\"#e9a7ff\"/><rect x=\"54\" y=\"106\" width=\"100\" height=\"100\" rx=\"7\" fill=\"#ff9658\"/><rect x=\"2\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"106\" y=\"2\" width=\"100\" height=\"48\" rx=\"7\" fill=\"#51c8cb\"/><rect x=\"2\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"158\" y=\"54\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"2\" y=\"158\" width=\"48\" height=\"100\" rx=\"7\" fill=\"#a994f6\"/><rect x=\"54\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"54\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"158\" y=\"158\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/><rect x=\"106\" y=\"210\" width=\"48\" height=\"48\" rx=\"7\" fill=\"#f5d46d\"/></g></svg>"
+          }
+        ],
+        "expected_payouts": {
+          "p0": 10
+        }
+      }
+    ]
+  },
+  "game_addition_request_id_and_secret": "example-only-escape-circuit-replace-before-publishing",
+  "translations": {
+    "es": {
+      "display_name": "Circuito de escape",
+      "short_description": "Dos jugadores empiezan con tableros idénticos. Por turnos, desliza un bloque exactamente una casilla hacia un espacio libre. Los bloques no pueden girar, saltar ni salir del tablero. Lleva tu núcleo naranja a las dos casillas marcadas abajo para escapar. Ambos jugadores mueven en cada ronda. Si ambos escapan en la misma ronda, o ninguno lo logra en 60 rondas, hay empate.",
+      "game_logic_rules": "Dos jugadores empiezan con tableros idénticos. Por turnos, desliza un bloque exactamente una casilla hacia un espacio libre. Los bloques no pueden girar, saltar ni salir del tablero. Lleva tu núcleo naranja a las dos casillas marcadas abajo para escapar. Ambos jugadores mueven en cada ronda. Si ambos escapan en la misma ronda, o ninguno lo logra en 60 rondas, hay empate.",
+      "game_ui_rules": "Arrastra un bloque resaltado o tócalo y elige un destino resaltado. La salida está abajo. Usa el zoom para ampliar el tablero.",
+      "tutorial_strings": {
+        "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.": "Dos jugadores empiezan con tableros idénticos. Por turnos, desliza un bloque exactamente una casilla hacia un espacio libre. Los bloques no pueden girar, saltar ni salir del tablero. Lleva tu núcleo naranja a las dos casillas marcadas abajo para escapar. Ambos jugadores mueven en cada ronda. Si ambos escapan en la misma ronda, o ninguno lo logra en 60 rondas, hay empate."
+      },
+      "client_strings": {
+        "core": "Núcleo",
+        "bar": "Barra",
+        "chip": "Ficha",
+        "runner": "Jugador {number}",
+        "you": "{player} (tú)",
+        "wins": "¡Gana {player}!",
+        "turn": "Desliza {player}",
+        "draw": "Empate",
+        "replay": "Historial",
+        "waiting": "Esperando el inicio",
+        "your_turn": "Tu turno",
+        "choose": "Arrastra o toca un bloque resaltado.",
+        "final_slide": "Queda un movimiento para empatar.",
+        "goal": "Lleva el núcleo naranja a la salida.",
+        "escaped": "Escapó",
+        "exit": "Salida",
+        "tile_at": "{tile} en {square}",
+        "slide_to": "Desliza {tile} a {square}",
+        "server_invalid_slide": "Elige un movimiento válido en tu turno."
+      }
+    },
+    "fr": {
+      "display_name": "Circuit d’évasion",
+      "short_description": "Deux joueurs commencent avec des plateaux identiques. À tour de rôle, faites glisser un bloc d’une case vers un espace libre. Les blocs ne peuvent ni pivoter, ni sauter, ni sortir du plateau. Amenez votre noyau orange sur les deux cases marquées en bas pour vous échapper. Chaque joueur joue une fois par manche. Si les deux s’échappent dans la même manche, ou si personne ne s’échappe en 60 manches, la partie est nulle.",
+      "game_logic_rules": "Deux joueurs commencent avec des plateaux identiques. À tour de rôle, faites glisser un bloc d’une case vers un espace libre. Les blocs ne peuvent ni pivoter, ni sauter, ni sortir du plateau. Amenez votre noyau orange sur les deux cases marquées en bas pour vous échapper. Chaque joueur joue une fois par manche. Si les deux s’échappent dans la même manche, ou si personne ne s’échappe en 60 manches, la partie est nulle.",
+      "game_ui_rules": "Faites glisser un bloc en surbrillance, ou touchez-le puis choisissez une destination en surbrillance. La sortie est en bas. Utilisez le zoom pour agrandir.",
+      "tutorial_strings": {
+        "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.": "Deux joueurs commencent avec des plateaux identiques. À tour de rôle, faites glisser un bloc d’une case vers un espace libre. Les blocs ne peuvent ni pivoter, ni sauter, ni sortir du plateau. Amenez votre noyau orange sur les deux cases marquées en bas pour vous échapper. Chaque joueur joue une fois par manche. Si les deux s’échappent dans la même manche, ou si personne ne s’échappe en 60 manches, la partie est nulle."
+      },
+      "client_strings": {
+        "core": "Noyau",
+        "bar": "Barre",
+        "chip": "Jeton",
+        "runner": "Joueur {number}",
+        "you": "{player} (vous)",
+        "wins": "{player} gagne !",
+        "turn": "À {player} de jouer",
+        "draw": "Match nul",
+        "replay": "Historique",
+        "waiting": "En attente du départ",
+        "your_turn": "À vous de jouer",
+        "choose": "Glissez ou touchez un bloc en surbrillance.",
+        "final_slide": "Un coup pour égaliser.",
+        "goal": "Amenez le noyau orange à la sortie.",
+        "escaped": "Échappé",
+        "exit": "Sortie",
+        "tile_at": "{tile} en {square}",
+        "slide_to": "Glisser {tile} en {square}",
+        "server_invalid_slide": "Choisissez un déplacement autorisé à votre tour."
+      }
+    },
+    "de": {
+      "display_name": "Fluchtparcours",
+      "short_description": "Zwei Spieler beginnen mit identischen Brettern. Schiebe abwechselnd einen Block genau ein Feld auf freien Platz. Blöcke dürfen sich nicht drehen, springen oder das Brett verlassen. Bringe deinen orangefarbenen Kern auf die beiden markierten Felder unten, um zu entkommen. Beide Spieler ziehen in jeder Runde. Entkommen beide in derselben Runde oder niemand in 60 Runden, endet die Partie unentschieden.",
+      "game_logic_rules": "Zwei Spieler beginnen mit identischen Brettern. Schiebe abwechselnd einen Block genau ein Feld auf freien Platz. Blöcke dürfen sich nicht drehen, springen oder das Brett verlassen. Bringe deinen orangefarbenen Kern auf die beiden markierten Felder unten, um zu entkommen. Beide Spieler ziehen in jeder Runde. Entkommen beide in derselben Runde oder niemand in 60 Runden, endet die Partie unentschieden.",
+      "game_ui_rules": "Ziehe einen hervorgehobenen Block oder tippe ihn und danach ein markiertes Ziel an. Der Ausgang liegt unten. Mit dem Zoom kannst du das Brett vergrößern.",
+      "tutorial_strings": {
+        "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.": "Zwei Spieler beginnen mit identischen Brettern. Schiebe abwechselnd einen Block genau ein Feld auf freien Platz. Blöcke dürfen sich nicht drehen, springen oder das Brett verlassen. Bringe deinen orangefarbenen Kern auf die beiden markierten Felder unten, um zu entkommen. Beide Spieler ziehen in jeder Runde. Entkommen beide in derselben Runde oder niemand in 60 Runden, endet die Partie unentschieden."
+      },
+      "client_strings": {
+        "core": "Kern",
+        "bar": "Riegel",
+        "chip": "Stein",
+        "runner": "Spieler {number}",
+        "you": "{player} (du)",
+        "wins": "{player} gewinnt!",
+        "turn": "{player} ist dran",
+        "draw": "Unentschieden",
+        "replay": "Verlauf",
+        "waiting": "Warten auf den Start",
+        "your_turn": "Du bist dran",
+        "choose": "Ziehe oder tippe einen markierten Block.",
+        "final_slide": "Ein Zug bleibt zum Ausgleich.",
+        "goal": "Bring den orangen Kern zum Ausgang.",
+        "escaped": "Entkommen",
+        "exit": "Ausgang",
+        "tile_at": "{tile} auf {square}",
+        "slide_to": "{tile} nach {square} schieben",
+        "server_invalid_slide": "Wähle einen erlaubten Zug, wenn du an der Reihe bist."
+      }
+    },
+    "pt": {
+      "display_name": "Circuito de fuga",
+      "short_description": "Dois jogadores começam com tabuleiros idênticos. Em turnos, deslize um bloco exatamente uma casa para um espaço livre. Os blocos não podem girar, saltar ou sair do tabuleiro. Leve seu núcleo laranja às duas casas marcadas embaixo para escapar. Cada jogador faz um movimento por rodada. Se ambos escaparem na mesma rodada ou ninguém escapar em 60 rodadas, há empate.",
+      "game_logic_rules": "Dois jogadores começam com tabuleiros idênticos. Em turnos, deslize um bloco exatamente uma casa para um espaço livre. Os blocos não podem girar, saltar ou sair do tabuleiro. Leve seu núcleo laranja às duas casas marcadas embaixo para escapar. Cada jogador faz um movimento por rodada. Se ambos escaparem na mesma rodada ou ninguém escapar em 60 rodadas, há empate.",
+      "game_ui_rules": "Arraste um bloco destacado ou toque nele e escolha um destino destacado. A saída fica embaixo. Use o zoom para ampliar.",
+      "tutorial_strings": {
+        "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.": "Dois jogadores começam com tabuleiros idênticos. Em turnos, deslize um bloco exatamente uma casa para um espaço livre. Os blocos não podem girar, saltar ou sair do tabuleiro. Leve seu núcleo laranja às duas casas marcadas embaixo para escapar. Cada jogador faz um movimento por rodada. Se ambos escaparem na mesma rodada ou ninguém escapar em 60 rodadas, há empate."
+      },
+      "client_strings": {
+        "core": "Núcleo",
+        "bar": "Barra",
+        "chip": "Peça",
+        "runner": "Jogador {number}",
+        "you": "{player} (você)",
+        "wins": "{player} venceu!",
+        "turn": "Vez de {player}",
+        "draw": "Empate",
+        "replay": "Histórico",
+        "waiting": "Aguardando o início",
+        "your_turn": "Sua vez",
+        "choose": "Arraste ou toque em um bloco destacado.",
+        "final_slide": "Falta um movimento para empatar.",
+        "goal": "Leve o núcleo laranja até a saída.",
+        "escaped": "Escapou",
+        "exit": "Saída",
+        "tile_at": "{tile} em {square}",
+        "slide_to": "Deslize {tile} para {square}",
+        "server_invalid_slide": "Escolha um movimento válido na sua vez."
+      }
+    },
+    "zh": {
+      "display_name": "滑块逃脱赛",
+      "short_description": "两名玩家从相同的棋盘开始。轮流将一个滑块向有空位的方向滑动一格。滑块不能旋转、跳跃或离开棋盘。将橙色核心移到棋盘底部标出的两个格子即可逃脱。每轮两人各走一步。同一轮都逃脱，或60轮内都未逃脱，即为平局。",
+      "game_logic_rules": "两名玩家从相同的棋盘开始。轮流将一个滑块向有空位的方向滑动一格。滑块不能旋转、跳跃或离开棋盘。将橙色核心移到棋盘底部标出的两个格子即可逃脱。每轮两人各走一步。同一轮都逃脱，或60轮内都未逃脱，即为平局。",
+      "game_ui_rules": "拖动高亮滑块，或点选滑块后选择高亮的目标位置。出口在棋盘底部。用缩放控件放大棋盘。",
+      "tutorial_strings": {
+        "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.": "两名玩家从相同的棋盘开始。轮流将一个滑块向有空位的方向滑动一格。滑块不能旋转、跳跃或离开棋盘。将橙色核心移到棋盘底部标出的两个格子即可逃脱。每轮两人各走一步。同一轮都逃脱，或60轮内都未逃脱，即为平局。"
+      },
+      "client_strings": {
+        "core": "核心",
+        "bar": "长块",
+        "chip": "小块",
+        "runner": "玩家 {number}",
+        "you": "{player}（你）",
+        "wins": "{player} 获胜！",
+        "turn": "轮到 {player}",
+        "draw": "平局",
+        "replay": "对局回放",
+        "waiting": "等待开始",
+        "your_turn": "轮到你了",
+        "choose": "拖动或点选高亮滑块。",
+        "final_slide": "还有一步可追平。",
+        "goal": "将橙色核心移到出口。",
+        "escaped": "已逃脱",
+        "exit": "出口",
+        "tile_at": "{tile}位于{square}",
+        "slide_to": "将{tile}移到{square}",
+        "server_invalid_slide": "请在你的回合选择合法滑动。"
+      }
+    },
+    "hi": {
+      "display_name": "एस्केप सर्किट",
+      "short_description": "दोनों खिलाड़ी एक जैसे बोर्ड से शुरू करते हैं। बारी-बारी से एक ब्लॉक को खाली जगह की ओर ठीक एक खाना खिसकाएँ। ब्लॉक घूम, कूद या बोर्ड से बाहर नहीं जा सकते। निकलने के लिए अपना नारंगी कोर नीचे के दो चिह्नित खानों पर लाएँ। हर राउंड में दोनों को एक चाल मिलती है। अगर दोनों एक ही राउंड में निकलें, या 60 राउंड तक कोई न निकले, तो खेल बराबर है।",
+      "game_logic_rules": "दोनों खिलाड़ी एक जैसे बोर्ड से शुरू करते हैं। बारी-बारी से एक ब्लॉक को खाली जगह की ओर ठीक एक खाना खिसकाएँ। ब्लॉक घूम, कूद या बोर्ड से बाहर नहीं जा सकते। निकलने के लिए अपना नारंगी कोर नीचे के दो चिह्नित खानों पर लाएँ। हर राउंड में दोनों को एक चाल मिलती है। अगर दोनों एक ही राउंड में निकलें, या 60 राउंड तक कोई न निकले, तो खेल बराबर है।",
+      "game_ui_rules": "चमकते ब्लॉक को खींचें, या उसे छूकर चमकती जगह चुनें। निकास बोर्ड के नीचे है। बोर्ड बड़ा करने के लिए ज़ूम का इस्तेमाल करें।",
+      "tutorial_strings": {
+        "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.": "दोनों खिलाड़ी एक जैसे बोर्ड से शुरू करते हैं। बारी-बारी से एक ब्लॉक को खाली जगह की ओर ठीक एक खाना खिसकाएँ। ब्लॉक घूम, कूद या बोर्ड से बाहर नहीं जा सकते। निकलने के लिए अपना नारंगी कोर नीचे के दो चिह्नित खानों पर लाएँ। हर राउंड में दोनों को एक चाल मिलती है। अगर दोनों एक ही राउंड में निकलें, या 60 राउंड तक कोई न निकले, तो खेल बराबर है।"
+      },
+      "client_strings": {
+        "core": "कोर",
+        "bar": "पट्टी",
+        "chip": "छोटा ब्लॉक",
+        "runner": "खिलाड़ी {number}",
+        "you": "{player} (आप)",
+        "wins": "{player} जीते!",
+        "turn": "{player} की बारी",
+        "draw": "बराबरी",
+        "replay": "खेल का इतिहास",
+        "waiting": "शुरू होने का इंतज़ार",
+        "your_turn": "आपकी बारी",
+        "choose": "चमकते ब्लॉक को खींचें या छुएँ।",
+        "final_slide": "बराबरी के लिए एक चाल बाकी।",
+        "goal": "नारंगी कोर को निकास तक ले जाएँ।",
+        "escaped": "निकल गए",
+        "exit": "निकास",
+        "tile_at": "{tile}, {square} पर",
+        "slide_to": "{tile} को {square} तक खिसकाएँ",
+        "server_invalid_slide": "अपनी बारी पर वैध चाल चुनें।"
+      }
+    },
+    "ar": {
+      "display_name": "حلبة الهروب",
+      "short_description": "يبدأ لاعبان بلوحتين متطابقتين. بالتناوب، حرّك كتلة خانة واحدة نحو مساحة خالية. لا يمكن تدوير الكتل أو القفز بها أو إخراجها من اللوحة. أوصل قلبك البرتقالي إلى الخانتين المحددتين في الأسفل للخروج. لكل لاعب حركة واحدة في الجولة. إذا خرج كلاهما في الجولة نفسها، أو لم يخرج أحد خلال 60 جولة، تنتهي المباراة بالتعادل.",
+      "game_logic_rules": "يبدأ لاعبان بلوحتين متطابقتين. بالتناوب، حرّك كتلة خانة واحدة نحو مساحة خالية. لا يمكن تدوير الكتل أو القفز بها أو إخراجها من اللوحة. أوصل قلبك البرتقالي إلى الخانتين المحددتين في الأسفل للخروج. لكل لاعب حركة واحدة في الجولة. إذا خرج كلاهما في الجولة نفسها، أو لم يخرج أحد خلال 60 جولة، تنتهي المباراة بالتعادل.",
+      "game_ui_rules": "اسحب كتلة مضاءة، أو المسها ثم اختر وجهة مضاءة. المخرج في أسفل اللوحة. استخدم التكبير لرؤية اللوحة بحجم أكبر.",
+      "tutorial_strings": {
+        "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.": "يبدأ لاعبان بلوحتين متطابقتين. بالتناوب، حرّك كتلة خانة واحدة نحو مساحة خالية. لا يمكن تدوير الكتل أو القفز بها أو إخراجها من اللوحة. أوصل قلبك البرتقالي إلى الخانتين المحددتين في الأسفل للخروج. لكل لاعب حركة واحدة في الجولة. إذا خرج كلاهما في الجولة نفسها، أو لم يخرج أحد خلال 60 جولة، تنتهي المباراة بالتعادل."
+      },
+      "client_strings": {
+        "core": "القلب",
+        "bar": "قضيب",
+        "chip": "قطعة",
+        "runner": "اللاعب {number}",
+        "you": "{player} (أنت)",
+        "wins": "فاز {player}!",
+        "turn": "دور {player}",
+        "draw": "تعادل",
+        "replay": "سجل المباراة",
+        "waiting": "بانتظار البدء",
+        "your_turn": "دورك",
+        "choose": "اسحب كتلة مضاءة أو المسها.",
+        "final_slide": "حركة واحدة متبقية للتعادل.",
+        "goal": "أوصل القلب البرتقالي إلى المخرج.",
+        "escaped": "خرج",
+        "exit": "المخرج",
+        "tile_at": "{tile} في {square}",
+        "slide_to": "حرّك {tile} إلى {square}",
+        "server_invalid_slide": "اختر حركة قانونية في دورك."
+      }
+    }
+  }
+}
