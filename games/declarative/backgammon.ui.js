@@ -277,6 +277,7 @@ const gameUI = {
         actions: canRoll ? ['tap'] : []});
     }
     pieces.push(...dice);
+    const ordinaryDiceRoll = !opening && dice.some(die => die.actions.includes('tap'));
     const button = (id, label, x, y, wide = false) => pieces.push({
       id, type: wide ? 'roll_button' : 'tool_button', board: 'main',
       position: {x, y}, text: label, aria_label: label, z: 200, actions: ['tap']});
@@ -285,7 +286,7 @@ const gameUI = {
       if (legal.length) button('hint', t('hint'), 536, -80);
       if (s.can_undo && !setup) button('undo', t('undo'), 450, -80);
       if (awaitingNext) button('next', t('next_game'), 165, 220, true);
-      if (s.needRoll && !doubling && !awaitingNext && !setup) button('roll', t(opening ? 'opening_roll' : 'roll'), 165, 220, true);
+      if (s.needRoll && !doubling && !awaitingNext && !setup && !ordinaryDiceRoll) button('roll', t(opening ? 'opening_roll' : 'roll'), 165, 220, true);
       if (s.can_double && !setup) button('double', t('double'), 165, 278);
       if (doubling) {
         button('take', t('take'), 160, 220, true);
@@ -302,10 +303,10 @@ const gameUI = {
       s.last_roll.values[0] === s.last_roll.values[1];
     const labels = [
       {id: 'title', text: t('title').replace(' (Declarative)', ''), x: 20, y: 26, font_size: 25, color: '#fff3cf'},
-      {id: 'turn', text: s.winner !== null ? t('winner', {name: name(s.winner)}) :
+      ...(!ordinaryDiceRoll ? [{id: 'turn', text: s.winner !== null ? t('winner', {name: name(s.winner)}) :
         opening && !setup ? t('opening_rule') :
         t(awaitingNext ? 'winner' : doubling ? 'double_offer' : tiedOpening ? 'opening_tie' : opening ? 'opening_turn' : s.needRoll ? 'roll_turn' : 'move_turn', {name: name(awaitingNext ? s.round_winner : s.cur)}),
-        x: 20, y: 58, font_size: 15, color: '#fff3cf'},
+        x: 20, y: 58, font_size: 15, color: '#fff3cf'}] : []),
       ...(!s.needRoll && !awaitingNext ? [{id: 'moves_remaining', text: t('moves_remaining', {count: remaining.length}),
         x: 20, y: 577, font_size: 14, color: '#fff3cf'}] : []),
       {id: 'bar_label', text: t('bar'), x: 344, y: 92, font_size: 11, color: '#ecd09e'},

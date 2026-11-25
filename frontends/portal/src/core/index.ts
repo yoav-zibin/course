@@ -860,7 +860,13 @@ export class PortalStore {
   }
   async startPractice(gameId: string, options: PracticeOptions = {}) {
     if (!this.state.account && !this.localOnly) throw new Error(copyText('Log in to save your matches in the cloud.'));
-    const guard = this.capture(); const game = await this.pinnedGame(gameId);
+    const guard = this.capture();
+    const viewed = !this.state.selectedMatch && this.state.selectedGameId === gameId ? this.state.game : null;
+    // Game details already loaded and validated this exact version. Use it
+    // when starting there instead of downloading the latest package twice.
+    const game = viewed?.id === gameId && isValidDownloadedGame(this.exactPackage(gameId, viewed.version), gameId, viewed.version)
+      ? viewed : await this.pinnedGame(gameId);
+    guard();
     const humans = options.humans ?? 1, computers = options.computers ?? 1, humanSeat = options.humanSeat ?? 0, total = humans + computers;
     if (!Number.isInteger(humans) || humans < 1 || !Number.isInteger(computers) || computers < 0 || !Number.isInteger(humanSeat) || humanSeat < 0 || humanSeat + humans > total) throw new Error(copyText('Choose valid local player counts and a human seat.'));
     if (computers > 0 && humans !== 1) throw new Error(copyText('Computer matches have one human player. Use pass and play for several people on one device.'));

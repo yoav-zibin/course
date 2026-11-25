@@ -194,3 +194,18 @@ def test_round_end_preserves_spent_faces_and_only_offers_the_next_game():
     assert not result['scene']['targets']
     assert next(piece for piece in result['scene']['pieces'] if piece['id'] == 'next')['actions'] == ['tap']
     assert tap(ui, after, result, 'next')['make_move'] == {'action': 'next'}
+
+
+def test_ordinary_roll_uses_the_dice_without_a_duplicate_button_or_prompt():
+    ui = DeclarativeLogic(specification())
+    message = changed(configured=True, opening=False)
+    frame = ui.reduce(message)
+    assert all(piece['id'] != 'roll' for piece in frame['scene']['pieces'])
+    assert all(label['id'] != 'turn' for label in frame['scene']['labels'])
+    for die in ('die_0', 'die_1'):
+        assert tap(ui, message, frame, die)['make_move'] == {'action': 'roll'}
+
+    waiting = ui.reduce({**message, 'acting_for_player_index': None})
+    assert any(label['id'] == 'turn' for label in waiting['scene']['labels'])
+    assert all(not piece['actions'] for piece in waiting['scene']['pieces']
+               if piece['id'].startswith('die_'))

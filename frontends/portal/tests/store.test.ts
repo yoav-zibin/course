@@ -964,3 +964,22 @@ test('localization uses a matching catalog version and pinned-package strings fo
     assert.equal(localizeGame(pinned).name, 'Pinned Arabic'); assert.equal(gameTexts(pinned).strings.roll, 'pinned roll');
   } finally { globalThis.fetch = original; }
 });
+
+test('starting practice from game details reuses the exact loaded package', async () => {
+  browserStorage(true);
+  const fixture = {...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8')),
+    id:'loaded-practice-game',version:7};
+  let downloads=0;
+  const restore=mockedFetch(url=>{
+    if(url.pathname===`/games/${fixture.id}`){downloads++;return fixture;}
+  });
+  try {
+    const store=new PortalStore(testRuntime());
+    await store.actions.bootstrap('https://local.test');
+    await store.actions.selectGame(fixture.id);
+    const match=await store.actions.startPractice(fixture.id,{humans:2,computers:0});
+    assert.equal(downloads,1);
+    assert.equal(match.game_version,fixture.version);
+    assert.equal(store.getSnapshot().selectedMatch?.id,match.id);
+  } finally {restore();}
+});
