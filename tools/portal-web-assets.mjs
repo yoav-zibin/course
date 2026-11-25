@@ -5,8 +5,8 @@ import path from 'node:path';
 // Keep these versions aligned with site_pages.REPORTING_VERSION and the
 // manual capture loader in static/site-bug-report.js.
 const reportingAssets=[
-  '/static/site-bug-report.js?v=2',
-  '/static/site-bug-report.css?v=2',
+  '/static/site-bug-report.js?v=3',
+  '/static/site-bug-report.css?v=3',
   '/static/app/site-bug-capture.js?v=1',
 ];
 const filesIn=directory=>readdirSync(directory,{withFileTypes:true}).flatMap(item=>item.isDirectory()

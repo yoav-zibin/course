@@ -23,8 +23,8 @@ export function createReporter(base:string,passwords:()=>Iterable<string>,transp
         let stack=error instanceof Error?`${error.name}: ${error.message}\n${error.stack||''}`:String(error??'');
         for(const value of passwords())if(value)stack=stack.split(value).join('<redacted>');
         stack=redactDiagnostic(stack);
-        const diagnostics={...diagnosticSnapshot(automatic.context?.()),automatic_error:{kind,message,stack,
-          url:typeof location==='undefined'?'/portal':diagnosticPath(location.href)}};
+        const diagnostics=diagnosticSnapshot(automatic.context?.(),{kind,message,stack,
+          url:typeof location==='undefined'?'/portal':diagnosticPath(location.href)});
         const body=JSON.stringify({automatic:true,text:`Automatic client error (${kind}): ${message}`,screenshot:null,diagnostics});
         // Diagnostic snapshots can exceed the browser's 64 KiB keepalive
         // budget, especially with several errors or non-ASCII log messages.

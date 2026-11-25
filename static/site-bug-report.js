@@ -7,12 +7,18 @@
   const nativeFetch = window.fetch?.bind(window);
   const stamp = () => new Date().toISOString();
   const logs = [], apiCalls = [], events = [], pages = [];
+  const entryOrder = new WeakMap();
+  let nextEntry = 0;
+  const MAX_DIAGNOSTIC_BYTES = 100_000;
   const secrets = new Set(), automaticSent = new Set(), telemetrySent = new Set(), drafts = new Map();
   let scope = null, sessionId = "", claimed = false, capture = null, capturePromise = null;
   let overlay = null, control = null, dialog = null, captureBusy = false, opened = 0;
   let position = {x: 1, y: 1};
   const topLevel = window.parent === window;
-  const append = (list, value, limit) => {list.push(value); if (list.length > limit) list.splice(0, list.length - limit);};
+  const append = (list, value, limit) => {
+    entryOrder.set(value, ++nextEntry);
+    list.push(value); if (list.length > limit) list.splice(0, list.length - limit);
+  };
   const t = (key, fallback, params = {}) => window.I18n?.t
     ? window.I18n.t(key, params, fallback)
     : fallback.replace(/\{(\w+)\}/g, (part, name) => name in params ? String(params[name]) : part);
@@ -78,17 +84,39 @@
   function recordEvent(name, details) {
     try {syncScope(); append(events, {at: stamp(), name, ...(details ? {details: clean(details)} : {})}, 70);} catch { /* Best effort. */ }
   }
-  function snapshot(context = {}) {
+  function snapshot(context = {}, automaticError) {
     const user = syncScope();
     const result = {version: 1, sessionId, capturedAt: stamp(), context: clean({platform: "web", path: path(location.href),
       user: user ? {id: user.id, displayName: user.display_name} : null, adminPage,
       viewport: {width: innerWidth, height: innerHeight}, online: navigator.onLine, userAgent: navigator.userAgent,
       webAssets: Array.from(document.scripts).filter(script => script.src).map(script => path(script.src)).slice(0, 25), ...context}),
-      logs: logs.map(row => clean(row)), apiCalls: apiCalls.map(row => clean(row)), events: events.map(row => clean(row)), pages: pages.map(row => clean(row))};
-    while (JSON.stringify(result).length * 3 > 160000) {
-      const lists = [result.logs, result.apiCalls, result.events, result.pages].filter(list => list.length).sort((a, b) => b.length - a.length);
-      if (!lists.length) {result.context = "[truncated]"; break;}
-      lists[0].shift();
+      ...(automaticError ? {automatic_error: automaticError} : {}),
+      logs: [], apiCalls: [], events: [], pages: []};
+    const encoder = new TextEncoder();
+    const bytesOf = value => encoder.encode(JSON.stringify(value)).length;
+    let bytes = bytesOf(result);
+    if (bytes > MAX_DIAGNOSTIC_BYTES) {
+      result.context = "[truncated]";
+      bytes = bytesOf(result);
+    }
+    const historyBudget = MAX_DIAGNOSTIC_BYTES - bytes;
+    const histories = Object.entries({logs, apiCalls, events, pages})
+      .map(([name, source]) => ({source, target: result[name], next: source.length - 1}));
+    for (;;) {
+      let newest, order = 0;
+      for (const list of histories) {
+        if (list.next < 0) continue;
+        const candidate = entryOrder.get(list.source[list.next]) || 0;
+        if (candidate > order) {newest = list; order = candidate;}
+      }
+      if (!newest) break;
+      const entry = clean(newest.source[newest.next--]);
+      const entryBytes = bytesOf(entry);
+      if (entryBytes > historyBudget) continue;
+      const cost = entryBytes + (newest.target.length ? 1 : 0);
+      if (bytes + cost > MAX_DIAGNOSTIC_BYTES) break;
+      newest.target.unshift(entry);
+      bytes += cost;
     }
     return result;
   }
@@ -114,7 +142,7 @@
       const key = `${scope}:${kind}:${detail.message}:${detail.url}`;
       if (automaticSent.has(key) || automaticSent.size >= 5) return;
       automaticSent.add(key); recordLog("error", detail.message, detail.stack);
-      const diagnostics = snapshot(context); diagnostics.automatic_error = detail;
+      const diagnostics = snapshot(context, detail);
       if (!topLevel) {
         window.parent.postMessage({type: "buildplay-site-client-error-v1", error: detail, diagnostics}, location.origin);
         return;

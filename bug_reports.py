@@ -27,7 +27,10 @@ from game_platform.paging import decode_cursor, encode_cursor, page_size
 UPLOAD_TIMEOUT_SECONDS = 15
 MAX_REPORT_BYTES = 760_000
 MAX_SCREENSHOT_CHARS = 500_000
-MAX_DIAGNOSTIC_BYTES = 180_000
+MAX_DIAGNOSTIC_BYTES = 100_000
+# Installed clients can still send their previous snapshot size. Trim before saving.
+MAX_INCOMING_DIAGNOSTIC_BYTES = 180_000
+_HISTORY_FIELDS = ("logs", "apiCalls", "events", "pages")
 REPORTS_PER_DAY = 20
 AUTOMATIC_DEDUPE_MINUTES = 5
 ReportStatus = Literal["open", "handling", "escalated", "handled"]
@@ -65,8 +68,7 @@ class BugReportCreate(BaseModel):
     @field_validator("diagnostics")
     @classmethod
     def bounded_diagnostics(cls, value):
-        encoded = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
-        if len(encoded) > MAX_DIAGNOSTIC_BYTES:
+        if _json_bytes(value) > MAX_INCOMING_DIAGNOSTIC_BYTES:
             raise ValueError("diagnostics too large")
         return value
 
@@ -227,6 +229,48 @@ def changed_report(row, change, *, changed_by, now):
     return {**row, **updates, "updated_at": now, "changed_by": changed_by}
 
 
+def _json_bytes(value):
+    return len(json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8"))
+
+
+def _recent_diagnostics(value):
+    if _json_bytes(value) <= MAX_DIAGNOSTIC_BYTES:
+        return value
+    histories = {key: list(reversed(value[key])) for key in _HISTORY_FIELDS if isinstance(value.get(key), list)}
+    result = {**value, **{key: [] for key in histories}}
+    if _json_bytes(result) > MAX_DIAGNOSTIC_BYTES:
+        # Keep room for recent activity even when a legacy client's metadata is large.
+        result = {key: [] for key in histories} | {"context": "[truncated]"}
+        for key in ("version", "sessionId", "capturedAt", "automatic_error"):
+            if key in value and _json_bytes({**result, key: value[key]}) <= MAX_DIAGNOSTIC_BYTES:
+                result[key] = value[key]
+    size = _json_bytes(result)
+    history_budget = MAX_DIAGNOSTIC_BYTES - size
+
+    def recorded_at(entry):
+        at = entry.get("at") if isinstance(entry, dict) else None
+        return at if isinstance(at, str) else ""
+
+    indices = {key: 0 for key, entries in histories.items() if entries}
+    while indices:
+        key = max(indices, key=lambda name: recorded_at(histories[name][indices[name]]))
+        entry = histories[key][indices[key]]
+        indices[key] += 1
+        if indices[key] == len(histories[key]):
+            del indices[key]
+        entry_bytes = _json_bytes(entry)
+        if entry_bytes > history_budget:
+            continue
+        cost = entry_bytes + bool(result[key])
+        if size + cost > MAX_DIAGNOSTIC_BYTES:
+            break
+        result[key].append(entry)
+        size += cost
+    for key in histories:
+        result[key].reverse()
+    return result
+
+
 def clean_diagnostics(value):
     # Retain useful stacks, event names and timing while removing credentials
     # even if an older or modified client forgot its own redaction pass.
@@ -241,6 +285,9 @@ def clean_diagnostics(value):
             # private store preserves them while removing labelled credentials.
             return _DIAGNOSTIC_SECRET.sub("<redacted>", item)[:20_000]
         return item
+    if isinstance(value, dict):
+        value = {key: entries[-200:] if key in _HISTORY_FIELDS and isinstance(entries, list) else entries
+                 for key, entries in value.items()}
     return strings(observability.redact(value, keep_long_strings=True))
 
 
@@ -297,7 +344,7 @@ def make_router(platform_dependency, master_dependency, caller_dependency, autom
                 }
                 row = {"id": uuid.uuid4().hex, "text": clean_diagnostics(report.text) if report.automatic else report.text,
                        "screenshot": None if report.automatic else report.screenshot, "automatic": report.automatic,
-                       "diagnostics": clean_diagnostics(report.diagnostics), "user": user_info,
+                       "diagnostics": _recent_diagnostics(clean_diagnostics(report.diagnostics)), "user": user_info,
                        "reporter_user_id": caller_id, "status": "open", "created_at": now,
                        "updated_at": now, "resolution": "", "commit": None, "changed_by": None,
                        "score": None, "score_rationale": "", "changes_summary": ""}

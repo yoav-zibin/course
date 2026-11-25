@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from game_platform.api import create_app
 
 
-MARKER = '/static/site-bug-report.js?v=2'
+MARKER = '/static/site-bug-report.js?v=3'
 
 
 def test_public_pages_and_not_found_have_one_early_reporter():

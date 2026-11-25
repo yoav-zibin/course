@@ -72,6 +72,24 @@ test('unexpected errors submit silent bounded automatic reports with no screensh
   await page.waitForTimeout(200);expect(sent).toHaveLength(5);
 });
 
+test('standalone automatic diagnostics retain recent traces within 100 KB', async ({page}) => {
+  await page.route('**/bug-reports', route => route.fulfill({status: 201, json: {id: 'bounded-report'}}));
+  await page.goto('/site-bug-fixture');
+  const posted = page.waitForRequest(request =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/bug-reports');
+  await page.evaluate(() => {
+    const reporter = (window as any).SiteBugReporter;
+    reporter.recordLog('warn', 'old marker');
+    for (let i = 0; i < 70; i++) reporter.recordEvent('drag_performance', {i, marker: '\u0001'.repeat(700)});
+    reporter.reportIssue('script_error', new Error('Latest automatic error'));
+  });
+  const {diagnostics} = (await posted).postDataJSON();
+  expect(Buffer.byteLength(JSON.stringify(diagnostics))).toBeLessThanOrEqual(100_000);
+  expect(diagnostics.automatic_error.message).toBe('Latest automatic error');
+  expect(diagnostics.logs.map((entry: {message: string}) => entry.message)).not.toContain('old marker');
+  expect(diagnostics.events.at(-1).details.i).toBe(69);
+});
+
 test('same-origin embedded pages forward their errors and show one parent icon; a Portal handoff stops standalone reports',async({page})=>{
   const sent:any[]=[];
   await page.route('**/bug-reports',route=>{sent.push(route.request().postDataJSON());return route.fulfill({status:201,json:{id:'frame-automatic'}});});

@@ -143,6 +143,28 @@ def test_report_validation_rejects_large_or_invalid_input_without_echoing_body(c
     assert len(response.content) < 500
 
 
+@pytest.mark.parametrize("automatic", [False, True])
+def test_legacy_diagnostics_trim_to_100_kb_and_keep_newest_history(api, automatic):
+    logs = [{"at": f"2026-11-25T10:{i // 60:02}:{i % 60:02}Z", "message": "界" * 700, "index": i}
+            for i in range(70)]
+    diagnostics = {
+        "logs": logs,
+        "events": [{"at": "2026-11-25T09:00:00Z", "name": "old event"},
+                   {"at": "2026-11-25T11:00:00Z", "name": "drag_performance"}],
+        "pages": [],
+        "automatic_error": {"kind": "script_error", "message": "Array.at unavailable"},
+    }
+    assert len(json.dumps(diagnostics, ensure_ascii=False).encode()) > 100_000
+    sent = api.client.post("/bug-reports", json=payload(automatic=automatic, diagnostics=diagnostics))
+    assert sent.status_code == 201
+    detail = api.client.get(f"/admin/bug-reports/{sent.json()['id']}", auth=AUTH).json()["diagnostics"]
+    assert len(json.dumps(detail, ensure_ascii=False, separators=(",", ":")).encode()) <= 100_000
+    assert detail["events"] == diagnostics["events"][-1:]
+    assert detail["logs"] == logs[-len(detail["logs"]):]
+    assert detail["logs"][-1]["index"] == 69
+    assert detail["automatic_error"] == diagnostics["automatic_error"]
+
+
 def test_report_stream_limit_and_daily_rate_limit(api):
     oversized = api.client.post("/bug-reports", content=b"x" * (MAX_REPORT_BYTES + 1),
                                 headers={"content-type": "application/json"})

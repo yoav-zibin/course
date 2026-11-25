@@ -58,7 +58,10 @@ contains method, path, status and timing; request and response bodies,
 authorization headers, cookies, typed form values and URL query/fragment
 contents are excluded. Known account secrets and credential-shaped fields and
 strings are redacted. The server applies another credential-redaction pass to
-diagnostics. The frontend trims the aggregate snapshot below the API limit.
+diagnostics. The app and standalone web reporter cap the entire diagnostics
+object at 100 KB (100,000 UTF-8 JSON bytes), including any automatic error stack.
+When the history exceeds the budget, the newest entries across logs, calls,
+events and pages take priority.
 API metadata can also contain request/response size, request IDs and server
 timing. The history lasts only for the current page or app diagnostic session;
 it is not stored in browser local storage. A manual report uploads a snapshot
@@ -128,7 +131,9 @@ and documentation.
 
 The trimmed description must be 5–10,000 characters. `screenshot` can be null;
 otherwise it must be a valid PNG or JPEG data URL, at most 500,000 characters.
-Diagnostics are at most 180,000 UTF-8 JSON bytes. The entire streamed body is
+The backend enforces the 100 KB stored diagnostics limit after redaction. It
+accepts up to 180,000 incoming diagnostic bytes from older clients and trims
+their oldest history before saving. The entire streamed body is
 limited to 760,000 bytes, including requests without `Content-Length`. Incomplete
 uploads time out after 15 seconds without storing evidence or consuming a quota slot.
 Success is HTTP 201 with `{id,status,created_at}`. Invalid or excessive data

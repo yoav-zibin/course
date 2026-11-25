@@ -19,7 +19,7 @@ test('recorder bounds memory and submission size, retaining recent errors and ti
     const complete=startDiagnosticRequest('GET',`/games/game-${i}?cursor=private`,{requestBytes:0});complete(200,{responseBytes:42});
   }
   const report=diagnosticSnapshot() as any;
-  assert.ok(Buffer.byteLength(JSON.stringify(report))<160000);
+  assert.ok(Buffer.byteLength(JSON.stringify(report))<=100_000);
   assert.ok(report.logs.length<=100);assert.ok(report.apiCalls.length<=70);assert.ok(report.events.length<=70);assert.ok(report.pages.length<=30);
   assert.ok(report.logs.at(-1).message.startsWith('239:'));
   assert.equal(report.apiCalls.at(-1).path,'/games/game-239');assert.equal(report.apiCalls.at(-1).status,200);assert.ok(report.apiCalls.at(-1).durationMs>=0);
@@ -29,7 +29,19 @@ test('oversized nested context terminates and remains inside the server byte lim
   const leaf=Object.fromEntries(Array.from({length:35},(_,i)=>[`field${i}`,'界'.repeat(3000)]));
   const context=Object.fromEntries(Array.from({length:35},(_,i)=>[`group${i}`,leaf]));
   const result=diagnosticSnapshot(context);
-  assert.ok(Buffer.byteLength(JSON.stringify(result))<160000);
+  assert.ok(Buffer.byteLength(JSON.stringify(result))<=100_000);
+});
+
+test('the automatic error counts toward the budget and newer traces outrank older logs',()=>{
+  setDiagnosticScope('byte-budget');
+  recordDiagnosticLog('warn','older log');
+  for(let i=0;i<70;i++)recordDiagnosticEvent('drag_performance',{i,marker:'\u0001'.repeat(700)});
+  recordDiagnosticLog('error','latest log');
+  const snapshot=diagnosticSnapshot({}, {kind:'script_error',stack:'界'.repeat(1000)});
+  assert.ok(Buffer.byteLength(JSON.stringify(snapshot))<=100_000);
+  assert.deepEqual(snapshot.logs.map(entry=>(entry as {message:string}).message),['latest log']);
+  assert.equal((snapshot.events.at(-1) as {metadata:{i:number}}).metadata.i,69);
+  assert.equal((snapshot.automatic_error as {stack:string}).stack.length,1000);
 });
 
 test('API metadata includes failed calls and response sizes without bodies or passwords',async()=>{

@@ -25,7 +25,7 @@ ADMIN_FILES = frozenset({
     "feedback.html", "bug-reports.html", "console.html",
 })
 PUBLIC_PAGES = frozenset({"/", "/portal", "/admin/login"})
-REPORTING_VERSION = "2"
+REPORTING_VERSION = "3"
 _HEAD = re.compile(br"<head(?:\s[^>]*)?>", re.I)
 _DOCTYPE = re.compile(br"<!doctype[^>]*>", re.I)
 

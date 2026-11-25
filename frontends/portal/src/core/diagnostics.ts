@@ -1,7 +1,12 @@
 /** An in-memory, bounded flight recorder. Never stores request bodies, headers,
  * typed form values, credentials, or full URLs with query/fragment secrets. */
+import {utf8Size} from '../platform/recoverable-cache';
+
 type Entry = Record<string, unknown>;
+const MAX_DIAGNOSTIC_BYTES = 100_000;
 const logs: Entry[] = [], apiCalls: Entry[] = [], events: Entry[] = [], pages: Entry[] = [];
+const entryOrder=new WeakMap<Entry,number>();
+let nextEntry=0;
 const secrets = new Set<string>();
 const newSessionId = () => `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 let sessionId = newSessionId(), scope: string | null = null;
@@ -14,7 +19,10 @@ export function setDiagnosticScope(next: string) {
   for (const entries of [logs, apiCalls, events, pages]) entries.length = 0;
 }
 const stamp = () => new Date().toISOString();
-function append(list: Entry[], entry: Entry, limit: number) {list.push(entry);if(list.length>limit)list.splice(0,list.length-limit);}
+function append(list: Entry[], entry: Entry, limit: number) {
+  entryOrder.set(entry,++nextEntry);
+  list.push(entry);if(list.length>limit)list.splice(0,list.length-limit);
+}
 export function rememberDiagnosticSecrets(values: Iterable<string>) {for(const value of values)if(value)secrets.add(value);}
 export function diagnosticPath(raw: string) {
   try {
@@ -54,14 +62,38 @@ export function startDiagnosticRequest(method:string,path:string,metadata:Entry=
   append(apiCalls,entry,70);
   return (status:number|null,details:Entry={})=>{Object.assign(entry,{status,durationMs:Date.now()-start,state:status===null?'failed':'complete'},clean(details));};
 }
-export function diagnosticSnapshot(context: Entry = {}) {
-  const snapshot:Record<string,unknown>={version:1,sessionId,capturedAt:stamp(),context:clean(context),logs:logs.map(entry=>clean(entry)),apiCalls:apiCalls.map(entry=>clean(entry)),events:events.map(entry=>clean(entry)),pages:pages.map(entry=>clean(entry))};
-  // Keep comfortably below the API limit even for multi-byte log messages.
-  while(JSON.stringify(snapshot).length*3>160000) {
-    const candidates=['logs','apiCalls','events','pages'].filter(key=>(snapshot[key] as Entry[]).length);
-    if(!candidates.length){snapshot.context='[truncated]';break;}
-    const longest=candidates.sort((a,b)=>(snapshot[b] as Entry[]).length-(snapshot[a] as Entry[]).length)[0];
-    (snapshot[longest] as Entry[]).shift();
+export function diagnosticSnapshot(context: Entry = {}, automaticError?: Entry) {
+  const snapshot={
+    version:1,sessionId,capturedAt:stamp(),context:clean(context),
+    ...(automaticError?{automatic_error:clean(automaticError)}:{}),
+    logs:[] as unknown[],apiCalls:[] as unknown[],events:[] as unknown[],pages:[] as unknown[],
+  };
+  let bytes=utf8Size(JSON.stringify(snapshot));
+  if(bytes>MAX_DIAGNOSTIC_BYTES){
+    snapshot.context='[truncated]';
+    bytes=utf8Size(JSON.stringify(snapshot));
+  }
+  const historyBudget=MAX_DIAGNOSTIC_BYTES-bytes;
+  const histories=[
+    {source:logs,target:snapshot.logs},{source:apiCalls,target:snapshot.apiCalls},
+    {source:events,target:snapshot.events},{source:pages,target:snapshot.pages},
+  ].map(list=>({...list,next:list.source.length-1}));
+  // Walk the newest tails together, keeping chronological order within a list.
+  for(;;){
+    let newest:(typeof histories)[number]|undefined,order=0;
+    for(const list of histories){
+      if(list.next<0)continue;
+      const candidate=entryOrder.get(list.source[list.next])??0;
+      if(candidate>order){newest=list;order=candidate;}
+    }
+    if(!newest)break;
+    const entry=clean(newest.source[newest.next--]);
+    const entryBytes=utf8Size(JSON.stringify(entry));
+    if(entryBytes>historyBudget)continue;
+    const cost=entryBytes+(newest.target.length?1:0);
+    if(bytes+cost>MAX_DIAGNOSTIC_BYTES)break;
+    newest.target.unshift(entry);
+    bytes+=cost;
   }
   return snapshot;
 }
