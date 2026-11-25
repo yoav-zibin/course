@@ -121,3 +121,25 @@ test('manual report drafts survive capture and upload failures while the icon re
   await page.getByRole('button',{name:'Send report',exact:true}).click();
   await expect(page.getByText('Thanks! Your report was sent.',{exact:true})).toBeVisible();
 });
+
+for(const unavailable of ['invalid cached locales','unavailable locale script']){
+  test(`admin sign-in can initialize with ${unavailable}`,async({page})=>{
+    await page.addInitScript(invalidCache=>{
+      if(invalidCache)localStorage.setItem('game-platform.i18n-locales.v1',JSON.stringify({locale:'en'}));
+      Object.assign(window,{google:{accounts:{id:{
+        initialize(){},
+        renderButton(container: HTMLElement){
+          const button=document.createElement('button');
+          button.textContent='Test Google sign-in';
+          container.append(button);
+        },
+      }}}});
+    },unavailable==='invalid cached locales');
+    if(unavailable==='unavailable locale script')await page.route('**/static/i18n.js?*',route=>route.abort());
+    await page.route('**/auth/config',route=>route.fulfill({json:{google_client_id:'synthetic-client'}}));
+    await page.route('**/auth/admin-session',route=>route.fulfill({json:{signed_in:false}}));
+    await page.goto('/admin/login');
+    await expect(page.getByRole('button',{name:'Test Google sign-in'})).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Sign in with Google to continue.');
+  });
+}

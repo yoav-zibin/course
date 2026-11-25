@@ -36,7 +36,7 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
       // Modal dialogs make outside descendants inert, so the control must move
       // inside the active modal as well as rise in the browser top layer.
       const active=document.activeElement?.closest('dialog');
-      const parent=(active&&modals.includes(active)?active:modals.at(-1))||document.fullscreenElement||document.body;
+      const parent=(active&&modals.includes(active)?active:modals[modals.length-1])||document.fullscreenElement||document.body;
       const moved=node.parentElement!==parent;if(moved)parent.appendChild(node);
       if(typeof node.showPopover==='function'){
         try {if(promote&&node.matches(':popover-open'))node.hidePopover();if(!node.matches(':popover-open'))node.showPopover();}catch{/* Detached during an update. */}

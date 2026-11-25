@@ -46,7 +46,7 @@ export function recordDiagnosticLog(level: string, ...values: unknown[]) {append
 export function recordDiagnosticEvent(name: string, metadata?: Entry) {append(events,{at:stamp(),name, ...(metadata?{metadata:clean(metadata)}: {})},70);}
 export function recordDiagnosticPage(page: Entry) {
   const safe=clean(page);
-  if(JSON.stringify(pages.at(-1)?.page)===JSON.stringify(safe))return;
+  if(JSON.stringify(pages[pages.length-1]?.page)===JSON.stringify(safe))return;
   append(pages,{at:stamp(),page:safe},30);
 }
 export function startDiagnosticRequest(method:string,path:string,metadata:Entry={}) {

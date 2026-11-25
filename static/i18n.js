@@ -99,7 +99,12 @@ const I18n = (() => {
     }
   };
 
-  let locales = read(LOCALES_KEY) ?? BUILT_IN;
+  const validLocales = value => Array.isArray(value) && value.length > 0 &&
+    value.every(locale => locale && typeof locale.code === "string" && locale.code &&
+      typeof locale.name === "string" && locale.name &&
+      (locale.direction === "ltr" || locale.direction === "rtl"));
+  const cachedLocales = read(LOCALES_KEY);
+  let locales = validLocales(cachedLocales) ? cachedLocales : BUILT_IN;
   let code = DEFAULT;
   let messages = {}; // of [code]; empty for English, whose texts are in the HTML
   let picker = null;
@@ -331,7 +336,9 @@ const I18n = (() => {
     try {
       const response = await fetch("/i18n/locales");
       if (!response.ok) return;
-      locales = (await response.json()).locales;
+      const next = (await response.json()).locales;
+      if (!validLocales(next)) return;
+      locales = next;
       write(LOCALES_KEY, locales);
       renderPicker();
       setDocument();

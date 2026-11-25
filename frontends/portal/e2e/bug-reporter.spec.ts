@@ -204,8 +204,11 @@ test('captures before opening, sends real screenshot with recent diagnostics, an
   const listed=await request.get('/admin/bug-reports?status=open',{headers:E2E_ADMIN_HEADERS});expect(listed.ok()).toBe(true);const rows=await listed.json();const reports=rows.items||rows.reports||rows.bug_reports;expect(reports.some((row:any)=>row.text===submitted.text)).toBe(true);
 });
 
-test('bug icon remains clickable above a browser modal dialog and fullscreen content',async({page,isMobile})=>{
-  await page.goto('/portal');const bug=page.getByRole('button',{name:label,exact:true});await expect(bug).toBeVisible();
+test('bug icon works above a browser modal and fullscreen without Array.at',async({page,isMobile})=>{
+  await page.addInitScript(()=>{Reflect.deleteProperty(Array.prototype,'at');});
+  await page.goto('/portal');
+  await expect(page.getByTestId('portal-header')).toBeVisible();
+  const bug=page.getByRole('button',{name:label,exact:true});await expect(bug).toBeVisible();
   await page.evaluate(()=>{const dialog=document.createElement('dialog');dialog.id='blocking-dialog';dialog.style.cssText='position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;background:black;';dialog.textContent='Blocking native browser dialog';document.body.appendChild(dialog);dialog.showModal();});
   await expect.poll(()=>bug.evaluate(node=>{const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
   await bug.click();await page.getByRole('textbox',{name:'Bug or feature request'}).fill('Report while native browser dialog is still open.');
