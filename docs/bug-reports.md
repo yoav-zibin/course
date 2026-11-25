@@ -73,6 +73,11 @@ Recoverable cache failures enter these logs without cached values or raw storage
 error text. Repeated failures are limited per operation and diagnostic session.
 Old cache entries are reclaimed automatically; a failed cache write leaves the
 download usable in memory without showing a storage error to the player.
+Completed or interrupted Portal drags of the floating controls and game pieces
+add one timing summary to recent events. It counts movement events and JavaScript
+visual updates and records scheduling delays and gaps between updates. The
+summary includes no touch path or piece identity. These timings describe
+JavaScript work and scheduling, rather than native display frame rate.
 The screenshot retains its original capture timestamp; diagnostics refresh on
 submission, so retrying a failed send includes its API failure and visible error.
 

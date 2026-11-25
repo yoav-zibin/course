@@ -1,5 +1,6 @@
 import {AccountScopeChangedError} from '../core/account-scope';
 import {recordDiagnosticLog,recordDiagnosticEvent} from '../core/diagnostics';
+import {createDragFrames} from '../core/dragFrames';
 import {copyText,playerText} from '../platform/i18n';
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
@@ -66,13 +67,14 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [drag, setDragState] = useState<{id: string; at: Point; target?: string} | null>(null);
-  const dragRef = useRef<typeof drag>(null);
-  const setDrag = (value: typeof drag) => { dragRef.current=value;setDragState(value); };
+  const dragFrames=useMemo(()=>createDragFrames<Point>('game_piece'),[]);
+  const setDrag = (value: typeof drag) => setDragState(old=>
+    old?.id===value?.id&&old?.target===value?.target&&old?.at.x===value?.at.x&&old?.at.y===value?.at.y ? old : value);
   const [camera, setCamera] = useState<Camera>({zoom: 1, x: 0, y: 0});
   const [width, setWidth] = useState(400);
   const [canvasHeight, setCanvasHeight] = useState(300);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [,setPaintTick]=useState(0);
+  const [paintTick,setPaintTick]=useState(0);
   const [,setGestureTick]=useState(0);
   const dimensions = useWindowDimensions();
   const callbacks = useRef({onMove,onError,onAnimationStateChange,onScene}); callbacks.current = {onMove,onError,onAnimationStateChange,onScene};
@@ -85,7 +87,9 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const paintOrder=useRef(new Map<string,number>());
   const selectedRef = useRef<string | null>(null), previewRef = useRef<string | null>(null);
   const gesture = useRef<Gesture | null>(null), lastGesture = useRef(0), motionUntil = useRef(0);
-  const endGesture=()=>{gesture.current=null;setGestureTick(value=>value+1);};
+  const endGesture=(outcome:'released'|'cancelled'='cancelled')=>{
+    dragFrames.finish(outcome);gesture.current=null;setGestureTick(value=>value+1);
+  };
   const [motionBusy,setMotionBusy]=useState(false), motionTimer=useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvas = useRef<React.ComponentRef<typeof View>>(null), surface=useRef<React.ComponentRef<typeof View>>(null), origin = useRef({x:0,y:0});
   const fittedGeometry=useRef('');
@@ -116,8 +120,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     alive.current=true;
     AccessibilityInfo.isReduceMotionEnabled().then(value=>{if(alive.current)setReducedMotion(value);}).catch(()=>{});
     const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReducedMotion);
-    return ()=>{alive.current=false;revision.current++;subscription.remove();if(motionTimer.current)clearTimeout(motionTimer.current);callbacks.current.onAnimationStateChange?.(false);};
-  },[]);
+    return ()=>{alive.current=false;revision.current++;dragFrames.finish('cancelled');subscription.remove();if(motionTimer.current)clearTimeout(motionTimer.current);callbacks.current.onAnimationStateChange?.(false);};
+  },[dragFrames]);
 
   useEffect(()=>{
     if(!reducedMotion)return;
@@ -250,7 +254,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     }
     latest.current=incoming;
     revision.current++;const atRevision=revision.current;
-    sent.current=false;select(null);showPreview(null);gesture.current=null;setDrag(null);
+    sent.current=false;select(null);showPreview(null);dragFrames.finish('cancelled');gesture.current=null;setDrag(null);
     queue.current=queue.current.catch(()=>{}).then(async()=>{
       await waitForMotion();
       if(!alive.current||atRevision!==revision.current)return;
@@ -283,13 +287,13 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     // Compare the physical frame, not delayed layout notifications. A stale
     // notification after rotation must not cancel the first new tap or drag.
     c.camera={zoom:1,x:0,y:0};c.view={x:c.bounds.x,y:c.bounds.y,width:c.bounds.width,height:c.bounds.height};
-    setCamera(c.camera);gesture.current=null;setDrag(null);select(null);showPreview(null);
+    setCamera(c.camera);dragFrames.finish('cancelled');gesture.current=null;setDrag(null);select(null);showPreview(null);
   }
-  function boardPoint(at: Point): Point {
+  function boardPoint(at: Point, measure=true): Point {
     // Layout notifications can lag a rotation by a frame. Hit testing must use
     // the same physical rectangle as the SVG the player is touching right now.
     const c=current.current;
-    const rect=(canvas.current as unknown as {getBoundingClientRect?:()=>{width:number;height:number}})?.getBoundingClientRect?.();
+    const rect=measure?(canvas.current as unknown as {getBoundingClientRect?:()=>{width:number;height:number}})?.getBoundingClientRect?.():undefined;
     if(rect?.width&&rect.height){c.width=rect.width;c.height=rect.height;}
     const scale=Math.min(c.width/c.view.width,c.height/c.view.height);
     return {x:c.view.x+(at.x-(c.width-c.view.width*scale)/2)/scale,
@@ -341,6 +345,12 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
 
   const actions = useRef({boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview});
   actions.current={boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview};
+  function projectDrag(at:Point,g:Gesture,piece:Piece){
+    const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height),size=pieceSize(spec,piece);
+    const lifted=dragPosition(at,g.grab,{width:size.width*scale,height:size.height*scale},c,g.touch);
+    const point=actions.current.boardPoint(lifted,false),target=hitTarget(spec,sceneRef.current,point,piece,16/scale);
+    return {id:piece.id,at:target?position(spec,target):point,target:target?.id};
+  }
   const hitVisibleTarget=(scene:Scene,point:Point,piece?:Piece)=>
     showDestinationsAfterSelection&&!piece?.move_targets?.length ? undefined : hitTarget(spec,scene,point,piece);
   const claimGesture=(event:GestureResponderEvent)=>{
@@ -396,14 +406,14 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       const b={x:touches[1].pageX-origin.current.x,y:touches[1].pageY-origin.current.y};
       g.kind='pinch';g.distance=Math.hypot(a.x-b.x,a.y-b.y);g.camera=current.current.camera;
       g.anchor=actions.current.boardPoint({x:(a.x+b.x)/2,y:(a.y+b.y)/2});g.moved=true;
-      setDrag(null);actions.current.select(null);actions.current.showPreview(null);
+      dragFrames.finish('cancelled');setDrag(null);actions.current.select(null);actions.current.showPreview(null);
     },
     onPanResponderMove:event=>{
       const g=gesture.current;if(!g)return;
       const touches=event.nativeEvent.touches||[];
       const at={x:event.nativeEvent.pageX-origin.current.x,y:event.nativeEvent.pageY-origin.current.y};
       if(touches.length>=2){
-        setDrag(null);actions.current.select(null);actions.current.showPreview(null);
+        dragFrames.finish('cancelled');setDrag(null);actions.current.select(null);actions.current.showPreview(null);
         const a={x:touches[0].pageX-origin.current.x,y:touches[0].pageY-origin.current.y};
         const b={x:touches[1].pageX-origin.current.x,y:touches[1].pageY-origin.current.y};
         const center={x:(a.x+b.x)/2,y:(a.y+b.y)/2},distance=Math.hypot(a.x-b.x,a.y-b.y);
@@ -423,10 +433,13 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       const piece=sceneRef.current.pieces?.find(p=>p.id===g.piece);
       if(piece?.move_targets?.length&&g.moved&&canMove(latest.current,sent.current)){
         if(selectedRef.current!==piece.id)actions.current.select(piece.id);
-        const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height),size=pieceSize(spec,piece);
-        const lifted=dragPosition(at,g.grab,{width:size.width*scale,height:size.height*scale},c,g.touch);
-        const point=actions.current.boardPoint(lifted),target=hitTarget(spec,sceneRef.current,point,piece,16/scale);
-        setDrag({id:piece.id,at:target?position(spec,target):point,target:target?.id});actions.current.showPreview(target?.id||null);
+        dragFrames.move(at,next=>{
+          if(gesture.current!==g||g.kind!=='press')return;
+          const currentPiece=sceneRef.current.pieces?.find(item=>item.id===g.piece);
+          if(!currentPiece?.move_targets?.length||!canMove(latest.current,sent.current))return;
+          const projected=projectDrag(next,g,currentPiece);
+          setDrag(projected);actions.current.showPreview(projected.target??null);
+        });
       }else if(g.moved&&!g.piece&&(!g.target||
         spec.viewport.camera_controls===true&&current.current.camera.zoom>1)){
         g.kind='pan';
@@ -435,7 +448,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       }
     },
     onPanResponderRelease:event=>{
-      const g=gesture.current;endGesture();lastGesture.current=Date.now();
+      const g=gesture.current;endGesture('released');lastGesture.current=Date.now();
       if(!g){setDrag(null);return;}
       const at={x:event.nativeEvent.pageX-origin.current.x,y:event.nativeEvent.pageY-origin.current.y};
       if(g.kind==='pinch'||g.kind==='pan'){setDrag(null);return;}
@@ -445,8 +458,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         const released=at.x>=0&&at.x<=held.width&&at.y>=0&&at.y<=held.height;
         // Use the actual lifted artwork's legal destination, never a finger's
         // overlapping adjacent point. Leaving the board always cancels.
-        const heldPiece=dragRef.current;
-        if(released&&heldPiece?.target&&piece)actions.current.dispatch({type:'drop',id:piece.id,piece_id:piece.id,target_id:heldPiece.target});
+        const target=released&&piece?.move_targets?.length?projectDrag(at,g,piece).target:undefined;
+        if(target&&piece)actions.current.dispatch({type:'drop',id:piece.id,piece_id:piece.id,target_id:target});
         setDrag(null);
         actions.current.select(null);actions.current.showPreview(null);return;
       }
@@ -459,43 +472,56 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       else if(target&&target.id===g.target)actions.current.activateTarget(target,g.touch);
     },
     onPanResponderTerminate:()=>{endGesture();setDrag(null);actions.current.select(null);actions.current.showPreview(null);},
-  }),[spec,showDestinationsAfterSelection]);
+  }),[spec,showDestinationsAfterSelection,dragFrames]);
 
   const selectedPiece=display.scene.pieces?.find(piece=>piece.id===selected);
   const visibleTargets=(display.scene.targets||[]).filter(target=>
     !showDestinationsAfterSelection || (active && selectedPiece?.move_targets?.includes(target.id)));
   const selectedActions=selectedPiece?pieceActions(selectedPiece):[];
-  const replayEffects=display.replay?historyChanges(display.previous,display.scene).effects:new Map<string,'enter'|'change'>();
   const previewTarget=display.scene.targets?.find(target=>target.id===preview);
   // Selecting a drag source must not introduce a footer and resize the canvas
   // underneath the pointer. Keep the pre-gesture controls until release.
   const toolsPiece=gesture.current?display.scene.pieces?.find(piece=>piece.id===gesture.current!.toolbarPiece):selectedPiece;
   const toolsActions=toolsPiece?pieceActions(toolsPiece):[];
   const toolsPreview=gesture.current?display.scene.targets?.find(target=>target.id===gesture.current!.toolbarPreview):previewTarget;
-  const now=Date.now();
-  const drawables=[
-    ...(!reducedMotion?display.ghosts:[]).map(piece=>({piece,ghost:true})),
-    ...(display.scene.pieces??[]).filter(piece=>!piece.hidden).map(piece=>({piece,ghost:false})),
-  ];
-  const paint=drawables.map(({piece,ghost})=>{
-    const previous=ghost?piece:display.previous.pieces?.find(old=>old.id===piece.id);
-    const options={animate:display.animate&&!reducedMotion&&(display.inferGroups||display.tracks===undefined||display.tracks.has(piece.id)),
-      effect:ghost?'exit' as const:replayEffects.get(piece.id),inferMovement:display.inferGroups||display.moves===undefined&&display.tracks===undefined,
-      moveTrack:display.moves?.get(piece.id),sceneTrack:display.tracks?.get(piece.id),pulseEnabled:!reducedMotion};
-    const motion=pieceAnimation(spec,piece,previous,{...options,elapsed:now-(display.started??now)});
-    return {piece,ghost,previous,options,z:motion.layerActive?motion.z:piece.z??0,
-      end:Number.isFinite(motion.layerTransition)?(display.started??now)+motion.layerTransition:Infinity};
-  }).sort((a,b)=>a.z-b.z||(a.piece.z??0)-(b.piece.z??0));
-  paintOrder.current=new Map(paint.filter(item=>!item.ghost).map((item,index)=>[item.piece.id,index]));
-  const paintEnd=Math.min(Infinity,...paint.map(item=>item.end));
+  const painting=useMemo(()=>{
+    const now=Date.now();
+    const replayEffects=display.replay?historyChanges(display.previous,display.scene).effects:new Map<string,'enter'|'change'>();
+    const previousById=new Map(display.previous.pieces?.map(piece=>[piece.id,piece]));
+    const drawables=[
+      ...(!reducedMotion?display.ghosts:[]).map(piece=>({piece,ghost:true})),
+      ...(display.scene.pieces??[]).filter(piece=>!piece.hidden).map(piece=>({piece,ghost:false})),
+    ];
+    const paint=drawables.map(({piece,ghost})=>{
+      const previous=ghost?piece:previousById.get(piece.id);
+      const options={animate:display.animate&&!reducedMotion&&(display.inferGroups||display.tracks===undefined||display.tracks.has(piece.id)),
+        effect:ghost?'exit' as const:replayEffects.get(piece.id),inferMovement:display.inferGroups||display.moves===undefined&&display.tracks===undefined,
+        moveTrack:display.moves?.get(piece.id),sceneTrack:display.tracks?.get(piece.id),pulseEnabled:!reducedMotion};
+      const motion=pieceAnimation(spec,piece,previous,{...options,elapsed:now-(display.started??now)});
+      return {piece,ghost,previous,options,z:motion.layerActive?motion.z:piece.z??0,
+        end:Number.isFinite(motion.layerTransition)?(display.started??now)+motion.layerTransition:Infinity};
+    }).sort((a,b)=>a.z-b.z||(a.piece.z??0)-(b.piece.z??0));
+    return {paint,order:new Map(paint.filter(item=>!item.ghost).map((item,index)=>[item.piece.id,index])),
+      end:Math.min(Infinity,...paint.map(item=>item.end))};
+  },[display,reducedMotion,spec,paintTick]);
+  paintOrder.current=painting.order;
+  const paintEnd=painting.end;
   useEffect(()=>{
     if(!Number.isFinite(paintEnd))return;
     const timer=setTimeout(()=>setPaintTick(value=>value+1),Math.max(1,paintEnd-Date.now()+1));
     return()=>clearTimeout(timer);
   },[paintEnd]);
-  const renderPiece=(item:typeof paint[number])=><PieceGraphic key={`${item.ghost?'ghost':'piece'}:${item.piece.id}`} piece={item.piece} previous={item.previous}
-    spec={spec} {...item.options} serial={display.serial} enabled={active&&!item.ghost} selected={item.piece.selected||(item.piece.parent??item.piece.id)===selected}
-    started={display.started} concealed={(item.piece.parent??item.piece.id)===drag?.id} onPress={()=>activatePiece(item.piece)}/>;
+  const draggedId=drag?.id;
+  const pieceLayers=useMemo(()=>{
+    const lower:React.ReactNode[]=[],upper:React.ReactNode[]=[];
+    for(const item of painting.paint){
+      const rootId=item.piece.parent??item.piece.id;
+      (item.z<=STATIC_PIECE_Z_MAX?lower:upper).push(<PieceGraphic key={`${item.ghost?'ghost':'piece'}:${item.piece.id}`} piece={item.piece} previous={item.previous}
+        spec={spec} {...item.options} serial={display.serial} enabled={active&&!item.ghost} selected={item.piece.selected||rootId===selected}
+        started={display.started} concealed={rootId===draggedId} onPress={()=>actions.current.activatePiece(item.piece)}/>);
+    }
+    return {lower,upper};
+  },[painting,spec,display.serial,display.started,active,selected,draggedId]);
   function draggedPosition(piece:Piece): Point {
     const root=display.scene.pieces!.find(p=>p.id===drag!.id)!;
     const center=position(spec,root), at=position(spec,piece);
@@ -539,7 +565,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         {[
         ...spec.boards.map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
         ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
-        ...paint.filter(item=>item.z<=STATIC_PIECE_Z_MAX).map(renderPiece),
+        ...pieceLayers.lower,
         ...(previewTarget?.preview||[]).map((cell,index)=>{
           const target=previewTarget!;
           const point=position(spec,{board:target.board,position:cell.position}),size=targetBox(spec,{...target,position:cell.position,hit_area:undefined,hit_shape:undefined});
@@ -553,7 +579,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
           enabled={active&&(!selectedPiece?.move_targets?.length||selectedPiece.move_targets.includes(target.id))}
           selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>),
         ...(display.scene.labels||[]).map(label=><SvgText key={`label:${label.id}`} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>),
-        ...paint.filter(item=>item.z>STATIC_PIECE_Z_MAX).map(renderPiece),
+        ...pieceLayers.upper,
         ...(drag?display.scene.pieces?.filter(piece=>!piece.hidden && (piece.parent??piece.id)===drag.id)||[]:[]).map(piece=><PieceGraphic key={`drag:${piece.id}`} piece={{...piece,hand:undefined,position:draggedPosition(piece)}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true} dragged/>),
         ]}
       </Svg>
