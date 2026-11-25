@@ -360,6 +360,8 @@ timestamp, and a production revision independently checked without `Array.at`.
 The watcher confirms that production still contains that release before saving
 score 0 and closing a matching report. Existing escalations and declines keep
 their recorded decisions.
+The scheduled review instructions also run `review.py close-array-at-duplicates`
+after the initial snapshot and at the final arrival check.
 Other previously escalated reports require an explicit decision to reopen. The status CLI checks
 fresh authorization before open/handling/handled and requires both optimistic
 guards for every transition.

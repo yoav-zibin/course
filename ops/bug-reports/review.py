@@ -794,6 +794,7 @@ def main():
     watcher = commands.add_parser("watch")
     watcher.add_argument("--dry-run", action="store_true")
     commands.add_parser("snapshot")
+    commands.add_parser("close-array-at-duplicates", help="Apply Yoav's verified standing closure rule")
     commands.add_parser("authorizations")
     commands.add_parser("sync-authorizations")
     permission = commands.add_parser("request-authorization")
@@ -830,6 +831,11 @@ def main():
         result = watch_locked(args.state_dir, dry_run=args.dry_run)
     elif args.command == "snapshot":
         result = snapshot(args.state_dir)
+    elif args.command == "close-array-at-duplicates":
+        config = configuration(args.state_dir)
+        api = BugAPI(config)
+        closed = close_array_at_duplicates(args.state_dir, config, api, api.pending_ids())
+        result = {"closed_array_at_duplicates": len(closed)}
     elif args.command == "get":
         result = get_report(args.state_dir, args.id)
     elif args.command == "assess":
