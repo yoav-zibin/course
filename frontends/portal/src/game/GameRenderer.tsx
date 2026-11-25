@@ -6,7 +6,7 @@ import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, 
 import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgXml, Text as SvgText } from 'react-native-svg';
 import G from './SceneGroup';
-import type { Board, Control, GameSpec, Json, Piece, Point, PresentationResult, Scene, StateMessage, Target, UIEvent } from './types';
+import type { Board, Control, GameSpec, Json, Motion, Piece, Point, PresentationResult, Scene, StateMessage, Target, UIEvent } from './types';
 import { assetURI, boardCell, cameraLimits, contentBounds, finiteJSON, knownObject, pieceActions, position, validateMoveAnimations, validateScene, validateSceneAnimations, validateTimeline, validateSpec } from './validation';
 import { animateUpdate, canMove, historyChanges, hitPiece, hitTarget, pieceName, pieceSize, presentationSteps, targetBox, targetShape, targetThickness, validNumber, validEvent } from './interactions';
 import { runPresentation } from './runtime';
@@ -31,6 +31,11 @@ export type GameRendererProps = {
   showToolbar?: boolean;
   showDestinationsAfterSelection?: boolean;
   omitPieceId?: string;
+  boardPresentation?: {
+    visibleBoard: (board: Board) => boolean;
+    presentScene: (scene: Scene, message: StateMessage) => Scene;
+    motion?: Partial<Motion>;
+  };
   frameHeight?: number;
 };
 
@@ -43,10 +48,14 @@ function errorOf(value: unknown) { return value instanceof Error ? value : new E
 
 export function GameRenderer(props: GameRendererProps) {
   const serialized = JSON.stringify(props.spec);
+  const motion = props.boardPresentation?.motion;
   const checked = useMemo(() => {
-    try { return {spec: validateSpec(copy(props.spec))}; }
+    try {
+      const spec = validateSpec(copy(props.spec));
+      return {spec: motion ? {...spec, motion: {...spec.motion, ...motion}} : spec};
+    }
     catch (error) { return {error: errorOf(error)}; }
-  }, [serialized]);
+  }, [serialized, motion]);
   useEffect(()=>{if(checked.error)recordDiagnosticLog('error','visible_game_error',checked.error);},[checked.error]);
   if (!checked.spec) return <Text accessibilityRole="alert" style={styles.error}>{playerText(checked.error?.message || copyText("Invalid game package"))}</Text>;
   return <Renderer {...props} key={`${props.contextKey || ''}:${serialized}:viewer:${props.message.my_player_index??'spectator'}`} spec={checked.spec} />;
@@ -60,7 +69,7 @@ type Gesture = {
 };
 type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];inferGroups?:boolean;moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
 
-function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,showDestinationsAfterSelection=false,omitPieceId,frameHeight}: GameRendererProps & {spec: GameSpec}) {
+function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,showDestinationsAfterSelection=false,omitPieceId,boardPresentation,frameHeight}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
@@ -94,7 +103,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const [motionBusy,setMotionBusy]=useState(false), motionTimer=useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvas = useRef<React.ComponentRef<typeof View>>(null), surface=useRef<React.ComponentRef<typeof View>>(null), origin = useRef({x:0,y:0});
   const fittedGeometry=useRef('');
-  const bounds = useMemo(()=>contentBounds(spec,display.scene),[spec,display.scene]);
+  const visibleBoards = useMemo(()=>boardPresentation ? spec.boards.filter(boardPresentation.visibleBoard) : undefined,[spec,boardPresentation]);
+  const bounds = useMemo(()=>contentBounds(spec,display.scene,visibleBoards),[spec,display.scene,visibleBoards]);
   const widthFittedHeight=width*bounds.height/bounds.width;
   // A measured frame fits the board below its controls in the actual safe-area
   // space. Do not enlarge a dense overview into a scrolling or clipped canvas;
@@ -146,7 +156,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     if (!alive.current || atRevision !== revision.current) return;
     knownObject(result,['scene','local_state','make_move','last_move_animations','animations','timeline'],['scene']); finiteJSON(result);
     const raw = validateScene(spec,result.scene);
-    const next = resolveScene(spec,raw);
+    const resolved = resolveScene(spec,raw);
+    const next = boardPresentation ? boardPresentation.presentScene(resolved,latest.current!) : resolved;
     // A host may provide an equivalent control outside the board. Omit its
     // board counterpart from both rendering and hit testing.
     if (omitPieceId && next.pieces) next.pieces = next.pieces.filter(piece => piece.id !== omitPieceId);
@@ -224,7 +235,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       try { recordDiagnosticEvent('game_move');await callbacks.current.onMove(copy(result.make_move)); }
       catch (reason) { if(atRevision===revision.current){sent.current=false;setBusy(false);} report(reason); }
     }
-  },[spec,report,omitPieceId]);
+  },[spec,report,omitPieceId,boardPresentation]);
 
   const messageJSON = JSON.stringify(message);
   const historyJSON = JSON.stringify(presentationHistory??null);
@@ -594,7 +605,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
       <Svg width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
         {[
-        ...spec.boards.map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
+        ...(visibleBoards??spec.boards).map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
         ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
         ...pieceLayers.lower,
         ...(previewTarget&&!boardInput.heldId?renderPreview(previewTarget):[]),

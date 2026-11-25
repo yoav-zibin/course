@@ -364,12 +364,14 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     return {x:point.x+num(hit.x,-width/2),y:point.y+num(hit.y,-height/2),
       width:num(hit.width,width),height:num(hit.height,height)};
   }
-  function contentBounds(spec, scene = {}) {
-    const boxes = [{x:0,y:0,width:spec.viewport.width,height:spec.viewport.height},
-      ...spec.boards.map(board => ({x:num(board.x),y:num(board.y),width:board.width,height:board.height}))];
+  function contentBounds(spec, scene = {}, visibleBoards) {
+    const boxes = (visibleBoards ?? spec.boards).map(board =>
+      ({x:num(board.x),y:num(board.y),width:board.width,height:board.height}));
+    if (!visibleBoards?.length) boxes.push({x:0,y:0,width:spec.viewport.width,height:spec.viewport.height});
     // Hands and other playable pieces may live outside their board surface.
     // Include their rotated bodies and complete legal destinations. The
-    // declared viewport also retains headings/instructions around the boards.
+    // declared viewport retains headings/instructions unless the host fits
+    // the visible boards directly.
     for(const piece of scene.pieces || []) {
       if(piece.hidden)continue;
       const point=position(spec,piece),board=point.board,type=spec.piece_types[piece.type];

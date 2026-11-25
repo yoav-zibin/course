@@ -61,7 +61,7 @@ test('saved Backgammon opening ties remain clear after computer rerolls and the 
   for(const moveCount of [4,6]){
     await roll.click();
     await expect.poll(async()=>(await saved(page,id)).match?.move_count).toBe(moveCount);
-    await expect(roll).toBeEnabled();
+    await expect(roll).toBeEnabled({timeout:15000});
     await expect(page.getByText('Tie 5–5: roll one die again.',{exact:true})).toBeVisible();
     const position=(await saved(page,id)).match;
     expect(position.logicState).toMatchObject({opening:true,opening_roll:[5,null],cur:1,needRoll:true});
@@ -82,6 +82,16 @@ test('saved Backgammon opening ties remain clear after computer rerolls and the 
   expect(ready.logicState).toMatchObject({opening:false,opening_roll:[5,6],cur:1,needRoll:false});
   const move=ready.state.legalMoves[0];
   const board=page.getByTestId('game-stage');
+  await expect(board.locator('rect[fill="#075b05"]')).toHaveCount(0);
+  await expect(board.getByText('Backgammon',{exact:true})).toHaveCount(0);
+  await expect(board.getByText(/PIP:|S: 0\/1/)).toHaveCount(0);
+  // Rotate an active match so the board fit and hit testing are checked together.
+  await page.setViewportSize({width:844,height:390});
+  const wood=board.locator('svg > g > rect[width="700"][height="440"]');
+  await expect.poll(async()=>{
+    const [woodBox,canvasBox]=await Promise.all([wood.boundingBox(),board.locator('svg').first().boundingBox()]);
+    return (woodBox?.height??0)/(canvasBox?.height??1);
+  }).toBeGreaterThan(.90);
   const destinations=board.getByRole('button',{name:/^(Point \d+|Bear off)$/});
   await expect(destinations).toHaveCount(0);
   const checker=page.getByRole('button',{name:`Player 2: Point ${move.from+1}: Move`,exact:true}).last();

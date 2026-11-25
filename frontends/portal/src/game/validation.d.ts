@@ -10,7 +10,7 @@ export function assetURI(asset?: {uri: string}): string | null;
 export function boardCell(board: Board, cell: string): Point;
 export function position(spec: GameSpec, item: {board: string; position: unknown; hand?: Piece['hand']}): Point & {board: Board};
 export function pieceActions(piece: Partial<Piece>): PieceAction[];
-export function contentBounds(spec: GameSpec, scene?: Scene): Point & {width:number;height:number};
+export function contentBounds(spec: GameSpec, scene?: Scene, visibleBoards?: Board[]): Point & {width:number;height:number};
 export function cameraLimits(bounds: Point & {width:number;height:number}, zoom: number): {width:number;height:number;minX:number;maxX:number;minY:number;maxY:number};
 
 export function validateTimeline(spec: GameSpec, scene: Scene, timeline: unknown): Timeline;
