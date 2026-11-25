@@ -500,11 +500,121 @@ def review_period(timestamp):
     return int(timestamp // 3600)
 
 
+_ARRAY_AT_CRASH = re.compile(
+    r"\b(?:modals|o|Array(?:\.prototype)?)\.at is not a function\b"
+    r"|\b(?:without|lack(?:s|ing)?|unsupported|does not support) Array(?:\.prototype)?\.at\b"
+    r"|\bArray(?:\.prototype)?\.at (?:is )?(?:unavailable|unsupported|missing)\b",
+    re.IGNORECASE,
+)
+
+
+def array_at_rule(state_dir, config):
+    path = state_dir / "array-at-duplicate-rule.json"
+    if not path.is_file() or path.stat().st_mode & 0o077:
+        return None
+    try:
+        rule = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(rule, dict) or rule.get("scope") != authorization_scope(config):
+        return None
+    return rule
+
+
+def array_at_candidate(report, rule):
+    if report.get("status") not in ("open", "handling"):
+        return False
+    try:
+        created = dt.datetime.fromisoformat(report["created_at"])
+        enabled = dt.datetime.fromisoformat(rule["enabled_after"])
+        return created >= enabled and bool(_ARRAY_AT_CRASH.search(report["text"]))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def verified_array_at_revision(api, config, rule):
+    verified = rule.get("verified_revision", "")
+    if api.base != "https://buildplay.fun" or not isinstance(verified, str) or not re.fullmatch(r"[0-9a-f]{40}", verified):
+        return None
+    request = urllib.request.Request(api.base + "/static/app/version.json", headers={"Cache-Control": "no-cache"})
+    try:
+        with urllib.request.build_opener(NoRedirect).open(request, timeout=10) as response:
+            revision = json.loads(response.read(4096))["commit"]
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            return None
+        result = subprocess.run(["git", "merge-base", "--is-ancestor", verified, revision],
+                                cwd=config["repository_path"], capture_output=True, timeout=10)
+        return revision if result.returncode == 0 else None
+    except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired):
+        return None
+
+
+def close_array_at_duplicates(state_dir, config, api, identifiers):
+    """Apply the owner's standing closure decision only to the verified crash signatures."""
+    rule = array_at_rule(state_dir, config)
+    if not rule or not identifiers:
+        return set()
+    candidates = {row["id"] for status in ("open", "handling") for page in api.pages(status=status)
+                  for row in page if row.get("id") in identifiers and array_at_candidate(row, rule)}
+    if not candidates:
+        return set()
+    revision = verified_array_at_revision(api, config, rule)
+    if not revision:
+        return set()
+    closed = set()
+    rationale = "This matches the verified Array.at compatibility crash. The production fix is already live and this duplicate requires no further change."
+    changes = "The deployed compatibility fix uses indexed access to find the active dialog. This duplicate required no additional code changes."
+    for identifier in sorted(candidates):
+        try:
+            with authorization_lock(state_dir):
+                current = api.get(identifier)
+                policy = with_review_policy(config, current, authorizations(state_dir, config))["_review_policy"]
+                if (not array_at_candidate(current, rule) or "workflow_stage" not in current
+                        or not current.get("updated_at") or policy["authorization_pending"]
+                        or policy["authorization_declined"] or policy["student_experience_concern"]):
+                    continue
+                path = "/admin/bug-reports/" + urllib.parse.quote(report_id(identifier), safe="")
+                guard = {"expected_status": current["status"], "expected_updated_at": current["updated_at"]}
+                if current["status"] == "open":
+                    api.request(path + "/status", method="POST", body={
+                        **guard, "status": "handling", "resolution": rationale, "commit": revision,
+                    })
+                    current = api.get(identifier)
+                    if current["status"] != "handling" or current.get("release_commit") != revision:
+                        continue
+                    guard = {"expected_status": current["status"], "expected_updated_at": current["updated_at"]}
+                if current.get("score") != 0 or current.get("score_rationale") != rationale:
+                    api.request(path + "/assessment", method="POST",
+                                body={**guard, "score": 0, "score_rationale": rationale})
+                    current = api.get(identifier)
+                    if (current["status"] != guard["expected_status"] or current.get("score") != 0
+                            or current.get("score_rationale") != rationale):
+                        continue
+                    guard["expected_updated_at"] = current["updated_at"]
+                api.request(path + "/status", method="POST", body={
+                    **guard, "status": "handled", "resolution": rationale, "changes_summary": changes,
+                    "commit": revision, "rollout_verified": True,
+                })
+                current = api.get(identifier)
+                if (current["status"] == "handled" and current.get("score") == 0
+                        and current.get("commit") == revision and current.get("rolled_out_at")):
+                    closed.add(identifier)
+        except (OSError, RuntimeError):
+            # A concurrent change or transient API failure stays in the ordinary queue.
+            continue
+        if identifier in closed:
+            complete_authorization(state_dir, config, identifier)
+    return closed
+
+
 def watch(state_dir, *, dry_run=False, now=None):
     config = configuration(state_dir)
     if not dry_run:
         sync_authorizations(state_dir, config)
-    identifiers = review_ids(BugAPI(config), authorizations(state_dir, config))
+    api = BugAPI(config)
+    identifiers = review_ids(api, authorizations(state_dir, config))
+    if not dry_run:
+        identifiers -= close_array_at_duplicates(state_dir, config, api, identifiers)
     receipt = state_dir / "pending.json"
     if not identifiers:
         if not dry_run:

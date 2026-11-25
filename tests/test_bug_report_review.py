@@ -61,6 +61,53 @@ def pending(monkeypatch):
     return api
 
 
+def test_watcher_closes_future_array_at_duplicates_only_after_release_verification(state_dir, pending, monkeypatch):
+    config = review.configuration(state_dir)
+    revision = "a" * 40
+    review.save_json(state_dir / "array-at-duplicate-rule.json", {
+        "scope": review.authorization_scope(config), "enabled_after": "2026-11-25T17:00:00Z",
+        "verified_revision": revision,
+    })
+    common = {"status": "open", "text": "Automatic client error: modals.at is not a function",
+              "workflow_stage": "unhandled", "updated_at": "1",
+              "created_at": "2026-11-25T18:00:00Z", "reporter_user_id": None, "user": None}
+    records = {identifier: {**common, "id": identifier, **overrides} for identifier, overrides in {
+        "future": {}, "old": {"created_at": "2026-11-25T16:00:00Z"},
+        "unrelated": {"text": "Array.at is handy for this feature idea."},
+        "declined": {}, "awaiting-answer": {},
+    }.items()}
+    authorization = review.authorizations(state_dir, config)
+    authorization["declined"]["declined"] = {"user_response": "Declined"}
+    authorization["pending"] = {"report_id": "awaiting-answer"}
+    review.save_json(state_dir / "authorizations.json", authorization)
+    pending.pages.side_effect = lambda *, status: [[], [row.copy() for row in records.values()
+                                                        if row["status"] == status]]
+    pending.get.side_effect = lambda identifier: records[identifier].copy()
+
+    def write(path, *, method, body):
+        _, identifier, action = path.rsplit("/", 2)
+        row = records[identifier]
+        assert body["expected_status"] == row["status"] and body["expected_updated_at"] == row["updated_at"]
+        if action == "assessment":
+            row.update(score=body["score"], score_rationale=body["score_rationale"])
+        elif body["status"] == "handling":
+            row.update(status="handling", release_commit=body["commit"])
+        else:
+            assert body["rollout_verified"] and body["changes_summary"]
+            row.update(status="handled", commit=body["commit"], rolled_out_at="now")
+        row["updated_at"] = str(int(row["updated_at"]) + 1)
+
+    pending.request.side_effect = write
+    monkeypatch.setattr(review, "verified_array_at_revision", lambda *_: None)
+    assert not review.close_array_at_duplicates(state_dir, config, pending, records.keys())
+    pending.request.assert_not_called()
+    monkeypatch.setattr(review, "verified_array_at_revision", lambda *_: revision)
+    assert review.close_array_at_duplicates(state_dir, config, pending, records.keys()) == {"future"}
+    assert records["future"]["status"] == "handled" and records["future"]["score"] == 0
+    assert all(records[identifier]["status"] == "open" for identifier in
+               ("old", "unrelated", "declined", "awaiting-answer"))
+
+
 def test_empty_queue_does_not_invoke_codex_and_clears_delivery_receipt(state_dir, pending, monkeypatch):
     pending.pending_ids.return_value = set()
     review.save_json(state_dir / "pending.json", {"report_ids": ["old"], "queued_at": 1})
