@@ -17,7 +17,9 @@ export function boardInputGeometry(spec:GameSpec,scene:Scene,order:ReadonlyMap<s
     const geometry=pieceGeometry(spec,piece),{x,y}=geometry.center;
     const rx=geometry.size.width*geometry.scale/2,ry=geometry.size.height*geometry.scale/2;
     const corner=(dx:number,dy:number)=>`${x+dx*geometry.cos+dy*geometry.sin} ${y-dx*geometry.sin+dy*geometry.cos}`;
-    const pressPath=!pressOutlines||!piece.move_targets?.length||geometry.shape!=='image'?undefined:spec.piece_types[piece.type].action_outline==='ellipse'
+    const tapButton=!piece.move_targets?.length && piece.actions?.includes('tap');
+    const outlined=tapButton || (pressOutlines && piece.move_targets?.length && geometry.shape==='image');
+    const pressPath=!outlined?undefined:geometry.shape==='circle'||spec.piece_types[piece.type].action_outline==='ellipse'
       ?`M ${corner(-rx,0)} A ${rx} ${ry} ${piece.rotation??0} 1 0 ${corner(rx,0)} A ${rx} ${ry} ${piece.rotation??0} 1 0 ${corner(-rx,0)} Z`
       :`M ${corner(-rx,-ry)} L ${corner(rx,-ry)} L ${corner(rx,ry)} L ${corner(-rx,ry)} Z`;
     return [piece.id,{...geometry,pressPath,targets:targets.filter(target=>piece.move_targets?.includes(target.id))}];

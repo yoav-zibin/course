@@ -57,7 +57,7 @@ def run(args):
                 if 'to' in action:
                     x,y=project(action['to']);y+=round(min(54*density,action['lift']*sc*.6+22*density,(bottom-top)/3))
                     command=f'swipe {p[0]} {p[1]} {x} {y} 530'
-                else:command=f'tap {p[0]} {p[1]}'
+                else:command=f'swipe {p[0]} {p[1]} {p[0]} {p[1]} {args.tap_ms}' if args.tap_ms else f'tap {p[0]} {p[1]}'
                 time.sleep(.4)
                 if args.profile:
                     pid=d.adb('shell','pidof',pkg);remote='/data/local/tmp/buildplay-samples.data'
@@ -99,4 +99,5 @@ def run(args):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('fixtures',type=Path);p.add_argument('results',type=Path)
+    p.add_argument('--tap-ms',type=int,default=55,help='Duration of a stationary touch, or zero to stress simultaneous down/up')
     p.add_argument('--serial',required=True);p.add_argument('--package',default='fun.buildplay.debug');p.add_argument('--profile',action='store_true');run(p.parse_args())

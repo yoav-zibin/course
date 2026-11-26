@@ -85,15 +85,17 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
     .onTouchesDown(event=>{
       'worklet';
       const touch=event.changedTouches[0];if(!touch)return;
-      const slot=Math.min(slots-1,Math.max(0,Math.floor((touch.x-1)/slotWidth)));
+      const x=touch.x>=0&&touch.x<=controlWidth?touch.x:touch.absoluteX-translation.value.x;
+      const y=touch.y>=0&&touch.y<=controlHeight?touch.y:touch.absoluteY-translation.value.y;
+      const slot=Math.min(slots-1,Math.max(0,Math.floor((x-1)/slotWidth)));
       pressedSlot.value=slot;
-      pressedOpacity.value=touch.y<=buttonHeight && !(disabledSlots&(1<<slot))?1:0;
+      pressedOpacity.value=y>=0 && y<=buttonHeight && !(disabledSlots&(1<<slot))?1:0;
     })
     .onTouchesUp(()=>{
       'worklet';
       pressedOpacity.value=withDelay(65,withTiming(0,{duration:65}));
     })
-    .onTouchesCancelled(()=>{'worklet';pressedOpacity.value=0;})
+    .onTouchesCancelled(()=>{'worklet';pressedOpacity.value=withTiming(0,{duration:90});})
     .onStart(event=>{
       'worklet';
       const now=Date.now();
@@ -115,7 +117,7 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
       if(success)move(event.translationX,event.translationY);
       dragging.value=false;
       scheduleOnRN(commitDrag,translation.value,limits.value,timing.value,Date.now(),!success);
-    }),[buttonHeight,commitDrag,disabledSlots,dragging,limits,move,origin,pressedOpacity,pressedSlot,slots,slotWidth,timing,translation]);
+    }),[buttonHeight,commitDrag,controlHeight,controlWidth,disabledSlots,dragging,limits,move,origin,pressedOpacity,pressedSlot,slots,slotWidth,timing,translation]);
   const buttonStyle=({pressed,focused}:any)=>[styles.button,{height:buttonHeight},pressed&&{backgroundColor:'#465572'},focused&&{outlineColor:'#70d5ff',outlineStyle:'solid',outlineWidth:2}];
   return <GestureDetector gesture={pan}><Animated.View ref={nativeView} collapsable={false} onLayout={protectGesture} testID={grouped?'match-floating-controls':undefined} style={[styles.position,{left:0,top:0,width:controlWidth,height:controlHeight},style]}>
     <Animated.View pointerEvents="none" accessible={false} style={[styles.pressHighlight,{width:slotWidth,height:buttonHeight},pressedStyle]}/>

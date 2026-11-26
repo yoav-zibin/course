@@ -263,7 +263,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
         camera:area.camera,hit,source,selected:model.selected,touch:event.pointerType!==PointerType.MOUSE,moved:false,claimsTouch,
         grab:piece?{x:(piece.center.x-point.x)*canvas.scaleX,y:(piece.center.y-point.y)*canvas.scaleY}:{x:0,y:0}};
       feedback.value=target&&(selectedDestination||!piece)?{target,scale:canvas.scale}:
-        piece?{...(android&&model.spriteIds.includes(piece.id)?{piecePath:piece.pressPath}:{piece:piece.id}),scale:canvas.scale}:null;
+        piece?{...(piece.pressPath&&(!piece.targets.length||android&&model.spriteIds.includes(piece.id))?{piecePath:piece.pressPath}:{piece:piece.id}),scale:canvas.scale}:null;
       glow.value=1;
       if(claimsTouch)GestureStateManager.activate(event.handlerTag);
     },
