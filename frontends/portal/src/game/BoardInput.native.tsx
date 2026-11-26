@@ -86,12 +86,12 @@ function TargetFeedback({feedback,glow}:{feedback:SharedValue<Feedback|null>;glo
 function DragPreview({id,feedback,children}:{
   id:string;feedback:SharedValue<Feedback|null>;children:React.ReactNode;
 }) {
-  const animatedProps=useAnimatedProps(()=>({opacity:feedback.value?.target?.id===id?1:0}));
+  const animatedProps=useAnimatedProps<GProps>(()=>({...identity,display:feedback.value?.target?.id===id?'inline':'none'}));
   return <AnimatedGroup animatedProps={animatedProps}>{children}</AnimatedGroup>;
 }
 
 function DestinationHint({id,shown,targets,children}:{id:string;shown:boolean;targets:SharedValue<string[]>;children:React.ReactNode}) {
-  const animatedProps=useAnimatedProps(()=>({opacity:shown||targets.value.includes(id)?1:0}));
+  const animatedProps=useAnimatedProps<GProps>(()=>({...identity,display:shown||targets.value.includes(id)?'inline':'none'}));
   return <AnimatedGroup animatedProps={animatedProps}>{children}</AnimatedGroup>;
 }
 
@@ -339,12 +339,13 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
     drawsSelectedTargets:!!selectedTargets,
     // Reveal the already drawn art on contact. Once selection commits, expose
     // those same nodes as accessible buttons without mounting another SVG tree.
-    destinationHints:hintedTargets.map(target=>{
+    // Android SVG groups skip display:none children before allocating a draw layer.
+    destinationHints:hintedTargets.length?<G key="destination-hints">{hintedTargets.map(target=>{
       const shown=!!selectedTargets?.some(dest=>dest.id===target.id);
       return <DestinationHint key={target.id} id={target.id} shown={shown} targets={pressedTargets}>
         {props.renderDestination(target,shown)}
       </DestinationHint>;
-    }),
+    })}</G>:null,
     wrapCanvas:canvas=><GestureDetector gesture={manual}>{canvas}</GestureDetector>,
     wrapPiece,
     // Route physical touches through the manual gesture exactly once. SVG
@@ -352,8 +353,8 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
     feedback:<View collapsable={false} style={[StyleSheet.absoluteFill,{direction:'ltr'}]} pointerEvents="box-only"
       accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Svg width="100%" height="100%" preserveAspectRatio={fill?"none":undefined} style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
-        {destinations&&scene.targets?.filter(target=>target.preview?.length&&destinations.some(d=>d.id===target.id)).map(target=>
-          <DragPreview key={target.id} id={target.id} feedback={feedback}>{props.renderPreview(target)}</DragPreview>)}
+        {destinations&&<G>{scene.targets?.filter(target=>target.preview?.length&&destinations.some(d=>d.id===target.id)).map(target=>
+          <DragPreview key={target.id} id={target.id} feedback={feedback}>{props.renderPreview(target)}</DragPreview>)}</G>}
         <TargetFeedback feedback={feedback} glow={glow}/>
         {held&&!spriteIds.includes(held.id)&&<HeldArtwork token={held.token} drag={drag} origin={origin}>{props.renderHeld(held.id)}</HeldArtwork>}
       </Svg>

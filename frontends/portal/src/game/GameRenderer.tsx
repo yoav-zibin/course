@@ -85,6 +85,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const [camera, setCamera] = useState<Camera>({zoom: 1, x: 0, y: 0});
   const [width, setWidth] = useState(400);
   const [canvasHeight, setCanvasHeight] = useState(300);
+  const [selectionHeight,setSelectionHeight]=useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [paintTick,setPaintTick]=useState(0);
   const [,setGestureTick]=useState(0);
@@ -113,6 +114,10 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   // the player can intentionally zoom in for larger pieces and destinations.
   const framed=frameHeight!==undefined&&frameHeight>0;
   const fill=framed&&fillFrame;
+  // In portrait a fitted board often has enough empty space beneath the art to
+  // show the selection tools without moving the board out from under the finger.
+  const floatSelection=Platform.OS!=='web'&&framed&&!fill&&!showToolbar&&showDestinationsAfterSelection&&
+    !display.scene.controls?.length&&(frameHeight-widthFittedHeight)/2>=Math.max(90*dimensions.fontScale,selectionHeight);
   const height=framed?canvasHeight:Math.max(1,Math.min(widthFittedHeight,dimensions.height));
   const limits = cameraLimits(bounds,camera.zoom);
   const view = {x: bounds.x + (bounds.width-limits.width)/2 + camera.x,
@@ -634,7 +639,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     {!!error&&<Text accessibilityRole="alert" style={styles.error}>{playerText(error)}</Text>}
     {!!display.scene.controls?.length&&<View style={styles.controls}>{display.scene.controls.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>}
     {boardInput.wrapCanvas?boardInput.wrapCanvas(boardCanvas):boardCanvas}
-    {Boolean(toolsPiece||toolsPreview?.preview?.length)&&<View style={styles.tools}>
+    {Boolean(toolsPiece||toolsPreview?.preview?.length)&&<View style={[styles.tools,floatSelection&&styles.floatingTools]}
+      onLayout={Platform.OS!=='web'&&showDestinationsAfterSelection?event=>setSelectionHeight(event.nativeEvent.layout.height):undefined}>
       {toolsPiece&&<Text style={styles.selectedLabel} accessibilityLiveRegion="polite">{playerText(pieceName(toolsPiece))}{toolsPiece.move_targets?.length?copyText(" · choose a highlighted destination"):''}</Text>}
       <View style={styles.row}>
         {toolsActions.includes('rotate')&&<><Tool label={copyText("Rotate counterclockwise")} text="↺" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:-90})}/><Tool label={copyText("Rotate clockwise")} text="↻" disabled={!active} onPress={()=>transform({type:'rotate',id:'',delta:90})}/></>}
@@ -789,6 +795,6 @@ const styles=StyleSheet.create({
   loading:{padding:20},error:{color:'#ffc8b9',backgroundColor:'#4a2527',padding:12,borderRadius:8},
   tool:{minWidth:44,minHeight:44,maxWidth:'100%',flexShrink:1,paddingHorizontal:12,paddingVertical:11,borderRadius:10,borderWidth:1,borderColor:'#355469',backgroundColor:'#172f40',alignItems:'center',justifyContent:'center'},
   toolText:{color:'#eff8fc',fontSize:14,fontWeight:'600',flexShrink:1,minWidth:0,maxWidth:'100%'},disabled:{opacity:.4},pressed:{backgroundColor:'#2a5365'},chosen:{borderColor:'#a7e6ba',backgroundColor:'#225247'},
-  tools:{gap:7},selectedLabel:{color:'#b9e4ce',fontSize:13},preview:{color:'#d0eab2',fontSize:13,minHeight:20},controls:{flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:10,minWidth:0,maxWidth:'100%'},
+  floatingTools:{position:'absolute',bottom:0,left:0,right:0},tools:{gap:7},selectedLabel:{color:'#b9e4ce',fontSize:13},preview:{color:'#d0eab2',fontSize:13,minHeight:20},controls:{flexDirection:'row',flexWrap:'wrap',justifyContent:'center',alignItems:'center',gap:10,minWidth:0,maxWidth:'100%'},
   field:{gap:5,minWidth:130,maxWidth:'100%',flexGrow:1},fieldLabel:{color:'#cbdce5',fontSize:13},input:{borderWidth:1,borderColor:'#365165',backgroundColor:'#102635',borderRadius:9,minHeight:44,color:'#ffffff',paddingHorizontal:12},
 });

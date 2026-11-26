@@ -24,6 +24,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
@@ -35,6 +38,7 @@ jobs:
           path: release
       - name: Set up release fixture and iPhone
         run: |
+          python3 -m pip install --only-binary=:all: av numpy
           command -v xcodegen || brew install xcodegen
           (cd frontends/portal && npm ci)
           mkdir -p "$RUNNER_TEMP/interaction"
@@ -68,7 +72,10 @@ jobs:
             app="$base/release/BuildPlay.app"
             cp "$base/js-$name"/_expo/static/js/ios/*.hbc "$app/main.jsbundle"
             codesign --force --sign - --preserve-metadata=identifier,entitlements "$app"
-            bash scripts/native-interactions/ios.sh "$app" "$base/fixture" "$base/results/$name" "$SIMULATOR_ID"
+            if ! bash scripts/native-interactions/ios.sh "$app" "$base/fixture" "$base/results/$name" "$SIMULATOR_ID"; then
+              if [[ "$name" == current ]]; then exit 1; fi
+              echo "::warning::Baseline verification failed. Continuing with the independent candidate."
+            fi
           done
       - uses: actions/upload-artifact@v4
         if: always()
@@ -78,5 +85,6 @@ jobs:
             ${{ runner.temp }}/interaction/results/*/*.xcresult
             ${{ runner.temp }}/interaction/results/*/*.json
             ${{ runner.temp }}/interaction/results/*/*.log
+            ${{ runner.temp }}/interaction/results/*/*.mov
             ${{ runner.temp }}/interaction/phone.json
             ${{ runner.temp }}/interaction/fixture/pose.json

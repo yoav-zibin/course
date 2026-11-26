@@ -64,16 +64,37 @@ final class BoardTests: XCTestCase {
     }
 
     func testDragChecker() {
-        let source = coordinate(pose.source), destination = coordinate(pose.destination, lift: true)
-        // Release on the opposite row, outside this checker’s legal destinations.
-        let middle = coordinate(Pose.Point(x: 680, y: 490), lift: true)
+        let source = coordinate(pose.source)
+        let end = Pose.Point(x: pose.source.x, y: pose.bounds.y + pose.bounds.height * 0.92)
+        let destination = coordinate(end)
+        let frame = board.frame, b = pose.bounds, s = scale
+        let x = frame.midX + (pose.source.x - b.x - b.width/2)*s
+        let y = frame.midY + (pose.source.y - b.y - b.height/2)*s
+        let endY = frame.midY + (end.y - b.y - b.height/2)*s
+        print("TRACK_GEOMETRY \(app.frame.width) \(app.frame.height) \(x) \(y) \(endY) \(s*pose.height)")
         sample {
             startMeasuring()
-            source.press(forDuration: 0.05, thenDragTo: middle, withVelocity: 180, thenHoldForDuration: 0)
+            source.press(forDuration: 0.05, thenDragTo: destination, withVelocity: 180, thenHoldForDuration: 0)
             stopMeasuring()
+            let cancel = element("Cancel selection")
+            if cancel.exists { cancel.tap() }
         }
+    }
+
+    func testCommitChecker() {
+        let source = coordinate(pose.source), destination = coordinate(pose.destination, lift: true)
         source.press(forDuration: 0.05, thenDragTo: destination, withVelocity: 180, thenHoldForDuration: 0)
-        // The host verifies the exact persisted checker counts and owners after this gesture.
+        // Keep the app in the foreground until the accepted move is visible.
+        // This particular move makes the previously empty destination a playable point.
+        let checker = pose.checker.components(separatedBy: ": ")[0] + ": " + pose.target + ": Move"
+        let proof = element(checker)
+        if !proof.waitForExistence(timeout: 4) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "Board after legal drop"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        // The host checks the persisted counts and owners, including any unintended extra move.
     }
 
     func testOpenReport() {

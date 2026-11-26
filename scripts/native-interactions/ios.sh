@@ -23,19 +23,40 @@ fi
 build=(xcodebuild -project "$results/project/Interactions.xcodeproj" -scheme Interactions -configuration Release
   -destination "platform=iOS Simulator,id=$sim" -derivedDataPath "$results/derived" -parallel-testing-enabled NO)
 "${build[@]}" build-for-testing > "$results/build.log"
-for action in SelectChecker OpenReport DragChecker; do
+record_pid=''
+stop_recording() {
+  if [[ -n "$record_pid" ]]; then
+    kill -INT "$record_pid" 2>/dev/null || true
+    wait "$record_pid" || true
+    record_pid=''
+  fi
+}
+trap stop_recording EXIT
+for action in SelectChecker OpenReport DragChecker CommitChecker; do
   xcrun simctl terminate "$sim" "$bundle" 2>/dev/null || true
   cp "$fixture/$filename" "$store/$filename"
+  if [[ "$action" == DragChecker ]]; then
+    xcrun simctl io "$sim" recordVideo --codec=h264 "$results/drag.mov" >"$results/recording.log" 2>&1 &
+    record_pid=$!
+  fi
   "${build[@]}" test-without-building "-only-testing:InteractionTests/BoardTests/test$action" \
     -resultBundlePath "$results/$action.xcresult" | tee "$results/$action.log"
+  stop_recording
   xcrun xcresulttool get test-results metrics --path "$results/$action.xcresult" > "$results/$action.json"
 done
-python3 - "$fixture/pose.json" "$store/$filename" <<'PY'
+python3 - "$fixture/pose.json" "$store/$filename" "$results/legal-drop.json" <<'PY'
 import json, sys
 pose = json.load(open(sys.argv[1]))
 match = json.loads(json.load(open(sys.argv[2]))['value'])['local'][pose['id']]
-assert match['move_count'] == pose['moveCount'] + 1
-assert match['logicState']['cnt'] == pose['expectedCounts']
-assert match['logicState']['owner'] == pose['expectedOwners']
-print('Verified the legal Backgammon checker move on the simulator')
+proof = {'move_count':match['move_count'],'expected_move_count':pose['moveCount']+1,
+         'counts':match['logicState']['cnt'],'owners':match['logicState']['owner']}
+proof['committed'] = (proof['move_count']==proof['expected_move_count'] and proof['counts']==pose['expectedCounts']
+                      and proof['owners']==pose['expectedOwners'])
+with open(sys.argv[3],'w') as output:
+    json.dump(proof,output,indent=2)
+print('Legal checker drop committed:',proof['committed'])
+
 PY
+
+python3 "$scripts/ios-tracking.py" "$results/drag.mov" "$results/DragChecker.log" "$results/tracking.json"
+jq -e '.committed' "$results/legal-drop.json" >/dev/null
