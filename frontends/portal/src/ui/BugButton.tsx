@@ -1,6 +1,6 @@
-import React,{useEffect,useLayoutEffect,useRef} from 'react';
+import React,{useCallback,useEffect,useLayoutEffect,useMemo,useRef} from 'react';
 import {findNodeHandle,Platform,Pressable,StyleSheet,Text,View,useWindowDimensions} from 'react-native';
-import {GestureDetector,usePanGesture} from 'react-native-gesture-handler';
+import {Gesture,GestureDetector} from 'react-native-gesture-handler';
 import Animated,{useAnimatedStyle,useSharedValue} from 'react-native-reanimated';
 import {scheduleOnRN,scheduleOnUI} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -54,7 +54,7 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
     return()=>{registration.dispose();protection.current=null;};
   },[]);
   const protectGesture=()=>protection.current?.register();
-  const commitDrag=(placed:BugPoint,endBounds:BugBounds,trace:{start:number;inputs:number;maxGap:number;slowGaps:number},
+  const commitDrag=useCallback((placed:BugPoint,endBounds:BugBounds,trace:{start:number;inputs:number;maxGap:number;slowGaps:number},
                    endedAt:number,canceled:boolean)=>{
     setBugPosition(normalizedBugPoint(placed,endBounds));
     recordDiagnosticEvent('drag_performance',{
@@ -63,39 +63,40 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
       ui_gaps_over_34ms:trace.slowGaps,js_release_delay_ms:Math.max(0,Date.now()-endedAt),
     });
     if(!canceled)recordDiagnosticEvent('bug_control_moved',{x:Math.round(placed.x),y:Math.round(placed.y)});
-  };
-  function move(x:number,y:number){
+  },[]);
+  const move=useCallback((x:number,y:number)=>{
     'worklet';
     const box=limits.value;
     translation.value={
       x:Math.max(box.left,Math.min(box.right,origin.value.x+x)),
       y:Math.max(box.top,Math.min(box.bottom,origin.value.y+y)),
     };
-  }
-  const pan=usePanGesture({
-    minDistance:5,maxPointers:1,runOnJS:false,cancelsTouchesInView:true,cancelsJSResponder:true,
-    onActivate:event=>{
+  },[limits,origin,translation]);
+  // The direct detector attaches to the transformed control itself. A separate
+  // layout-less detector host gives Android accessibility a zero-height parent.
+  const pan=useMemo(()=>Gesture.Pan().minDistance(5).maxPointers(1)
+    .runOnJS(false).cancelsTouchesInView(true)
+    .onStart(event=>{
       'worklet';
       const now=Date.now();
       origin.value=translation.value;
       dragging.value=true;
       timing.value={start:now,last:now,inputs:0,maxGap:0,slowGaps:0};
       move(event.translationX,event.translationY);
-    },
-    onUpdate:event=>{
+    })
+    .onUpdate(event=>{
       'worklet';
       const now=Date.now(),previous=timing.value,gap=Math.max(0,now-previous.last);
       timing.value={start:previous.start,last:now,inputs:previous.inputs+1,
         maxGap:Math.max(previous.maxGap,gap),slowGaps:previous.slowGaps+(gap>=34?1:0)};
       move(event.translationX,event.translationY);
-    },
-    onDeactivate:event=>{
+    })
+    .onEnd((event,success)=>{
       'worklet';
-      if(!event.canceled)move(event.translationX,event.translationY);
+      if(success)move(event.translationX,event.translationY);
       dragging.value=false;
-      scheduleOnRN(commitDrag,translation.value,limits.value,timing.value,Date.now(),event.canceled);
-    },
-  });
+      scheduleOnRN(commitDrag,translation.value,limits.value,timing.value,Date.now(),!success);
+    }),[commitDrag,dragging,limits,move,origin,timing,translation]);
   const buttonStyle=({pressed,focused}:any)=>[styles.button,{height:(grouped&&history?44:controlHeight)-2},pressed&&{opacity:.7},focused&&{outlineColor:'#70d5ff',outlineStyle:'solid',outlineWidth:2}];
   return <GestureDetector gesture={pan}><Animated.View ref={nativeView} collapsable={false} onLayout={protectGesture} testID={grouped?'match-floating-controls':undefined} style={[styles.position,{left:0,top:0,width:controlWidth,height:controlHeight},style]}>
     <Pressable accessibilityRole="button" accessibilityLabel={bugButtonLabel()}
