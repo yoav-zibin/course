@@ -1,27 +1,30 @@
-import {Dimensions} from 'react-native';
+import {Dimensions,Platform} from 'react-native';
 import {createWorkletRuntime,runOnRuntimeAsync} from 'react-native-worklets';
 import {captureRef,captureScreen} from 'react-native-view-shot';
 import {nativeBugCaptureTarget} from '../ui/bugModal';
 
 let worker: ReturnType<typeof createWorkletRuntime> | undefined;
 
-function capturePlan(width:number,height:number) {
+function capturePlan(width:number,height:number,pixelsPerUnit:number) {
   'worklet';
-  const scale=Math.min(1,1000/width,1400/height);
+  // ViewShot takes points on iOS, then renders at the display's native
+  // scale. Its Android resize arguments are already output pixels.
+  const scale=Math.min(1,1000/(width*pixelsPerUnit),1400/(height*pixelsPerUnit));
   return {
-    size:{width:Math.round(width*scale),height:Math.round(height*scale)},
+    size:{width:Math.max(1,Math.floor(width*scale)),height:Math.max(1,Math.floor(height*scale))},
     qualities:[.65,.35,.15],
     maxLength:500000,
   };
 }
 
-let cached:{width:number;height:number;plan:Promise<ReturnType<typeof capturePlan>>}|undefined;
+let cached:{width:number;height:number;pixelsPerUnit:number;plan:Promise<ReturnType<typeof capturePlan>>}|undefined;
 function planForWindow() {
-  const {width,height}=Dimensions.get('window');
-  if(cached?.width===width&&cached.height===height)return cached.plan;
+  const {width,height,scale}=Dimensions.get('window');
+  const pixelsPerUnit=Platform.OS==='ios'?scale:1;
+  if(cached?.width===width&&cached.height===height&&cached.pixelsPerUnit===pixelsPerUnit)return cached.plan;
   worker ??= createWorkletRuntime({name:'Bug screenshot',enableEventLoop:false});
-  const plan=runOnRuntimeAsync(worker,capturePlan,width,height);
-  cached={width,height,plan};
+  const plan=runOnRuntimeAsync(worker,capturePlan,width,height,pixelsPerUnit);
+  cached={width,height,pixelsPerUnit,plan};
   void plan.catch(()=>{if(cached?.plan===plan)cached=undefined;});
   return plan;
 }

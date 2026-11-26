@@ -570,6 +570,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       serial={display.serial} enabled={false} selected dragged/>);
   const boardInput=useBoardInput({
     spec,scene:display.scene,order:painting.order,revision:revision.current,presentedRevision:renderedRevision.current,moveCount:lastPaint.current?.move_count,active,selected,
+    lastMoveWasOwn:lastPaint.current?.my_player_index!=null&&lastPaint.current.my_player_index===lastPaint.current.last_move_player_index,
     selectionRequired:showDestinationsAfterSelection,width,height,view,bounds,camera,fill,
     onResult:finishBoardInput,onCamera:setSafeCamera,renderHeld,renderPreview,
     renderDestination:(target,accessible)=><TargetGraphic target={target} spec={spec} enabled selected={preview===target.id} onPress={accessible?pressTarget:undefined}/>,

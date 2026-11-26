@@ -14,6 +14,7 @@ export type BoardInputProps = {
   revision:number;
   presentedRevision:number;
   moveCount?:number;
+  lastMoveWasOwn:boolean;
   active:boolean;
   selected:string|null;
   selectionRequired:boolean;
