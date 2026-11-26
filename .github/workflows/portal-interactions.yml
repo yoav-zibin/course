@@ -10,6 +10,10 @@ on:
         description: Optional baseline commit for a same-simulator JavaScript comparison
         type: string
         required: false
+      baseline_build_run:
+        description: Portal apps run for the baseline when its native code differs
+        type: string
+        required: false
       scenario:
         description: Interactions to measure
         type: choice
@@ -65,6 +69,13 @@ jobs:
           run-id: ${{ inputs.build_run }}
           github-token: ${{ github.token }}
           path: release
+      - uses: actions/download-artifact@v4
+        if: inputs.baseline && inputs.baseline_build_run
+        with:
+          name: BuildPlay-ios-simulator
+          run-id: ${{ inputs.baseline_build_run }}
+          github-token: ${{ github.token }}
+          path: baseline-release
       - name: Set up release fixture and iPhone
         run: |
           python3 -m pip install --only-binary=:all: av numpy pillow
@@ -73,6 +84,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/interaction"
           frontends/portal/node_modules/.bin/tsx scripts/native-interactions/backgammon.ts "$RUNNER_TEMP/interaction/fixture"
           ditto -x -k release/BuildPlay-simulator.zip "$RUNNER_TEMP/interaction/release"
+          if [[ -f baseline-release/BuildPlay-simulator.zip ]]; then
+            ditto -x -k baseline-release/BuildPlay-simulator.zip "$RUNNER_TEMP/interaction/baseline-release"
+          fi
           xcrun simctl list devices available --json | jq '{devices:(.devices | with_entries(select(.key | test("iOS-(2[6-9]|[3-9][0-9])-"))))}' > "$RUNNER_TEMP/interaction/devices.json"
           python3 frontends/portal/scripts/select-ios-simulator.py "$RUNNER_TEMP/interaction/devices.json" > "$RUNNER_TEMP/interaction/phone.json"
           uname -m > "$RUNNER_TEMP/interaction/host-architecture.txt"
@@ -81,6 +95,7 @@ jobs:
         env:
           BASELINE: ${{ inputs.baseline }}
           BUILD_RUN: ${{ inputs.build_run }}
+          BASELINE_BUILD_RUN: ${{ inputs.baseline_build_run }}
           SCENARIO: ${{ inputs.scenario }}
           VIDEO_PAIRS: ${{ inputs.video_pairs || '5' }}
           GH_TOKEN: ${{ github.token }}
@@ -91,18 +106,17 @@ jobs:
           if [[ "$SCENARIO" == startup* ]]; then
             export EXPO_PUBLIC_API_URL=http://localhost:18764
             benchmark=scripts/native-interactions/ios-startup.sh
-            python3 - "$base/release/BuildPlay.app/Info.plist" <<'PY'
+            python3 - "$base" <<'PY'
           import plistlib, sys
           from pathlib import Path
-          path = Path(sys.argv[1])
-          info = plistlib.loads(path.read_bytes())
-          policy = info.setdefault('NSAppTransportSecurity', {})
-          policy['NSAllowsLocalNetworking'] = True
-          policy.setdefault('NSExceptionDomains', {})['localhost'] = {'NSExceptionAllowsInsecureHTTPLoads': True}
-          path.write_bytes(plistlib.dumps(info))
+          for path in Path(sys.argv[1]).glob('*release/BuildPlay.app/Info.plist'):
+              info = plistlib.loads(path.read_bytes())
+              policy = info.setdefault('NSAppTransportSecurity', {})
+              policy['NSAllowsLocalNetworking'] = True
+              policy.setdefault('NSExceptionDomains', {})['localhost'] = {'NSExceptionAllowsInsecureHTTPLoads': True}
+              path.write_bytes(plistlib.dumps(info))
           PY
           fi
-          source_sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" --jq '.head_sha')
           revisions=(current)
           if [[ -n "$BASELINE" ]]; then
             [[ "$BASELINE" =~ ^[0-9a-f]{40}$ ]]
@@ -110,13 +124,19 @@ jobs:
           fi
           for name in "${revisions[@]}"; do
             revision=$GITHUB_SHA
+            app="$base/release/BuildPlay.app"
+            native_run=$BUILD_RUN
             if [[ "$name" == baseline ]]; then revision=$BASELINE; fi
+            if [[ "$name" == baseline && -n "$BASELINE_BUILD_RUN" ]]; then
+              app="$base/baseline-release/BuildPlay.app"
+              native_run=$BASELINE_BUILD_RUN
+            fi
+            source_sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$native_run" --jq '.head_sha')
             # Only replace JavaScript in an app with matching native dependencies and config.
             git diff --exit-code "$source_sha" "$revision" -- frontends/portal/{package-lock.json,app.config.ts,plugins,modules,ios}
             git worktree add --detach "$base/$name" "$revision"
             portal="$base/$name/frontends/portal"
             (cd "$portal" && npm ci && CI=1 npx --no-install expo export --platform ios --output-dir "$base/js-$name")
-            app="$base/release/BuildPlay.app"
             cp "$base/js-$name"/_expo/static/js/ios/*.hbc "$app/main.jsbundle"
             codesign --force --sign - --preserve-metadata=identifier,entitlements "$app"
             if [[ "$SCENARIO" == startup-video || "$SCENARIO" == startup-link ]]; then

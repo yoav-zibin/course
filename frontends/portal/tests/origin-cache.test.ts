@@ -25,7 +25,7 @@ test('origin LRU prunes only optional legacy/translation responses and preserves
   (data as any).unknownRecoveryField={retained:'byte-for-byte'};
   f.put(base,data);f.put(response('/games/open'),['stale']);f.put(`${base}.recency`,{entries:[{path:'/games/open',at:20}]});
   const translation='game-platform.i18n-bundle.v1:es';f.put(translation,{data:'ñ😀'});f.put('game-platform.i18n-recency.v1',{entries:[{key:translation,at:10}]});
-  for(const key of ['game-platform.accounts.v1','game-platform.current-account.v1','game-platform.locale.v1','console-passwords','buildplay.native-import.v1.https.archive','buildplay.shared.v1.foreign'])f.put(key,{original:'never evict'});
+  for(const key of ['game-platform.accounts.v1','game-platform.current-account.v1','game-platform.locale.v1','console-passwords','another-app.private-record','buildplay.shared.v1.foreign'])f.put(key,{original:'never evict'});
   const protectedBefore=new Map([...f.values].filter(([key])=>key!==base&&key!==response('/games/open')&&key!==translation));
   const candidates=await originEvictions(f.storage,'buildplay.shared.v1.current');
   assert.deepEqual(candidates.map(c=>c.at),[10,20,30]);assert.equal(candidates[0].bytes,new TextEncoder().encode(f.values.get(translation)!).length);

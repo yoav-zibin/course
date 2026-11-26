@@ -3,7 +3,7 @@
 The application source is [frontends/portal](../frontends/portal). Expo and React
 Native render the same screens, navigation, game scenes and match behavior on
 Android, iOS and web. Platform adapters provide secure storage, file persistence,
-the native JavaScript game runtime, sharing and migration from older installations.
+the native JavaScript game runtime and sharing.
 The Python backend remains authoritative for online play.
 
 Use a separate checkout on the course VM. Do not develop in the running backend
@@ -34,8 +34,7 @@ build outputs are local artifacts. Change `app.config.ts`, config plugins, local
 modules or TypeScript source, then regenerate; do not maintain another app in
 those generated directories. The local modules under `modules/` are source.
 
-Expo Go does not include the custom native game-runtime or legacy-migration
-modules. Use a native build for gameplay and account-upgrade testing.
+Use a native build to exercise the game runtime and persistent files on a device.
 
 ## Android on the VM
 
@@ -115,44 +114,26 @@ open BuildPlay.xcworkspace
 
 Choose the BuildPlay scheme. Use local ad-hoc signing for a simulator or the
 existing Apple team for a phone build. Upgrading with the same bundle ID and
-team preserves access to the old sandbox and Keychain. Switching identity/team
+team preserves access to the app’s sandbox and Keychain. Switching identity/team
 creates a different app or loses access to its account. The Linux VM cannot
 compile iOS or run an iPhone Simulator; GitHub Actions uses a hosted Mac.
 
-## Upgrade data
+## Native storage
 
-`modules/legacy-portal` reads the previous native applications' data without
-modifying it. Android decrypts the existing `portal-session` account using its
-original Android Keystore key and restores the selected match. iOS reads the
-existing `edu.columbia.gameportal.online` Keychain item, `Documents/portal.json`
-and `Application Support/OnlineSnapshots/account-*.json`.
-
-The new native cache stores atomic JSON envelopes in Android's
-`filesDir/BuildPlayShared` or iOS Application Support's `BuildPlayShared`.
-SHA-256 key filenames allow large packages and archives without SQLite's row
-and database limits. Existing AsyncStorage values are copied only after a
-successful atomic write; their originals remain available for recovery.
-Credentials stay in SecureStore rather than these cache files.
-
-The shared importer persists the recovered identity and archives old snapshots,
-local matches and pending branches before recording migration completion.
-Retired HTML packages and their pending state-based moves are retained for
-inspection; they are never executed or sent to the current move API. Corrupt
-JSON originals are retained as base64 in the archive. A read/storage failure
-leaves original files intact. Migration data and account exports are private;
-keep them out of logs, screenshots, CI artifacts and Git.
+The native app stores matches and game packages in atomic files under Android’s
+`filesDir/BuildPlayShared` or iOS’s `Application Support/BuildPlayShared`. Each
+filename is the SHA-256 hash of its storage key. The account metadata and
+selection are scoped to the API origin. SecureStore holds the credentials.
+A clean installation starts with an empty match repository.
 
 ## Cloud builds and downloads
 
 The [Portal apps workflow](../.github/workflows/portal-apps.yml) runs shared
-TypeScript checks and tests, builds the standalone Android APK, checks real
-Keystore migration, corrupt-data preservation and large atomic cache values in
-an Android emulator, and
-builds and launches both native apps. It captures launch screenshots and checks
+TypeScript checks and tests, builds the standalone Android APK, verifies large atomic files and corruption handling on an Android emulator,
+and builds and launches both native apps. It captures launch screenshots and checks
 that the apps remain running. Android also drives bundled pass-and-play through
 the native SVG scene, handoffs, restart restoration, completion and replay with
-network access disabled. These checks do not replace offline recovery and
-migration testing on real devices.
+network access disabled.
 
 ```bash
 gh workflow run portal-apps.yml --repo yoav-zibin/course --ref main
@@ -164,7 +145,7 @@ gh run download RUN_ID --repo yoav-zibin/course \
 
 Artifacts include `BuildPlay-android-apk`,
 `BuildPlay-ios-simulator`, `BuildPlay-ios-build-results`, `BuildPlay-ios-test-results`,
-`BuildPlay-ios-screenshots`, and `BuildPlay-gradle-logs`. Android migration and
+`BuildPlay-ios-screenshots`, and `BuildPlay-gradle-logs`. Android storage and
 launch diagnostics are in `BuildPlay-android-test-results`. Successful pushes to
 `main` update [BuildPlay.apk](https://github.com/yoav-zibin/course/releases/download/portal-apps/BuildPlay.apk).
 Manual runs provide artifacts without replacing that download. The ad-hoc-signed
@@ -180,11 +161,8 @@ AMFI rejects ad-hoc host signatures that claim these restricted iOS entitlements
 Before packaging, `frontends/portal/scripts/sign-ios-simulator.py` refuses
 device-platform bundles, verifies both embedded sections in arm64 and x86_64,
 signs nested libraries before the app with empty host entitlements, and verifies
-the signatures and unchanged sections. Simulator Keychain migration fixtures
-must use the same embedded synthetic group for the old and new app.
-**These simulator-only flags and synthetic entitlements never apply to
-real-device or TestFlight archives.** Real upgrades must retain their original
-App ID prefix, bundle identifier and team.
+the signatures and embedded sections. Device and TestFlight archives use their
+own distribution entitlements.
 
 Simulator builds and launch checks use the validated `macos-26-intel` image
 with Xcode 26.6. The TestFlight job uses the Apple Silicon `xcode-27` image and

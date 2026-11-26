@@ -1,8 +1,8 @@
 Pod::Spec.new do |s|
   s.name = 'LegacyPortal'
   s.version = '1.0.0'
-  s.summary = 'Read-only upgrade access to the original BuildPlay app data'
-  s.description = 'Exports existing local accounts and archived matches without replaying old moves.'
+  s.summary = 'BuildPlay native storage and launch settings'
+  s.description = 'Stores game data in atomic files and supplies native UI test settings.'
   s.license = { :type => 'UNLICENSED' }
   s.author = 'BuildPlay'
   s.homepage = 'https://github.com/yoav-zibin/course'
@@ -12,5 +12,5 @@ Pod::Spec.new do |s|
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
   s.source_files = '**/*.{h,m,mm,swift}'
-  s.frameworks = 'Security', 'CryptoKit'
+  s.frameworks = 'CryptoKit'
 end

@@ -2,5 +2,5 @@
   "name": "legacy-portal",
   "version": "1.0.0",
   "private": true,
-  "description": "Read-only migration from the original BuildPlay native apps"
+  "description": "BuildPlay native storage, gesture handling and UI test settings"
 }

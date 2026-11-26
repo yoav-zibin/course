@@ -72,7 +72,7 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/BuildPlay.apk"
       - name: Enable emulator acceleration
         run: sudo chmod a+rw /dev/kvm
-      - name: Test native account upgrade and launch standalone app
+      - name: Test native file storage and launch standalone app
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36

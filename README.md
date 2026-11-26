@@ -3,7 +3,7 @@
 **BuildPlay web, Android and iOS use one application:** the React Native + web
 source lives in [frontends/portal](frontends/portal). Start with the
 [course VM and cloud-build guide](docs/mobile-development-on-vm.md) for local
-development, native builds, existing-account migration and cloud artifacts.
+development, native storage, builds and cloud artifacts.
 
 An in-memory REST backend for a multiplayer turn-based games platform, built with FastAPI.
 
