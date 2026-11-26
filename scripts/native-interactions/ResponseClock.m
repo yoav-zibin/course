@@ -65,7 +65,7 @@ static int logfd = -1;
   if(logfd>=0 && event.type==UIEventTypeTouches){
     for(UITouch *t in event.allTouches){
       if(t.phase==UITouchPhaseStationary) continue;
-      if(t.phase==UITouchPhaseBegan)recordResponseStacks();
+      if(t.phase==UITouchPhaseBegan||t.phase==UITouchPhaseEnded)recordResponseStacks();
       CGPoint p=[t locationInView:nil];
       dprintf(logfd,"{\"phase\":%ld,\"t\":%.3f,\"x\":%.2f,\"y\":%.2f,\"wall\":%.3f,\"pid\":%d}\n",
         (long)t.phase,t.timestamp*1000,p.x,p.y,NSDate.date.timeIntervalSince1970*1000,getpid());

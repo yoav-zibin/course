@@ -136,7 +136,9 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
     const pieces=scene.pieces??[],sources=pieces.filter(p=>!p.hidden&&!p.parent&&p.move_targets?.length);
     // Small standalone image pieces can be drawn before the touch. Keep the
     // original on-demand SVG path for groups, external labels and large scenes.
-    if(!active||sources.length>8)return [];
+    // A pending save briefly disables input. Keep its prepared graphics
+    // mounted so the same checkers can move again on the next turn.
+    if(sources.length>8)return [];
     return sources.flatMap(piece=>{
       const geometry=play.geometry.pieces[piece.id];
       if(geometry.shape!=='image'||piece.text||pieces.some(p=>p.parent===piece.id))return [];
@@ -144,7 +146,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       if(side*Math.max(projection.scaleX,projection.scaleY)>256)return [];
       return [{id:piece.id,x:geometry.center.x-side/2,y:geometry.center.y-side/2,side}];
     });
-  },[active,scene,play,projection]);
+  },[scene,play,projection]);
   const spriteIds=useMemo(()=>sprites.map(sprite=>sprite.id),[sprites]);
   const directSources=useMemo(()=>{
     const targets=scene.targets??[];

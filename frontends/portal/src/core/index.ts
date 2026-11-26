@@ -134,8 +134,8 @@ export class PortalStore {
       if (/^\/users\/[^/?]+$/.test(path) && value?.id) profiles[value.id] = value;
       else if (path.startsWith('/users?ids=') && Array.isArray(value)) for (const profile of value) if (profile?.id) profiles[profile.id] = profile;
     }
-    this.patch({matchGames:this.downloadedGameNames(),profiles:{...profiles,...this.state.profiles}});
-    this.patch({ ...(ownProfile && !this.state.profile && !this.state.deletionUpdating ? {profile: ownProfile, account: {...this.state.account!, canonical_user_id: ownProfile.id}} : {}), ...(retired ? {history:null,replayIndex:null} : {}), localMatches: Object.values(data.local).map(match => this.decorate(match) as LocalMatch), conflicts: data.conflicts, archived: [...data.archivedMatches, ...data.archives], pending: Object.values(data.queues).reduce((n, q) => n + q.length, 0) + Object.values(data.local).filter(needsCloudSave).length + Object.keys(data.creations || {}).length, selectedMatch: this.decorate(next), myMatches: this.state.myMatches.filter(match=>!hidden.has(match.id)).map(m => this.decorate(data.responses[`/matches/${m.id}`] || m)!) });
+    this.patch({matchGames:this.downloadedGameNames(),profiles:{...profiles,...this.state.profiles},
+      ...(ownProfile && !this.state.profile && !this.state.deletionUpdating ? {profile: ownProfile, account: {...this.state.account!, canonical_user_id: ownProfile.id}} : {}), ...(retired ? {history:null,replayIndex:null} : {}), localMatches: Object.values(data.local).map(match => this.decorate(match) as LocalMatch), conflicts: data.conflicts, archived: [...data.archivedMatches, ...data.archives], pending: Object.values(data.queues).reduce((n, q) => n + q.length, 0) + Object.values(data.local).filter(needsCloudSave).length + Object.keys(data.creations || {}).length, selectedMatch: this.decorate(next), myMatches: this.state.myMatches.filter(match=>!hidden.has(match.id)).map(m => this.decorate(data.responses[`/matches/${m.id}`] || m)!) });
   }
   private mergeVolatile(data: AccountData) {
     const pending=this.volatileResponses.get(this.identity());if(!pending)return;
@@ -969,8 +969,11 @@ export class PortalStore {
     const selected = this.state.selectedMatch as LocalMatch; if (!selected || !this.data.local[selected.id]) throw new Error('Choose a local match first');
     if (this.state.replayIndex !== null || this.awaitingLocalHandoff(this.data.local[selected.id])) throw new Error('Return to the live board and confirm the next player is ready');
     const guard = this.capture(); const owner = this.identity();
+    const started=performance.now();
     await this.repository.lock(owner, async () => {
+      const acquired=performance.now();
       const data = await this.repository.read(owner); const original = data.local[selected.id];
+      const read=performance.now();
       if (!original || original.move_count !== selected.move_count || original.status !== 'ongoing' || this.awaitingLocalHandoff(original, data)) throw new Error('Local match changed. Refresh before moving.');
       // The isolated rules return fresh state and practiceResult appends to a
       // new moves array. Existing history can be shared for this transaction.
@@ -979,17 +982,24 @@ export class PortalStore {
       if(!data.responses[packagePath])data.responses[packagePath]=game;
       const actor = next.localMode === 'pass' ? next.turn_of_player_indices?.find(i => next.players[i].kind === 'human') : localHumanSeat(next);
       if (actor === undefined || !next.turn_of_player_indices?.includes(actor)) throw new Error('It is not your turn');
-      await this.practiceResult(game, next, await this.callGame(game, 'applyMove', [next.logicState, next.players[actor].id, move], next), true, actor); await this.practiceComputers(game, next); guard();
+      await this.practiceResult(game, next, await this.callGame(game, 'applyMove', [next.logicState, next.players[actor].id, move], next), true, actor);
+      const human=performance.now();
+      await this.practiceComputers(game, next); guard();
+      const computer=performance.now();
       const humanMove = next.moves?.find(item => item.move_number === original.move_count + 1); if (humanMove) humanMove.move = move;
       next.awaitingHandoff = game.all_state_public !== true && next.localMode === 'pass' && next.status === 'ongoing' && next.turn_of_player_indices?.[0] !== actor;
       next.local_revision = localRevision(original) + 1; next.cloud_pending = true;
       data.local[next.id] = next; await this.repository.write(owner, data); guard();
+      const saved=performance.now();
       // Publish the accepted views with the final board so the renderer can
       // present computer actions that were committed in this single batch.
       if (next.localMode === 'computer') this.observations.set(next.id, (next.moves || []).slice(-(LOCAL_COMPUTER_MOVE_LIMIT + 1)).map(move => ({
         view: move.new_state, move_count: move.move_number, last_move_player_index: move.player_index,
       })));
       this.publishData(data);
+      recordDiagnosticEvent('local_move_timing',{wait_for_store_ms:Math.round(acquired-started),
+        read_ms:Math.round(read-acquired),human_rules_and_view_ms:Math.round(human-read),
+        computer_ms:Math.round(computer-human),save_ms:Math.round(saved-computer),publish_ms:Math.round(performance.now()-saved)});
     });
     if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {});
   }

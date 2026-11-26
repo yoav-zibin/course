@@ -213,6 +213,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     if (result.timeline) lastTimelineKey.current=result.timeline.key;
     animate=animate && !current.current.reducedMotion;
     local.current = result.local_state === undefined ? null : copy(result.local_state);
+    const revisionChanged=renderedRevision.current!==atRevision;
     renderedRevision.current=atRevision;
     lastResponse.current=result;
     const inferGroups=Boolean(animate && !explicit && animations===null && groupScene && previous);
@@ -232,7 +233,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         if(motionTimer.current)clearTimeout(motionTimer.current);
         motionTimer.current=setTimeout(()=>{if(alive.current){setMotionBusy(false);setDisplay(old=>({...old,animate:false,ghosts:[],tracks:undefined,moves:undefined}));callbacks.current.onAnimationStateChange?.(false);}},duration);
       }else{motionUntil.current=0;setMotionBusy(false);if(motionTimer.current)clearTimeout(motionTimer.current);callbacks.current.onAnimationStateChange?.(false);}
-    } else setDisplay(old=>({...old}));
+    } else if(revisionChanged)setGestureTick(value=>value+1);
     // Incoming messages and reducer results are isolated snapshots. Neither
     // the history observer nor the embedded host's postMessage mutates them.
     if(stateChange)lastPaint.current=latest.current!;

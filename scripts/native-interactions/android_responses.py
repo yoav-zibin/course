@@ -71,7 +71,7 @@ def run(args):
                     pid=d.adb('shell','pidof',pkg);remote='/data/local/tmp/buildplay-samples.data'
                     d.adb('shell','rm','-f',remote)
                     sp=subprocess.Popen([*d.command,'shell','simpleperf','record','-e','cpu-clock','-f','400','--call-graph','dwarf,8192',
-                        '-p',pid,'--duration','2','-o',remote],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+                        '-p',pid,'--duration','4' if 'spentDie' in action else '2','-o',remote],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
                     time.sleep(.28)
                     ticks=d.adb('shell','cat /proc/uptime; cmd input '+command+'; cat /proc/uptime').splitlines()
                     (folder/(action['id']+'-sample-clock.json')).write_text(json.dumps(
