@@ -80,6 +80,7 @@ def run(args):
                     rows.append({'action':action['id'],'point':p,'injection_ms':round(bracket,1),**row})
                     print(case['id'],action['id'],row['first_ms'],flush=True)
                 if 'until' in action:control(d,action['until'])
+                if action['id']=='open-report':control(d,'Screenshot captured before opening this report')
             time.sleep(1.8)
             data=json.loads(json.loads(d.adb('shell','cat',path))['value'])
             proof=verify([case],data)[case['id']]

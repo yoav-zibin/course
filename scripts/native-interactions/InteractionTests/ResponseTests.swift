@@ -45,6 +45,7 @@ final class ResponseTests: XCTestCase {
             print("RESPONSE_ACTION \(name) \(action.id) begin \(Date().timeIntervalSince1970*1000)")
             if let end=end { target.press(forDuration:0.035,thenDragTo:end,withVelocity:230,thenHoldForDuration:0) } else { target.tap() }
             if let until=action.until { XCTAssertTrue(element(until).waitForExistence(timeout:12),until) }
+            if action.id=="open-report" {XCTAssertTrue(element("Screenshot captured before opening this report").waitForExistence(timeout:10))}
             if let absent=action.absent { XCTAssertTrue(element(absent).waitForNonExistence(timeout:12),absent) }
             print("RESPONSE_ACTION \(name) \(action.id) end \(Date().timeIntervalSince1970*1000)")
         }

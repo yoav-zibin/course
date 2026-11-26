@@ -89,6 +89,8 @@ async def run_case(browser,origin,fixtures,case,folder,profile):
             await page.wait_for_timeout(850)
             if 'until' in action:await control(action['until']).wait_for()
             if 'absent' in action:await control(action['absent']).wait_for(state='hidden')
+            if action['id']=='open-report':
+                await page.get_by_label('Screenshot captured before opening this report',exact=True).first.wait_for()
             if profile:
                 prof=(await session.send('Profiler.stop'))['profile']
                 (folder/(action['id']+'.cpuprofile')).write_text(json.dumps(prof))
