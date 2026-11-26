@@ -13,7 +13,7 @@ import av
 import numpy as np
 
 from connect4 import reserve_motion
-from tracking import checker_sweeps
+from tracking import checker_segments, full_sweeps
 
 BOARD = 'Game board. Use pieces and highlighted destinations.'
 REPORT = 'Report a bug or request a feature'
@@ -202,7 +202,7 @@ def benchmark(args):
             end = project({'x':pose['source']['x'], 'y':pose['bounds']['y'] + pose['bounds']['height']*.92})
             times, frames, duration = device.record(result, 'tracking', f'swipe {src[0]} {src[1]} {end[0]} {end[1]} 850')
             row = {k:round(float(v),1) for k,v in drag_metrics(times, frames, board, duration).items()}
-            sweeps = checker_sweeps(zip(times, frames), src[0], src[1], end[1], pose['height']*scale)
+            sweeps = full_sweeps(checker_segments(zip(times, frames), src[0], src[1], end[1], pose['height']*scale))
             if len(sweeps) != 1:
                 raise RuntimeError('Could not track the ivory checker through one complete drag')
             row.update({'checker_'+key:value for key,value in sweeps[0].items()})
