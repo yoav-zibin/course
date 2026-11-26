@@ -3,7 +3,6 @@
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
 #import <mach/mach.h>
-#import <mach/mach_vm.h>
 #import <dlfcn.h>
 #import <pthread.h>
 #import <stdatomic.h>
@@ -31,8 +30,8 @@ static unsigned int stack(thread_t thread, uintptr_t *pcs, unsigned int limit) {
 #endif
   unsigned int n=0;if(pc)pcs[n++]=pc;
   while(fp && n<limit){
-    uintptr_t frame[2];mach_vm_size_t size=0;
-    if(mach_vm_read_overwrite(mach_task_self(),fp,sizeof(frame),(mach_vm_address_t)frame,&size)!=KERN_SUCCESS||size!=sizeof(frame))break;
+    uintptr_t frame[2];vm_size_t size=0;
+    if(vm_read_overwrite(mach_task_self(),(vm_address_t)fp,sizeof(frame),(vm_address_t)frame,&size)!=KERN_SUCCESS||size!=sizeof(frame))break;
     if(!frame[1])break;
     pcs[n++]=frame[1]-1;
     if(frame[0]<=fp || frame[0]-fp>1048576 || frame[0]%sizeof(uintptr_t))break;
