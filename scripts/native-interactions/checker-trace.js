@@ -1,5 +1,5 @@
-// Copied into the benchmark bundle only. The app writes numeric timings after
-// a quiet period so file I/O does not become part of the interaction under test.
+// Copied into the benchmark bundle only. Batch numeric timings on a timer.
+// A signed-in account can keep synchronizing for the entire recording.
 import {AccountRepository} from './src/core/repository';
 import {PortalStore} from './src/core';
 import {setItem} from './src/platform/storage';
@@ -9,8 +9,10 @@ let sequence=0,flush;
 function append(row) {
   rows.push({...row,wall_ms:Date.now(),js_ms:performance.now()});
   if(rows.length>900)rows.shift();
-  clearTimeout(flush);
-  flush=setTimeout(()=>{void setItem('buildplay.test.checker-timing',JSON.stringify(rows)).catch(()=>{});},650);
+  if(!flush)flush=setTimeout(()=>{
+    flush=undefined;
+    void setItem('buildplay.test.checker-timing',JSON.stringify(rows)).catch(()=>{});
+  },750);
 }
 function begin(label) {const id=++sequence;append({label,id,phase:'begin'});return id;}
 function end(id) {append({id,phase:'end'});}
