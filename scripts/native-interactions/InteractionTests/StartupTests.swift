@@ -46,7 +46,20 @@ final class StartupTests: XCTestCase {
         let start = ProcessInfo.processInfo.systemUptime
         var tappedAt = start
         while ProcessInfo.processInfo.systemUptime - start < 50 {
-            if app.state == .runningForeground { return }
+            if app.state == .runningForeground {
+                // Leave the destination foregrounded until the host recorder can
+                // capture it. Screen capture here does not attach to BuildPlay.
+                let deadline = ProcessInfo.processInfo.systemUptime + 45
+                repeat {
+                    if showsBoard(XCUIScreen.main.screenshot(), screen: .opening) {
+                        Thread.sleep(forTimeInterval: 2)
+                        return
+                    }
+                    Thread.sleep(forTimeInterval: 0.4)
+                } while ProcessInfo.processInfo.systemUptime < deadline
+                XCTFail("BuildPlay opened without displaying the Backgammon board")
+                return
+            }
             for owner in [springboard, sender] {
                 let button = owner.buttons.matching(NSPredicate(format: "label == %@", "Open")).firstMatch
                 if button.exists && button.isHittable {
