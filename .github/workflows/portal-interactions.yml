@@ -143,9 +143,9 @@ jobs:
               continue
             fi
             if [[ "$SCENARIO" == responses* ]]; then
-              flags=()
-              if [[ "$SCENARIO" == responses-profile ]]; then flags+=(--profile); fi
-              python3 scripts/native-interactions/ios_responses.py "$app" "$base/response-fixtures" "$base/results/$name" "$SIMULATOR_ID" "${flags[@]}"
+              measure=(python3 scripts/native-interactions/ios_responses.py "$app" "$base/response-fixtures" "$base/results/$name" "$SIMULATOR_ID")
+              if [[ "$SCENARIO" == responses-profile ]]; then measure+=(--profile); fi
+              "${measure[@]}"
               continue
             fi
             if ! bash "$benchmark" "$app" "$base/fixture" "$base/results/$name" "$SIMULATOR_ID"; then

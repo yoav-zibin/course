@@ -1,0 +1,80 @@
+name: Android response benchmark
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Portal apps run with the matching native release
+        required: true
+        type: string
+      profile:
+        description: Record Simpleperf stacks in a separate pass
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: actions/download-artifact@v4
+        with:
+          name: BuildPlay-android-apk
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: release
+      - name: Prepare the release code and the private test positions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run }}
+          EXPO_PUBLIC_API_URL: https://buildplay.fun
+        run: |
+          set -euo pipefail
+          native=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" --jq .head_sha)
+          git diff --exit-code "$native" HEAD -- frontends/portal/{package-lock.json,app.config.ts,plugins,modules,android}
+          python -m pip install --only-binary=:all: av numpy pillow
+          (cd frontends/portal && npm ci && CI=1 npx --no-install expo export --platform android --output-dir "$RUNNER_TEMP/js")
+          frontends/portal/node_modules/.bin/tsx scripts/native-interactions/response-fixtures.ts "$RUNNER_TEMP/fixtures"
+          build=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          python - "$RUNNER_TEMP" <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import sys
+          tmp=Path(sys.argv[1])
+          bundle,=list((tmp/'js/_expo/static/js/android').glob('*.hbc'))
+          with ZipFile('release/BuildPlay.apk') as old, ZipFile(tmp/'unsigned.apk','w') as new:
+              for item in old.infolist():
+                  if item.filename.startswith('META-INF/') and item.filename.upper().endswith(('.SF','.RSA','.DSA','MANIFEST.MF')):continue
+                  item.extra=b''
+                  new.writestr(item,bundle.read_bytes() if item.filename=='assets/index.android.bundle' else old.read(item))
+          PY
+          "$build/zipalign" -P 16 -f 4 "$RUNNER_TEMP/unsigned.apk" "$RUNNER_TEMP/aligned.apk"
+          keytool -genkeypair -keystore "$RUNNER_TEMP/bench.jks" -storepass android -keypass android -alias bench -keyalg RSA -dname CN=Benchmark -validity 1
+          "$build/apksigner" sign --ks "$RUNNER_TEMP/bench.jks" --ks-pass pass:android --out "$RUNNER_TEMP/bench.apk" "$RUNNER_TEMP/aligned.apk"
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-buildplay-kvm.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -cores 2
+          script: |
+            adb shell wm size 480x854
+            adb shell wm density 180
+            adb install --no-streaming "$RUNNER_TEMP/bench.apk"
+            python scripts/native-interactions/android_responses.py "$RUNNER_TEMP/fixtures" "$RUNNER_TEMP/results" --serial emulator-5554 ${{ inputs.profile && '--profile' || '' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-responses
+          path: ${{ runner.temp }}/results
+          retention-days: 14
