@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { PortalStore } from '../src/core';
 import { rulesSource } from '../src/game/runtimeSource';
 import { AccountRepository } from '../src/core/repository';
-import { redactedNativeArchive } from '../src/core/native-migration';
+import { redactedNativeArchive, restoreAccounts } from '../src/core/native-migration';
 import { setLocale, localizeGame, gameTexts, getDirection, t } from '../src/platform/i18n';
 import { AccountScopeChangedError, visibleErrorMessage } from '../src/core/account-scope';
 import { ApiError } from '../src/core/api';
@@ -169,6 +169,15 @@ test('refresh completes without requesting retired match discovery endpoints', a
   }finally{restore();}
 });
 
+test('restoring a migrated login avoids writing credentials again on launch',async()=>{
+  const values=browserStorage(true),base='https://local.test',repository=new AccountRepository(base);
+  const first=await restoreAccounts(base,repository);
+  assert.equal(first[0].id,'visitor');
+  const writes:string[]=[];
+  Object.defineProperty(values,'setItem',{value:(key:string,value:string)=>{writes.push(key);values[key]=value;}});
+  assert.deepEqual(await restoreAccounts(base,repository),first);
+  assert.deepEqual(writes,[]);
+});
 test('cold launch restores the saved locale and catalog while server configuration is pending',async()=>{
   const saved=browserStorage();
   saved['game-platform.locale.v1']='ar';
@@ -672,6 +681,33 @@ test('failed game-package fetch cannot pair an old match with a newly selected g
     await assert.rejects(store.actions.selectGame('missing'), /Game not found/);
     assert.equal(store.getSnapshot().selectedMatch, null); assert.equal(store.getSnapshot().game, null); assert.equal(store.getSnapshot().selectedGameId, 'missing'); assert.equal(store.getSnapshot().history, null); assert.equal((await new AccountRepository('https://local.test').read('visitor')).selectedId, null);
   } finally { restore(); }
+});
+test('match polling reuses prepared artwork until the pinned game version changes',async()=>{
+  browserStorage();
+  const source=JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8'));
+  let version=1;
+  const downloads:string[]=[];
+  const restore=mockedFetch(url=>{
+    if(url.pathname==='/matches/opening')return {id:'opening',game_id:'paired-game',game_version:version,
+      players:[],status:'ongoing',turn_of_player_indices:[0],move_count:0};
+    if(url.pathname.startsWith('/games/paired-game/versions/')){
+      downloads.push(url.pathname);
+      return {...source,id:'paired-game',version};
+    }
+  });
+  try {
+    const store=new PortalStore();
+    await store.bootstrap('https://local.test');
+    await store.actions.selectMatch('opening');
+    const artwork=store.getSnapshot().game!.declarative_ui;
+    await store.refreshMatch();
+    assert.strictEqual(store.getSnapshot().game!.declarative_ui,artwork);
+    version=2;
+    await store.refreshMatch();
+    assert.equal(store.getSnapshot().game!.version,2);
+    assert.notStrictEqual(store.getSnapshot().game!.declarative_ui,artwork);
+    assert.deepEqual(downloads,['/games/paired-game/versions/1','/games/paired-game/versions/2']);
+  } finally {restore();}
 });
 test('visitors load an unpublished match’s pinned package and keep it for offline reopening',async()=>{
   browserStorage();
