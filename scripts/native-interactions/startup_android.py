@@ -39,11 +39,13 @@ def first_paint(times, frames, bounds, require_opening=False):
     return round(float(next(t for t,f in zip(times,frames) if t>=0 and matches(f))),1)
 
 
-def find_control(device, label, scroll=False, editable=False):
+def find_control(device, label, scroll=False, editable=False, clickable=False):
     for _ in range(10):
         device.adb('shell','uiautomator dump --compressed /sdcard/buildplay-startup.xml >/dev/null')
         nodes = ElementTree.fromstring(device.adb('shell','cat','/sdcard/buildplay-startup.xml')).iter('node')
         candidates = [n for n in nodes if label in (n.get('text'),n.get('content-desc'))]
+        if clickable:
+            candidates=[n for n in candidates if n.get('clickable')=='true']
         if editable:
             candidates = [n for n in candidates if n.get('editable')=='true' or n.get('focusable')=='true']
         candidates.sort(key=lambda n:n.get('clickable')!='true')
@@ -95,7 +97,7 @@ def run(device, scenario, dest):
         x,y = center(find_control(device,'Play Backgammon',scroll=True))
         times,frames,_ = device.record_shell(dest,'details',f'cmd input tap {x} {y}',seconds=4)
         row['game_details_visible_ms'] = first_paint(times,frames,device.bounds('How would you like to play?'))
-        x,y = center(find_control(device,'Pass and play',scroll=True))
+        x,y = center(find_control(device,'Pass and play',scroll=True,clickable=True))
         times,frames,_ = device.record_shell(dest,'new',f'cmd input tap {x} {y}',seconds=6)
         row['board_visible_ms'] = first_paint(times,frames,device.bounds(BOARD))
         press(device,'Start game: Select')

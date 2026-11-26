@@ -5,7 +5,7 @@ from urllib.parse import quote
 import numpy as np
 from PIL import Image
 from playwright.async_api import async_playwright
-from response_frames import response
+from response_frames import destination,response
 from response_store import verify
 
 VIEW={'width':402,'height':874}
@@ -98,6 +98,8 @@ async def run_case(browser,origin,fixtures,case,folder,profile):
             times=[boundary['t']-1]+[t for t,_ in events]
             imgs=[pixels(before)]+[pixels(img) for _,img in events]
             row=response(times,imgs,down,p,[VIEW['width'],VIEW['height']])
+            if action['id'] in ('open-menu','close-menu','open-report','dismiss-report'):
+                row['dialog_landmark_ms']=destination(times,imgs,down)
             row.update(action=action['id'],input_epoch_ms=down,events=reported,frames_ms=[round(t-down,2) for t in times])
             if profile:row['profiler_epoch_offset_us']=round(epoch*1000-tick*1e6)
             (folder/(action['id']+'-before.png')).write_bytes(before)

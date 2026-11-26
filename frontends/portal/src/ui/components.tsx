@@ -29,7 +29,7 @@ export function Button({children, onPress, secondary, danger, disabled, busy, la
 }) {
   const [working, setWorking] = useState(false);
   const pending = busy || working;
-  return <Pressable accessibilityRole="button" accessibilityLabel={label===undefined?undefined:playerText(label)} accessibilityState={{disabled: Boolean(disabled || pending), selected}} {...(Platform.OS==='web'&&selected!==undefined?{'aria-pressed':selected}:{})} testID={testID}
+  return <Pressable android_ripple={{color:secondary?'#596583':'#4692ad'}} accessibilityRole="button" accessibilityLabel={label===undefined?undefined:playerText(label)} accessibilityState={{disabled: Boolean(disabled || pending), selected}} {...(Platform.OS==='web'&&selected!==undefined?{'aria-pressed':selected}:{})} testID={testID}
     disabled={disabled || pending} onPress={async () => {if (!onPress || working) return; recordDiagnosticEvent('press',{label:label||textContent(children)}); setWorking(true); try { await onPress(); } finally { setWorking(false); }}}
     style={({pressed, focused}: any) => [styles.button, secondary && styles.secondary, danger && styles.danger, selected && styles.selected, compact && {paddingVertical: 8, paddingHorizontal: 12, minHeight: 40}, (disabled || pending) && {opacity: 0.5}, pressed && {opacity: 0.8}, focused && {outlineColor: colors.blue, outlineStyle: 'solid', outlineWidth: 2}]}>
     {pending && <ActivityIndicator color={secondary ? colors.accent : colors.ink} size="small" />}

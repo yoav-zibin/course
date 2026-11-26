@@ -4,7 +4,7 @@ from collections import defaultdict
 from pathlib import Path
 import av
 import numpy as np
-from response_frames import response
+from response_frames import destination,response
 
 def frames(movie,width,height):
     with av.open(movie) as source:
@@ -60,7 +60,10 @@ def measure(directory):
             if start-1200<=pts<=start+2300:
                 times.append(pts);pictures.append(im)
     for start,row,times,pictures in windows:
-        try:row.update(response(times,pictures,start,row['point'],screen))
+        try:
+            row.update(response(times,pictures,start,row['point'],screen))
+            if row['action'] in ('open-menu','close-menu','open-report','dismiss-report'):
+                row['dialog_landmark_ms']=destination(times,pictures,start)
         except ValueError as e:row['error']=str(e)
     (directory/'clock-alignment.json').write_text(json.dumps({'clockAnchors':len(anchors),'medianOffsetMs':global_offset,
         'p95ResidualMs':float(np.percentile(abs(offsets-global_offset),95))},indent=2))

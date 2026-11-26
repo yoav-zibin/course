@@ -53,14 +53,16 @@ export function GameRenderer(props: GameRendererProps) {
   const motion = props.boardPresentation?.motion;
   const checked = useMemo(() => {
     try {
-      const spec = validateSpec(copy(props.spec));
+      const spec = validateSpec(JSON.parse(serialized));
       return {spec: motion ? {...spec, motion: {...spec.motion, ...motion}} : spec};
     }
     catch (error) { return {error: errorOf(error)}; }
   }, [serialized, motion]);
   useEffect(()=>{if(checked.error)recordDiagnosticLog('error','visible_game_error',checked.error);},[checked.error]);
+  const viewer=props.message.my_player_index??'spectator';
+  const rendererKey=useMemo(()=>`${props.contextKey||''}:${serialized}:viewer:${viewer}`,[props.contextKey,serialized,viewer]);
   if (!checked.spec) return <Text accessibilityRole="alert" style={styles.error}>{playerText(checked.error?.message || copyText("Invalid game package"))}</Text>;
-  return <Renderer {...props} key={`${props.contextKey || ''}:${serialized}:viewer:${props.message.my_player_index??'spectator'}`} spec={checked.spec} />;
+  return <Renderer {...props} key={rendererKey} spec={checked.spec} />;
 }
 
 type Camera = {zoom: number; x: number; y: number};

@@ -17,7 +17,7 @@ import {RemoveSavedMatch} from './RemoveSavedMatch';
 function useText() {const {p} = useApp(); return (key: string, fallback: string) => text(p,key,fallback);}
 function GameCard({game}: {game: Game}) {
   const {p,openGame,run} = useApp();
-  return <Card style={s.gameCard}><Pressable accessibilityRole="link" accessibilityLabel={copyText("Play {v0}",{v0:game.name})} onPress={()=>run(()=>openGame(game.id))} style={{gap:12}}>
+  return <Card style={s.gameCard}><Pressable android_ripple={{color:'#465572'}} accessibilityRole="link" accessibilityLabel={copyText("Play {v0}",{v0:game.name})} onPress={()=>run(()=>openGame(game.id))} style={({pressed})=>({gap:12,opacity:pressed?.75:1})}>
     {game.cover_url ? <Image source={{uri:new URL(game.cover_url,p.baseUrl).href}} style={s.cover} resizeMode="contain" accessibilityLabel={playerText(game.name)}/> : <View style={[s.cover,{alignItems:'center',justifyContent:'center'}]}><Copy style={{fontSize:44,color:colors.blue}}>◇</Copy></View>}
     <Title small>{game.name}</Title><Copy small muted numberOfLines={3}>{game.description}</Copy>
     <Copy small style={{color:colors.blue}}>{game.allowed_player_counts?.join(', ')} {copyText("players")}</Copy>

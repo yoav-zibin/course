@@ -4,13 +4,22 @@ from pathlib import Path
 from xml.etree import ElementTree
 import numpy as np
 from android import Device,BOARD,center
-from response_frames import response
+from response_frames import destination,response
 from response_store import verify
 
 def control(d,label):
     for i in range(5):
-        d.adb('shell','uiautomator dump --compressed /sdcard/buildplay-response.xml >/dev/null')
-        tree=ElementTree.fromstring(d.adb('shell','cat','/sdcard/buildplay-response.xml'))
+        try:
+            d.adb('shell','uiautomator dump --compressed /sdcard/buildplay-response.xml >/dev/null')
+            tree=ElementTree.fromstring(d.adb('shell','cat','/sdcard/buildplay-response.xml'))
+        except (subprocess.CalledProcessError,ElementTree.ParseError):
+            time.sleep(.4)
+            continue
+        if any(n.get('package')=='android' and n.get('text')=="Quickstep isn't responding" for n in tree.iter('node')):
+            close=next((n for n in tree.iter('node') if n.get('text')=='Close app'),None)
+            if close is not None:
+                d.adb('shell','cmd','input','tap',*center(tuple(map(int,re.findall(r'-?\d+',close.get('bounds'))))))
+                continue
         for n in tree.iter('node'):
             if label in (n.get('content-desc'),n.get('text'),(n.get('resource-id') or '').split('/')[-1]):
                 return tuple(map(int,re.findall(r'-?\d+',n.get('bounds'))))
@@ -66,6 +75,8 @@ def run(args):
                     times,frames,bracket=d.record(folder,action['id'],command)
                     small=[f[::2,::2] for f in frames]
                     row=response(times,small,0,p,dims)
+                    if action['id'] in ('open-menu','close-menu','open-report','dismiss-report'):
+                        row['dialog_landmark_ms']=destination(times,small,0)
                     rows.append({'action':action['id'],'point':p,'injection_ms':round(bracket,1),**row})
                     print(case['id'],action['id'],row['first_ms'],flush=True)
                 if 'until' in action:control(d,action['until'])

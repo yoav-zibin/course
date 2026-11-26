@@ -320,7 +320,7 @@ test('a cold match requests both resources concurrently and only saves the match
     });
     try {
       const store=new PortalStore(testRuntime());
-      await store.bootstrap('https://local.test',false,'buildplay:///#match=opening','opening');
+      await store.bootstrap('https://local.test',false,Promise.resolve('buildplay:///#match=opening'),true);
       assert.equal(store.getSnapshot().selectedMatch?.id,match.id);
       assert.equal(store.getSnapshot().game?.version,game.version);
       assert.equal(matchReads,1);

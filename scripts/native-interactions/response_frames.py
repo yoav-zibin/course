@@ -24,3 +24,20 @@ def response(times,images,start,point,screen):
             return {'first_ms':round(times[j]-start,1),'frame_ms':round(times[j],2),'previous_frame_ms':round(times[j-1],2),
                     'screen_changed':round(broad,4),'near_input_changed':round(near,4)}
     return {'first_ms':None,'reason':'No visible change met the screen or touch-region threshold'}
+
+
+def destination(times,images,start):
+    """Time to the visible dialog or its dismissal, using the recorded final screen."""
+    before=max((i for i,t in enumerate(times) if t<start),default=None)
+    if before is None or len(images)<2:return None
+    h,w=images[-1].shape[:2]
+    region=np.s_[round(h*.11):round(h*.9),round(w*.06):round(w*.94)]
+    first=images[before][region].astype(np.int16);last=images[-1][region].astype(np.int16)
+    altered=np.max(abs(last-first),axis=2)>40
+    if altered.mean()<.012:return None
+    final=last[altered]
+    for t,img in zip(times,images):
+        if t<start:continue
+        if np.mean(np.max(abs(img[region][altered].astype(np.int16)-final),axis=1)<35)>=.85:
+            return round(t-start,1)
+    return None

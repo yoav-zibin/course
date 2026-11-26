@@ -344,27 +344,28 @@ export class PortalStore {
     // already usable snapshot, package, or compact game-name metadata.
     this.offlineDownloadAfter = Date.now()+(failed ? 15000 : 60000);
   }
-  async bootstrap(baseUrl?: string, localOnly = false, initialUrl?:string, initialMatchId?:string): Promise<void> {
+  async bootstrap(baseUrl?: string, localOnly = false, initialUrl?:string|Promise<string|null>, openMatchLink=false): Promise<void> {
     if (this.bootstrapPromise) return this.bootstrapPromise;
     this.bootstrapPromise = this.perform(async () => {
       const base = (baseUrl ?? (typeof location !== 'undefined' ? location.origin : process.env.EXPO_PUBLIC_API_URL || 'https://buildplay.fun')).replace(/\/$/, '');
       this.localOnly = localOnly;
       this.api = new PortalApi(base, getLocale, localOnly ? async () => { throw new Error('This test launch runs entirely on this device.'); } : fetch); this.repository = new AccountRepository(base); this.patch({ baseUrl: base, network: !localOnly && isOnline() });
-      const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);
-      const [accounts,id] = await Promise.all([
+      const [accounts,id,incoming] = await Promise.all([
         loadAccounts(base).catch(error=>{
           if(isQuotaError(error))reportCacheFailure('read',error);
           else this.patch({storageError:`Saved accounts are unavailable: ${(error as Error).message}`});
           return [];
         }),
         loadCurrentAccount(base).catch(()=>null),
-        incoming ? undefined : purgePersonalAttribution(),
+        initialUrl??(typeof location!=='undefined'?location.href:null),
       ]);
       // Only old installs without a selection may restore their first login.
       // An explicit visitor marker or a removed selected account stays out.
       const account = (id === null ? accounts[0] : accounts.find(a => a.id === id)) || null;
       this.patch({ accounts, account });
-      await Promise.all([this.reloadData(),incoming?this.rememberAttribution(incoming):undefined]);
+      const target=openMatchLink && incoming ? playerLink(incoming,base) : null;
+      const initialMatchId=target?.kind==='match'?target.id:undefined;
+      await Promise.all([this.reloadData(),incoming?this.rememberAttribution(incoming):purgePersonalAttribution()]);
       const snapshot = this.data, hidden = hiddenMatchIds(snapshot);
       this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']), authConfig:snapshot.responses['/auth/config']||{} });
       if (!initialMatchId && snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) {
@@ -383,7 +384,7 @@ export class PortalStore {
       // A cold native link can begin as soon as its account and attribution are
       // known. Opening the board does not depend on React mounting or the catalog.
       const opening = initialMatchId
-        ? this.perform(() => this.selectMatch(initialMatchId),false).catch(() => {})
+        ? this.perform(() => this.selectMatch(initialMatchId,undefined,undefined,true,true),false).catch(() => {})
         : Promise.resolve();
       subscribeI18n(() => this.localize());
       this.paginated = Object.keys(snapshot.responses).some(key=>key.startsWith('/v2/'));
@@ -602,11 +603,16 @@ export class PortalStore {
       }
       if (!game?.declarative_ui) throw new Error('This game uses an earlier renderer. Its saved data is preserved in the archive.');
       if (!isValidDownloadedGame(game,id,version ?? game.version)) throw new Error('The downloaded game package is incomplete or has the wrong version.');
-      await this.cache(path,game);
     }
+    // Native digest work and persistence are independent once the pin is verified.
+    const prepared=this.prepareGamePresentation(game);
+    if (!cached) await this.cache(path,game);
     await this.rememberMatchGame(game);
     const exactPath=`/games/${game.id}/versions/${game.version}`;
     if (!cached && path !== exactPath) await this.cache(exactPath, game);
+    return prepared;
+  }
+  private async prepareGamePresentation(game:Game):Promise<Game> {
     let presentation = game.declarative_ui;
     if (['5f5293c3-2a3a-4eec-b631-9debf59be0ca','e299b14e-480d-44f3-8132-74282a46cebc'].includes(game.id)) {
       try { presentation = await (await import('../game/presentation')).presentationForGame(game); }
@@ -649,11 +655,12 @@ export class PortalStore {
     await this.selectMatch(match.id, token, match); guard();
     return match;
   }
-  async selectMatch(id: string, inviteToken?: string, initialMatch?: Match,trackOpen=true) {
+  async selectMatch(id: string, inviteToken?: string, initialMatch?: Match,trackOpen=true,alreadyHydrated=false) {
     this.requestedLink=inviteToken?{kind:'invite',id:inviteToken}:{kind:'match',id};
     if (inviteToken) {this.selectedInvite = {matchId: id, token: inviteToken};this.inviteMatchIds.set(inviteToken,id);}
     else if (this.selectedInvite?.matchId !== id) this.selectedInvite = null;
-    const token = ++this.selection; const guard = this.capture(); await this.reloadData();
+    const token = ++this.selection; const guard = this.capture();
+    if(!alreadyHydrated)await this.reloadData();
     guard(); if (token !== this.selection) return;
     if(removedSavedMatch(this.data,id))throw new RemovedSavedMatchError();
     const matchPath=`/matches/${encodeURIComponent(id)}`;
