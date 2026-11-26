@@ -198,6 +198,10 @@ test('captures before opening, sends real screenshot with recent diagnostics, an
   await page.evaluate(()=>document.getElementById('scroll-screenshot-proof')?.remove());
   await page.getByRole('textbox',{name:'Bug or feature request'}).fill('The game board needs a clearer turn marker.');await page.getByRole('button',{name:'Send report',exact:true}).click();
   const submitted=(await capture).postDataJSON();expect(submitted.screenshot).toBe(uri);expect(submitted.diagnostics.context.matchId).toBeTruthy();expect(submitted.diagnostics.pages.some((row:any)=>row.page.matchMenuOpen)).toBe(true);expect(submitted.diagnostics.apiCalls.length).toBeGreaterThan(0);
+  const reportLayout=submitted.diagnostics.events.find((row:any)=>row.name==='bug_form_laid_out');
+  expect(reportLayout.metadata.capture_ms).toBeGreaterThanOrEqual(0);
+  expect(reportLayout.metadata.total_ms).toBeGreaterThanOrEqual(reportLayout.metadata.capture_ms);
+  expect(submitted.diagnostics.apiCalls.some((row:any)=>row.fetchMs>=0 && row.readMs>=0 && /^app;dur=/.test(row.serverTiming))).toBe(true);
   expect(submitted.diagnostics.context.webAssets.some((asset:string)=>asset.startsWith('/static/app/_expo/static/js/web/index-'))).toBe(true);
   expect(JSON.stringify(submitted.diagnostics)).toContain('Visible diagnostic marker');expect(JSON.stringify(submitted.diagnostics)).not.toContain('do-not-copy');
   await expect(page.getByText('Thanks! Your report was sent.')).toBeVisible();

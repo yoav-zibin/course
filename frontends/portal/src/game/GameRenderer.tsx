@@ -47,7 +47,7 @@ const labels: Record<string, string> = {tap: 'Select', move: 'Move', rotate: 'Ro
 function errorOf(value: unknown) { return value instanceof Error ? value : new Error(String(value)); }
 
 export function GameRenderer(props: GameRendererProps) {
-  const serialized = JSON.stringify(props.spec);
+  const serialized = useMemo(()=>JSON.stringify(props.spec),[props.spec]);
   const motion = props.boardPresentation?.motion;
   const checked = useMemo(() => {
     try {
@@ -237,8 +237,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     }
   },[spec,report,omitPieceId,boardPresentation]);
 
-  const messageJSON = JSON.stringify(message);
-  const historyJSON = JSON.stringify(presentationHistory??null);
+  const messageJSON = useMemo(()=>JSON.stringify(message),[message]);
+  const historyJSON = useMemo(()=>JSON.stringify(presentationHistory??null),[presentationHistory]);
   const lastHistoryJSON=useRef(historyJSON);
   useEffect(()=>{
     // Compatibility hosts can redeliver an identical snapshot while a finger

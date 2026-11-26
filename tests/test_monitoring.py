@@ -149,6 +149,7 @@ def test_every_response_has_a_request_id() -> None:
     client, _ = client_for()
     response = client.get("/games")
     assert len(response.headers["x-request-id"]) >= 8
+    assert float(response.headers["server-timing"].removeprefix("app;dur=")) >= 0
     assert client.get("/games", headers={"X-Request-Id": "mine-1"}).headers["x-request-id"] == "mine-1"
 
 

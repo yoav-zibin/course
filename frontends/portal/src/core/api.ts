@@ -9,8 +9,16 @@ export class PortalApi {
   async request<T = any>(method: string, path: string, body?: any, account?: Account | null, requestId?: string, linkOpen?:boolean): Promise<T> {
     if (!path.startsWith('/') || path.startsWith('//') || /[\r\n]/.test(path)) throw new Error('Invalid API path');
     if(account)rememberDiagnosticSecrets([account.password]);
-    const finish=startDiagnosticRequest(method,path,{authenticated:Boolean(account),requestId,requestBytes:body===undefined?0:JSON.stringify(body).length});
+    const started=performance.now();
+    const payload=body===undefined?undefined:JSON.stringify(body);
+    const finish=startDiagnosticRequest(method,path,{authenticated:Boolean(account),requestId,requestBytes:payload?.length??0});
     let received=false;
+    let fetchStarted:number|undefined,responseResolved:number|undefined;
+    const timings=(finished:number)=>({
+      prepareMs:Math.round((fetchStarted??finished)-started),
+      fetchMs:fetchStarted===undefined?undefined:Math.round((responseResolved??finished)-fetchStarted),
+      readMs:responseResolved===undefined?undefined:Math.round(finished-responseResolved),
+    });
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 20000);
     try {
       const headers: Record<string, string> = { 'Accept-Language': this.locale(), 'X-Visitor-Id': await visitorId() };
@@ -22,12 +30,14 @@ export class PortalApi {
       // Browser fetch is a Web IDL function: invoking it as this.fetcher binds
       // the PortalApi instance and throws Illegal invocation before networking.
       const fetcher = this.fetcher;
-      const response = await fetcher(`${this.baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal, cache: 'no-store' });
+      fetchStarted=performance.now();
+      const response = await fetcher(`${this.baseUrl}${path}`, { method, headers, body: payload, signal: controller.signal, cache: 'no-store' });
+      responseResolved=performance.now();
       const text = await response.text(); let value: any;
-      received=true;finish(response.status,{responseBytes:text.length,requestId:response.headers.get('x-request-id')||requestId,serverTiming:response.headers.get('server-timing')?.slice(0,300)});
+      received=true;finish(response.status,{...timings(performance.now()),responseBytes:text.length,requestId:response.headers.get('x-request-id')||requestId,serverTiming:response.headers.get('server-timing')?.slice(0,300)});
       try { value = text ? JSON.parse(text) : null; } catch { throw new ApiError(response.status || 502, 'Invalid server response'); }
       if (!response.ok) { const detail = value?.detail; throw new ApiError(response.status, typeof detail === 'string' ? detail : detail?.message || response.statusText || 'Request failed', detail); }
       return value;
-    } catch(error) {if(!received)finish(null,{error:error instanceof Error?error.name:'RequestError'});throw error;} finally { clearTimeout(timeout); }
+    } catch(error) {if(!received)finish(null,{...timings(performance.now()),error:error instanceof Error?error.name:'RequestError'});throw error;} finally { clearTimeout(timeout); }
   }
 }

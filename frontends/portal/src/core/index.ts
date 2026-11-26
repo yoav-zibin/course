@@ -544,7 +544,8 @@ export class PortalStore {
       await this.cache(path,game);
     }
     await this.rememberMatchGame(game);
-    if (!cached) await this.cache(`/games/${game.id}/versions/${game.version}`, game);
+    const exactPath=`/games/${game.id}/versions/${game.version}`;
+    if (!cached && path !== exactPath) await this.cache(exactPath, game);
     let presentation = game.declarative_ui;
     if (['5f5293c3-2a3a-4eec-b631-9debf59be0ca','e299b14e-480d-44f3-8132-74282a46cebc'].includes(game.id)) {
       try { presentation = await (await import('../game/presentation')).presentationForGame(game); }

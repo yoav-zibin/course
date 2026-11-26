@@ -1,6 +1,6 @@
 import {copyText} from '../platform/i18n';
 import React,{useEffect,useRef,useState,type ReactNode} from 'react';
-import {Image,View} from 'react-native';
+import {Image,Text,View} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {shareInvite} from '../platform/share';
 import {matchInviteUrl} from '../core/links';
@@ -15,14 +15,32 @@ import {GameInstructions} from './GameInstructions';
 import {isSinglePlayerMatch, matchKind} from './match-kind';
 import {RemoveSavedMatch} from './RemoveSavedMatch';
 import type {MatchHistoryController} from './matchHistory';
+import {matchGameName} from './match-game';
+
+function TurnClock({deadline,serverTime}:{deadline?:string|null;serverTime?:string|null}) {
+  const [clock,setClock]=useState('');
+  useEffect(()=>{
+    if(!deadline){setClock('');return;}
+    const offset=serverTime?Date.parse(serverTime)-Date.now():0;
+    const update=()=>{
+      const seconds=Math.max(0,Math.ceil((Date.parse(deadline)-Date.now()-offset)/1000));
+      setClock(`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`);
+    };
+    update();
+    const timer=setInterval(update,1000);
+    return()=>clearInterval(timer);
+  },[deadline,serverTime]);
+  return deadline&&clock?<Text>{copyText(" · {v0} remaining",{v0:clock})}</Text>:null;
+}
 
 export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,history,onMenuDismissed}:{menuOpen?:boolean;onCloseMenu:()=>void;menuHeader?:ReactNode;menuExtras?:ReactNode;history:MatchHistoryController;onMenuDismissed?:()=>void}) {
   const {p,run,navigate,notify,openMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
   const match=p.selectedMatch!, game=p.game;
+  const gameTitle=game?.name||matchGameName(match,p,copyText('Tic-tac-toe'))||copyText('Match');
   const backgammon=game?.id==='5f5293c3-2a3a-4eec-b631-9debf59be0ca';
   const hasInstructions=Boolean(game&&(game.tutorial_text||game.game_logic_rules||game.game_ui_rules));
   const sharingScope=JSON.stringify([p.baseUrl,p.account?.id,match.id]),currentSharingScope=useRef(sharingScope);currentSharingScope.current=sharingScope;
-  const [confirm,setConfirm]=useState(''),[clock,setClock]=useState(''),[rendererError,setRendererError]=useState('');
+  const [confirm,setConfirm]=useState(''),[rendererError,setRendererError]=useState('');
   const [help,setHelp]=useState(false);
   const [frameHeight,setFrameHeight]=useState<number>();
   const fittedBoard=match.status!=='waiting_for_players'&&!match.awaitingHandoff;
@@ -37,16 +55,13 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
   const message=p.actions.presentationMessage();
   useEffect(()=>{setHelp(false);setConfirm('');setRendererError('');},[match.id,p.account?.id,p.baseUrl]);
   useEffect(()=>{if(!menuOpen){setHelp(false);setConfirm('');}},[menuOpen]);
-  useEffect(()=>{if(!match.turn_deadline){setClock('');return;}const offset=match.server_time?Date.parse(match.server_time)-Date.now():0;
-    const update=()=>{const seconds=Math.max(0,Math.ceil((Date.parse(match.turn_deadline)-Date.now()-offset)/1000));setClock(`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`);};update();const timer=setInterval(update,1000);return()=>clearInterval(timer);
-  },[match.turn_deadline,match.server_time]);
   const inviteUrl=!singlePlayer&&waiting&&match.invite_code?matchInviteUrl(match.invite_code,p.baseUrl):null;
   const recordShare=(channel:InviteShareChannel)=>p.account&&currentSharingScope.current===sharingScope?p.actions.recordInviteShare(match.id,channel):Promise.resolve();
   const shareMatch=()=>run(async()=>{if(inviteUrl&&await performInviteShare('share_link',()=>shareInvite(inviteUrl),recordShare)==='copied')notify(copyText('Invite link copied.'));});
   const copyCode=()=>run(async()=>{await performInviteShare('copy_code',async()=>{await Clipboard.setStringAsync(match.invite_code!);return 'copied';},recordShare);notify(copyText('Invite code copied.'));});
   const submit=async(move:any)=>{if(local)await p.actions.practiceMove(move);else await p.actions.submitMove(move);};
   const details=<View testID="match-details" style={{gap:22}}>
-    <View style={{gap:8}}><Row><Title>{game?.name||copyText("Match")}</Title><View style={{flex:1}}/><Copy style={{color:over?colors.purple:yourTurn?colors.accent:colors.blue,fontWeight:'700'}}>{over?copyText("Finished"):waiting?singlePlayer?privateReady:copyText("Waiting for players"):yourTurn?copyText("Your turn"):copyText("Game in progress")}</Copy></Row><Copy small muted>{match.move_count} {copyText("moves ·")} {match.players.length} {copyText("players")}{' · '}{matchKind(match)==='computer'?copyText('Against computers'):matchKind(match)==='pass_and_play'?copyText('Pass and play'):copyText('Multiplayer')}{clock?copyText(" · {v0} remaining",{v0:clock}):''}</Copy></View>
+    <View style={{gap:8}}><Row><Title>{gameTitle}</Title><View style={{flex:1}}/><Copy style={{color:over?colors.purple:yourTurn?colors.accent:colors.blue,fontWeight:'700'}}>{over?copyText("Finished"):waiting?singlePlayer?privateReady:copyText("Waiting for players"):yourTurn?copyText("Your turn"):copyText("Game in progress")}</Copy></Row><Copy small muted>{match.move_count} {copyText("moves ·")} {match.players.length} {copyText("players")}{' · '}{matchKind(match)==='computer'?copyText('Against computers'):matchKind(match)==='pass_and_play'?copyText('Pass and play'):copyText('Multiplayer')}<TurnClock deadline={match.turn_deadline} serverTime={match.server_time}/></Copy></View>
     {!singlePlayer&&match.cloud_pending&&<Notice>{copyText('Match saved locally. Connect to save it in the cloud and get an invite link.')}</Notice>}
     {singlePlayer&&<Copy small muted>{match.cloud_pending?copyText('Saved locally · waiting to sync'):copyText('Saved in the cloud')}</Copy>}
     <MatchOutcome match={match}/>

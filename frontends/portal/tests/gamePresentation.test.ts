@@ -9,6 +9,8 @@ import {presentationSource} from '../src/game/runtimeSource';
 import {validateMoveAnimations,validateScene,validateSpec} from '../src/game/validation';
 import replacement from '../src/game/reviewedBackgammon.json';
 import connectFourReplacement from '../src/game/reviewedConnectFour.json';
+import {backgammonMatchPresentation} from '../src/game/backgammonMatchPresentation';
+import type {Piece,StateMessage} from '../src/game/types';
 
 const root=resolve(import.meta.dirname,'../../..');
 const read=(name:string)=>JSON.parse(readFileSync(resolve(root,name),'utf8'));
@@ -16,6 +18,17 @@ const digest=async(source:string)=>createHash('sha256').update(source).digest('h
 const game=()=>({id:'5f5293c3-2a3a-4eec-b631-9debf59be0ca',version:1,
   server_code:readFileSync(resolve(root,'games/declarative/backgammon.server.js'),'utf8'),
   declarative_ui:read('tests/fixtures/declarative/backgammon-v1-ui.json')});
+
+test('the Backgammon match has one doubling control when the cube is tappable',()=>{
+  const button:Piece={id:'double',type:'tool_button',board:'main',position:{x:0,y:0},actions:['tap']};
+  const cube:Piece={id:'cube',type:'cube',board:'off',position:{x:0,y:0},actions:['tap']};
+  const message={view:{}} as StateMessage;
+  const show=backgammonMatchPresentation!.presentScene;
+  assert.deepEqual(show({pieces:[button,cube]},message).pieces,[cube]);
+  for(const inactive of [{...cube,actions:[]},{...cube,hidden:true}]){
+    assert.deepEqual(show({pieces:[button,inactive]},message).pieces,[button,inactive]);
+  }
+});
 
 test('exact reviewed historical Backgammon UIs receive bundled repair while rules and version remain pinned',async()=>{
   for(const version of [1,2,3]){

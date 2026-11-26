@@ -1,5 +1,6 @@
 import type {GameRendererProps} from './GameRenderer';
 import type {Scene, StateMessage} from './types';
+import {pieceActions} from './validation';
 
 const hiddenLabels = new Set([
   'title', 'bar_label', 'off_label', 'white_label', 'black_label', 'moves_remaining',
@@ -13,6 +14,7 @@ function presentScene(scene: Scene, message: StateMessage): Scene {
     opening?: boolean; winner?: number | null; round_winner?: number | null; cube?: {offer?: number | null};
   } | null | undefined;
   const showTurnPrompt = view?.opening || view?.winner != null || view?.round_winner != null || view?.cube?.offer != null;
+  const canTapCube = scene.pieces?.some(piece => piece.id === 'cube' && !piece.hidden && pieceActions(piece).includes('tap'));
   const labels = scene.labels?.flatMap(label => {
     if (hiddenLabels.has(label.id) || (label.id === 'turn' && !showTurnPrompt)) return [];
     // Keep instructions for special game states near the controls, inside the wood frame.
@@ -22,7 +24,7 @@ function presentScene(scene: Scene, message: StateMessage): Scene {
     return [label];
   });
   const pieces = scene.pieces?.flatMap(piece => {
-    if (hiddenPieces.has(piece.id)) return [];
+    if (hiddenPieces.has(piece.id) || (piece.id === 'double' && canTapCube)) return [];
     if (boardTools.has(piece.id) && 'y' in piece.position && piece.position.y < -18) {
       return [{...piece, position: {...piece.position, y: -18}}];
     }

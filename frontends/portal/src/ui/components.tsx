@@ -74,7 +74,7 @@ export function Dialog({visible,title,children,onClose,onDismiss,wide,reporting,
   // Web fade-out keeps focusable controls mounted after close, including when
   // another dialog opens immediately. Remove the closed web modal at once.
   if(Platform.OS==='web'&&!visible)return null;
-  return <Modal visible={visible} transparent animationType="fade" onDismiss={onDismiss} onRequestClose={()=>{if(report)report.onClose();else onClose();}} accessibilityViewIsModal accessibilityLabel={title}>
+  return <Modal visible={visible} transparent animationType={reporting?'none':'fade'} onDismiss={onDismiss} onRequestClose={()=>{if(report)report.onClose();else onClose();}} accessibilityViewIsModal accessibilityLabel={title}>
     <NativeGestureRoot>
       <View ref={captureView} collapsable={false} style={{flex:1}}>
         <View style={{flex:1}} accessibilityElementsHidden={Boolean(report&&!reporting)} importantForAccessibility={report&&!reporting?'no-hide-descendants':'auto'}>

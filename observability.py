@@ -1301,6 +1301,7 @@ class RequestLogMiddleware:
         response_headers: dict[str, str] = {}
         status = 0
         crashed = False
+        started = time.perf_counter()
 
         async def receive_and_keep() -> MutableMapping[str, Any]:
             nonlocal body_size
@@ -1318,6 +1319,8 @@ class RequestLogMiddleware:
                 status = message["status"]
                 message.setdefault("headers", [])
                 message["headers"] = [*message["headers"], (b"x-request-id", request_id.encode())]
+                elapsed_ms = (time.perf_counter() - started) * 1000
+                message["headers"].append((b"server-timing", f"app;dur={elapsed_ms:.1f}".encode("ascii")))
                 response_headers.update(
                     {
                         key.decode("latin-1").lower(): value.decode("latin-1")
