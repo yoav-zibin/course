@@ -68,6 +68,7 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
     onPointerDown:(event:React.PointerEvent<HTMLButtonElement>)=>{
       if(disabled||!event.isPrimary||event.button!==0)return;
       suppressClick.current=false;
+      event.currentTarget.style.setProperty('--press-background','#465572');
       drag.current={id:event.pointerId,start:{x:event.clientX,y:event.clientY},origin:current.current.point};
       event.currentTarget.setPointerCapture(event.pointerId);
     },
@@ -80,6 +81,7 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
       dragFrames.move(value.next,moveControl);
     },
     onPointerUp:(event:React.PointerEvent<HTMLButtonElement>)=>{
+      event.currentTarget.style.removeProperty('--press-background');
       const value=drag.current;if(!value||value.id!==event.pointerId)return;
       const dx=event.clientX-value.start.x,dy=event.clientY-value.start.y;
       drag.current=null;suppressClick.current=true;event.preventDefault();
@@ -96,6 +98,7 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
       if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
     },
     onLostPointerCapture:(event:React.PointerEvent<HTMLButtonElement>)=>{
+      event.currentTarget.style.removeProperty('--press-background');
       const value=drag.current;if(value?.id!==event.pointerId)return;
       drag.current=null;suppressClick.current=true;
       dragFrames.finish('cancelled');
@@ -103,7 +106,7 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
     },
     onClick:(event:React.MouseEvent<HTMLButtonElement>)=>{if(disabled||suppressClick.current&&event.detail!==0){suppressClick.current=false;event.preventDefault();event.stopPropagation();return;}activate();},
   });
-  const buttonStyle:React.CSSProperties={flex:1,minWidth:0,height:grouped&&history?42:'100%',padding:0,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:0,borderRadius:7,cursor:'grab',touchAction:'none',userSelect:'none'};
+  const buttonStyle:React.CSSProperties={flex:1,minWidth:0,height:grouped&&history?42:'100%',padding:0,display:'flex',alignItems:'center',justifyContent:'center',background:'var(--press-background, transparent)',border:0,borderRadius:7,cursor:'grab',touchAction:'none',userSelect:'none'};
   return host?createPortal(<div ref={control} data-testid={grouped?'match-floating-controls':undefined} dir="ltr"
     style={{position:'absolute',top:0,left:0,width:controlWidth,height:controlHeight,boxSizing:'border-box',display:'flex',background:'#171c2a',border:'1px solid #3b4760',borderRadius:8,pointerEvents:'auto',zIndex:2147483647}}>
     <button type="button" data-testid="bug-report-button" aria-label={bugButtonLabel()} title={bugButtonLabel()} {...pointerHandlers(openBugReport)} style={buttonStyle}><BugGlyph/></button>

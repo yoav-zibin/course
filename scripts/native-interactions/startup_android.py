@@ -110,7 +110,7 @@ def run(device, scenario, dest):
     with urlopen(SERVER+'/__requests', timeout=5) as response:
         requests = json.load(response)
     paths = [r['path'] for r in requests]
-    if scenario=='match' and not {'/matches/benchmark-opening',f'/games/{GAME_ID}/versions/10'}<=set(paths):
+    if scenario=='match' and ('/matches/benchmark-opening' not in paths or not {f'/games/{GAME_ID}/versions/10','/matches/benchmark-opening/game'}.intersection(paths)):
         raise RuntimeError('The match or its pinned package did not load over the fixture network')
     if scenario=='new' and ('/users' not in paths or f'/games/{GAME_ID}' not in paths):
         raise RuntimeError('The empty account or downloaded game was missing')

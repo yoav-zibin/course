@@ -94,7 +94,7 @@ def serve(fixture, port, delay_ms, web_build=None):
                       '/i18n/locales':{'locales':[{'code':'en','name':'English','direction':'ltr'}]},
                       '/i18n/bundle/en':{'messages':{},'direction':'ltr'},
                       '/games':[card],'/games/popular':[card],'/v2/games':{'items':[card],'next_cursor':None},
-                      game_path:game,game_path+'/versions/'+str(game['version']):game,match_path:match,
+                      game_path:game,game_path+'/versions/'+str(game['version']):game,match_path:match,match_path+'/game':game,
                       '/v2'+match_path+'/history':{'items':[],'total':match['move_count']},match_path+'/moves':[],
                       '/users/'+account['id']:account,'/users':[account],'/matches':[],
                       '/users/me/recent-games':[],'/users/me/saved-games':[]}

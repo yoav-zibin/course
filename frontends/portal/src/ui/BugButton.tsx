@@ -97,13 +97,13 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
       dragging.value=false;
       scheduleOnRN(commitDrag,translation.value,limits.value,timing.value,Date.now(),!success);
     }),[commitDrag,dragging,limits,move,origin,timing,translation]);
-  const buttonStyle=({pressed,focused}:any)=>[styles.button,{height:(grouped&&history?44:controlHeight)-2},pressed&&{opacity:.7},focused&&{outlineColor:'#70d5ff',outlineStyle:'solid',outlineWidth:2}];
+  const buttonStyle=({pressed,focused}:any)=>[styles.button,{height:(grouped&&history?44:controlHeight)-2},pressed&&{backgroundColor:'#465572'},focused&&{outlineColor:'#70d5ff',outlineStyle:'solid',outlineWidth:2}];
   return <GestureDetector gesture={pan}><Animated.View ref={nativeView} collapsable={false} onLayout={protectGesture} testID={grouped?'match-floating-controls':undefined} style={[styles.position,{left:0,top:0,width:controlWidth,height:controlHeight},style]}>
-    <Pressable accessibilityRole="button" accessibilityLabel={bugButtonLabel()}
+    <Pressable android_ripple={{color:'#465572'}} accessibilityRole="button" accessibilityLabel={bugButtonLabel()}
       onPress={openBugReport} style={buttonStyle} testID="bug-report-button"><BugGlyph/></Pressable>
-    {onMenuPress&&<Pressable accessibilityRole="button" accessibilityLabel={copyText('Match menu')} accessibilityState={{expanded:menuExpanded}}
+    {onMenuPress&&<Pressable android_ripple={{color:'#465572'}} accessibilityRole="button" accessibilityLabel={copyText('Match menu')} accessibilityState={{expanded:menuExpanded}}
       onPress={onMenuPress} style={buttonStyle} testID="match-menu-button"><MenuGlyph/></Pressable>}
-    {grouped&&history&&historyButtons(history).map(control=><Pressable key={control.id} accessibilityRole="button" accessibilityLabel={control.label} accessibilityState={{disabled:control.disabled}} disabled={control.disabled}
+    {grouped&&history&&historyButtons(history).map(control=><Pressable android_ripple={{color:'#465572'}} key={control.id} accessibilityRole="button" accessibilityLabel={control.label} accessibilityState={{disabled:control.disabled}} disabled={control.disabled}
       onPress={()=>{if(!control.disabled){recordDiagnosticEvent('press',{label:control.label});control.onPress();}}} style={state=>[buttonStyle(state),control.disabled&&styles.disabled]} testID={control.id}><HistoryGlyph kind={control.kind}/></Pressable>)}
     {grouped&&history&&<Text testID="history-status" pointerEvents="none" accessibilityLiveRegion="polite" numberOfLines={1} style={styles.historyStatus}>{history.atEnd?copyText('Live board'):copyText('Replay · move {v0} of {v1}',{v0:history.position,v1:history.total})}</Text>}
   </Animated.View></GestureDetector>;

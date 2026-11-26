@@ -57,7 +57,7 @@ async def trial(browser, origin, output):
         start = await page.evaluate('performance.timeOrigin')
         requests = await (await context.request.get(origin + '/__requests')).json()
         paths = {request['path'] for request in requests}
-        if stamp <= start or not {'/matches/benchmark-opening', '/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10'} <= paths:
+        if stamp <= start or '/matches/benchmark-opening' not in paths or not {'/matches/benchmark-opening/game','/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10'}.intersection(paths):
             raise RuntimeError('The recorded frame did not follow an uncached match and package request')
         elapsed = round(stamp - start, 1)
         (output / 'board.png').write_bytes(png)

@@ -344,7 +344,7 @@ export class PortalStore {
     // already usable snapshot, package, or compact game-name metadata.
     this.offlineDownloadAfter = Date.now()+(failed ? 15000 : 60000);
   }
-  async bootstrap(baseUrl?: string, localOnly = false, initialUrl?:string): Promise<void> {
+  async bootstrap(baseUrl?: string, localOnly = false, initialUrl?:string, initialMatchId?:string): Promise<void> {
     if (this.bootstrapPromise) return this.bootstrapPromise;
     this.bootstrapPromise = this.perform(async () => {
       const base = (baseUrl ?? (typeof location !== 'undefined' ? location.origin : process.env.EXPO_PUBLIC_API_URL || 'https://buildplay.fun')).replace(/\/$/, '');
@@ -367,7 +367,12 @@ export class PortalStore {
       await Promise.all([this.reloadData(),incoming?this.rememberAttribution(incoming):undefined]);
       const snapshot = this.data, hidden = hiddenMatchIds(snapshot);
       this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']), authConfig:snapshot.responses['/auth/config']||{} });
-      if (snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) { const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`]; if (match) this.patch({ selectedMatch: this.decorate(match), game: snapshot.responses[`/games/${match.game_id}/versions/${match.game_version}`] || null }); }
+      if (!initialMatchId && snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) { const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`]; if (match) this.patch({ selectedMatch: this.decorate(match), game: snapshot.responses[`/games/${match.game_id}/versions/${match.game_version}`] || null }); }
+      // A cold native link can begin as soon as its account and attribution are
+      // known. Opening the board does not depend on React mounting or the catalog.
+      const opening = initialMatchId
+        ? this.perform(() => this.selectMatch(initialMatchId),false).catch(() => {})
+        : Promise.resolve();
       subscribeI18n(() => this.localize());
       this.paginated = Object.keys(snapshot.responses).some(key=>key.startsWith('/v2/'));
       const capabilities = localOnly ? Promise.resolve() : this.api.request('GET','/storage/capabilities').then(result=>{
@@ -378,7 +383,7 @@ export class PortalStore {
       const translations=configureI18n(base,account?.locale,localOnly,showLocalData).catch(()=>{}).finally(showLocalData);
       await localReady;
       this.patch({ready:true});
-      const initialRefresh=this.refresh(capabilities,true);
+      const initialRefresh=opening.then(()=>this.refresh(capabilities,true,initialMatchId));
       if(!localOnly){
         let lastOnline=isOnline();
         this.stopConnectivity=watchConnectivity(online=>{
@@ -391,7 +396,7 @@ export class PortalStore {
     });
     return this.bootstrapPromise;
   }
-  async refresh(capabilities?:Promise<void>, startup=false): Promise<void> {
+  async refresh(capabilities?:Promise<void>, startup=false, freshlyOpenedId?:string): Promise<void> {
     if(!this.state.ready)return;
     if (this.refreshPromise) return this.refreshPromise;
     const guard = this.capture();
@@ -403,7 +408,7 @@ export class PortalStore {
       if (this.state.account && isOnline()) await this.sync().catch(() => {});
       guard();
       const updateAuth=()=>this.read('/auth/config').then(authConfig=>{guard();this.patch({authConfig});});
-      if (this.state.selectedMatch) { this.startOfflineDownloads();await Promise.all([this.refreshMatch(),startup?updateAuth().catch(()=>{}):undefined]); return; }
+      if (this.state.selectedMatch) { this.startOfflineDownloads();await Promise.all([this.state.selectedMatch.id===freshlyOpenedId?undefined:this.refreshMatch(),startup?updateAuth().catch(()=>{}):undefined]); return; }
       const jobs: Promise<any>[] = [this.list('games'), updateAuth(), this.read('/games/popular').then(popularGames => { guard(); this.patch({ popularGames: popularGames.map(localizeGame) }); })];
       if (this.state.account) jobs.push(this.refreshNotifications(), this.list('myMatches'), this.list('savedGames'), this.read('/users/me/recent-games').then(recentGames => { guard(); this.patch({ recentGames: recentGames.map(localizeGame) }); }), this.refreshProfile());
       const results = await Promise.allSettled(jobs); guard();
@@ -535,7 +540,7 @@ export class PortalStore {
     await this.recoverPresentation(match, selected).catch(() => {});
     if (match.status !== selected.status || match.token_pot !== selected.token_pot || !equal(match.token_payouts, selected.token_payouts)) await this.refreshProfile().catch(() => {});
   }
-  private pinnedGame(id: string, version?: number, matchId?: string): Promise<Game> {
+  private pinnedGame(id: string, version?: number, matchId?: string, prefetched?:Promise<Game|undefined>): Promise<Game> {
     const generation=this.generation,owner=this.identity(),prepared=this.preparedPackage;
     // Polls for the same immutable rules can reuse the verified presentation.
     // Only a versioned lookup can do this. Catalog opens must check the latest version.
@@ -545,14 +550,14 @@ export class PortalStore {
     const key=JSON.stringify([generation,this.state.baseUrl,owner,id,version,matchId]);
     const current=this.pendingPackages.get(key);
     if(current)return current;
-    const pending=this.loadPinnedGame(id,version,matchId).then(game=>{
+    const pending=this.loadPinnedGame(id,version,matchId,prefetched).then(game=>{
       if(this.generation===generation&&this.identity()===owner)this.preparedPackage={generation,owner,game};
       return game;
     }).finally(()=>this.pendingPackages.delete(key));
     this.pendingPackages.set(key,pending);
     return pending;
   }
-  private async loadPinnedGame(id: string, version?: number, matchId?: string): Promise<Game> {
+  private async loadPinnedGame(id: string, version?: number, matchId?: string, prefetched?:Promise<Game|undefined>): Promise<Game> {
     if (id === bundled.id) return localizeGame(bundled as Game);
     const guard = this.capture();
     const path = version === undefined ? `/games/${encodeURIComponent(id)}` : `/games/${encodeURIComponent(id)}/versions/${version}`;
@@ -564,7 +569,10 @@ export class PortalStore {
       // different version must never become an immutable offline package.
       try {
         if (this.localOnly || !isOnline() || Date.now() < this.retryAfter) throw new TypeError('Offline');
-        try { game = await this.request('GET',path); }
+        const candidate=prefetched ? await prefetched : undefined;
+        guard();
+        if (candidate && version!==undefined && isValidDownloadedGame(candidate,id,version)) game=candidate;
+        else try { game = await this.request('GET',path); }
         catch (error) {
           guard();
           // A catalog withdrawal does not hide the package needed to watch an
@@ -634,7 +642,14 @@ export class PortalStore {
     if (inviteToken) {this.selectedInvite = {matchId: id, token: inviteToken};this.inviteMatchIds.set(inviteToken,id);}
     else if (this.selectedInvite?.matchId !== id) this.selectedInvite = null;
     const token = ++this.selection; const guard = this.capture(); await this.reloadData();
+    guard(); if (token !== this.selection) return;
     if(removedSavedMatch(this.data,id))throw new RemovedSavedMatchError();
+    const matchPath=`/matches/${encodeURIComponent(id)}`;
+    // Both endpoints enforce the viewer's access. A known match already tells
+    // us which immutable package to reuse from the offline cache.
+    const prefetched = !initialMatch && !this.data.local[id] && !this.data.responses[matchPath]
+      && !this.data.creations?.[id] && !this.localOnly && isOnline() && Date.now()>=this.retryAfter
+      ? this.request('GET',matchPath+'/game').catch(()=>undefined) : undefined;
     const fetched = initialMatch || this.data.local[id] || (this.data.creations?.[id] ? this.data.responses[`/matches/${id}`] : await this.read(`/matches/${encodeURIComponent(id)}`,true,trackOpen)); guard(); if (token !== this.selection) return;
     if (initialMatch?.single_player_state) {
       await this.cache(`/matches/${encodeURIComponent(id)}`,initialMatch); guard();
@@ -649,7 +664,7 @@ export class PortalStore {
     guard(); if (token !== this.selection) return;
     this.patch({ selectedMatch: this.decorate(match), game: packageMatches ? this.state.game : null, selectedGameId: match.game_id, replayIndex: null, history: null });
     this.repository.protectGame(this.identity(),match.game_id,match.game_version);
-    const game = await this.pinnedGame(match.game_id, match.game_version,match.localMode?undefined:match.id); await this.reloadData();guard(); if (token !== this.selection || removedSavedMatch(this.data,id)) return;
+    const game = await this.pinnedGame(match.game_id, match.game_version,match.localMode?undefined:match.id,prefetched); await this.reloadData();guard(); if (token !== this.selection || removedSavedMatch(this.data,id)) return;
     this.patch({ game, selectedGameId: game.id });
     await this.loadProfiles().catch(() => {});
     if (token === this.selection) await this.recoverPresentation(match).catch(() => {});

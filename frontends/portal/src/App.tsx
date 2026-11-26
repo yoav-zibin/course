@@ -127,12 +127,14 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
     else void p.actions.claimNotificationPrompt().catch(() => p.actions.dismissNotificationPrompt());
   }, [p.notificationPrompt,p.notificationPromptReady,notificationDelivery.status]);
 
+  const [openingLink,setOpeningLink]=useState(false);
   const [launchLink,setLaunchLink]=useState<{url:string;attributed:boolean}|null>(null);
   useEffect(() => {void run(async () => {
     if(Platform.OS!=='web'){
-      const {url,bootstrap}=await nativeLaunch();
-      if(url)setLaunchLink({url,attributed:true});
-      await bootstrap;
+      const {url,matchId,bootstrap}=await nativeLaunch();
+      if(matchId){setScreen('matches');setOpeningLink(true);}
+      else if(url)setLaunchLink({url,attributed:true});
+      try {await bootstrap;} finally {if(matchId)setOpeningLink(false);}
     }else{
       const url=window.location.href;
       setLaunchLink({url,attributed:!p.ready});
@@ -234,7 +236,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
     {p.storageError && <Notice error>{p.storageError}</Notice>}
     {showDetails&&extras}
     {pendingInvite&&!p.account&&invitePreview?.usable&&<Card><Title small>{copyText('You’re invited to play')}</Title><Copy muted>{copyText('Log in or continue as a guest to join this match.')}</Copy><Row><Button onPress={()=>setAccount(true)}>{copyText('Log in to join')}</Button><Button secondary onPress={()=>{p.actions.watchInvite();clearInvite();writeRoute(`match=${encodeURIComponent(invitePreview.match.id)}`);}}>{copyText('Watch match')}</Button></Row></Card>}
-    {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
+    {!p.ready || (openingLink && !p.selectedMatch && !p.error && screen==='matches') ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
       : MatchStage ? <MatchStage menuOpen={matchMenuOpen} onCloseMenu={onCloseMatchMenu} menuHeader={header} menuExtras={extras} history={history} onMenuDismissed={menuDismissed}/>
       : screen==='games' ? p.selectedGameId ? <GameDetail /> : <Catalog />
       : screen==='matches' ? <Matches />

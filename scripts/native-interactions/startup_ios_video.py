@@ -188,13 +188,18 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
             log.write(output)
             if sampler:
                 try:
-                    sampler.wait(timeout=18)
+                    sampler.wait(timeout=90)
                 except subprocess.TimeoutExpired:
                     sampler.terminate()
                     sampler.wait(timeout=10)
             if driver and driver.wait(timeout=90):
                 raise RuntimeError('The iOS confirmation driver failed')
     if recorder.returncode not in (0,-signal.SIGINT,130) or not movie.exists():raise RuntimeError('Simulator recorder failed')
+    # Save clock and API timestamps even if the recorder drops a marker.
+    if sender_stamp and sender_stamp.exists():
+        diagnostics={'sender':json.loads(sender_stamp.read_text()),'requests':api('/__requests')}
+        if profile:diagnostics['runtime']=api('/__startup')
+        Path(str(prefix)+'-timings.json').write_text(json.dumps(diagnostics,indent=2))
     if action=='match':
         # XCTest may leave the app after verifying the opening. Find its last
         # populated frame in the movie and retain that exact comparison image.
@@ -216,11 +221,12 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
         if reference is None:raise RuntimeError('No populated Backgammon opening in the verified recording')
         Image.fromarray(reference.astype(np.uint8)).save(after)
         if sender_stamp:
-            if sender_frame is None or first_marker is None:raise RuntimeError('Missing the link sender markers in the recording')
+            if sender_frame is None:raise RuntimeError('Missing the magenta link sender marker in the recording')
             Image.fromarray(sender_frame.astype(np.uint8)).save(before)
     requests=api('/__requests')
     paths={item['path'] for item in requests}
     required={'/games/popular'} if action=='home' else {'/matches/benchmark-opening','/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10'}
+    if '/matches/benchmark-opening/game' in paths:required.discard('/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10')
     if not required<=paths:raise RuntimeError(f'Missing cold-start requests: {required-paths}')
     evidence={'bounds':list(bounds),'requests':requests}
     if profile:
@@ -230,7 +236,7 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
         timing=json.loads(sender_stamp.read_text())
         evidence['link_sent_epoch_ms']=timing['sent_epoch_ms']
         evidence['link_sent_pts_ms']=last_marker+timing['after_marker_ms']
-        evidence['marker_interval_error_ms']=round(last_marker-first_marker-timing['marker_interval_ms'],1)
+        evidence['marker_interval_error_ms']=round(last_marker-first_marker-timing['marker_interval_ms'],1) if first_marker is not None else None
         evidence['sender_driven_by_xctest']=drive_sender
         if confirmation_start is not None:
             if confirmation_end is None:raise RuntimeError('The video did not capture the link confirmation dismissal')

@@ -306,6 +306,31 @@ test('an exact RAM-only package is committed atomically with a durable pending a
   }finally{restore();}
 });
 
+test('a cold match requests both resources concurrently and only saves the matching immutable package',async()=>{
+  for (const matching of [true,false]) {
+    browserStorage();
+    const game={...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8')),id:'opening-game',version:4};
+    const match={id:'opening',game_id:game.id,game_version:4,players:[],status:'ongoing',state:{},turn_of_player_indices:[0],move_count:0};
+    let resume!:()=>void, canonicalReads=0, matchReads=0;
+    const matchGate=new Promise<void>(resolve=>{resume=resolve;});
+    const restore=mockedFetch(async url=>{
+      if(url.pathname==='/matches/opening'){matchReads++;await matchGate;return match;}
+      if(url.pathname==='/matches/opening/game'){resume();return matching?game:{...game,version:5};}
+      if(url.pathname==='/games/opening-game/versions/4'){canonicalReads++;return game;}
+    });
+    try {
+      const store=new PortalStore(testRuntime());
+      await store.bootstrap('https://local.test',false,'buildplay:///#match=opening','opening');
+      assert.equal(store.getSnapshot().selectedMatch?.id,match.id);
+      assert.equal(store.getSnapshot().game?.version,game.version);
+      assert.equal(matchReads,1);
+      assert.equal(canonicalReads,matching?0:1);
+      const saved=await new AccountRepository('https://local.test').read('visitor');
+      assert.equal(saved.responses['/games/opening-game/versions/5'],undefined);
+    } finally {resume();restore();}
+  }
+});
+
 test('offline cached reads update recency and a recovered cache write publishes its trimmed response set',async()=>{
   const saved=browserStorage();let offline=false;const restore=mockedFetch(()=>{if(offline)throw new TypeError('offline');});
   try{

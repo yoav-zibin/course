@@ -34,7 +34,7 @@ for ((sample=1;sample<=samples;sample++)); do
     curl -fsS http://127.0.0.1:18764/__requests >"$results/$name-requests.json"
     if ((status)); then exit "$status"; fi
     if [[ "$action" == ColdBackgammon ]]; then
-      jq -e '([.[].path] | index("/matches/benchmark-opening")!=null and index("/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10")!=null)' "$results/$name-requests.json" >/dev/null
+      jq -e '([.[].path] | index("/matches/benchmark-opening")!=null and (index("/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10")!=null or index("/matches/benchmark-opening/game")!=null))' "$results/$name-requests.json" >/dev/null
     elif [[ "$action" == NewBackgammon ]]; then
       for attempt in {1..20}; do
         curl -fsS http://127.0.0.1:18764/__saves >"$results/$name-saves.json"
