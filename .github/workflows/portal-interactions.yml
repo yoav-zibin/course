@@ -49,20 +49,6 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
-      - name: Install simulator tap tool for the iOS link confirmation
-        if: inputs.scenario == 'startup-link'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tap_tool="$RUNNER_TEMP/link-tap"
-          mkdir -p "$tap_tool"
-          cd "$tap_tool"
-          archive=AXe-macOS-homebrew-v2.2.0.tar.gz
-          gh release download v2.2.0 -R cameroncooke/AXe -p "$archive"
-          echo "66a8696752fe14266a111a231510ac233ce113ba39585aecf945b1e93ee899c1  $archive" | shasum -a 256 -c -
-          tar -xzf "$archive"
-          codesign --force --sign - --timestamp=none Frameworks/FBControlCore.framework Frameworks/FBSimulatorControl.framework axe
-          echo "$tap_tool" >> "$GITHUB_PATH"
       - uses: actions/download-artifact@v4
         with:
           name: BuildPlay-ios-simulator

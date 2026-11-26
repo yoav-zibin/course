@@ -35,8 +35,39 @@ final class StartupTests: XCTestCase {
         XCUIDevice.shared.press(.home)
         Thread.sleep(forTimeInterval: 1)
         try testColdBackgammon()
-        // Keep the populated scene visible for the simulator video encoder.
-        Thread.sleep(forTimeInterval: 0.5)
+        // Allow the simulator compositor and its independent encoder to deliver the final frame.
+        Thread.sleep(forTimeInterval: 2)
+    }
+
+    func testAuthorizeLinkSender() {
+        let sender = XCUIApplication(bundleIdentifier: "fun.buildplay.benchmark.linksender")
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        sender.launch()
+        let start = ProcessInfo.processInfo.systemUptime
+        var tappedAt = start
+        while ProcessInfo.processInfo.systemUptime - start < 50 {
+            if app.state == .runningForeground { return }
+            for owner in [springboard, sender] {
+                let button = owner.buttons.matching(NSPredicate(format: "label == %@", "Open")).firstMatch
+                if button.exists && button.isHittable {
+                    button.tap()
+                    tappedAt = ProcessInfo.processInfo.systemUptime
+                    break
+                }
+            }
+            // Some iOS versions render the system sheet outside the sender's
+            // accessibility hierarchy. Its Open button is at this position in
+            // the iPhone 17 portrait recordings.
+            if ProcessInfo.processInfo.systemUptime - tappedAt > 7 {
+                springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.66, dy: 0.552)).tap()
+                tappedAt = ProcessInfo.processInfo.systemUptime
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        let image = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        image.lifetime = .keepAlways
+        add(image)
+        XCTFail("The sender did not hand the match link to BuildPlay")
     }
 
     private func reveal(_ control: XCUIElement) {

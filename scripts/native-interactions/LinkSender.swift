@@ -49,9 +49,7 @@ final class LinkSceneDelegate: UIResponder, UIWindowSceneDelegate {
             let elapsed = (CACurrentMediaTime() - displayTime) * 1000
             let sentAt = Date().timeIntervalSince1970 * 1000
             UIApplication.shared.open(URL(string: "buildplay:///#match=benchmark-opening")!)
-            let size = self.window!.bounds.size
             let timing = ["sent_epoch_ms": sentAt, "after_marker_ms": elapsed,
-                          "width_points": Double(size.width), "height_points": Double(size.height),
                           "marker_interval_ms": (displayTime - self.markerTimes[0]) * 1000]
             let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             try? JSONEncoder().encode(timing).write(to: directory.appendingPathComponent("link-sent.json"), options: .atomic)

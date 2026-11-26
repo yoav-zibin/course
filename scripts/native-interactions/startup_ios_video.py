@@ -48,17 +48,8 @@ def link_confirmation(image):
     return ((r>140)&(g<55)&(b>130)).mean()>.55 and blue[h//2:3*h//5,w//2:4*w//5].mean()>.05
 
 
-def approve_link(device,image,sender_stamp):
-    # A coordinate tap also works when the foreground accessibility tree belongs
-    # to the sender and the system alert is hosted by SpringBoard.
-    h,w=image.shape[:2]
-    y,x=h//2,w//2
-    r,g,b=image[y:3*h//5,x:4*w//5].transpose(2,0,1)
-    by,bx=np.nonzero((b>160)&(b>r+90)&(b>g+55)&(g>40))
-    display=json.loads(sender_stamp.read_text())
-    px=round((x+np.median(bx))*display['width_points']/w)
-    py=round((y+np.median(by))*display['height_points']/h)
-    subprocess.run(['axe','tap','--udid',device,'-x',str(px),'-y',str(py)],check=True,timeout=30)
+class LinkConfirmationRequired(Exception):
+    pass
 
 
 def clear_game_data(device,bundle):
@@ -74,24 +65,12 @@ def clear_game_data(device,bundle):
         path.mkdir(parents=True,exist_ok=True)
 
 
-def prepare_link_sender(app,bundle,device,sender_stamp,results):
+def prepare_link_sender(app,device,command,results):
     sim('install',device,app)
-    sender_stamp.unlink(missing_ok=True)
     evidence=results/'authorization'
     evidence.mkdir()
-    screenshot=evidence/'link.png'
-    sim('launch','--terminate-running-process',device,SENDER)
-    deadline=time.monotonic()+120
-    tapped=0
-    while time.monotonic()<deadline:
-        sim('io',device,'screenshot',screenshot,capture_output=True)
-        image=next(frames(screenshot))[1]
-        if sender_stamp.exists() and link_confirmation(image) and time.monotonic()-tapped>3:
-            approve_link(device,image,sender_stamp)
-            tapped=time.monotonic()
-        if sender_stamp.exists() and opening_bounds(image) is not None:return
-        time.sleep(.5)
-    raise RuntimeError('Could not authorize an iOS link and verify the opening board')
+    with (evidence/'open.log').open('w') as log:
+        subprocess.run([*command,'-resultBundlePath',evidence/'open.xcresult'],stdout=log,stderr=subprocess.STDOUT,check=True)
 
 
 def measure(movie, before, after, bounds, include_first_frame=False):
@@ -139,7 +118,7 @@ def measure(movie, before, after, bounds, include_first_frame=False):
             'transition_pts_ms':round(samples[transition][0],1),'landmark_pts_ms':round(samples[painted][0],1)}
 
 
-def trial(app, bundle, device, directory, index, action, ocr, match_command, sender_stamp=None):
+def trial(app, bundle, device, directory, index, action, ocr, match_command, sender_stamp=None, drive_sender=False):
     directory.mkdir(exist_ok=True,parents=True)
     prefix=directory/f'{index}-{action}'
     movie=prefix.with_suffix('.mov')
@@ -149,7 +128,7 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     sim('install',device,app)
     if sender_stamp:clear_game_data(device,bundle)
-    confirmed=False
+    driver=None
     api('/__reset','POST')
     time.sleep(1.5)
     if not sender_stamp:sim('io',device,'screenshot',before,capture_output=True)
@@ -175,14 +154,19 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
                 time.sleep(.5)
             elif sender_stamp:
                 sender_stamp.unlink(missing_ok=True)
-                sim('launch','--terminate-running-process',device,SENDER,stdout=launch_log,stderr=subprocess.STDOUT)
-                deadline=time.monotonic()+100
+                if drive_sender:
+                    driver=subprocess.Popen([*match_command,'-resultBundlePath',prefix.with_suffix('.xcresult')],
+                        stdout=launch_log,stderr=subprocess.STDOUT)
+                else:
+                    sim('launch','--terminate-running-process',device,SENDER,stdout=launch_log,stderr=subprocess.STDOUT)
+                deadline=time.monotonic()+(180 if drive_sender else 100)
                 while time.monotonic()<deadline:
                     sim('io',device,'screenshot',after,capture_output=True)
                     frame=next(frames(after))[1]
-                    if sender_stamp.exists() and link_confirmation(frame) and not confirmed:
-                        approve_link(device,frame,sender_stamp)
-                        confirmed=True
+                    if sender_stamp.exists() and link_confirmation(frame) and not drive_sender:
+                        raise LinkConfirmationRequired()
+                    if driver and driver.poll() not in (None,0):
+                        raise RuntimeError('The iOS confirmation driver failed')
                     if sender_stamp.exists() and opening_bounds(frame) is not None:
                         time.sleep(.5)
                         break
@@ -198,6 +182,8 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
             if recorder.poll() is None:recorder.send_signal(signal.SIGINT)
             output,_=recorder.communicate(timeout=60)
             log.write(output)
+            if driver and driver.wait(timeout=90):
+                raise RuntimeError('The iOS confirmation driver failed')
     if recorder.returncode not in (0,-signal.SIGINT,130) or not movie.exists():raise RuntimeError('Simulator recorder failed')
     if action=='match':
         # XCTest may leave the app after verifying the opening. Find its last
@@ -232,7 +218,8 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
         evidence['link_sent_epoch_ms']=timing['sent_epoch_ms']
         evidence['link_sent_pts_ms']=last_marker+timing['after_marker_ms']
         evidence['marker_interval_error_ms']=round(last_marker-first_marker-timing['marker_interval_ms'],1)
-        if confirmed:
+        evidence['sender_driven_by_xctest']=drive_sender
+        if confirmation_start is not None:
             if confirmation_end is None:raise RuntimeError('The video did not capture the link confirmation dismissal')
             evidence['confirmation_start_pts_ms']=round(confirmation_start,1)
             evidence['confirmation_dismissed_pts_ms']=round(confirmation_end,1)
@@ -240,7 +227,7 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
     output=measure(movie,next(frames(before))[1],next(frames(after))[1],bounds,include_first_frame=not sender_stamp)
     if sender_stamp:
         output['open_url_to_board_ms']=round(output['landmark_pts_ms']-evidence['link_sent_pts_ms'],1)
-        if confirmed:
+        if confirmation_end is not None:
             output['confirmation_to_board_ms']=round(output['landmark_pts_ms']-confirmation_end,1)
         if output['open_url_to_board_ms']<=0:raise ValueError('The opening board predates the sender request')
     prefix.with_suffix('.json').write_text(json.dumps({**output,**evidence},indent=2)+'\n')
@@ -248,7 +235,7 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
     return output.get('open_url_to_board_ms',output['visible_ms'])
 
 
-def match_launcher(scripts, results, device):
+def match_launcher(scripts, results, device, test):
     project=results/'project'
     project.mkdir()
     shutil.copy2(scripts/'project.yml',project/'project.yml')
@@ -258,7 +245,7 @@ def match_launcher(scripts, results, device):
            '-configuration','Release','-destination','platform=iOS Simulator,id='+device,
            '-derivedDataPath',project/'derived','-parallel-testing-enabled','NO']
     with (project/'build.log').open('w') as log:subprocess.run([*build,'build-for-testing'],stdout=log,check=True)
-    return [*build,'test-without-building','-only-testing:InteractionTests/StartupTests/testOpenMatchForVideo']
+    return [*build,'test-without-building','-only-testing:InteractionTests/StartupTests/'+test]
 
 
 def install_sender(scripts, results, device):
@@ -287,10 +274,9 @@ def run(apps, fixture, results, device, pairs, sender=False):
     ocr=results/'home-title'
     sim('bootstatus',device,'-b')
     sender_stamp=install_sender(scripts,results,device) if sender else None
-    match_command=None
+    match_command=match_launcher(scripts,results,device,'testAuthorizeLinkSender' if sender else 'testOpenMatchForVideo')
     if not sender:
         subprocess.run(['xcrun','swiftc',scripts/'HomeTitle.swift','-o',ocr],check=True)
-        match_command=match_launcher(scripts,results,device)
     builds={p.parent.name:p for p in apps.glob('*/BuildPlay.app')}
     names=['baseline','current'] if 'baseline' in builds else ['current']
     bundle=subprocess.check_output(['/usr/libexec/PlistBuddy','-c','Print CFBundleIdentifier',builds['current']/'Info.plist'],text=True).strip()
@@ -300,12 +286,22 @@ def run(apps, fixture, results, device, pairs, sender=False):
         for _ in range(30):
             try:api('/__requests');break
             except OSError:time.sleep(.2)
-        if sender:prepare_link_sender(builds[names[0]],bundle,device,sender_stamp,results)
+        if sender:prepare_link_sender(builds[names[0]],device,match_command,results)
+        drive_sender=False
         for index in range(1,pairs+1):
             for name in names if index%2 else reversed(names):
                 row={}
                 for action in (('match',) if sender else ('home','match')):
-                    row[action+'_ms']=trial(builds[name],bundle,device,results/name,index,action,ocr,match_command,sender_stamp)
+                    args=(builds[name],bundle,device,results/name,index,action,ocr,match_command,sender_stamp)
+                    try:row[action+'_ms']=trial(*args,drive_sender)
+                    except LinkConfirmationRequired:
+                        # A host can request permission again after replacing the app.
+                        # Drive the foreground sender and system sheet, leaving BuildPlay uninstrumented.
+                        for ext in ('.mov','.log','-launch.log','-content.png'):
+                            artifact=results/name/(f'{index}-{action}'+ext)
+                            if artifact.exists():artifact.rename(artifact.with_name('unconfirmed-'+artifact.name))
+                        drive_sender=True
+                        row[action+'_ms']=trial(*args,drive_sender)
                 samples[name].append(row)
                 (results/name/'startup-video.json').write_text(json.dumps(samples[name],indent=2)+'\n')
     finally:
