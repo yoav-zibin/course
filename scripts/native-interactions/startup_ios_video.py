@@ -8,6 +8,8 @@ import subprocess
 import time
 from urllib.request import Request, urlopen
 
+from PIL import Image
+
 import av
 import numpy as np
 
@@ -17,8 +19,13 @@ def sim(*args, **kwargs):
 
 
 def api(path, method='GET'):
-    with urlopen(Request('http://127.0.0.1:18764'+path,method=method),timeout=5) as result:
-        return json.load(result)
+    for attempt in range(3):
+        try:
+            with urlopen(Request('http://127.0.0.1:18764'+path,method=method),timeout=12) as result:
+                return json.load(result)
+        except OSError:
+            if attempt==2:raise
+            time.sleep(.2)
 
 
 def frames(path):
@@ -95,7 +102,6 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command):
     api('/__reset','POST')
     time.sleep(1.5)
     sim('io',device,'screenshot',before,capture_output=True)
-    launch=None
     with prefix.with_suffix('.log').open('w') as log, Path(str(prefix)+'-launch.log').open('w') as launch_log:
         recorder=subprocess.Popen(['xcrun','simctl','io',device,'recordVideo','--codec=h264',str(movie)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
         try:
@@ -106,34 +112,36 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command):
             time.sleep(.7)
             if action=='home':
                 sim('launch',device,bundle)
-            else:
-                # XCUIApplication.open delivers the URL to the target app.
-                # simctl openurl instead presents the system consent dialog.
-                launch=subprocess.Popen(match_command,stdout=launch_log,stderr=subprocess.STDOUT)
-            time.sleep(3)
-            deadline=time.monotonic()+(150 if launch else 30)
-            bounds=None
-            while bounds is None and time.monotonic()<deadline:
-                if launch:
-                    if launch.poll() not in (None,0):raise RuntimeError('XCTest could not deliver the cold link')
-                    if '/matches/benchmark-opening' not in {r['path'] for r in api('/__requests')}:
-                        time.sleep(.5)
-                        continue
-                sim('io',device,'screenshot',after,capture_output=True)
-                if action=='home':
+                deadline=time.monotonic()+60
+                while True:
+                    sim('io',device,'screenshot',after,capture_output=True)
                     result=subprocess.run([ocr,after],capture_output=True,text=True)
-                    if result.returncode==0:bounds=list(map(float,result.stdout.split()))
-                else:
-                    bounds=opening_bounds(next(frames(after))[1])
-                if bounds is None:time.sleep(.5)
-            if bounds is None:raise RuntimeError(f'The expected {action} screen never appeared')
-            time.sleep(.5)
+                    if result.returncode==0:
+                        bounds=list(map(float,result.stdout.split()))
+                        break
+                    if time.monotonic()>=deadline:raise RuntimeError('The home title never appeared')
+                    time.sleep(.5)
+                time.sleep(.5)
+            else:
+                # Keep recording through the actual XCTest launch, including a
+                # slow runner startup. Its screenshot independently verifies the
+                # wood and both checker colors before the test returns.
+                subprocess.run([*match_command,'-resultBundlePath',prefix.with_suffix('.xcresult')],
+                               stdout=launch_log,stderr=subprocess.STDOUT,check=True)
         finally:
             if recorder.poll() is None:recorder.send_signal(signal.SIGINT)
-            output,_=recorder.communicate(timeout=30)
+            output,_=recorder.communicate(timeout=60)
             log.write(output)
-            if launch and launch.wait(timeout=120):raise RuntimeError('Cold-link launch failed its XCTest verification')
     if recorder.returncode not in (0,-signal.SIGINT,130) or not movie.exists():raise RuntimeError('Simulator recorder failed')
+    if action=='match':
+        # XCTest may leave the app after verifying the opening. Find its last
+        # populated frame in the movie and retain that exact comparison image.
+        reference=None
+        for _,image in frames(movie):
+            box=opening_bounds(image)
+            if box is not None:reference,bounds=image,box
+        if reference is None:raise RuntimeError('No populated Backgammon opening in the verified recording')
+        Image.fromarray(reference.astype(np.uint8)).save(after)
     requests=api('/__requests')
     paths={item['path'] for item in requests}
     required={'/games/popular'} if action=='home' else {'/matches/benchmark-opening','/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10'}

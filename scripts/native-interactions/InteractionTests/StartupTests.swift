@@ -35,8 +35,8 @@ final class StartupTests: XCTestCase {
         XCUIDevice.shared.press(.home)
         Thread.sleep(forTimeInterval: 1)
         try testColdBackgammon()
-        // Leave the verified content on screen while the host saves its image.
-        Thread.sleep(forTimeInterval: 5)
+        // Keep the populated scene visible for the simulator video encoder.
+        Thread.sleep(forTimeInterval: 0.5)
     }
 
     private func reveal(_ control: XCUIElement) {

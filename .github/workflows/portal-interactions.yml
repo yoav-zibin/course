@@ -48,7 +48,7 @@ jobs:
           path: release
       - name: Set up release fixture and iPhone
         run: |
-          python3 -m pip install --only-binary=:all: av numpy
+          python3 -m pip install --only-binary=:all: av numpy pillow
           command -v xcodegen || brew install xcodegen
           (cd frontends/portal && npm ci)
           mkdir -p "$RUNNER_TEMP/interaction"
