@@ -1,7 +1,7 @@
 import React,{useCallback,useEffect,useLayoutEffect,useMemo,useRef} from 'react';
 import {findNodeHandle,Platform,Pressable,StyleSheet,Text,View,useWindowDimensions} from 'react-native';
 import {Gesture,GestureDetector} from 'react-native-gesture-handler';
-import Animated,{useAnimatedStyle,useSharedValue} from 'react-native-reanimated';
+import Animated,{useAnimatedStyle,useSharedValue,withDelay,withTiming} from 'react-native-reanimated';
 import {scheduleOnRN,scheduleOnUI} from 'react-native-worklets';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BugGlyph} from './BugGlyph';
@@ -22,6 +22,12 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
   const limits=useSharedValue(bounds);
   const origin=useSharedValue(point);
   const dragging=useSharedValue(false);
+  const buttons=grouped&&history?historyButtons(history):[];
+  const slots=grouped?2+buttons.length:1,slotWidth=(controlWidth-2)/slots;
+  const buttonHeight=(grouped&&history?44:controlHeight)-2;
+  const disabledSlots=buttons.reduce((mask,button,i)=>button.disabled?mask|(1<<(i+2)):mask,0);
+  const pressedSlot=useSharedValue(0),pressedOpacity=useSharedValue(0);
+  const pressedStyle=useAnimatedStyle(()=>({opacity:pressedOpacity.value,transform:[{translateX:pressedSlot.value*slotWidth}]}));
   const timing=useSharedValue({start:0,last:0,inputs:0,maxGap:0,slowGaps:0});
   useLayoutEffect(()=>{
     scheduleOnUI((nextBounds:BugBounds,nextPoint:BugPoint)=>{
@@ -76,9 +82,22 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
   // layout-less detector host gives Android accessibility a zero-height parent.
   const pan=useMemo(()=>Gesture.Pan().minDistance(5).maxPointers(1)
     .runOnJS(false).cancelsTouchesInView(true)
+    .onTouchesDown(event=>{
+      'worklet';
+      const touch=event.changedTouches[0];if(!touch)return;
+      const slot=Math.min(slots-1,Math.max(0,Math.floor((touch.x-1)/slotWidth)));
+      pressedSlot.value=slot;
+      pressedOpacity.value=touch.y<=buttonHeight && !(disabledSlots&(1<<slot))?1:0;
+    })
+    .onTouchesUp(()=>{
+      'worklet';
+      pressedOpacity.value=withDelay(65,withTiming(0,{duration:65}));
+    })
+    .onTouchesCancelled(()=>{'worklet';pressedOpacity.value=0;})
     .onStart(event=>{
       'worklet';
       const now=Date.now();
+      pressedOpacity.value=0;
       origin.value=translation.value;
       dragging.value=true;
       timing.value={start:now,last:now,inputs:0,maxGap:0,slowGaps:0};
@@ -96,18 +115,20 @@ export function BugButton({onMenuPress,menuExpanded=false,history}:{onMenuPress?
       if(success)move(event.translationX,event.translationY);
       dragging.value=false;
       scheduleOnRN(commitDrag,translation.value,limits.value,timing.value,Date.now(),!success);
-    }),[commitDrag,dragging,limits,move,origin,timing,translation]);
-  const buttonStyle=({pressed,focused}:any)=>[styles.button,{height:(grouped&&history?44:controlHeight)-2},pressed&&{backgroundColor:'#465572'},focused&&{outlineColor:'#70d5ff',outlineStyle:'solid',outlineWidth:2}];
+    }),[buttonHeight,commitDrag,disabledSlots,dragging,limits,move,origin,pressedOpacity,pressedSlot,slots,slotWidth,timing,translation]);
+  const buttonStyle=({pressed,focused}:any)=>[styles.button,{height:buttonHeight},pressed&&{backgroundColor:'#465572'},focused&&{outlineColor:'#70d5ff',outlineStyle:'solid',outlineWidth:2}];
   return <GestureDetector gesture={pan}><Animated.View ref={nativeView} collapsable={false} onLayout={protectGesture} testID={grouped?'match-floating-controls':undefined} style={[styles.position,{left:0,top:0,width:controlWidth,height:controlHeight},style]}>
+    <Animated.View pointerEvents="none" accessible={false} style={[styles.pressHighlight,{width:slotWidth,height:buttonHeight},pressedStyle]}/>
     <Pressable android_ripple={{color:'#465572'}} accessibilityRole="button" accessibilityLabel={bugButtonLabel()}
       onPress={openBugReport} style={buttonStyle} testID="bug-report-button"><BugGlyph/></Pressable>
     {onMenuPress&&<Pressable android_ripple={{color:'#465572'}} accessibilityRole="button" accessibilityLabel={copyText('Match menu')} accessibilityState={{expanded:menuExpanded}}
       onPress={onMenuPress} style={buttonStyle} testID="match-menu-button"><MenuGlyph/></Pressable>}
-    {grouped&&history&&historyButtons(history).map(control=><Pressable android_ripple={{color:'#465572'}} key={control.id} accessibilityRole="button" accessibilityLabel={control.label} accessibilityState={{disabled:control.disabled}} disabled={control.disabled}
+    {buttons.map(control=><Pressable android_ripple={{color:'#465572'}} key={control.id} accessibilityRole="button" accessibilityLabel={control.label} accessibilityState={{disabled:control.disabled}} disabled={control.disabled}
       onPress={()=>{if(!control.disabled){recordDiagnosticEvent('press',{label:control.label});control.onPress();}}} style={state=>[buttonStyle(state),control.disabled&&styles.disabled]} testID={control.id}><HistoryGlyph kind={control.kind}/></Pressable>)}
     {grouped&&history&&<Text testID="history-status" pointerEvents="none" accessibilityLiveRegion="polite" numberOfLines={1} style={styles.historyStatus}>{history.atEnd?copyText('Live board'):copyText('Replay · move {v0} of {v1}',{v0:history.position,v1:history.total})}</Text>}
   </Animated.View></GestureDetector>;
 }
 const styles=StyleSheet.create({position:{position:'absolute',flexDirection:'row',direction:'ltr',backgroundColor:'#171c2a',borderWidth:1,borderColor:'#3b4760',borderRadius:8,zIndex:2147483647,elevation:100},
+  pressHighlight:{position:'absolute',left:0,top:0,backgroundColor:'#465572',borderRadius:7},
   button:{flex:1,minWidth:0,alignItems:'center',justifyContent:'center',borderRadius:7},disabled:{opacity:.35},
   historyStatus:{position:'absolute',left:4,right:4,bottom:2,height:17,fontSize:11,lineHeight:16,textAlign:'center',color:'#b8c2d5'}});

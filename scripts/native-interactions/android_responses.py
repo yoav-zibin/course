@@ -55,7 +55,10 @@ def run(args):
                     d.adb('shell','rm','-f',remote)
                     sp=subprocess.Popen([*d.command,'shell','simpleperf','record','-e','cpu-clock','-f','400','--call-graph','dwarf,8192',
                         '-p',pid,'--duration','2','-o',remote],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
-                    time.sleep(.28);d.adb('shell','cmd','input',*command.split())
+                    time.sleep(.28)
+                    ticks=d.adb('shell','cat /proc/uptime; cmd input '+command+'; cat /proc/uptime').splitlines()
+                    (folder/(action['id']+'-sample-clock.json')).write_text(json.dumps(
+                        {'input_boot_ms':[float(line.split()[0])*1000 for line in ticks]}))
                     _,err=sp.communicate(timeout=12)
                     if sp.returncode:raise RuntimeError('simpleperf: '+err.decode()[-500:])
                     d.adb('pull',remote,folder/(action['id']+'.perf.data'))

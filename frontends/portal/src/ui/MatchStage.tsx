@@ -102,7 +102,7 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
       :<Empty>{copyText("Loading the match’s saved game version…")}</Empty>}
     {rendererError&&<Notice error>{rendererError}</Notice>}
     {history.error&&history.error!==p.error&&<Notice error>{history.error}</Notice>}
-    <Dialog visible={menuOpen||help||Boolean(confirm)} title={confirm?confirm==='resolve'?copyText("Use server version?"):copyText("Leave this match?"):help?t('ui.game.rules','How to play'):copyText('Match menu')} onClose={()=>{if(confirm)setConfirm('');else if(help)setHelp(false);else onCloseMenu();}} onDismiss={onMenuDismissed} wide bottomClearance={96}>
+    <Dialog instant visible={menuOpen||help||Boolean(confirm)} title={confirm?confirm==='resolve'?copyText("Use server version?"):copyText("Leave this match?"):help?t('ui.game.rules','How to play'):copyText('Match menu')} onClose={()=>{if(confirm)setConfirm('');else if(help)setHelp(false);else onCloseMenu();}} onDismiss={onMenuDismissed} wide bottomClearance={96}>
       {confirm?<>
       <Copy>{confirm==='resolve'?copyText("Your pending branch will be kept in an archive before loading the server board."):over?copyText("This removes the match from your list. Other players can still see it."):waiting&&owner?copyText("Leaving closes this lobby for everyone and refunds any tokens."):copyText("Your seat will leave the match. The server calculates any token settlement.")}</Copy>
       {confirm==='leave'&&!waiting&&!over&&match.pending_leave_payout!==null&&match.pending_leave_payout!==undefined&&<Copy>{copyText("Your payout:")} {match.pending_leave_payout} {copyText("tokens")}</Copy>}

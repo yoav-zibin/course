@@ -68,13 +68,13 @@ export function DialogContent({title,children,onClose,wide,avoidKeyboard,bottomC
   const shade=[styles.modalShade,bottomClearance?{paddingBottom:bottomClearance}:undefined];
   return avoidKeyboard&&Platform.OS!=='web'?<KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':'height'} style={shade}>{content}</KeyboardAvoidingView>:<View style={shade}>{content}</View>;
 }
-export function Dialog({visible,title,children,onClose,onDismiss,wide,reporting,bottomClearance}: {visible:boolean;title:string;children:ReactNode;onClose:()=>void;onDismiss?:()=>void;wide?:boolean;reporting?:boolean;bottomClearance?:number}) {
+export function Dialog({visible,title,children,onClose,onDismiss,wide,reporting,instant,bottomClearance}: {visible:boolean;title:string;children:ReactNode;onClose:()=>void;onDismiss?:()=>void;wide?:boolean;reporting?:boolean;instant?:boolean;bottomClearance?:number}) {
   const id=useRef(Symbol('dialog')).current,captureView=useRef<React.ComponentRef<typeof View>>(null),report=useNativeBugReport();
   useEffect(()=>{if(Platform.OS!=='web'&&visible&&!reporting)return registerNativeDialog(id,captureView);},[visible,reporting,id]);
   // Web fade-out keeps focusable controls mounted after close, including when
   // another dialog opens immediately. Remove the closed web modal at once.
   if(Platform.OS==='web'&&!visible)return null;
-  return <Modal visible={visible} transparent animationType={reporting?'none':'fade'} onDismiss={onDismiss} onRequestClose={()=>{if(report)report.onClose();else onClose();}} accessibilityViewIsModal accessibilityLabel={title}>
+  return <Modal visible={visible} transparent animationType={reporting||instant?'none':'fade'} onDismiss={onDismiss} onRequestClose={()=>{if(report)report.onClose();else onClose();}} accessibilityViewIsModal accessibilityLabel={title}>
     <NativeGestureRoot>
       <View ref={captureView} collapsable={false} style={{flex:1}}>
         <View style={{flex:1}} accessibilityElementsHidden={Boolean(report&&!reporting)} importantForAccessibility={report&&!reporting?'no-hide-descendants':'auto'}>

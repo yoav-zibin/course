@@ -66,7 +66,8 @@ function makeCase(slug:string,game:any,mode:string,level:number,setup=false){
   }else{
     if(mode==='pass'){
       actions.push({id:'open-menu',label:'match-menu-button',until:'Close dialog'},{id:'close-menu',label:'Close dialog',absent:'Close dialog'},
-        {id:'open-report',label:'bug-report-button',until:'Bug or feature request'},{id:'dismiss-report',label:'Close dialog',absent:'Bug or feature request'});
+        {id:'open-report',label:'bug-report-button',until:'Bug or feature request'},{id:'dismiss-report',label:'Close dialog',absent:'Bug or feature request'},
+        {id:'history-previous',label:'Previous move'},{id:'history-live',label:'Go to end'});
     }
     if(bg){
       const choices=state.legalMoves.flatMap((m:any)=>{
