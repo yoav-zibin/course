@@ -18,6 +18,7 @@ import {MATCH_HISTORY_HEIGHT} from './ui/bugPosition';
 import {diagnosticPath,recordDiagnosticPage,recordDiagnosticEvent,rememberDiagnosticSecrets} from './core/diagnostics';
 import {installWebApp} from './ui/webApp';
 import {EmbeddedGameHost} from './game/EmbeddedGameHost';
+import {BACKGAMMON_GAME_ID,fillsBackgammonLandscape} from './game/backgammonMatchPresentation';
 import {getDirection} from './platform/i18n';
 import {configureReporter,createReporter,reportClientIssue} from './core/reporting';
 import {ErrorBoundary} from './ui/ErrorBoundary';
@@ -31,8 +32,10 @@ import {PortalHeader} from './ui/PortalHeader';
 import {useMatchHistory,type MatchHistoryController} from './ui/matchHistory';
 
 function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:ReturnType<typeof usePortal>;boardVisible:boolean;matchMenuOpen:boolean;onCloseMatchMenu:()=>void;history:MatchHistoryController}) {
-  const {width} = useWindowDimensions();
+  const {width,height} = useWindowDimensions();
   const fittedBoard=boardVisible&&!p.selectedMatch?.awaitingHandoff;
+  const backgammonStage=fittedBoard&&p.selectedMatch?.game_id===BACKGAMMON_GAME_ID;
+  const fillBoard=backgammonStage&&fillsBackgammonLandscape(width,height);
   const localOnly=useRef(readLocalUiTest()).current;
   const [screen, setScreen] = useState<Screen>('games');
   const [account, setAccount] = useState(false);
@@ -209,22 +212,26 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
           {appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
     <NotificationPrompt inline={boardVisible}/>
   </>;
+  const contentBody=<>
+    {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
+    {p.storageError && <Notice error>{p.storageError}</Notice>}
+    {showDetails&&extras}
+    {pendingInvite&&!p.account&&invitePreview?.usable&&<Card><Title small>{copyText('You’re invited to play')}</Title><Copy muted>{copyText('Log in or continue as a guest to join this match.')}</Copy><Row><Button onPress={()=>setAccount(true)}>{copyText('Log in to join')}</Button><Button secondary onPress={()=>{p.actions.watchInvite();clearInvite();writeRoute(`match=${encodeURIComponent(invitePreview.match.id)}`);}}>{copyText('Watch match')}</Button></Row></Card>}
+    {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
+      : gameVisible ? <MatchStage menuOpen={matchMenuOpen} onCloseMenu={onCloseMatchMenu} menuHeader={header} menuExtras={extras} history={history} onMenuDismissed={menuDismissed}/>
+      : screen==='games' ? p.selectedGameId ? <GameDetail /> : <Catalog />
+      : screen==='matches' ? <Matches />
+      : <LocalMatches />}
+  </>;
   return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>openHeaderDialog('account'),navigate,openGame,openMatch}}>
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
       {showDetails&&header}
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
+        {backgammonStage?<View style={[s.boardFrame,!fillBoard&&s.historyClearance]}>{contentBody}</View>:
         <ScrollView ref={content} key={contentKey} style={{flex:1,minWidth:0}} scrollEnabled={!fittedBoard} contentContainerStyle={[s.content,gameVisible&&{maxWidth:1500},fittedBoard?s.fittedBoard:{padding:gameVisible?0:width<600?14:28}]} keyboardShouldPersistTaps="handled">
-          {(notice || p.error) && <Notice error onDismiss={()=>{setNotice('');p.actions.clearError();}}>{notice || p.error}</Notice>}
-          {p.storageError && <Notice error>{p.storageError}</Notice>}
-          {showDetails&&extras}
-          {pendingInvite&&!p.account&&invitePreview?.usable&&<Card><Title small>{copyText('You’re invited to play')}</Title><Copy muted>{copyText('Log in or continue as a guest to join this match.')}</Copy><Row><Button onPress={()=>setAccount(true)}>{copyText('Log in to join')}</Button><Button secondary onPress={()=>{p.actions.watchInvite();clearInvite();writeRoute(`match=${encodeURIComponent(invitePreview.match.id)}`);}}>{copyText('Watch match')}</Button></Row></Card>}
-          {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
-            : gameVisible ? <MatchStage menuOpen={matchMenuOpen} onCloseMenu={onCloseMatchMenu} menuHeader={header} menuExtras={extras} history={history} onMenuDismissed={menuDismissed}/>
-            : screen==='games' ? p.selectedGameId ? <GameDetail /> : <Catalog />
-            : screen==='matches' ? <Matches />
-            : <LocalMatches />}
-        </ScrollView>
+          {contentBody}
+        </ScrollView>}
       </View>
       <AccountDialog visible={account} onClose={()=>setAccount(false)} />
       <NotificationInbox visible={inbox} onClose={()=>setInbox(false)} onOpen={openNotification}/>
@@ -255,6 +262,7 @@ export default function App() {
 }
 const s = StyleSheet.create({
   safe:{flex:1,backgroundColor:colors.background},
+  boardFrame:{flex:1,minWidth:0,minHeight:0},historyClearance:{paddingBottom:MATCH_HISTORY_HEIGHT+2},
   fittedBoard:{height:'100%',maxWidth:'100%',gap:0,paddingBottom:MATCH_HISTORY_HEIGHT+2},
   content:{width:'100%',maxWidth:1240,alignSelf:'center',gap:22,flexGrow:1},loading:{minHeight:300,alignItems:'center',justifyContent:'center',gap:20},
 });

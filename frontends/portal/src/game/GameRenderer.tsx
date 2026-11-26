@@ -15,6 +15,7 @@ import { animateSceneUpdate, sceneTracks, sceneTransform, type SceneTrack } from
 import {TabletopGraphic} from './TabletopGraphic';
 import {compileTimeline,inferredGroupTracks, pathsTimeline} from './composition';
 import {dragPosition} from './dragPosition';
+import {projectCanvas,scenePoint} from './boardInputGeometry';
 import {useBoardInput,type BoardInputResult} from './BoardInput';
 import {pieceAnimation,STATIC_PIECE_Z_MAX} from './pieceAnimations';
 
@@ -37,6 +38,7 @@ export type GameRendererProps = {
     motion?: Partial<Motion>;
   };
   frameHeight?: number;
+  fillFrame?: boolean;
 };
 
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -69,7 +71,7 @@ type Gesture = {
 };
 type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];inferGroups?:boolean;moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
 
-function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,showDestinationsAfterSelection=false,omitPieceId,boardPresentation,frameHeight}: GameRendererProps & {spec: GameSpec}) {
+function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,showDestinationsAfterSelection=false,omitPieceId,boardPresentation,frameHeight,fillFrame=false}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
@@ -110,17 +112,18 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   // space. Do not enlarge a dense overview into a scrolling or clipped canvas;
   // the player can intentionally zoom in for larger pieces and destinations.
   const framed=frameHeight!==undefined&&frameHeight>0;
+  const fill=framed&&fillFrame;
   const height=framed?canvasHeight:Math.max(1,Math.min(widthFittedHeight,dimensions.height));
   const limits = cameraLimits(bounds,camera.zoom);
   const view = {x: bounds.x + (bounds.width-limits.width)/2 + camera.x,
     y: bounds.y + (bounds.height-limits.height)/2 + camera.y, width:limits.width,height:limits.height};
-  const current = useRef({camera,view,width,height,bounds,display,selected,preview,reducedMotion,framed,frameHeight,windowHeight:dimensions.height});
-  current.current={camera,view,width,height,bounds,display,selected,preview,reducedMotion,framed,frameHeight,windowHeight:dimensions.height};
+  const current = useRef({camera,view,width,height,bounds,display,selected,preview,reducedMotion,framed,frameHeight,fill,windowHeight:dimensions.height});
+  current.current={camera,view,width,height,bounds,display,selected,preview,reducedMotion,framed,frameHeight,fill,windowHeight:dimensions.height};
   const active = canMove(latest.current,sent.current) && renderedRevision.current === revision.current && !busy && !motionBusy;
   const select = (id: string | null) => {selectedRef.current=id;setSelected(id);};
   const showPreview = (id: string | null) => {previewRef.current=id;setPreview(id);};
 
-  useLayoutEffect(()=>{fitGeometry();},[width,frameHeight,dimensions.width,dimensions.height]);
+  useLayoutEffect(()=>{fitGeometry();},[width,frameHeight,dimensions.width,dimensions.height,fill]);
 
   const report = useCallback((reason: unknown) => {
     if (!alive.current || reason instanceof AccountScopeChangedError) return;
@@ -289,7 +292,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   function fitGeometry() {
     const c=current.current;
     const rect=(surface.current as unknown as {getBoundingClientRect?:()=>{width:number;height:number}})?.getBoundingClientRect?.();
-    const key=`${rect?.width||c.width}:${c.framed?rect?.height||c.frameHeight:Platform.OS==='web'?window.innerHeight:c.windowHeight}:${c.framed}`;
+    const key=`${rect?.width||c.width}:${c.framed?rect?.height||c.frameHeight:Platform.OS==='web'?window.innerHeight:c.windowHeight}:${c.framed}:${c.fill}`;
     if(fittedGeometry.current===key)return;
     fittedGeometry.current=key;
     // Compare the physical frame, not delayed layout notifications. A stale
@@ -303,9 +306,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     const c=current.current;
     const rect=measure?(canvas.current as unknown as {getBoundingClientRect?:()=>{width:number;height:number}})?.getBoundingClientRect?.():undefined;
     if(rect?.width&&rect.height){c.width=rect.width;c.height=rect.height;}
-    const scale=Math.min(c.width/c.view.width,c.height/c.view.height);
-    return {x:c.view.x+(at.x-(c.width-c.view.width*scale)/2)/scale,
-      y:c.view.y+(at.y-(c.height-c.view.height*scale)/2)/scale};
+    return scenePoint(projectCanvas(c.width,c.height,c.view,c.fill),at);
   }
   function measureOrigin() {
     fitGeometry();
@@ -327,9 +328,9 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   function zoomTo(zoom: number, at?: Point) {
     if(spec.viewport.camera_enabled===false)return;
     const c=current.current, point=at||{x:c.width/2,y:c.height/2}, anchor=boardPoint(point), nextZoom=clamp(zoom,.25,6);
-    const nextLimits=cameraLimits(c.bounds,nextZoom), scale=Math.min(c.width/nextLimits.width,c.height/nextLimits.height);
-    const x=anchor.x-(point.x-(c.width-nextLimits.width*scale)/2)/scale;
-    const y=anchor.y-(point.y-(c.height-nextLimits.height*scale)/2)/scale;
+    const nextLimits=cameraLimits(c.bounds,nextZoom);
+    const projected=scenePoint(projectCanvas(c.width,c.height,{x:0,y:0,...nextLimits},c.fill),point);
+    const x=anchor.x-projected.x,y=anchor.y-projected.y;
     setSafeCamera({zoom:nextZoom,x:x-c.bounds.x-(c.bounds.width-nextLimits.width)/2,y:y-c.bounds.y-(c.bounds.height-nextLimits.height)/2});
   }
   function transform(event: UIEvent) { const piece=sceneRef.current.pieces?.find(p=>p.id===selectedRef.current);if(piece)dispatch({...event,id:piece.id}); }
@@ -354,8 +355,9 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const actions = useRef({boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview});
   actions.current={boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview};
   function projectDrag(at:Point,g:Gesture,piece:Piece){
-    const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height),size=pieceSize(spec,piece);
-    const lifted=dragPosition(at,g.grab,{width:size.width*scale,height:size.height*scale},c,g.touch);
+    const c=current.current,size=pieceSize(spec,piece);
+    const {scale,scaleX,scaleY}=projectCanvas(c.width,c.height,c.view,c.fill);
+    const lifted=dragPosition(at,g.grab,{width:size.width*scaleX,height:size.height*scaleY},c,g.touch);
     const point=actions.current.boardPoint(lifted,false),target=hitTarget(spec,sceneRef.current,point,piece,16/scale);
     return {id:piece.id,at:target?position(spec,target):point,target:target?.id};
   }
@@ -395,11 +397,11 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         const node=event.target as unknown as {closest?:(selector:string)=>{focus?:()=>void}|null};
         node?.closest?.('[role="button"]')?.focus?.();
       }
-      const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height);
+      const c=current.current,{scaleX,scaleY}=projectCanvas(c.width,c.height,c.view,c.fill);
       const center=piece?position(spec,piece):point;
       const native=e as unknown as {pointerType?:string;type?:string};
       gesture.current={kind:'press',first:at,last:at,camera:current.current.camera,piece:piece?.id,target:target?.id,moved:false,
-        grab:{x:(center.x-point.x)*scale,y:(center.y-point.y)*scale},
+        grab:{x:(center.x-point.x)*scaleX,y:(center.y-point.y)*scaleY},
         toolbarPiece:selectedRef.current,toolbarPreview:previewRef.current,
         touch:Platform.OS!=='web'||native.pointerType==='touch'||native.type?.startsWith('touch')===true};
       // A legal destination may contain another movable piece. Preserve the
@@ -428,9 +430,9 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         if(g.kind!=='pinch'){g.kind='pinch';g.distance=distance;g.camera=current.current.camera;g.anchor=actions.current.boardPoint(center);}
         if(spec.viewport.camera_enabled!==false){
           const c=current.current,zoom=clamp(g.camera.zoom*distance/Math.max(1,g.distance!),.25,6),l=cameraLimits(c.bounds,zoom);
-          const scale=Math.min(c.width/l.width,c.height/l.height);
-          actions.current.setSafeCamera({zoom,x:g.anchor!.x-(center.x-(c.width-l.width*scale)/2)/scale-c.bounds.x-(c.bounds.width-l.width)/2,
-            y:g.anchor!.y-(center.y-(c.height-l.height*scale)/2)/scale-c.bounds.y-(c.bounds.height-l.height)/2});
+          const projected=scenePoint(projectCanvas(c.width,c.height,{x:0,y:0,...l},c.fill),center);
+          actions.current.setSafeCamera({zoom,x:g.anchor!.x-projected.x-c.bounds.x-(c.bounds.width-l.width)/2,
+            y:g.anchor!.y-projected.y-c.bounds.y-(c.bounds.height-l.height)/2});
         }
         g.moved=true;return;
       }
@@ -451,8 +453,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       }else if(g.moved&&!g.piece&&(!g.target||
         spec.viewport.camera_controls===true&&current.current.camera.zoom>1)){
         g.kind='pan';
-        const c=current.current,scale=Math.min(c.width/c.view.width,c.height/c.view.height);
-        actions.current.setSafeCamera({...g.camera,x:g.camera.x-dx/scale,y:g.camera.y-dy/scale});
+        const c=current.current,{scaleX,scaleY}=projectCanvas(c.width,c.height,c.view,c.fill);
+        actions.current.setSafeCamera({...g.camera,x:g.camera.x-dx/scaleX,y:g.camera.y-dy/scaleY});
       }
     },
     onPanResponderRelease:event=>{
@@ -553,7 +555,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       serial={display.serial} enabled={false} selected dragged/>);
   const boardInput=useBoardInput({
     spec,scene:display.scene,order:painting.order,revision:revision.current,active,selected,
-    selectionRequired:showDestinationsAfterSelection,width,height,view,bounds,camera,
+    selectionRequired:showDestinationsAfterSelection,width,height,view,bounds,camera,fill,
     onResult:finishBoardInput,onCamera:setSafeCamera,renderHeld,renderPreview,
   });
   const targetSource=boardInput.heldId?display.scene.pieces?.find(piece=>piece.id===boardInput.heldId):selectedPiece;
@@ -599,7 +601,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const boardCanvas=<View ref={canvas} collapsable={false} focusable style={[styles.canvas,framed?{flex:1,minHeight:0}:{height},canvasWebStyle]} {...webProps} {...(!boardInput.wrapCanvas&&responders.panHandlers)}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);setCanvasHeight(event.nativeEvent.layout.height);measureOrigin();}}
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
-      <Svg width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
+      <Svg width="100%" height="100%" preserveAspectRatio={fill?"none":undefined} style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
         {[
         ...(visibleBoards??spec.boards).map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
         ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),

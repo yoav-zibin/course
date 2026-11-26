@@ -17,6 +17,7 @@ export type BoardInputProps = {
   selectionRequired:boolean;
   width:number;
   height:number;
+  fill:boolean;
   view:BoardRect;
   bounds:BoardRect;
   camera:BoardCamera;

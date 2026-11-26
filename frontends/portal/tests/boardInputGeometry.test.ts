@@ -49,3 +49,14 @@ test('native drop projection fits the SVG view and snaps lifted artwork to an el
   assert.equal(touch.y,-50);
   assert.equal(projectPiece(canvas,{x:150,y:100},{x:0,y:0},piece,false).target?.id,'destination');
 });
+
+test('full-frame landscape maps touch and drop coordinates on both axes',()=>{
+  const canvas=projectCanvas(800,400,{x:0,y:0,width:200,height:200},true);
+  const offCenter={x:200,y:40};
+  assert.deepEqual(scenePoint(canvas,offCenter),{x:50,y:20});
+  assert.equal(projectPiece(canvas,offCenter,{x:0,y:0},geometry.pieces.source,false).target?.id,'line');
+  const point=scenePoint(canvas,{x:400,y:200});
+  assert.deepEqual(point,{x:100,y:100});
+  assert.equal(boardHit(geometry,point,'source',true).target?.id,'destination');
+  assert.equal(projectPiece(canvas,{x:400,y:200},{x:0,y:0},geometry.pieces.source,false).target?.id,'destination');
+});

@@ -22,17 +22,20 @@ export function boardInputGeometry(spec:GameSpec,scene:Scene,order:ReadonlyMap<s
 type Geometry=ReturnType<typeof boardInputGeometry>;
 export type InputPiece=Geometry['pieces'][string];
 export type InputTarget=Geometry['targets'][number];
-export type Projection={width:number;height:number;scale:number;x:number;y:number};
+export type Projection={width:number;height:number;scale:number;scaleX:number;scaleY:number;x:number;y:number;fill:boolean};
 
-export function projectCanvas(width:number,height:number,view:BoardRect):Projection {
+export function projectCanvas(width:number,height:number,view:BoardRect,fill=false):Projection {
   'worklet';
   const scale=Math.min(width/view.width,height/view.height);
-  return {width,height,scale,x:view.x-(width-view.width*scale)/(2*scale),y:view.y-(height-view.height*scale)/(2*scale)};
+  const scaleX=fill?width/view.width:scale,scaleY=fill?height/view.height:scale;
+  return {width,height,scale,scaleX,scaleY,fill,
+    x:fill?view.x:view.x-(width-view.width*scale)/(2*scale),
+    y:fill?view.y:view.y-(height-view.height*scale)/(2*scale)};
 }
 
 export function scenePoint(canvas:Projection,point:Point):Point {
   'worklet';
-  return {x:canvas.x+point.x/canvas.scale,y:canvas.y+point.y/canvas.scale};
+  return {x:canvas.x+point.x/canvas.scaleX,y:canvas.y+point.y/canvas.scaleY};
 }
 
 export function boardHit(geometry:Geometry,point:Point,selected:string|null,selectionRequired:boolean) {
@@ -46,8 +49,8 @@ export function boardHit(geometry:Geometry,point:Point,selected:string|null,sele
 
 export function projectPiece(canvas:Projection,at:Point,grab:Point,piece:InputPiece,touch:boolean) {
   'worklet';
-  const {scale}=canvas;
-  const lifted=dragPosition(at,grab,{width:piece.size.width*scale,height:piece.size.height*scale},canvas,touch);
+  const {scale,scaleX,scaleY}=canvas;
+  const lifted=dragPosition(at,grab,{width:piece.size.width*scaleX,height:piece.size.height*scaleY},canvas,touch);
   const point=scenePoint(canvas,lifted);
   const target=closestTarget(piece.targets,point,16/scale);
   const center=target?.center??point;

@@ -87,6 +87,12 @@ test('saved Backgammon opening ties remain clear after computer rerolls and the 
   await expect(board.getByText(/PIP:|S: 0\/1/)).toHaveCount(0);
   // Rotate an active match so the board fit and hit testing are checked together.
   await page.setViewportSize({width:844,height:390});
+  const canvas=board.locator('svg').first();
+  await expect(canvas).toHaveAttribute('preserveAspectRatio','none');
+  await expect.poll(async()=>{
+    const frame=await canvas.boundingBox();
+    return frame&&{width:Math.round(frame.width),height:Math.round(frame.height)};
+  }).toEqual({width:844,height:390});
   const wood=board.locator('svg > g > rect[width="700"][height="440"]');
   await expect.poll(async()=>{
     const [woodBox,canvasBox]=await Promise.all([wood.boundingBox(),board.locator('svg').first().boundingBox()]);

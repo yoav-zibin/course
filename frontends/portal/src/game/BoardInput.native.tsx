@@ -84,20 +84,20 @@ function pinchCamera(gesture:Gesture,bounds:BoardRect,a:Point,b:Point):BoardCame
   const {center,distance}=pinchGeometry(a,b),pinch=gesture.pinch!;
   const zoom=Math.max(.25,Math.min(6,gesture.camera.zoom*distance/Math.max(1,pinch.distance)));
   const width=bounds.width/zoom,height=bounds.height/zoom;
-  const fitted=projectCanvas(gesture.canvas.width,gesture.canvas.height,{x:0,y:0,width,height});
+  const fitted=projectCanvas(gesture.canvas.width,gesture.canvas.height,{x:0,y:0,width,height},gesture.canvas.fill);
   const point=scenePoint(fitted,center);
   return {zoom,x:pinch.anchor.x-point.x-bounds.x-(bounds.width-width)/2,
     y:pinch.anchor.y-point.y-bounds.y-(bounds.height-height)/2};
 }
 
 export function useBoardInput(props:BoardInputProps):BoardInput {
-  const {spec,scene,order,revision,active,selected,selectionRequired,width,height,view,bounds,camera}=props;
+  const {spec,scene,order,revision,active,selected,selectionRequired,width,height,view,bounds,camera,fill}=props;
   const latest=useRef(props);
   latest.current=props;
   const play=useMemo(()=>({geometry:boardInputGeometry(spec,scene,order),selectionRequired}),
     [spec,scene,order,selectionRequired]);
   const snapshot=useSharedValue({epoch:0,play,active,selected});
-  const frame=useSharedValue({width,height,view,bounds,camera});
+  const frame=useSharedValue({width,height,view,bounds,camera,fill});
   const gesture=useSharedValue<Gesture|null>(null);
   const sequence=useSharedValue(0);
   const drag=useSharedValue<Drag|null>(null);
@@ -107,8 +107,8 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
   const [lifted,setLifted]=useState<{id:string;token:number;epoch:number}|null>(null);
   const epoch=useRef(0);
 
-  const surface=useMemo(()=>({width,height,view,bounds,camera}),
-    [width,height,view.x,view.y,view.width,view.height,bounds,camera]);
+  const surface=useMemo(()=>({width,height,view,bounds,camera,fill}),
+    [width,height,view.x,view.y,view.width,view.height,bounds,camera,fill]);
   const lastSurface=useRef<{surface:typeof surface;play:typeof play;revision:number}|null>(null);
   useLayoutEffect(()=>{
     const nextEpoch=++epoch.current,previous=lastSurface.current;
@@ -169,7 +169,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
     onTouchesDown:event=>{
       'worklet';
       const area=frame.value,current=gesture.value,model=snapshot.value;
-      const canvas=current?.canvas??projectCanvas(area.width,area.height,area.view);
+      const canvas=current?.canvas??projectCanvas(area.width,area.height,area.view,area.fill);
       if(event.allTouches.length>=2){
         if(current?.pinch)return;
         const {center,distance}=pinchGeometry(event.allTouches[0],event.allTouches[1]);
@@ -178,7 +178,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
         drag.value=null;origin.value=null;feedback.value=null;glow.value=0;
         gesture.value={epoch:model.epoch,token:++sequence.value,first:center,canvas,camera:area.camera,
           hit:{piece:undefined,target:undefined},source:null,selected:null,grab:{x:0,y:0},touch:true,moved:true,claimsTouch:true,
-          pinch:{distance,anchor:scenePoint(projectCanvas(area.width,area.height,area.view),center)}};
+          pinch:{distance,anchor:scenePoint(projectCanvas(area.width,area.height,area.view,area.fill),center)}};
         GestureStateManager.activate(event.handlerTag);
         return;
       }
@@ -195,7 +195,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       const claimsTouch=!!(piece||target||area.camera.zoom>1);
       gesture.value={epoch:model.epoch,token:++sequence.value,first:{x:first.x,y:first.y},canvas,
         camera:area.camera,hit,source,selected:model.selected,touch:event.pointerType!==PointerType.MOUSE,moved:false,claimsTouch,
-        grab:piece?{x:(piece.center.x-point.x)*canvas.scale,y:(piece.center.y-point.y)*canvas.scale}:{x:0,y:0}};
+        grab:piece?{x:(piece.center.x-point.x)*canvas.scaleX,y:(piece.center.y-point.y)*canvas.scaleY}:{x:0,y:0}};
       feedback.value=target&&(selectedDestination||!piece)?{target,scale:canvas.scale}:
         piece?{piece:piece.id,scale:canvas.scale}:null;
       glow.value=1;
@@ -234,7 +234,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       }else{
         if(!held.moved){gesture.value={...held,moved:true};feedback.value=null;}
         if(cameraEnabled&&pans)
-          scheduleOnRN(updateCamera,{...initialCamera,x:initialCamera.x-dx/canvas.scale,y:initialCamera.y-dy/canvas.scale},canvas.width,canvas.height);
+          scheduleOnRN(updateCamera,{...initialCamera,x:initialCamera.x-dx/canvas.scaleX,y:initialCamera.y-dy/canvas.scaleY},canvas.width,canvas.height);
       }
     },
     onTouchesUp:event=>{
@@ -282,7 +282,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
     wrapPiece,
     feedback:<View style={StyleSheet.absoluteFill} pointerEvents="none"
       accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Svg width="100%" height="100%" style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
+      <Svg width="100%" height="100%" preserveAspectRatio={fill?"none":undefined} style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
         {destinations&&scene.targets?.filter(target=>target.preview?.length&&destinations.some(d=>d.id===target.id)).map(target=>
           <DragPreview key={target.id} id={target.id} feedback={feedback}>{props.renderPreview(target)}</DragPreview>)}
         <TargetFeedback feedback={feedback} glow={glow}/>
