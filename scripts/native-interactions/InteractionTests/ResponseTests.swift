@@ -5,7 +5,7 @@ final class ResponseTests: XCTestCase {
     private struct Bounds: Decodable { let x, y, width, height: CGFloat }
     private struct Action: Decodable { let id: String; let label, until, absent: String?; let at, to, spentDie: Point?; let lift: CGFloat? }
     private struct Scenario: Decodable { let id, match: String; let bounds: Bounds; let actions: [Action] }
-    private struct Cases: Decodable { let library: String; let profile: Bool; let rapid: Bool?; let scenarios: [Scenario] }
+    private struct Cases: Decodable { let library: String; let profile: Bool; let rapid, instruments: Bool?; let scenarios: [Scenario] }
     private let app = XCUIApplication(bundleIdentifier: "edu.columbia.gameportal.starter")
 
     private func element(_ name: String) -> XCUIElement {
@@ -18,18 +18,40 @@ final class ResponseTests: XCTestCase {
         let resource = try XCTUnwrap(Bundle(for: Self.self).url(forResource:"response-cases",withExtension:"json"))
         let data = try JSONDecoder().decode(Cases.self,from:Data(contentsOf:resource))
         let scenario = try XCTUnwrap(data.scenarios.first { $0.id == name })
-        app.launchEnvironment["BUILDPLAY_LOCAL_UI_TEST"] = "1"
+        if data.instruments==true {app.launchEnvironment["BUILDPLAY_CHECKER_SIGNPOSTS"]="1"}
+        else {app.launchEnvironment["BUILDPLAY_LOCAL_UI_TEST"] = "1"}
         app.launchEnvironment["DYLD_INSERT_LIBRARIES"] = data.library
         if data.profile {app.launchEnvironment["BUILDPLAY_RESPONSE_STACKS"]="1"}
         app.launch()
         let canvas = element("Game board. Use pieces and highlighted destinations.")
         // The restored game installs its URL listener as part of startup.
         // Wait for the warm board before asking UIKit to open the test match.
-        XCTAssertTrue(canvas.waitForExistence(timeout:30),app.debugDescription)
+        if data.instruments==true {
+            let login=app.buttons["Log in / continue as guest"]
+            if login.waitForExistence(timeout:10) {
+                for _ in 0..<7 {if login.isHittable {break};app.swipeUp()}
+                login.tap()
+                let guest=app.buttons.matching(NSPredicate(format:"label == %@ OR label ENDSWITH %@","Guest",": Guest")).firstMatch
+                XCTAssertTrue(guest.waitForExistence(timeout:15));guest.tap()
+                let field=app.textFields.firstMatch
+                field.tap();field.typeText("Benchmark\n")
+                let submit=app.buttons["Continue as guest"];submit.tap()
+                XCTAssertTrue(submit.waitForNonExistence(timeout:20))
+            }
+        } else {XCTAssertTrue(canvas.waitForExistence(timeout:30),app.debugDescription)}
         app.open(try XCTUnwrap(URL(string:"buildplay:///#match="+scenario.match)))
         let board = canvas.waitForExistence(timeout:10) ? canvas : element("game-stage")
         XCTAssertTrue(board.waitForExistence(timeout:25),app.debugDescription)
         Thread.sleep(forTimeInterval:1.4)
+        if data.instruments==true {
+            var request=URLRequest(url:try XCTUnwrap(URL(string:"http://127.0.0.1:18766/ready")))
+            request.httpMethod="POST";request.timeoutInterval=120
+            let ready=expectation(description:"Profiler attached to the warm app")
+            URLSession.shared.dataTask(with:request){_,response,error in
+                XCTAssertNil(error);XCTAssertEqual((response as? HTTPURLResponse)?.statusCode,200);ready.fulfill()
+            }.resume()
+            wait(for:[ready],timeout:125)
+        }
         func coordinate(_ point:Point, lift:CGFloat = 0) -> XCUICoordinate {
             let f=board.frame, b=scenario.bounds, s=min(f.width/b.width,f.height/b.height)
             let x=f.midX+(point.x-b.x-b.width/2)*s, y=f.midY+(point.y-b.y-b.height/2)*s

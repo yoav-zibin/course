@@ -4,6 +4,7 @@
 #import <objc/runtime.h>
 #import <fcntl.h>
 #import <unistd.h>
+#import <os/signpost.h>
 
 @interface ResponseStripe : UIView
 @property(nonatomic) uint32_t stamp;
@@ -65,6 +66,12 @@ static int logfd = -1;
   if(logfd>=0 && event.type==UIEventTypeTouches){
     for(UITouch *t in event.allTouches){
       if(t.phase==UITouchPhaseStationary) continue;
+      if(getenv("BUILDPLAY_CHECKER_SIGNPOSTS") && (t.phase==UITouchPhaseBegan||t.phase==UITouchPhaseEnded)) {
+        static os_log_t log;static dispatch_once_t once;
+        dispatch_once(&once,^{log=os_log_create("fun.buildplay.benchmark",OS_LOG_CATEGORY_POINTS_OF_INTEREST);});
+        if(t.phase==UITouchPhaseBegan)os_signpost_event_emit(log,OS_SIGNPOST_ID_EXCLUSIVE,"Checker down","touch_ms=%{public}.3f",t.timestamp*1000);
+        else os_signpost_event_emit(log,OS_SIGNPOST_ID_EXCLUSIVE,"Checker up","touch_ms=%{public}.3f",t.timestamp*1000);
+      }
       if(t.phase==UITouchPhaseBegan||t.phase==UITouchPhaseEnded)recordResponseStacks();
       CGPoint p=[t locationInView:nil];
       dprintf(logfd,"{\"phase\":%ld,\"t\":%.3f,\"x\":%.2f,\"y\":%.2f,\"wall\":%.3f,\"pid\":%d}\n",
