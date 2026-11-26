@@ -169,6 +169,35 @@ test('refresh completes without requesting retired match discovery endpoints', a
   }finally{restore();}
 });
 
+test('cold launch restores the saved locale and catalog while server configuration is pending',async()=>{
+  const saved=browserStorage();
+  saved['game-platform.locale.v1']='ar';
+  saved['game-platform.i18n-bundle.v1:ar']=JSON.stringify({data:{direction:'rtl',messages:{welcome:'أهلاً'}}});
+  await new AccountRepository('https://local.test').cache('visitor','/games',[{id:'cached',name:'Cached game'}]);
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const calls:string[]=[];
+  const restore=mockedFetch(async url=>{
+    calls.push(url.pathname);
+    if(url.pathname.startsWith('/i18n/')||url.pathname==='/storage/capabilities')await gate;
+  });
+  const store=new PortalStore(testRuntime());
+  let ready!:()=>void;
+  const restored=new Promise<void>(resolve=>{ready=resolve;});
+  const unsubscribe=store.subscribe(()=>{if(store.getSnapshot().ready)ready();});
+  const boot=store.bootstrap('https://local.test');
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{
+    await Promise.race([restored,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Local restore waited for the network')),1500);})]);
+    assert.equal(getDirection(),'rtl');
+    assert.equal(store.getSnapshot().games[0].id,'cached');
+    const refresh=store.actions.refresh();
+    release();await Promise.all([boot,refresh]);
+    assert.equal(calls.filter(path=>path==='/auth/config').length,1);
+    assert.equal(calls.filter(path=>path==='/games').length,1);
+  }finally{clearTimeout(timer);release();await boot;unsubscribe();restore();}
+});
+
 for(const signedIn of [false,true])test(`bootstrap releases its initial loading state for ${signedIn?'a saved account':'a visitor'}`,async()=>{
   const saved=browserStorage(),restore=mockedFetch();
   if(signedIn){saved['game-platform.accounts.v1']=JSON.stringify([{id:'alice',password:'synthetic-secret',display_name:'Alice'}]);saved['game-platform.current-account.v1']='alice';}

@@ -41,13 +41,19 @@ class Device:
         self.adb('shell', 'cmd', 'input', 'tap', x, y)
 
     def record(self, directory, action, command):
+        return self.record_shell(directory, action, 'cmd input '+command)
+
+    def record_shell(self, directory, action, command, seconds=3):
         remote = '/sdcard/buildplay-benchmark.mp4'
         video = directory / (action + '.mp4')
         self.adb('shell', 'rm', '-f', remote)
-        with subprocess.Popen([*self.command, 'shell', 'screenrecord', '--time-limit', '3', remote]) as recorder:
+        with subprocess.Popen([*self.command, 'shell', 'screenrecord', '--time-limit', str(seconds), remote]) as recorder:
             time.sleep(.75)
-            start, end = map(int, self.adb('shell', f'date +%s%N; cmd input {command}; date +%s%N').split())
-            if recorder.wait(timeout=12):
+            output = self.adb('shell', f'date +%s%N; {command}; date +%s%N').splitlines()
+            start, end = int(output[0]), int(output[-1])
+            if len(output)>2:
+                (directory/(action+'.txt')).write_text('\n'.join(output[1:-1])+'\n')
+            if recorder.wait(timeout=seconds+10):
                 raise RuntimeError('Screen recording failed')
         self.adb('pull', remote, video)
         raw = video.read_bytes()

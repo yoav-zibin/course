@@ -82,22 +82,35 @@ async function cacheSet(key: string, value: any) {
   }
 }
 function adopt(value: any) { bundle = value; messages = value.catalog?.messages ?? value.messages ?? {}; direction = value.direction ?? value.catalog?.direction ?? 'ltr'; listeners.forEach(fn => fn()); }
-export async function configureI18n(base: string, preferred?: string, localOnly = false): Promise<void> {
+export async function configureI18n(base: string, preferred?: string, localOnly = false, onCached?:()=>void): Promise<void> {
   baseUrl = base; offlineOnly = localOnly;
-  const savedLocales = await cacheGet('game-platform.i18n-locales.v1'); locales = (Array.isArray(savedLocales) ? savedLocales : savedLocales?.locales) ?? locales;
-  if (!offlineOnly) try { const response = await fetch(`${baseUrl}/i18n/locales`); if (response.ok) { const data = await response.json(); locales = data.locales; await cacheSet('game-platform.i18n-locales.v1', data); } } catch { /* offline list */ }
-  const stored = await storage.getItem('game-platform.locale.v1').catch(() => null);
-  await setLocale(preferred || stored || 'en');
+  const [savedLocales,stored] = await Promise.all([cacheGet('game-platform.i18n-locales.v1'),storage.getItem('game-platform.locale.v1').catch(()=>null)]);
+  locales = (Array.isArray(savedLocales) ? savedLocales : savedLocales?.locales) ?? locales;
+  const value = preferred || stored || 'en';
+  async function updateLocales() {
+    if(localOnly)return;
+    try {
+      const response=await fetch(`${base}/i18n/locales`);
+      if(!response.ok)return;
+      const data=await response.json();
+      if(baseUrl!==base||offlineOnly||!Array.isArray(data.locales))return;
+      locales=data.locales;
+      if(!bundle){direction=locales.find(item=>item.code===locale)?.direction??'ltr';listeners.forEach(fn=>fn());}
+      await cacheSet('game-platform.i18n-locales.v1',data);
+    } catch { /* retain the local list */ }
+  }
+  await Promise.all([setLocale(value,onCached,stored!==value),updateLocales()]);
 }
-export async function setLocale(value: string): Promise<boolean> {
+export async function setLocale(value: string, onCached?:()=>void, persist=true): Promise<boolean> {
   const request = ++localeRequest, base = baseUrl, localOnly = offlineOnly;
   const current = () => request === localeRequest;
   locale = value; direction = locales.find(item => item.code === value)?.direction ?? 'ltr';
-  await storage.setItem('game-platform.locale.v1', value).catch(error => reportCacheFailure('locale',error));
+  if(persist)await storage.setItem('game-platform.locale.v1', value).catch(error => reportCacheFailure('locale',error));
   if (!current()) return false;
   const key = `game-platform.i18n-bundle.v1:${value}`;
   const saved = await cacheGet(key); if (!current()) return false;
   if (saved?.data) adopt(saved.data); else { messages = {}; bundle = null; listeners.forEach(fn => fn()); }
+  onCached?.();
   if (!localOnly) try { const response = await fetch(`${base}/i18n/bundle/${encodeURIComponent(value)}`); if (response.ok && current()) { const data = await response.json(); if (!current()) return false; adopt(data); await cacheSet(key, { data }); } } catch { /* cached catalogs and supplied English fallbacks remain usable */ }
   return current();
 }

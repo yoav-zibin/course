@@ -34,7 +34,7 @@ function TurnClock({deadline,serverTime}:{deadline?:string|null;serverTime?:stri
 }
 
 export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,history,onMenuDismissed}:{menuOpen?:boolean;onCloseMenu:()=>void;menuHeader?:ReactNode;menuExtras?:ReactNode;history:MatchHistoryController;onMenuDismissed?:()=>void}) {
-  const {p,run,navigate,notify,openMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
+  const {p,run,navigate,notify,openMatch,showSelectedMatch}=useApp(),t=(key:string,fallback:string)=>text(p,key,fallback);
   const match=p.selectedMatch!, game=p.game;
   const gameTitle=game?.name||matchGameName(match,p,copyText('Tic-tac-toe'))||copyText('Match');
   const backgammon=game?.id===BACKGAMMON_GAME_ID;
@@ -100,7 +100,7 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
       <Copy>{confirm==='resolve'?copyText("Your pending branch will be kept in an archive before loading the server board."):over?copyText("This removes the match from your list. Other players can still see it."):waiting&&owner?copyText("Leaving closes this lobby for everyone and refunds any tokens."):copyText("Your seat will leave the match. The server calculates any token settlement.")}</Copy>
       {confirm==='leave'&&!waiting&&!over&&match.pending_leave_payout!==null&&match.pending_leave_payout!==undefined&&<Copy>{copyText("Your payout:")} {match.pending_leave_payout} {copyText("tokens")}</Copy>}
       <Button danger onPress={()=>run(async()=>{if(confirm==='resolve')await p.actions.resolveConflict(match.id);else if(waiting||over){await p.actions.leaveMatch();navigate('matches');}else if(match.pending_leave_player_id)await p.actions.leaveMatch();else{await p.actions.matchAction('maybeLeave');return;}setConfirm('');})}>{confirm==='resolve'?copyText("Use server version"):!waiting&&!over&&!match.pending_leave_player_id?copyText("Preview leaving"):copyText("Confirm leaving")}</Button>
-      </>:help&&game?<GameInstructions game={game} summaryFirst/>:<>{menuHeader}{menuExtras}{details}{singlePlayer&&over&&<Row><Button onPress={()=>run(async()=>{const computers=match.players.filter(player=>player.kind==='computer').length;const next=await p.actions.startPractice(match.game_id,{humans:match.players.length-computers,computers,humanSeat:computers?Math.floor(Math.random()*(computers+1)):0,...(computers?{}:{names:match.players.map(player=>player.name||'Player')})});await openMatch(next.id);})}>{copyText("Play again")}</Button><Button secondary disabled={!p.network||Boolean(match.cloud_pending)} onPress={()=>run(async()=>{await p.actions.deleteLocal(match.id);navigate('matches');})}>{copyText('Delete finished match')}</Button></Row>}</>}
+      </>:help&&game?<GameInstructions game={game} summaryFirst/>:<>{menuHeader}{menuExtras}{details}{singlePlayer&&over&&<Row><Button onPress={()=>run(async()=>{const computers=match.players.filter(player=>player.kind==='computer').length;const next=await p.actions.startPractice(match.game_id,{humans:match.players.length-computers,computers,humanSeat:computers?Math.floor(Math.random()*(computers+1)):0,...(computers?{}:{names:match.players.map(player=>player.name||'Player')})});showSelectedMatch(next.id);})}>{copyText("Play again")}</Button><Button secondary disabled={!p.network||Boolean(match.cloud_pending)} onPress={()=>run(async()=>{await p.actions.deleteLocal(match.id);navigate('matches');})}>{copyText('Delete finished match')}</Button></Row>}</>}
     </Dialog>
   </View>;
 }

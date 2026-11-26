@@ -5,7 +5,7 @@ import type {NotificationDelivery} from './useNotificationDelivery';
 
 export type Portal = ReturnType<typeof usePortal>;
 export type Screen = 'games' | 'matches' | 'local';
-export type AppContext = { p: Portal; notificationDelivery: NotificationDelivery; notify: (message: string) => void; run: (task: () => Promise<unknown>) => Promise<void>; openAccount: () => void; navigate: (screen: Screen) => void; openGame: (id: string) => Promise<void>; openMatch: (id: string) => Promise<void> };
+export type AppContext = { p: Portal; notificationDelivery: NotificationDelivery; notify: (message: string) => void; run: (task: () => Promise<unknown>) => Promise<void>; openAccount: () => void; navigate: (screen: Screen) => void; openGame: (id: string) => Promise<void>; openMatch: (id: string) => Promise<void>; showSelectedMatch:(id:string)=>void };
 export const Context = createContext<AppContext | null>(null);
 export function useApp() { const value = useContext(Context); if (!value) throw new Error('App context missing'); return value; }
 

@@ -10,14 +10,12 @@ import {Context, Screen, text} from './ui/context';
 import {Catalog, GameDetail, Matches, LocalMatches} from './ui/screens';
 import {AccountDialog} from './ui/AccountDialog';
 import {AccountDeletionBanner} from './ui/AccountDeletion';
-import {MatchStage} from './ui/MatchStage';
 import {BugReporter} from './ui/BugReporter';
 import {BugButton} from './ui/BugButton';
 import {NativeGestureRoot} from './ui/NativeGestureRoot';
 import {MATCH_HISTORY_HEIGHT} from './ui/bugPosition';
 import {diagnosticPath,recordDiagnosticPage,recordDiagnosticEvent,rememberDiagnosticSecrets} from './core/diagnostics';
 import {installWebApp} from './ui/webApp';
-import {EmbeddedGameHost} from './game/EmbeddedGameHost';
 import {BACKGAMMON_GAME_ID,fillsBackgammonLandscape} from './game/backgammonMatchPresentation';
 import {getDirection} from './platform/i18n';
 import {configureReporter,createReporter,reportClientIssue} from './core/reporting';
@@ -64,16 +62,17 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
   const clearInvite = () => {navigation.current++; acceptingInvite.current=''; setPendingInvite(''); setInvitePreview(null);};
   const navigate = (next: Screen) => {onCloseMatchMenu();history.stopPlayback();clearInvite();if(next==='games')p.actions.clearGame();else p.actions.clearMatch(); setScreen(next); writeRoute(next);};
   const openGame = async (id: string) => {clearInvite();setScreen('games');writeRoute(`game=${encodeURIComponent(id)}`);await p.actions.selectGame(id);};
-  const openMatch = async (id: string) => {clearInvite();setScreen('matches');writeRoute(`match=${encodeURIComponent(id)}`);await p.actions.selectMatch(id);};
+  const showSelectedMatch = (id:string) => {clearInvite();setScreen('matches');writeRoute(`match=${encodeURIComponent(id)}`);};
+  const openMatch = async (id: string) => {showSelectedMatch(id);await p.actions.selectMatch(id);};
   const openInvite = async (token: string) => {
     const epoch=++navigation.current;acceptingInvite.current='';setPendingInvite('');setInvitePreview(null);setScreen('matches');
     const preview=await p.actions.openInvite(token);
     if(epoch!==navigation.current||!preview)return;
     setPendingInvite(token);setInvitePreview(preview);
   };
-  const receiveLink = async (raw: string | null) => {
+  const receiveLink = async (raw: string | null, attributed=false) => {
     if(!raw)return;
-    await p.actions.rememberAttribution(raw);
+    if(!attributed)await p.actions.rememberAttribution(raw);
     const target=playerLink(raw,routeBase);if(!target)return;
     if(target.kind==='app-login'){setAppSession(target.id);return;}
     if(target.kind==='invite')await openInvite(target.id);
@@ -127,12 +126,18 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
     else void p.actions.claimNotificationPrompt().catch(() => p.actions.dismissNotificationPrompt());
   }, [p.notificationPrompt,p.notificationPromptReady,notificationDelivery.status]);
 
+  const launchLink=useRef<string|null>(null);
   useEffect(() => {void run(async () => {
     const initialUrl=Platform.OS==='web'?window.location.href:(await Linking.getInitialURL())??null;
+    launchLink.current=initialUrl;
     await p.actions.bootstrap(undefined,localOnly,initialUrl??undefined);
     if (Platform.OS === 'web') installWebApp();
-    await receiveLink(initialUrl);
   });}, []);
+  useEffect(()=>{
+    if(!p.ready||!launchLink.current)return;
+    const url=launchLink.current;launchLink.current=null;
+    void run(()=>receiveLink(url,true));
+  },[p.ready]);
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({url}) => {void run(()=>receiveLink(url));});
     const resume = AppState.addEventListener('change', state => {if (state === 'active') void run(() => p.actions.refresh());});
@@ -197,6 +202,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
   useEffect(()=>{if(p.storageError)reportClientIssue('storage_error',p.storageError);},[p.storageError]);
 
   const gameVisible = p.selectedMatch !== null;
+  const MatchStage=gameVisible?(require('./ui/MatchStage') as typeof import('./ui/MatchStage')).MatchStage:null;
   const showDetails = !boardVisible;
   // New destinations start at the top; updates within a match keep its position.
   const contentKey = gameVisible ? `match:${p.selectedMatch!.id}` : screen === 'games' && p.selectedGameId ? `game:${p.selectedGameId}` : screen;
@@ -222,12 +228,12 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
     {showDetails&&extras}
     {pendingInvite&&!p.account&&invitePreview?.usable&&<Card><Title small>{copyText('You’re invited to play')}</Title><Copy muted>{copyText('Log in or continue as a guest to join this match.')}</Copy><Row><Button onPress={()=>setAccount(true)}>{copyText('Log in to join')}</Button><Button secondary onPress={()=>{p.actions.watchInvite();clearInvite();writeRoute(`match=${encodeURIComponent(invitePreview.match.id)}`);}}>{copyText('Watch match')}</Button></Row></Card>}
     {!p.ready ? <View style={s.loading}><ActivityIndicator size="large" color={colors.accent}/><Copy muted>{copyText("Loading BuildPlay…")}</Copy></View>
-      : gameVisible ? <MatchStage menuOpen={matchMenuOpen} onCloseMenu={onCloseMatchMenu} menuHeader={header} menuExtras={extras} history={history} onMenuDismissed={menuDismissed}/>
+      : MatchStage ? <MatchStage menuOpen={matchMenuOpen} onCloseMenu={onCloseMatchMenu} menuHeader={header} menuExtras={extras} history={history} onMenuDismissed={menuDismissed}/>
       : screen==='games' ? p.selectedGameId ? <GameDetail /> : <Catalog />
       : screen==='matches' ? <Matches />
       : <LocalMatches />}
   </>;
-  return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>openHeaderDialog('account'),navigate,openGame,openMatch}}>
+  return <Context.Provider value={{p,notificationDelivery,notify:setNotice,run,openAccount:()=>openHeaderDialog('account'),navigate,openGame,openMatch,showSelectedMatch}}>
     <SafeAreaView style={[s.safe,{direction:getDirection()}]} edges={['top','bottom','left','right']}>
       <StatusBar style="light" />
       {showDetails&&header}
@@ -252,10 +258,11 @@ export default function App() {
   useEffect(()=>{setMenuMatch(null);},[p.baseUrl,p.account?.id,p.selectedMatch?.id]);
   const toggleMatchMenu=()=>{if(!matchMenuOpen)history.stopPlayback();setMenuMatch(matchMenuOpen?null:matchKey);recordDiagnosticEvent('match_menu',{expanded:!matchMenuOpen});};
   const embedded=Platform.OS==='web'?document.getElementById('declarative-spec'):null;
+  const EmbeddedGameHost=embedded?(require('./game/EmbeddedGameHost') as typeof import('./game/EmbeddedGameHost')).EmbeddedGameHost:null;
   return <NativeGestureRoot>
     <SafeAreaProvider>
       <ErrorBoundary>
-        {embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:
+        {EmbeddedGameHost&&embedded?<EmbeddedGameHost spec={JSON.parse(embedded.textContent||'null')}/>:
           <PortalApp p={p} boardVisible={boardVisible} matchMenuOpen={matchMenuOpen} onCloseMatchMenu={()=>setMenuMatch(null)} history={history}/>}
       </ErrorBoundary>
       <BugReporter key={JSON.stringify([p.baseUrl,p.account?.id??'visitor'])} p={p} screen={p.selectedMatch?'match':p.selectedGameId?'game':'portal'}/>

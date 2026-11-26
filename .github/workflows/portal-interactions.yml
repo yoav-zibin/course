@@ -10,6 +10,11 @@ on:
         description: Optional baseline commit for a same-simulator JavaScript comparison
         type: string
         required: false
+      scenario:
+        description: Interactions to measure
+        type: choice
+        options: [board, startup]
+        default: board
 permissions:
   contents: read
   actions: read
@@ -51,10 +56,26 @@ jobs:
         env:
           BASELINE: ${{ inputs.baseline }}
           BUILD_RUN: ${{ inputs.build_run }}
+          SCENARIO: ${{ inputs.scenario }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           base="$RUNNER_TEMP/interaction"
+          benchmark=scripts/native-interactions/ios.sh
+          if [[ "$SCENARIO" == startup ]]; then
+            export EXPO_PUBLIC_API_URL=http://localhost:18764
+            benchmark=scripts/native-interactions/ios-startup.sh
+            python3 - "$base/release/BuildPlay.app/Info.plist" <<'PY'
+          import plistlib, sys
+          from pathlib import Path
+          path = Path(sys.argv[1])
+          info = plistlib.loads(path.read_bytes())
+          policy = info.setdefault('NSAppTransportSecurity', {})
+          policy['NSAllowsLocalNetworking'] = True
+          policy.setdefault('NSExceptionDomains', {})['localhost'] = {'NSExceptionAllowsInsecureHTTPLoads': True}
+          path.write_bytes(plistlib.dumps(info))
+          PY
+          fi
           source_sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" --jq '.head_sha')
           revisions=(current)
           if [[ -n "$BASELINE" ]]; then
@@ -72,8 +93,8 @@ jobs:
             app="$base/release/BuildPlay.app"
             cp "$base/js-$name"/_expo/static/js/ios/*.hbc "$app/main.jsbundle"
             codesign --force --sign - --preserve-metadata=identifier,entitlements "$app"
-            if ! bash scripts/native-interactions/ios.sh "$app" "$base/fixture" "$base/results/$name" "$SIMULATOR_ID"; then
-              if [[ "$name" == current ]]; then exit 1; fi
+            if ! bash "$benchmark" "$app" "$base/fixture" "$base/results/$name" "$SIMULATOR_ID"; then
+              if [[ "$name" == current || "$SCENARIO" == startup ]]; then exit 1; fi
               echo "::warning::Baseline verification failed. Continuing with the independent candidate."
             fi
           done

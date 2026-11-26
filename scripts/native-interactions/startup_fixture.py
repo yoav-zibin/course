@@ -1,0 +1,91 @@
+"""Serve the native startup benchmark's public game and empty account on loopback."""
+import argparse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+from pathlib import Path
+import secrets
+import time
+from urllib.parse import urlsplit
+
+
+def serve(fixture, port, delay_ms):
+    pose = json.loads((fixture/'pose.json').read_text())
+    data = json.loads(json.loads((fixture/pose['filename']).read_text())['value'])
+    game = dict(next(iter(data['responses'].values())), description='A game for two players.')
+    card = {k:game[k] for k in ('id','name','description','version','allowed_player_counts','renderer_type')}
+    game_path = '/games/'+game['id']
+    match = {k:v for k,v in data['local'][pose['id']].items() if k not in
+             ('localMode','logicState','initialState','initialTurn','moves','practiceSeed','awaitingHandoff')}
+    match.update(id='benchmark-opening', match_kind='multiplayer')
+    match_path = '/matches/'+match['id']
+    account = {'id':'benchmark-player','display_name':'Benchmark','linked':[],'locale':'en'}
+    password = secrets.token_urlsafe(18)
+    arrivals = []
+    saves = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def reply(self, value, status=200):
+            payload = json.dumps(value, separators=(',',':')).encode()
+            self.send_response(status)
+            self.send_header('Content-Type','application/json')
+            self.send_header('Content-Length',str(len(payload)))
+            self.end_headers()
+            try:
+                self.wfile.write(payload)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+        def handle_request(self):
+            path = urlsplit(self.path).path
+            if path=='/__requests':
+                return self.reply(list(arrivals))
+            if path=='/__saves':
+                return self.reply([{'id':m['id'],'game_id':m['game_id'],'move_count':m['move_count'],
+                                    'opening':m['state'].get('opening',False)} for m in saves.values()])
+            if path=='/__reset' and self.command=='POST':
+                arrivals.clear()
+                saves.clear()
+                return self.reply({})
+            arrivals.append({'method':self.command,'path':path,'at':time.time()})
+            time.sleep(delay_ms/1000)
+            if self.command=='POST':
+                body = json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))) or '{}')
+                if path=='/users':
+                    return self.reply({**account,'user_id':account['id'],'password':password},201)
+                if path=='/matches/single-player-sync':
+                    saved = body['match']
+                    cloud = {**saved,'single_player_state':saved,'cloud_revision':body.get('expected_revision',0)+1}
+                    saves['/matches/'+saved['id']] = cloud
+                    return self.reply(cloud)
+                return self.reply({})
+            values = {'/storage/capabilities':{'pagination':True},'/auth/config':{},
+                      '/i18n/locales':{'locales':[{'code':'en','name':'English','direction':'ltr'}]},
+                      '/i18n/bundle/en':{'messages':{},'direction':'ltr'},
+                      '/games':[card],'/games/popular':[card],'/v2/games':{'items':[card],'next_cursor':None},
+                      game_path:game,game_path+'/versions/'+str(game['version']):game,match_path:match,
+                      '/v2'+match_path+'/history':{'items':[],'total':match['move_count']},match_path+'/moves':[],
+                      '/users/'+account['id']:account,'/users':[account],'/matches':[],
+                      '/users/me/recent-games':[],'/users/me/saved-games':[]}
+            if path in values:
+                return self.reply(values[path])
+            if path in saves:
+                return self.reply(saves[path])
+            if path.startswith('/v2/') or 'notifications' in path:
+                return self.reply({'items':[],'next_cursor':None,'unread_count':0})
+            return self.reply({'detail':'Unknown fixture route'},404)
+
+        do_GET = do_POST = handle_request
+
+    ThreadingHTTPServer(('127.0.0.1',port),Handler).serve_forever()
+
+
+if __name__=='__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('fixture',type=Path)
+    parser.add_argument('--port',type=int,default=18764)
+    parser.add_argument('--delay-ms',type=int,default=200)
+    args = parser.parse_args()
+    serve(args.fixture,args.port,args.delay_ms)

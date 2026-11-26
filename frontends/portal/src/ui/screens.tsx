@@ -43,14 +43,14 @@ export function Catalog() {
 }
 
 export function GameDetail() {
-  const {p,run,openAccount,openMatch} = useApp(),t=useText();
+  const {p,run,openAccount,showSelectedMatch} = useApp(),t=useText();
   const game=p.selectedGame;
   const [computerPlayers,setComputerPlayers]=useState(2),[passPlayers,setPassPlayers]=useState(2),[stake,setStake]=useState(0),[speed,setSpeed]=useState(0);
   useEffect(()=>{if(game){const min=Math.min(...game.allowed_player_counts),counts=game.allowed_player_counts.filter(count=>count>1);setComputerPlayers(counts.length?Math.min(...counts):min);setPassPlayers(min);}},[game?.id]);
   if(!game)return <Empty>{copyText("Loading game…")}</Empty>;
   const solo=game.allowed_player_counts.length===1&&game.allowed_player_counts[0]===1;
   const computerCounts=game.allowed_player_counts.filter(count=>count>1);
-  const start=async(mode:'computer'|'online'|'pass')=>{if(!p.account){openAccount();return;}let match;if(mode!=='online'){const computer=mode==='computer',players=computer?computerPlayers:passPlayers;match=await p.actions.startPractice(game.id,{humans:computer?1:players,computers:computer?players-1:0,humanSeat:computer?Math.floor(Math.random()*players):0});}else{match=await p.actions.createMatch({game_id:game.id,match_kind:'multiplayer',bet_per_player:stake,turn_seconds:speed||null});}await openMatch(match.id);};
+  const start=async(mode:'computer'|'online'|'pass')=>{if(!p.account){openAccount();return;}let match;if(mode!=='online'){const computer=mode==='computer',players=computer?computerPlayers:passPlayers;match=await p.actions.startPractice(game.id,{humans:computer?1:players,computers:computer?players-1:0,humanSeat:computer?Math.floor(Math.random()*players):0});}else{match=await p.actions.createMatch({game_id:game.id,match_kind:'multiplayer',bet_per_player:stake,turn_seconds:speed||null});}showSelectedMatch(match.id);};
   return <>
     <Card style={{borderTopWidth:3,borderTopColor:colors.purple}}><Title>{game.name}</Title><Copy muted>{game.description}</Copy><Copy small style={{color:colors.blue}}>{game.allowed_player_counts.join(', ')} {copyText("players")}</Copy></Card>
     <Title small>{t('ui.portal.choose_play_mode','How would you like to play?')}</Title>
@@ -140,9 +140,9 @@ export function Matches() {
 }
 
 export function LocalMatches() {
-  const {p,run,openMatch,openAccount}=useApp(),t=useText();
+  const {p,run,showSelectedMatch,openAccount}=useApp(),t=useText();
   const localOnly=useRef(readLocalUiTest()).current;
-  const start=async(computers:number)=>{if(!p.account&&!localOnly){openAccount();return;}const match=await p.actions.startPractice('bundled-tictactoe',{humans:2-computers,computers,humanSeat:computers?Math.floor(Math.random()*2):0});await openMatch(match.id);};
+  const start=async(computers:number)=>{if(!p.account&&!localOnly){openAccount();return;}const match=await p.actions.startPractice('bundled-tictactoe',{humans:2-computers,computers,humanSeat:computers?Math.floor(Math.random()*2):0});showSelectedMatch(match.id);};
   return <><Title>{copyText('Single-player matches')}</Title><Copy muted>{copyText('Your private computer and pass-and-play matches save locally first and sync to the cloud. Download a game once, then keep playing offline.')}</Copy><LocalMatchCarousels/><Card><Title small>{copyText("Tic-tac-toe")}</Title><Copy muted>{copyText("A bundled game, ready to play offline on a fresh installation.")}</Copy><Row><Button onPress={()=>run(()=>start(0))}>{copyText("Pass and play")}</Button><Button secondary onPress={()=>run(()=>start(1))}>{copyText("Practice with a computer")}</Button></Row></Card>{!singlePlayerMatches(p.myMatches,p.localMatches).length&&<Empty>{copyText('No single-player matches yet. Choose a game to get started.')}</Empty>}
     <PreservedAppData/>
   </>;

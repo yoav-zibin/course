@@ -360,27 +360,45 @@ export class PortalStore {
       this.patch({ accounts, account }); await this.reloadData();
       const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);if(incoming)await this.rememberAttribution(incoming);
       const snapshot = this.data, hidden = hiddenMatchIds(snapshot);
-      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']) });
+      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']), authConfig:snapshot.responses['/auth/config']||{} });
       if (snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) { const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`]; if (match) this.patch({ selectedMatch: this.decorate(match), game: snapshot.responses[`/games/${match.game_id}/versions/${match.game_version}`] || null }); }
       subscribeI18n(() => this.localize());
-      if (!localOnly) this.stopConnectivity = watchConnectivity(online => { this.patch({ network: online }); if (online) { this.retryAfter = 0; void this.refresh().catch(() => {}); } });
-      await configureI18n(base, account?.locale, localOnly).catch(() => {});
-      if (!localOnly) try { const capabilities = await this.api.request('GET', '/storage/capabilities'); this.paginated = capabilities.pagination === true; } catch { this.paginated = Object.keys(snapshot.responses).some(key => key.startsWith('/v2/')); }
-      try { this.patch({ authConfig: await this.read('/auth/config') }); } catch { this.patch({ authConfig: snapshot.responses['/auth/config'] || {} }); }
-      this.patch({ ready: true }); await this.refresh();
+      this.paginated = Object.keys(snapshot.responses).some(key=>key.startsWith('/v2/'));
+      const capabilities = localOnly ? Promise.resolve() : this.api.request('GET','/storage/capabilities').then(result=>{
+        this.paginated=result.pagination===true;
+      }).catch(()=>{});
+      let showLocalData!:()=>void;
+      const localReady=new Promise<void>(resolve=>{showLocalData=resolve;});
+      const translations=configureI18n(base,account?.locale,localOnly,showLocalData).catch(()=>{}).finally(showLocalData);
+      await localReady;
+      this.patch({ready:true});
+      const initialRefresh=this.refresh(capabilities,true);
+      if(!localOnly){
+        let lastOnline=isOnline();
+        this.stopConnectivity=watchConnectivity(online=>{
+          const reconnected=online&&!lastOnline;lastOnline=online;
+          this.patch({network:online});
+          if(reconnected){this.retryAfter=0;void this.refresh().catch(()=>{});}
+        });
+      }
+      await Promise.all([translations,initialRefresh]);
     });
     return this.bootstrapPromise;
   }
-  async refresh(): Promise<void> {
+  async refresh(capabilities?:Promise<void>, startup=false): Promise<void> {
+    if(!this.state.ready)return;
     if (this.refreshPromise) return this.refreshPromise;
     const guard = this.capture();
     const pending = (async () => {
-      await this.reloadData();
+      if(capabilities)await capabilities;
+      if(!startup)await this.reloadData();
+      guard();
       if (this.localOnly) { this.patch({ network: false }); return; }
       if (this.state.account && isOnline()) await this.sync().catch(() => {});
       guard();
-      if (this.state.selectedMatch) { this.startOfflineDownloads();await this.refreshMatch(); return; }
-      const jobs: Promise<any>[] = [this.list('games'), this.read('/auth/config').then(authConfig => { guard(); this.patch({ authConfig }); }), this.read('/games/popular').then(popularGames => { guard(); this.patch({ popularGames: popularGames.map(localizeGame) }); })];
+      const updateAuth=()=>this.read('/auth/config').then(authConfig=>{guard();this.patch({authConfig});});
+      if (this.state.selectedMatch) { this.startOfflineDownloads();await Promise.all([this.refreshMatch(),startup?updateAuth().catch(()=>{}):undefined]); return; }
+      const jobs: Promise<any>[] = [this.list('games'), updateAuth(), this.read('/games/popular').then(popularGames => { guard(); this.patch({ popularGames: popularGames.map(localizeGame) }); })];
       if (this.state.account) jobs.push(this.refreshNotifications(), this.list('myMatches'), this.list('savedGames'), this.read('/users/me/recent-games').then(recentGames => { guard(); this.patch({ recentGames: recentGames.map(localizeGame) }); }), this.refreshProfile());
       const results = await Promise.allSettled(jobs); guard();
       await this.claimDailyLogin().catch(() => {}); guard();
@@ -879,7 +897,14 @@ export class PortalStore {
     }), status: 'ongoing', state: null, logicState: null, turn_of_player_indices: [0], move_count: 0, created_at: new Date().toISOString(), match_kind: computers ? 'computer' : 'pass_and_play', localMode: computers ? 'computer' : 'pass', practiceSeed: Math.floor(Math.random() * 4294967296), moves: [], initialState: null, initialTurn: [0], token_pot: 0, bet_per_player: 0, local_revision:1, synced_local_revision:0, cloud_revision:0, cloud_pending:true } as LocalMatch;
     await this.practiceResult(game, match, await this.callGame(game, 'newMatch', [], match), false); match.initialState = match.state; match.initialTurn = match.turn_of_player_indices; await this.practiceComputers(game, match); guard();
     const gamePackage=this.exactPackage(game.id,game.version);if(!gamePackage)throw new Error('Exact downloaded game rules are unavailable for offline play.');
-    await this.repository.mutate(owner, data => { data.local[id] = match; data.responses[`/games/${game.id}/versions/${game.version}`] = gamePackage; data.selectedId = id; }); guard(); await this.reloadData(); ++this.selection; this.patch({ selectedMatch: match, game, selectedGameId: game.id, history: null, replayIndex: null });
+    const committed=await this.repository.mutate(owner, data => {
+      data.local[id]=match;data.responses[`/games/${game.id}/versions/${game.version}`]=gamePackage;data.selectedId=id;
+      return data;
+    });
+    guard();this.publishData(committed);++this.selection;
+    this.requestedLink={kind:'match',id};this.selectedInvite=null;this.repository.protectGame(owner,game.id,game.version);
+    this.patch({selectedMatch:this.decorate(match),game,selectedGameId:game.id,history:null,replayIndex:null});
+    if(match.move_count>0)await this.recoverPresentation(match);
     if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {}); return match;
   }
   async practiceMove(move: any) {

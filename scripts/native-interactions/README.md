@@ -30,3 +30,25 @@ python3 scripts/native-interactions/android.py --serial emulator-5554 --fixture 
 Run the **Native interaction benchmark** workflow with a Portal apps workflow run ID that contains a compatible simulator build. An optional full baseline commit runs both revisions on the same iPhone simulator. The workflow installs the same native app with each revision's release Hermes bundle and uses the XCTest bundle in this directory.
 
 XCTest measures checker selection, dragging and opening the report. The wall-clock metric includes UI automation and accessibility waits. XCTest also requests the application hitch metric, whose availability depends on the device. A simulator recording independently measures intervals between visibly distinct checker positions. When recorded movement aligns with every XCTest drag, the output also reports visible positions for each gesture, including partial strokes and the initial warm-up. A separate test starts from a fresh opening and verifies the exact saved result of a legal drop. The artifact includes the individual metrics, drop result, video, simulator model, logs and Xcode result bundles.
+
+## Cold launch and uncached Backgammon
+
+The startup fixture serves the opening position and its pinned game package over loopback. It adds 200 ms to each API response. Both revisions use the same fixture, and each trial clears the app's data. A cold match launch must request both the match and the game package and display the wooden board.
+
+For iOS, choose `startup` in the **Native interaction benchmark** workflow. It measures three clean installs per case per revision. The home and playable catalog milestones use XCTest accessibility. The match milestone also verifies a screenshot. The artifact includes individual times and the API request log for every launch.
+
+For Android, install a release benchmark build with `EXPO_PUBLIC_API_URL=http://127.0.0.1:18764` embedded in the bundle and loopback HTTP allowed in the test app. Generate the board fixture as above. Start the server in a separate terminal, then connect the disposable emulator and record each scenario.
+
+```sh
+python3 scripts/native-interactions/startup_fixture.py /tmp/board-fixture
+```
+
+```sh
+adb -s emulator-5554 reverse tcp:18764 tcp:18764
+for scenario in home match new; do
+  python3 scripts/native-interactions/startup_android.py --serial emulator-5554 \
+    --reset-test-app --scenario "$scenario" --output "/tmp/startup-$scenario"
+done
+```
+
+The Android recording measures the first visible frame after a launch intent or touch. The `home` case also records Android's time to the first activity. The `new` case creates an empty guest account, opens Backgammon from the catalog, starts pass-and-play, and verifies that the first move reached the server. Its game-details and board measurements start at their respective taps.
