@@ -102,9 +102,10 @@ for(const fault of ['quota','cleanup-denied'] as const)test(`${fault}: cache fai
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Pass and play',exact:true})).toBeVisible();
   await expect(page.getByTestId('play-online').getByRole('button',{name:'Invite your friends to play',exact:true})).toBeEnabled();
-  expect(downloads).toContainEqual({path:`/games/${gameId}`,status:200});
+  // The catalog can offer play modes before this package finishes downloading.
+  await expect.poll(()=>downloads).toContainEqual({path:`/games/${gameId}`,status:200});
   await expect(page.getByRole('alert').filter({hasText:storageErrors})).toHaveCount(0);
-  if(fault==='quota')expect(await page.evaluate(()=>(window as any).__quotaDeniedWrites as number)).toBeGreaterThan(deniedAfterMatch);
+  if(fault==='quota')await expect.poll(()=>page.evaluate(()=>(window as any).__quotaDeniedWrites as number)).toBeGreaterThan(deniedAfterMatch);
   else{
     expect(await page.evaluate(()=>(window as any).__deniedCacheRemovals as number)).toBeGreaterThan(0);
     expect(await page.evaluate(()=>(window as any).__permissionDeniedWrites as number)).toBeGreaterThan(0);

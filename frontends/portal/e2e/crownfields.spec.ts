@@ -44,20 +44,32 @@ test('Crownfields: a full game against the computer, with tile rotation, ends wi
   const square=page.getByRole('button',{name:/^Start the tile here/});
   const discard=page.getByRole('button',{name:'Discard tile',exact:true});
   const lay=page.getByRole('button',{name:/^Lay tile \d+ here$/});
+  type TurnAction='pick'|'place'|'discard'|'finished';
+  async function chooseTurnAction():Promise<TurnAction>{
+    let action:TurnAction='finished';
+    // Computer turns can replace the displayed choices while Playwright waits
+    // for a physical tap. Resolve the next available human action each time.
+    await expect(async()=>{
+      if(await outcome.isVisible()){action='finished';return;}
+      for(const [kind,control] of [['pick',pick.first()],['discard',discard],['place',square.first()]] as const){
+        if(!await control.isVisible())continue;
+        if(isMobile)await control.tap({timeout:1500});else await control.click({timeout:1500});
+        action=kind;
+        return;
+      }
+      throw new Error('Waiting for a Crownfields turn or the result');
+    }).toPass({timeout:60000});
+    return action;
+  }
   let toolTurn=false,buttonTurn=false,picks=0,lays=0;
   for(let step=0;step<40;step++){
-    await expect(pick.first().or(square.first()).or(discard).or(outcome)).toBeVisible({timeout:60000});
-    if(await outcome.isVisible())break;
-    await page.waitForTimeout(300);
-    if(await pick.count()){
-      await press(page,/^Choose tile \d+$/,isMobile);
+    const action=await chooseTurnAction();
+    if(action==='finished')break;
+    if(action==='pick'){
       await expect(page.getByRole('button',{name:/^Take tile \d+$/})).toBeVisible();
       if(picks===0)await shot(page,'pick',info.project.name);
       await press(page,/^Take tile \d+$/,isMobile);picks++;
-    }else if(await discard.count()){
-      await press(page,'Discard tile',isMobile);
-    }else{
-      await press(page,/^Start the tile here/,isMobile);
+    }else if(action==='place'){
       const ghost=page.getByRole('img',{name:/^Tile \d+ (fits here|does not fit this way)/}).first();
       await expect(ghost).toBeVisible();
       if(!toolTurn){

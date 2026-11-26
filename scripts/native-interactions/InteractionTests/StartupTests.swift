@@ -31,6 +31,14 @@ final class StartupTests: XCTestCase {
         measureBoard(from: start, screen: .opening)
     }
 
+    func testOpenMatchForVideo() throws {
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 1)
+        try testColdBackgammon()
+        // Leave the verified content on screen while the host saves its image.
+        Thread.sleep(forTimeInterval: 5)
+    }
+
     private func reveal(_ control: XCUIElement) {
         XCTAssertTrue(control.waitForExistence(timeout: 20), app.debugDescription)
         for _ in 0..<8 {

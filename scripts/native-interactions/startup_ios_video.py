@@ -2,6 +2,7 @@
 import argparse
 import json
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import time
@@ -53,18 +54,20 @@ def measure(movie, before, after, bounds):
         samples.append((stamp,float(changed),float(agreement)))
     if not samples or samples[-1][2]<.80:
         raise ValueError(f'The recording did not finish on the verified landmark: {samples[-3:]}')
-    launcher=next(i for i,(_,changed,_) in enumerate(samples) if changed<.03)
-    transition=next(i for i in range(launcher+1,len(samples)-1) if samples[i][1]>.06 and samples[i+1][1]>.06)
     painted=len(samples)-1
-    while painted>transition and samples[painted-1][2]>=.80:
+    while painted>0 and samples[painted-1][2]>=.80:
         painted-=1
+    # The XCTest URL actuator returns to SpringBoard before opening the link.
+    # Ignore any earlier runner-app launch shown in the recording.
+    launcher=max(i for i in range(painted) if samples[i][1]<.03)
+    transition=next(i for i in range(launcher+1,min(painted+1,len(samples)-1)) if samples[i][1]>.06 and samples[i+1][1]>.06)
     if painted==transition:
         raise ValueError('No distinct launch transition before the landmark')
     return {'visible_ms':round(samples[painted][0]-samples[transition][0],1),
             'transition_pts_ms':round(samples[transition][0],1),'landmark_pts_ms':round(samples[painted][0],1)}
 
 
-def trial(app, bundle, device, directory, index, action, ocr):
+def trial(app, bundle, device, directory, index, action, ocr, match_command):
     directory.mkdir(exist_ok=True,parents=True)
     prefix=directory/f'{index}-{action}'
     movie=prefix.with_suffix('.mov')
@@ -75,7 +78,8 @@ def trial(app, bundle, device, directory, index, action, ocr):
     api('/__reset','POST')
     time.sleep(1.5)
     sim('io',device,'screenshot',before,capture_output=True)
-    with prefix.with_suffix('.log').open('w') as log:
+    launch=None
+    with prefix.with_suffix('.log').open('w') as log, Path(str(prefix)+'-launch.log').open('w') as launch_log:
         recorder=subprocess.Popen(['xcrun','simctl','io',device,'recordVideo','--codec=h264',str(movie)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
         try:
             for line in recorder.stdout:
@@ -83,12 +87,21 @@ def trial(app, bundle, device, directory, index, action, ocr):
                 if 'Recording started' in line:break
             if recorder.poll() is not None:raise RuntimeError('Simulator recorder did not start')
             time.sleep(.7)
-            if action=='home':sim('launch',device,bundle)
-            else:sim('openurl',device,'buildplay:///#match=benchmark-opening')
+            if action=='home':
+                sim('launch',device,bundle)
+            else:
+                # XCUIApplication.open delivers the URL to the target app.
+                # simctl openurl instead presents the system consent dialog.
+                launch=subprocess.Popen(match_command,stdout=launch_log,stderr=subprocess.STDOUT)
             time.sleep(3)
-            deadline=time.monotonic()+30
+            deadline=time.monotonic()+(150 if launch else 30)
             bounds=None
             while bounds is None and time.monotonic()<deadline:
+                if launch:
+                    if launch.poll() not in (None,0):raise RuntimeError('XCTest could not deliver the cold link')
+                    if '/matches/benchmark-opening' not in {r['path'] for r in api('/__requests')}:
+                        time.sleep(.5)
+                        continue
                 sim('io',device,'screenshot',after,capture_output=True)
                 if action=='home':
                     result=subprocess.run([ocr,after],capture_output=True,text=True)
@@ -102,6 +115,7 @@ def trial(app, bundle, device, directory, index, action, ocr):
             if recorder.poll() is None:recorder.send_signal(signal.SIGINT)
             output,_=recorder.communicate(timeout=30)
             log.write(output)
+            if launch and launch.wait(timeout=120):raise RuntimeError('Cold-link launch failed its XCTest verification')
     if recorder.returncode not in (0,-signal.SIGINT,130) or not movie.exists():raise RuntimeError('Simulator recorder failed')
     requests=api('/__requests')
     paths={item['path'] for item in requests}
@@ -113,12 +127,26 @@ def trial(app, bundle, device, directory, index, action, ocr):
     return output['visible_ms']
 
 
+def match_launcher(scripts, results, device):
+    project=results/'project'
+    project.mkdir()
+    shutil.copy2(scripts/'project.yml',project/'project.yml')
+    shutil.copytree(scripts/'InteractionTests',project/'InteractionTests')
+    subprocess.run(['xcodegen','generate'],cwd=project,check=True)
+    build=['xcodebuild','-project',project/'Interactions.xcodeproj','-scheme','Interactions',
+           '-configuration','Release','-destination','platform=iOS Simulator,id='+device,
+           '-derivedDataPath',project/'derived','-parallel-testing-enabled','NO']
+    with (project/'build.log').open('w') as log:subprocess.run([*build,'build-for-testing'],stdout=log,check=True)
+    return [*build,'test-without-building','-only-testing:InteractionTests/StartupTests/testOpenMatchForVideo']
+
+
 def run(apps, fixture, results, device):
     scripts=Path(__file__).resolve().parent
     results.mkdir(parents=True,exist_ok=True)
     ocr=results/'home-title'
     subprocess.run(['xcrun','swiftc',scripts/'HomeTitle.swift','-o',ocr],check=True)
     sim('bootstatus',device,'-b')
+    match_command=match_launcher(scripts,results,device)
     builds={p.parent.name:p for p in apps.glob('*/BuildPlay.app')}
     names=['baseline','current'] if 'baseline' in builds else ['current']
     bundle=subprocess.check_output(['/usr/libexec/PlistBuddy','-c','Print CFBundleIdentifier',builds['current']/'Info.plist'],text=True).strip()
@@ -132,7 +160,7 @@ def run(apps, fixture, results, device):
             for name in names if index%2 else reversed(names):
                 row={}
                 for action in ('home','match'):
-                    row[action+'_ms']=trial(builds[name],bundle,device,results/name,index,action,ocr)
+                    row[action+'_ms']=trial(builds[name],bundle,device,results/name,index,action,ocr,match_command)
                 samples[name].append(row)
                 (results/name/'startup-video.json').write_text(json.dumps(samples[name],indent=2)+'\n')
     finally:

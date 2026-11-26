@@ -175,7 +175,7 @@ test('fast draft edits retain their input and survive closing above the account 
 });
 
 test('captures before opening, sends real screenshot with recent diagnostics, and remains above modal and the board-only match',async({page,request})=>{
-  await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).click();
+  await page.goto('/portal');await page.getByTestId('header-account').click();
   const bug=page.getByRole('button',{name:label,exact:true});await expect(bug).toBeVisible();
   // A shared account modal must never cover or disable the always-visible icon.
   await expect.poll(()=>bug.evaluate(node=>{const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
