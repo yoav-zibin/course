@@ -14,7 +14,7 @@ def run(app,fixtures,output,device,profile):
     library=project/'ResponseClock.dylib'
     sdk=subprocess.check_output(['xcrun','--sdk','iphonesimulator','--show-sdk-path'],text=True).strip()
     subprocess.run(['xcrun','clang','-isysroot',sdk,'-target',platform.machine()+'-apple-ios17.0-simulator','-dynamiclib',
-        '-fobjc-arc','-framework','UIKit','-framework','QuartzCore',scripts/'ResponseClock.m','-o',library],check=True)
+        '-fobjc-arc','-framework','UIKit','-framework','QuartzCore','-framework','CoreGraphics','-framework','Foundation',scripts/'ResponseClock.m','-o',library],check=True)
     subprocess.run(['codesign','-s','-','--force',library],check=True)
     scenarios,key,data=seed(fixtures)
     (project/'InteractionTests/response-cases.json').write_text(json.dumps({'library':str(library.resolve()),'scenarios':scenarios}))
