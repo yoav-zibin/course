@@ -7,13 +7,13 @@ import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable
 import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgXml, Text as SvgText } from 'react-native-svg';
 import G from './SceneGroup';
 import type { Board, Control, GameSpec, Json, Motion, Piece, Point, PresentationResult, Scene, StateMessage, Target, UIEvent } from './types';
-import { assetURI, boardCell, cameraLimits, contentBounds, finiteJSON, knownObject, pieceActions, position, validateMoveAnimations, validateScene, validateSceneAnimations, validateTimeline, validateSpec } from './validation';
+import { assetURI, boardCell, cameraLimits, contentBounds, pieceActions, position, validateSpec } from './validation';
 import { animateUpdate, canMove, historyChanges, hitPiece, hitTarget, pieceName, pieceSize, presentationSteps, targetBox, targetShape, targetThickness, validNumber, validEvent } from './interactions';
-import { runPresentation } from './runtime';
+import { runPreparedPresentation } from './runtime';
 import { animateLastMove, moveTracks, trackPosition, type MoveTrack } from './moveAnimations';
 import { animateSceneUpdate, sceneTracks, sceneTransform, type SceneTrack } from './sceneAnimations';
 import {TabletopGraphic} from './TabletopGraphic';
-import {compileTimeline,inferredGroupTracks, pathsTimeline, resolveScene} from './composition';
+import {compileTimeline,inferredGroupTracks, pathsTimeline} from './composition';
 import {dragPosition} from './dragPosition';
 import {useBoardInput,type BoardInputResult} from './BoardInput';
 import {pieceAnimation,STATIC_PIECE_Z_MAX} from './pieceAnimations';
@@ -152,21 +152,17 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   },[]);
 
   const apply = useCallback(async (input: unknown, atRevision: number, stateChange: boolean) => {
-    const result = await runPresentation(spec.ui_code,input,local.current);
-    if (!alive.current || atRevision !== revision.current) return;
-    knownObject(result,['scene','local_state','make_move','last_move_animations','animations','timeline'],['scene']); finiteJSON(result);
-    const raw = validateScene(spec,result.scene);
-    const resolved = resolveScene(spec,raw);
+    const prepared = await runPreparedPresentation(spec,input,local.current,()=>
+      alive.current && atRevision === revision.current);
+    if (!prepared || !alive.current || atRevision !== revision.current) return;
+    const {result,resolved} = prepared;
+    const raw = result.scene;
     const next = boardPresentation ? boardPresentation.presentScene(resolved,latest.current!) : resolved;
     // A host may provide an equivalent control outside the board. Omit its
     // board counterpart from both rendering and hit testing.
     if (omitPieceId && next.pieces) next.pieces = next.pieces.filter(piece => piece.id !== omitPieceId);
-    const incomingMoves = validateMoveAnimations(spec,raw,result.last_move_animations);
-    const requested = validateSceneAnimations(spec,raw,result.animations);
-    if (result.timeline !== undefined) {
-      validateTimeline(spec,raw,result.timeline);
-      if (result.animations !== undefined) throw new Error('Return timeline or animations');
-    }
+    const incomingMoves = result.last_move_animations ?? null;
+    const requested = result.animations ?? [];
     if (result.make_move !== undefined && (stateChange || !canMove(latest.current,sent.current))) throw new Error(copyText("Only a current player interaction may submit a move"));
     const previous=lastResponse.current;
     const message=latest.current!;

@@ -25,6 +25,7 @@ export function rulesSource(game: {server_code: string; game_schemas?: unknown},
 }
 
 export function decodeResult(result: string): PresentationResult {
+  'worklet';
   if (typeof result !== 'string' || result.length > 256_000) throw new Error('Presentation response exceeds its size limit');
   return JSON.parse(result);
 }

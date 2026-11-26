@@ -1,7 +1,7 @@
 "use strict";
 // Shared portable contract. Keep fixtures in tests/fixtures/declarative in parity.
-function t(key, params, fallback) { return fallback.replace(/\{(\w+)\}/g, (m,k)=>params[k]??m); }
-const num=(v,f=0)=>Number.isFinite(v)?v:f;
+function t(key, params, fallback) { "worklet"; return fallback.replace(/\{(\w+)\}/g, (m,k)=>params[k]??m); }
+const num=(v,f=0)=>{ "worklet"; return Number.isFinite(v)?v:f; };
   function assetURI(asset) {
     const uri = asset?.uri;
     // Image requests are an outbound channel too: choosing an authored remote
@@ -9,6 +9,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     return typeof uri === "string" && /^data:image\/(png|jpeg|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/.test(uri) ? uri : null;
   }
   function boardCell(board, cell) {
+    "worklet";
     const explicit = board.cells?.find(item => item.id === cell);
     if (explicit) return {x: num(explicit.x), y: num(explicit.y)};
     if (board.cells?.length) throw new Error(t("ui.declarative.error.unknown_cell", {id:cell}, "Unknown board cell: {id}"));
@@ -19,6 +20,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     throw new Error(t("ui.declarative.error.unknown_cell", {id:cell}, "Unknown board cell: {id}"));
   }
   function position(spec, item) {
+    "worklet";
     const board = spec.boards.find(board => board.id === item.board);
     if (!board) throw new Error(t("ui.declarative.error.unknown_board", {id:item.board}, "Unknown board: {id}"));
     const at = item.position || {};
@@ -33,6 +35,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     return {x,y,board};
   }
   function finiteJSON(value, depth=0) {
+    "worklet";
     if(depth>64)throw new Error(t("ui.declarative.error.ui_json_is_nested_too_deeply", {}, "UI JSON is nested too deeply"));
     if(typeof value==="number"&&!Number.isFinite(value))throw new Error(t("ui.declarative.error.ui_json_contains_a_non_finite_number", {}, "UI JSON contains a non-finite number"));
     if(value&&typeof value==="object")for(const item of Object.values(value))finiteJSON(item,depth+1);
@@ -85,14 +88,17 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     return spec;
   }
   function knownObject(value, allowed, required=[]) {
+    "worklet";
     if(!value || typeof value!=="object" || Array.isArray(value) || Object.keys(value).some(key=>!allowed.includes(key)) || required.some(key=>!Object.hasOwn(value,key)))throw new Error(t("ui.declarative.error.invalid_ui_object_fields", {}, "Invalid UI object fields"));
   }
-  const isId=value=>typeof value==="string" && value.length<=80 && /^[A-Za-z0-9_.:-]+$/.test(value);
+  const isId=value=>{ "worklet"; return typeof value==="string" && value.length<=80 && /^[A-Za-z0-9_.:-]+$/.test(value); };
   function checkPoint(point) {
+    "worklet";
     knownObject(point,["x","y"],["x","y"]);
     if([point.x,point.y].some(value=>typeof value!=="number"||Math.abs(value)>100000))throw new Error(t("ui.declarative.error.invalid_point_geometry", {}, "Invalid point geometry"));
   }
   function checkElement(kind,item) {
+    "worklet";
     const fields={pieces:["id","type","board","position","text","aria_label","asset","rotation","scale","opacity","z","face","move_targets","selected","hidden","draggable","actions","animation","hand","parent","pivot","mirror_x","mirror_y","count","die_value"],targets:["id","board","position","label","aria_label","color","asset","hit_area","hit_shape","preview"],labels:["id","text","x","y","color","font_size"],controls:["id","label","kind","value","min","max","step","options","disabled"],paths:["id","points","color","width"]};
     const required={pieces:["id","type","board","position"],targets:["id","board","position"],labels:["id","text","x","y"],controls:["id","label","kind"],paths:["id","points"]};
     knownObject(item,fields[kind],required[kind]);
@@ -183,6 +189,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     }
   }
   function validateScene(spec, scene) {
+    "worklet";
     finiteJSON(scene);
     knownObject(scene,["pieces","targets","labels","controls","paths"]);
     if (!scene || typeof scene !== "object" || Array.isArray(scene)) throw new Error(t("ui.declarative.error.ui_response_must_contain_a_scene", {}, "UI response must contain a scene"));
@@ -222,6 +229,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     return scene;
   }
   function visiblePieces(scene) {
+    "worklet";
     const all=new Map((scene.pieces||[]).map(p=>[p.id,p]));
     return new Map([...all].filter(([,piece])=>{
       while (!piece.hidden) {
@@ -232,6 +240,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     }));
   }
   function validateMoveAnimations(spec, scene, animations) {
+    "worklet";
     if(animations===undefined||animations===null)return null;
     finiteJSON(animations);
     const fail=()=>{throw new Error('Invalid last move animations');};
@@ -263,6 +272,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     return animations;
   }
   function validateSceneAnimations(spec, scene, animations) {
+    "worklet";
     if(animations===undefined)return [];
     finiteJSON(animations);
     const fail=()=>{throw new Error('Invalid scene animations');};
@@ -294,6 +304,7 @@ const num=(v,f=0)=>Number.isFinite(v)?v:f;
     return animations;
   }
   function validateTimeline(spec, scene, timeline) {
+    "worklet";
     knownObject(timeline, ['key', 'steps'], ['key', 'steps']);
     if (!isId(timeline.key) || !Array.isArray(timeline.steps) || !timeline.steps.length || timeline.steps.length > 128)
       throw new Error('Invalid timeline');

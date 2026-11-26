@@ -4,9 +4,13 @@ import {position} from './validation';
 
 type Pose = Point & {rotation:number; scale:number; opacity:number};
 type Segment = {start:number; end:number; from:Pose; to:Pose; z?:number};
-const indexPieces = (scene:Scene) => new Map(scene.pieces?.map(p => [p.id,p]));
+const indexPieces = (scene:Scene) => {
+  'worklet';
+  return new Map(scene.pieces?.map(p => [p.id,p]));
+};
 
 function resting(spec:GameSpec, p:Piece):Pose {
+  'worklet';
   const {x,y} = p.parent ? p.position as Point : position(spec,p);
   return {x,y,rotation:p.rotation ?? 0,scale:p.scale ?? 1,opacity:p.opacity ?? 1};
 }
@@ -32,6 +36,7 @@ function override(spec:GameSpec, p:Piece, pieces:Map<string,Piece>, base:Pose, f
 }
 
 function offset(pose:Pose, point:Point, mirrorX:boolean, mirrorY:boolean):Point {
+  'worklet';
   const angle = pose.rotation * Math.PI / 180;
   const x = point.x * pose.scale * (mirrorX ? -1 : 1);
   const y = point.y * pose.scale * (mirrorY ? -1 : 1);
@@ -39,6 +44,7 @@ function offset(pose:Pose, point:Point, mirrorX:boolean, mirrorY:boolean):Point 
 }
 
 function hierarchy(piece:Piece, pieces:Map<string,Piece>):Piece[] {
+  'worklet';
   const chain = [piece];
   while (piece.parent) {
     piece = pieces.get(piece.parent)!;
@@ -50,6 +56,7 @@ function hierarchy(piece:Piece, pieces:Map<string,Piece>):Piece[] {
 // A piece's position locates its pivot. Child coordinates start at the
 // centre of its parent's artwork. Reflection reverses the handedness of a turn.
 function world(chain:Piece[], local:(p:Piece)=>Pose) {
+  'worklet';
   let pose:Pose = {x:0,y:0,rotation:0,scale:1,opacity:1};
   let mirrorX=false, mirrorY=false;
   for (const p of chain) {
@@ -69,6 +76,7 @@ function world(chain:Piece[], local:(p:Piece)=>Pose) {
 }
 
 export function resolveScene(spec:GameSpec, scene:Scene):Scene {
+  'worklet';
   if (!scene.pieces?.some(p => p.parent || p.pivot)) return scene;
   const byId=indexPieces(scene);
   return {...scene,pieces:scene.pieces.map(p => {
