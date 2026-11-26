@@ -21,8 +21,8 @@ export class PortalApi {
     });
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 20000);
     try {
-      const [visitor,campaign]=await Promise.all([visitorId(),readCampaignCode()]);
-      const headers: Record<string, string> = { 'Accept-Language': this.locale(), 'X-Visitor-Id': visitor };
+      const headers: Record<string, string> = { 'Accept-Language': this.locale(), 'X-Visitor-Id': await visitorId() };
+      const campaign=await readCampaignCode();
       if(campaign&&campaign!==account?.password)headers['X-Campaign-Code']=campaign;
       if (account) { headers['X-User-Id'] = account.id; headers['X-User-Password'] = account.password; }
       if (requestId) headers['Idempotency-Key'] = requestId;
