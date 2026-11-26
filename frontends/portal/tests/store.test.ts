@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { PortalStore } from '../src/core';
 import { rulesSource } from '../src/game/runtimeSource';
 import { AccountRepository } from '../src/core/repository';
-import { redactedNativeArchive, restoreAccounts } from '../src/core/native-migration';
+import { redactedArchive } from '../src/core/redaction';
 import { setLocale, localizeGame, gameTexts, getDirection, t } from '../src/platform/i18n';
 import { AccountScopeChangedError, visibleErrorMessage } from '../src/core/account-scope';
 import { ApiError } from '../src/core/api';
@@ -169,21 +169,6 @@ test('refresh completes without requesting retired match discovery endpoints', a
   }finally{restore();}
 });
 
-test('restoring a migrated login avoids writing credentials again on launch',async()=>{
-  const values=browserStorage(true),base='https://local.test',repository=new AccountRepository(base);
-  const first=await restoreAccounts(base,repository);
-  assert.equal(first[0].id,'visitor');
-  const writes:string[]=[];
-  Object.defineProperty(values,'setItem',{value:(key:string,value:string)=>{writes.push(key);values[key]=value;}});
-  assert.deepEqual(await restoreAccounts(base,repository),first);
-  assert.deepEqual(writes,[]);
-});
-test('a clean install completes legacy migration without creating an empty account index',async()=>{
-  const values=browserStorage(),base='https://local.test';
-  assert.deepEqual(await restoreAccounts(base,new AccountRepository(base)),[]);
-  assert.equal(values['game-platform.accounts.v1'],undefined);
-  assert.equal(values[`buildplay.native-import.v1.${encodeURIComponent(base)}`],'1');
-});
 test('cold launch restores the saved locale and catalog while server configuration is pending',async()=>{
   const saved=browserStorage();
   saved['game-platform.locale.v1']='ar';
@@ -969,9 +954,10 @@ test('language selection guards a delayed response body from an older download',
     assert.equal(await first, false); assert.equal(getDirection(), 'ltr'); assert.equal(t('audit.language'), 'Español');
   } finally { globalThis.fetch = original; }
 });
-test('native migration archive never downgrades decrypted account passwords into ordinary storage', () => {
-  const archive = redactedNativeArchive({ android: { user: { id: 'a', password: 'android-secret' }, raw: { password: 'android-secret', serialized: '{"password":"android-secret"}' } }, ios: { identity: { id: 'i', password: 'ios-secret' }, portal: { matches: [{ board: [null], name: 'Saved game' }] } } });
-  assert.doesNotMatch(archive, /android-secret|ios-secret/); assert.match(archive, /Saved game/);
+test('an account archive redacts credentials including copies in serialized values', () => {
+  const archive=redactedArchive({id:'a',password:'test-password',notes:'saved with test-password',match:'Saved game'});
+  assert.doesNotMatch(archive,/test-password/);
+  assert.match(archive,/Saved game/);
 });
 test('native browser account linking proves both accounts and stores the canonical survivor', async () => {
   const saved = browserStorage();

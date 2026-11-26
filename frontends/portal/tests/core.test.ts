@@ -33,6 +33,16 @@ test('browser fetch is invoked without a PortalApi receiver', async () => {
   assert.deepEqual(await api.request('GET', '/health'), {});
 });
 
+test('opening an empty native account reads its own file without scanning storage',async()=>{
+  const storage=Object.assign(new MemoryStorage(),{supportsBrowserImports:false});
+  const repo=new AccountRepository('https://buildplay.fun',storage);
+  const reads:string[]=[];
+  storage.getItem=async key=>{reads.push(key);return null;};
+  storage.keys=async()=>{throw new Error('Unexpected storage scan');};
+  assert.deepEqual(await repo.read('visitor'),emptyAccountData());
+  assert.deepEqual(reads,[repo.key('visitor')]);
+});
+
 test('split browser migration retains queues, pinned packages, local matches and original bytes', async () => {
   const storage = new MemoryStorage(); const repository = new AccountRepository('', storage); const base = 'game-platform.portal.v1.alice';
   const queue = [{ requestId: 'saved', body: { move: { cell: 2 }, expected_move_count: 0 }, baseState: null, baseTurn: [0] }];

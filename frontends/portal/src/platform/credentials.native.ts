@@ -1,8 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { getItem, setItem } from './storage';
 import type { Account } from '../core/types';
-import {createCredentialVault,credentialKeys,LEGACY_ACCOUNTS_KEY,LEGACY_CURRENT_KEY} from './credential-vault';
-export const ACCOUNTS_KEY=LEGACY_ACCOUNTS_KEY,CURRENT_KEY=LEGACY_CURRENT_KEY;
+import {createCredentialVault,credentialKeys} from './credential-vault';
 const vault=(base?:string)=>createCredentialVault(base,{getItem,setItem},{
   getItem:key=>SecureStore.getItemAsync(key),
   setItem:(key,password)=>SecureStore.setItemAsync(key,password,{keychainAccessible:SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY}),

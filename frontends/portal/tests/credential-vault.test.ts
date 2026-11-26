@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {apiOrigin,createCredentialVault,credentialKeys,LEGACY_ACCOUNTS_KEY,LEGACY_CURRENT_KEY} from '../src/platform/credential-vault';
+import {apiOrigin,createCredentialVault,credentialKeys} from '../src/platform/credential-vault';
 
 class Values {
   values=new Map<string,string>();reads:string[]=[];failWrites=false;
@@ -8,51 +8,37 @@ class Values {
   async setItem(key:string,value:string){if(this.failWrites)throw new Error('Device locked');this.values.set(key,value);}
 }
 const alice={id:'alice',display_name:'Alice',password:'production-only-password'};
-const oldPasswordKey='buildplay.account.61-6c-69-63-65';
 function fixture(){
-  const metadata=new Values(),secure=new Values();
-  metadata.values.set(LEGACY_ACCOUNTS_KEY,JSON.stringify([{id:alice.id,display_name:alice.display_name}]));
-  metadata.values.set(LEGACY_CURRENT_KEY,alice.id);
-  secure.values.set(oldPasswordKey,alice.password);
-  return {metadata,secure};
+  const metadata=new Values(),secure=new Values(),production=createCredentialVault(undefined,metadata,secure);
+  return {metadata,secure,production};
 }
 
-test('production adopts the former secure login without deleting any old credential or metadata',async()=>{
-  const {metadata,secure}=fixture(),beforeMetadata=new Map(metadata.values),beforeSecure=new Map(secure.values);
-  const production=createCredentialVault('https://buildplay.fun',metadata,secure);
-  assert.deepEqual(await production.loadAccounts(),[alice]);assert.equal(await production.loadCurrentAccount(),alice.id);
-  await production.saveAccounts(await production.loadAccounts());
-  assert.deepEqual(await createCredentialVault('https://BUILDPLAY.fun:443/',metadata,secure).loadAccounts(),[alice]);
-  assert.equal(secure.values.get(production.keys.password(alice.id)),alice.password);
+test('a fresh native vault checks only its origin-scoped index and selection',async()=>{
+  const {metadata,secure,production}=fixture();
+  metadata.values.set('game-platform.accounts.v1','unread prototype data');
+  assert.deepEqual(await production.loadAccounts(),[]);
+  assert.equal(await production.loadCurrentAccount(),null);
+  assert.deepEqual(metadata.reads,[production.keys.accounts,production.keys.current]);
+  assert.deepEqual(secure.reads,[]);
+});
+
+test('credentials are restored from secure storage only for their API origin',async()=>{
+  const {metadata,secure,production}=fixture();
+  await production.saveAccounts([alice]);await metadata.setItem(production.keys.current,alice.id);
+  const restored=createCredentialVault('https://BUILDPLAY.fun:443/',metadata,secure);
+  assert.deepEqual(await restored.loadAccounts(),[alice]);assert.equal(await restored.loadCurrentAccount(),alice.id);
   assert.doesNotMatch(metadata.values.get(production.keys.accounts)!,/production-only-password|"password"/);
-  for(const [key,value]of beforeMetadata)assert.equal(metadata.values.get(key),value);
-  for(const [key,value]of beforeSecure)assert.equal(secure.values.get(key),value);
-  await metadata.setItem(production.keys.current,'another-account');assert.equal(await production.loadCurrentAccount(),'another-account');
-});
-
-test('a different API origin never loads production legacy accounts, passwords or selection',async()=>{
-  const {metadata,secure}=fixture(),foreign=createCredentialVault('https://different.test',metadata,secure);
+  const foreign=createCredentialVault('https://different.test',metadata,secure);
   assert.deepEqual(await foreign.loadAccounts(),[]);assert.equal(await foreign.loadCurrentAccount(),null);
-  assert.equal(metadata.reads.includes(LEGACY_ACCOUNTS_KEY),false);assert.equal(metadata.reads.includes(LEGACY_CURRENT_KEY),false);assert.deepEqual(secure.reads,[]);
-  const other={...alice,password:'different-server-password'};await foreign.saveAccounts([other]);
-  assert.deepEqual(await foreign.loadAccounts(),[other]);
-  assert.deepEqual(await createCredentialVault('https://buildplay.fun',metadata,secure).loadAccounts(),[alice]);
-  assert.notEqual(foreign.keys.password(alice.id),credentialKeys().password(alice.id));
+  await foreign.saveAccounts([{...alice,password:'separate-password'}]);
+  assert.deepEqual(await production.loadAccounts(),[alice]);
+  await production.saveAccounts([]);assert.deepEqual(await production.loadAccounts(),[]);
 });
 
-test('an explicit empty scoped account index does not resurrect retained legacy logins',async()=>{
-  const {metadata,secure}=fixture(),production=createCredentialVault(undefined,metadata,secure);
-  await production.saveAccounts([alice]);await production.saveAccounts([]);
-  assert.deepEqual(await createCredentialVault(undefined,metadata,secure).loadAccounts(),[]);
-  assert.equal(secure.values.get(oldPasswordKey),alice.password);
-  assert.equal(secure.values.get(production.keys.password(alice.id)),alice.password);
-});
-
-test('failed migration preserves the old index and its usable secure password',async()=>{
-  const {metadata,secure}=fixture(),production=createCredentialVault(undefined,metadata,secure);
-  metadata.failWrites=true;await assert.rejects(production.saveAccounts([alice]),/Device locked/);
-  assert.equal(metadata.values.has(production.keys.accounts),false);
-  assert.deepEqual(await production.loadAccounts(),[alice]);assert.equal(secure.values.get(oldPasswordKey),alice.password);
+test('failed index writes leave the previous account index readable',async()=>{
+  const {metadata,production}=fixture();await production.saveAccounts([alice]);
+  metadata.failWrites=true;await assert.rejects(production.saveAccounts([]),/Device locked/);
+  assert.deepEqual(await production.loadAccounts(),[alice]);
 });
 
 test('credential slots use canonical HTTP origins and reject opaque or embedded-credential URLs',()=>{
@@ -64,18 +50,14 @@ test('credential slots use canonical HTTP origins and reject opaque or embedded-
 });
 
 
-test('retired codes are scrubbed from saved and legacy metadata without touching credentials',async()=>{
-  const {metadata,secure}=fixture();
-  metadata.values.set(LEGACY_ACCOUNTS_KEY,JSON.stringify([{id:alice.id,display_name:alice.display_name,referral_code:'12345'}]));
-  const production=createCredentialVault(undefined,metadata,secure);
-  assert.deepEqual(await production.loadAccounts(),[alice]);
-  assert.equal(JSON.parse(metadata.values.get(LEGACY_ACCOUNTS_KEY)!)[0].referral_code,undefined);
-  await production.saveAccounts([{...alice,referral_code:'67890'}]);
+test('retired codes are omitted from scoped account metadata',async()=>{
+  const {metadata,secure,production}=fixture();
+  await production.saveAccounts([{...alice,referral_code:'12345'}]);
   assert.equal(JSON.parse(metadata.values.get(production.keys.accounts)!)[0].referral_code,undefined);
-  assert.equal(secure.values.get(oldPasswordKey),alice.password);
-});
-
-test('denied metadata cleanup still loads a usable account without retired codes',async()=>{
-  const {metadata,secure}=fixture();metadata.values.set(LEGACY_ACCOUNTS_KEY,JSON.stringify([{id:alice.id,display_name:alice.display_name,referral_code:'12345'}]));metadata.failWrites=true;
-  assert.deepEqual(await createCredentialVault(undefined,metadata,secure).loadAccounts(),[alice]);
+  const record={id:alice.id,display_name:alice.display_name,referral_code:'12345'};
+  metadata.values.set(production.keys.accounts,JSON.stringify([record]));metadata.failWrites=true;
+  assert.deepEqual(await production.loadAccounts(),[alice]);
+  metadata.failWrites=false;assert.deepEqual(await production.loadAccounts(),[alice]);
+  assert.equal(JSON.parse(metadata.values.get(production.keys.accounts)!)[0].referral_code,undefined);
+  assert.equal(secure.values.get(production.keys.password(alice.id)),alice.password);
 });

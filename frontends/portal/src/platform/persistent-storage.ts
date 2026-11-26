@@ -1,6 +1,4 @@
-import {reportCacheFailure} from './cache-diagnostics';
-
-export interface LegacyStorage {
+export interface StorageFallback {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   removeItem(key: string): Promise<void>;
@@ -14,9 +12,8 @@ export interface PersistentBackend {
 }
 export const DELETED_VALUE = '\u0000buildplay.deleted.v1';
 
-/** Bulk saves use atomic native files, avoiding Android AsyncStorage's database
- * and per-row limits. Originals remain available after interrupted migration. */
-export function createPersistentStorage(legacy: LegacyStorage, native: PersistentBackend | null, cachedKeys:ReadonlySet<string>=new Set()) {
+/** Serialize operations on each key and share reads of installation metadata. */
+export function createPersistentStorage(fallback: StorageFallback, native: PersistentBackend | null, cachedKeys:ReadonlySet<string>=new Set()) {
   const pending = new Map<string, Promise<void>>();
   const cached = new Map<string, Promise<string|null>>();
   function serial<T>(key: string, run: () => Promise<T>): Promise<T> {
@@ -25,19 +22,11 @@ export function createPersistentStorage(legacy: LegacyStorage, native: Persisten
     void settled.then(() => { if (pending.get(key) === settled) pending.delete(key); });
     return result;
   }
-  const read = (key: string, retryMigration?:()=>void): Promise<string | null> => serial(key, async () => {
-    if (!native) return legacy.getItem(key);
-    const current = await native.getPersistentItem(key);
-    if (current === DELETED_VALUE) return null;
-    if (current !== null) { if (typeof current !== 'string') throw new Error('Saved native data has an invalid format'); return current; }
-    const original = await legacy.getItem(key);
-    if (original !== null) {
-      try {await native.setPersistentItem(key, original);}
-      catch (error) {retryMigration?.();reportCacheFailure('migration',error);}
-    }
-    // The retained original is still readable if the optional copy failed.
-    // No marker is written, so a later read retries the atomic migration.
-    return original;
+  const read = (key: string): Promise<string | null> => serial(key, async () => {
+    const value = native ? await native.getPersistentItem(key) : await fallback.getItem(key);
+    if (value === null || value === DELETED_VALUE) return null;
+    if (typeof value !== 'string') throw new Error('Saved native data has an invalid format');
+    return value;
   });
   // Only cache the small installation metadata needed by every request.
   // Successful reads include missing values. Failed reads are retried.
@@ -46,23 +35,19 @@ export function createPersistentStorage(legacy: LegacyStorage, native: Persisten
     const existing=cached.get(key);
     if(existing)return existing;
     const clear=()=>{if(cached.get(key)===result)cached.delete(key);};
-    const result=read(key,clear).catch(error=>{clear();throw error;});
+    const result=read(key).catch(error=>{clear();throw error;});
     cached.set(key,result);
     return result;
   };
   const setItem = (key: string, value: string): Promise<void> => {
     cached.delete(key);
-    return serial(key, () => native ? native.setPersistentItem(key, value) : legacy.setItem(key, value));
+    return serial(key, () => native ? native.setPersistentItem(key, value) : fallback.setItem(key, value));
   };
   const removeItem = (key: string): Promise<void> => {
     cached.delete(key);
-    return serial(key, () => native ? native.setPersistentItem(key, DELETED_VALUE) : legacy.removeItem(key));
+    return serial(key, () => native ? native.removePersistentItem(key) : fallback.removeItem(key));
   };
-  const keys = async (): Promise<string[]> => {
-    const oldKeys = await legacy.getAllKeys(); if (!native) return [...oldKeys];
-    const all = [...new Set([...oldKeys, ...await native.getPersistentKeys()])];
-    const visible = await Promise.all(all.map(async key => (await serial(key, () => native.getPersistentItem(key))) === DELETED_VALUE ? null : key));
-    return visible.filter((key): key is string => key !== null);
-  };
+  const keys = async (): Promise<string[]> =>
+    native ? native.getPersistentKeys() : [...await fallback.getAllKeys()];
   return { getItem, setItem, removeItem, keys };
 }

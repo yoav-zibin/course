@@ -1,7 +1,7 @@
 import {AccountScopeChangedError,visibleErrorMessage} from './account-scope';
 import {playerLink} from './links';
 import type {InviteShareChannel} from './invite-sharing';
-import {withoutPersonalReferral,cleanAccounts} from './account-data';
+import {withoutPersonalReferral} from './account-data';
 import { useSyncExternalStore } from 'react';
 import { PortalApi, ApiError,InactiveSignInError } from './api';
 import {recordDiagnosticEvent,recordDiagnosticLog,setDiagnosticScope} from './diagnostics';
@@ -16,7 +16,6 @@ import {RetryableSyncCompatibilityError} from './sync-compatibility';
 import {hiddenMatchIds, hydrateSinglePlayer, localRevision, needsCloudSave, REMOVED_SAVED_MATCH, removedSavedMatch, savedMatchBranch, singlePlayerKind} from './single-player';
 import {handsTurnToOpponent, pendingNotifications} from './notifications';
 import {redactedArchive} from './redaction';
-import { restoreAccounts } from './native-migration';
 import * as storage from '../platform/storage';
 import { loadAccounts, saveAccounts, loadCurrentAccount, currentAccountKey } from '../platform/credentials';
 import { isOnline, watchConnectivity } from '../platform/connectivity';
@@ -353,9 +352,10 @@ export class PortalStore {
       this.api = new PortalApi(base, getLocale, localOnly ? async () => { throw new Error('This test launch runs entirely on this device.'); } : fetch); this.repository = new AccountRepository(base); this.patch({ baseUrl: base, network: !localOnly && isOnline() });
       const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);
       const [accounts,id] = await Promise.all([
-        restoreAccounts(base || 'https://buildplay.fun',this.repository).then(cleanAccounts).catch(async error=>{
-          if(isQuotaError(error))reportCacheFailure('migration',error);else this.patch({storageError:`Saved data needs attention: ${(error as Error).message}. Existing saves were kept.`});
-          return loadAccounts(base).catch(()=>[]);
+        loadAccounts(base).catch(error=>{
+          if(isQuotaError(error))reportCacheFailure('read',error);
+          else this.patch({storageError:`Saved accounts are unavailable: ${(error as Error).message}`});
+          return [];
         }),
         loadCurrentAccount(base).catch(()=>null),
         incoming ? undefined : purgePersonalAttribution(),

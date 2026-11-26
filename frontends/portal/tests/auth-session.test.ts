@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {PortalStore,type Account} from '../src/core';
 import {AccountRepository} from '../src/core/repository';
 import {rulesSource} from '../src/game/runtimeSource';
-import {createCredentialVault,LEGACY_CURRENT_KEY} from '../src/platform/credential-vault';
+import {createCredentialVault} from '../src/platform/credential-vault';
 import {InactiveSignInError} from '../src/core/api';
 import {diagnosticSnapshot} from '../src/core/diagnostics';
 
@@ -97,17 +97,17 @@ test('a delayed older account-selection write cannot sign in again after logout'
   }finally{releaseWrite.resolve();f.restore();}
 });
 
-test('a native signed-out selection overrides a retained legacy selection without removing other secure credentials',async()=>{
+test('a native signed-out selection persists alongside the saved secure credentials',async()=>{
   const metadata=new Map<string,string>(),secure=new Map<string,string>();
   const values=(map:Map<string,string>)=>({getItem:async(key:string)=>map.get(key)??null,setItem:async(key:string,value:string)=>{map.set(key,value);}});
   const vault=createCredentialVault('https://buildplay.fun',values(metadata),values(secure));
   await vault.saveAccounts(accounts);
-  metadata.set(LEGACY_CURRENT_KEY,'alice');metadata.set(vault.keys.current,'visitor');
+  metadata.set(vault.keys.current,'visitor');
   const originalSecure=new Map(secure);
   const restarted=createCredentialVault('https://buildplay.fun',values(metadata),values(secure));
   assert.equal(await restarted.loadCurrentAccount(),'visitor');
   assert.deepEqual(await restarted.loadAccounts(),accounts);
-  assert.deepEqual(secure,originalSecure);assert.equal(metadata.get(LEGACY_CURRENT_KEY),'alice');
+  assert.deepEqual(secure,originalSecure);
 });
 
 test('logout wins over an earlier verified-login selection persistence without losing the other account or its local save',async()=>{

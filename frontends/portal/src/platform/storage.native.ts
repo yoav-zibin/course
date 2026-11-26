@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { createPersistentStorage, type PersistentBackend } from './persistent-storage';
 import {CAMPAIGN_KEY,VISITOR_KEY} from './request-storage-keys';
+export const supportsBrowserImports = false;
 const native = requireOptionalNativeModule<PersistentBackend>('LegacyPortal');
 const persistent = createPersistentStorage(AsyncStorage, native, new Set([VISITOR_KEY,CAMPAIGN_KEY]));
 export const getItem = persistent.getItem;
