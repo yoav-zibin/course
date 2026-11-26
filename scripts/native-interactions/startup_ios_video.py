@@ -34,7 +34,14 @@ def opening_bounds(image):
     if len(x)<red.size*.1:
         return None
     h,w=red.shape
-    return np.percentile(x,2)/w,np.percentile(y,2)/h,np.percentile(x,98)/w,np.percentile(y,98)/h
+    left,right=np.percentile(x,[2,98]).astype(int)
+    top,bottom=np.percentile(y,[2,98]).astype(int)
+    r,g,b=image[top:bottom,left:right].transpose(2,0,1)
+    red_checkers=(r>150)&(g<95)&(r>g+95)&(b<100)
+    ivory_checkers=(r>190)&(g>180)&(b>160)&(abs(r-g)<45)&(abs(g-b)<55)
+    if red_checkers.mean()<.015 or ivory_checkers.mean()<.015:
+        return None
+    return left/w,top/h,right/w,bottom/h
 
 
 def measure(movie, before, after, bounds):
@@ -52,11 +59,21 @@ def measure(movie, before, after, bounds):
         changed=np.mean(np.max(abs(image[area]-before[area]),axis=2)>38)
         agreement=np.mean(np.max(abs(image[rect][1:,1:][edges]-expected),axis=1)<46)
         samples.append((stamp,float(changed),float(agreement)))
-    if not samples or samples[-1][2]<.80:
-        raise ValueError(f'The recording did not finish on the verified landmark: {samples[-3:]}')
-    painted=len(samples)-1
-    while painted>0 and samples[painted-1][2]>=.80:
-        painted-=1
+    # Count the first sustained appearance. XCTest can dismiss its app after
+    # the host takes the reference screenshot, leaving a later teardown frame.
+    start=None
+    for i,(stamp,_,agreement) in enumerate(samples):
+        if agreement<.80:
+            start=None
+        elif start is None:
+            start=i
+        elif stamp-samples[start][0]>=120:
+            break
+    if start is None:
+        raise ValueError('The verified landmark did not stay visible for 120 ms')
+    # A simulator recording can end on a single fully drawn frame, with no
+    # duplicate frames emitted while the independently verified image is still.
+    painted=start
     # The XCTest URL actuator returns to SpringBoard before opening the link.
     # Ignore any earlier runner-app launch shown in the recording.
     launcher=max(i for i in range(painted) if samples[i][1]<.03)
@@ -121,8 +138,10 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command):
     paths={item['path'] for item in requests}
     required={'/games/popular'} if action=='home' else {'/matches/benchmark-opening','/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10'}
     if not required<=paths:raise RuntimeError(f'Missing cold-start requests: {required-paths}')
+    evidence={'bounds':list(bounds),'requests':requests}
+    prefix.with_suffix('.json').write_text(json.dumps(evidence,indent=2)+'\n')
     output=measure(movie,next(frames(before))[1],next(frames(after))[1],bounds)
-    prefix.with_suffix('.json').write_text(json.dumps({**output,'requests':requests},indent=2)+'\n')
+    prefix.with_suffix('.json').write_text(json.dumps({**output,**evidence},indent=2)+'\n')
     print(directory.name,index,action,output,flush=True)
     return output['visible_ms']
 
@@ -140,7 +159,7 @@ def match_launcher(scripts, results, device):
     return [*build,'test-without-building','-only-testing:InteractionTests/StartupTests/testOpenMatchForVideo']
 
 
-def run(apps, fixture, results, device):
+def run(apps, fixture, results, device, pairs):
     scripts=Path(__file__).resolve().parent
     results.mkdir(parents=True,exist_ok=True)
     ocr=results/'home-title'
@@ -156,7 +175,7 @@ def run(apps, fixture, results, device):
         for _ in range(30):
             try:api('/__requests');break
             except OSError:time.sleep(.2)
-        for index in range(1,6):
+        for index in range(1,pairs+1):
             for name in names if index%2 else reversed(names):
                 row={}
                 for action in ('home','match'):
@@ -174,5 +193,6 @@ if __name__=='__main__':
     parser.add_argument('fixture',type=Path)
     parser.add_argument('results',type=Path)
     parser.add_argument('device')
+    parser.add_argument('--pairs',type=int,choices=range(1,6),default=5)
     args=parser.parse_args()
-    run(args.apps,args.fixture,args.results,args.device)
+    run(args.apps,args.fixture,args.results,args.device,args.pairs)

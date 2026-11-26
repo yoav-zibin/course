@@ -15,6 +15,11 @@ on:
         type: choice
         options: [board, startup, startup-video]
         default: board
+      video_pairs:
+        description: Paired trials for startup-video
+        type: choice
+        options: ['5', '1', '2', '3', '4']
+        default: '5'
 permissions:
   contents: read
   actions: read
@@ -57,6 +62,7 @@ jobs:
           BASELINE: ${{ inputs.baseline }}
           BUILD_RUN: ${{ inputs.build_run }}
           SCENARIO: ${{ inputs.scenario }}
+          VIDEO_PAIRS: ${{ inputs.video_pairs || '5' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -104,7 +110,7 @@ jobs:
             fi
           done
           if [[ "$SCENARIO" == startup-video ]]; then
-            python3 scripts/native-interactions/startup_ios_video.py "$base/video-apps" "$base/fixture" "$base/results" "$SIMULATOR_ID"
+            python3 scripts/native-interactions/startup_ios_video.py "$base/video-apps" "$base/fixture" "$base/results" "$SIMULATOR_ID" --pairs "$VIDEO_PAIRS"
           fi
       - uses: actions/upload-artifact@v4
         if: always()

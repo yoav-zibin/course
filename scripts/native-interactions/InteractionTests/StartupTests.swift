@@ -109,17 +109,20 @@ final class StartupTests: XCTestCase {
                 bytesPerRow: width*4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: info) else { return false }
             context.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
             let rgb = bytes.bindMemory(to: UInt8.self)
-            var matching = 0
+            var matching = 0, redCheckers = 0, ivoryCheckers = 0
             for i in stride(from: 0, to: rgb.count, by: 4) {
                 let r = Int(rgb[i]), g = Int(rgb[i+1]), b = Int(rgb[i+2])
                 switch screen {
                 case .opening:
                     if r>95 && r>g+34 && g>b+18 { matching += 1 }
+                    if r>150 && g<95 && r>g+95 && b<100 { redCheckers += 1 }
+                    if r>190 && g>180 && b>160 && abs(r-g)<45 && abs(g-b)<55 { ivoryCheckers += 1 }
                 case .setup:
                     if r<42 && g<65 && g>r+8 && g>b+7 { matching += 1 }
                 }
             }
-            return matching>width*height/10
+            let area=width*height
+            return matching>area/10 && (screen == .setup || (redCheckers>area/300 && ivoryCheckers>area/300))
         }
     }
 }
