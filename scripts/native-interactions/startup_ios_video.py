@@ -40,6 +40,59 @@ def frames(path):
             small=frame.reformat(width=320,height=round(320*frame.height/frame.width),format='rgb24')
             yield float((frame.pts or 0)*frame.time_base)*1000,small.to_ndarray().astype(np.int16)
 
+def link_confirmation(image):
+    # The blue Open button on the system alert is surrounded by the sender's magenta.
+    r,g,b=image[::4,::4].transpose(2,0,1)
+    h,w=r.shape
+    blue=(b>160)&(b>r+90)&(b>g+55)&(g>40)
+    return ((r>140)&(g<55)&(b>130)).mean()>.55 and blue[h//2:3*h//5,w//2:4*w//5].mean()>.05
+
+
+def approve_link(device,image,sender_stamp):
+    # A coordinate tap also works when the foreground accessibility tree belongs
+    # to the sender and the system alert is hosted by SpringBoard.
+    h,w=image.shape[:2]
+    y,x=h//2,w//2
+    r,g,b=image[y:3*h//5,x:4*w//5].transpose(2,0,1)
+    by,bx=np.nonzero((b>160)&(b>r+90)&(b>g+55)&(g>40))
+    display=json.loads(sender_stamp.read_text())
+    px=round((x+np.median(bx))*display['width_points']/w)
+    py=round((y+np.median(by))*display['height_points']/h)
+    subprocess.run(['axe','tap','--udid',device,'-x',str(px),'-y',str(py)],check=True,timeout=30)
+
+
+def clear_game_data(device,bundle):
+    container=Path(sim('get_app_container',device,bundle,'data',capture_output=True,text=True).stdout.strip())
+    if (not container.is_dir() or container.parent.parts[-3:]!=('Containers','Data','Application')
+            or device.lower() not in [part.lower() for part in container.parts]):
+        raise RuntimeError('Could not identify the simulator application data container')
+    # Keep iOS's sender authorization while removing saved matches, package
+    # data, migration markers, network caches, and older AsyncStorage records.
+    for child in ('Documents','Library/Application Support','Library/Caches','tmp'):
+        path=container/child
+        if path.is_dir():shutil.rmtree(path)
+        path.mkdir(parents=True,exist_ok=True)
+
+
+def prepare_link_sender(app,bundle,device,sender_stamp,results):
+    sim('install',device,app)
+    sender_stamp.unlink(missing_ok=True)
+    evidence=results/'authorization'
+    evidence.mkdir()
+    screenshot=evidence/'link.png'
+    sim('launch','--terminate-running-process',device,SENDER)
+    deadline=time.monotonic()+120
+    tapped=0
+    while time.monotonic()<deadline:
+        sim('io',device,'screenshot',screenshot,capture_output=True)
+        image=next(frames(screenshot))[1]
+        if sender_stamp.exists() and link_confirmation(image) and time.monotonic()-tapped>3:
+            approve_link(device,image,sender_stamp)
+            tapped=time.monotonic()
+        if sender_stamp.exists() and opening_bounds(image) is not None:return
+        time.sleep(.5)
+    raise RuntimeError('Could not authorize an iOS link and verify the opening board')
+
 
 def measure(movie, before, after, bounds, include_first_frame=False):
     h,w=after.shape[:2]
@@ -92,8 +145,11 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
     movie=prefix.with_suffix('.mov')
     before=Path(str(prefix)+'-launcher.png')
     after=Path(str(prefix)+'-content.png')
-    subprocess.run(['xcrun','simctl','uninstall',device,bundle],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(['xcrun','simctl','terminate' if sender_stamp else 'uninstall',device,bundle],
+                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     sim('install',device,app)
+    if sender_stamp:clear_game_data(device,bundle)
+    confirmed=False
     api('/__reset','POST')
     time.sleep(1.5)
     if not sender_stamp:sim('io',device,'screenshot',before,capture_output=True)
@@ -123,7 +179,11 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
                 deadline=time.monotonic()+100
                 while time.monotonic()<deadline:
                     sim('io',device,'screenshot',after,capture_output=True)
-                    if sender_stamp.exists() and opening_bounds(next(frames(after))[1]) is not None:
+                    frame=next(frames(after))[1]
+                    if sender_stamp.exists() and link_confirmation(frame) and not confirmed:
+                        approve_link(device,frame,sender_stamp)
+                        confirmed=True
+                    if sender_stamp.exists() and opening_bounds(frame) is not None:
                         time.sleep(.5)
                         break
                     time.sleep(.7)
@@ -142,7 +202,7 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
     if action=='match':
         # XCTest may leave the app after verifying the opening. Find its last
         # populated frame in the movie and retain that exact comparison image.
-        reference=sender_frame=first_marker=last_marker=None
+        reference=sender_frame=first_marker=last_marker=confirmation_start=confirmation_end=None
         for stamp,image in frames(movie):
             if sender_stamp:
                 r,g,b=image[::8,::8].transpose(2,0,1)
@@ -150,6 +210,11 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
                 if ((r>180)&(g<50)&(b>180)).mean()>.9:
                     if last_marker is None:last_marker=stamp
                     sender_frame=image
+                if link_confirmation(image):
+                    if confirmation_start is None:confirmation_start=stamp
+                    confirmation_end=None
+                elif confirmation_start is not None and confirmation_end is None:
+                    confirmation_end=stamp
             box=opening_bounds(image)
             if box is not None:reference,bounds=image,box
         if reference is None:raise RuntimeError('No populated Backgammon opening in the verified recording')
@@ -167,10 +232,16 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
         evidence['link_sent_epoch_ms']=timing['sent_epoch_ms']
         evidence['link_sent_pts_ms']=last_marker+timing['after_marker_ms']
         evidence['marker_interval_error_ms']=round(last_marker-first_marker-timing['marker_interval_ms'],1)
+        if confirmed:
+            if confirmation_end is None:raise RuntimeError('The video did not capture the link confirmation dismissal')
+            evidence['confirmation_start_pts_ms']=round(confirmation_start,1)
+            evidence['confirmation_dismissed_pts_ms']=round(confirmation_end,1)
     prefix.with_suffix('.json').write_text(json.dumps(evidence,indent=2)+'\n')
     output=measure(movie,next(frames(before))[1],next(frames(after))[1],bounds,include_first_frame=not sender_stamp)
     if sender_stamp:
         output['open_url_to_board_ms']=round(output['landmark_pts_ms']-evidence['link_sent_pts_ms'],1)
+        if confirmed:
+            output['confirmation_to_board_ms']=round(output['landmark_pts_ms']-confirmation_end,1)
         if output['open_url_to_board_ms']<=0:raise ValueError('The opening board predates the sender request')
     prefix.with_suffix('.json').write_text(json.dumps({**output,**evidence},indent=2)+'\n')
     print(directory.name,index,action,output,flush=True)
@@ -229,6 +300,7 @@ def run(apps, fixture, results, device, pairs, sender=False):
         for _ in range(30):
             try:api('/__requests');break
             except OSError:time.sleep(.2)
+        if sender:prepare_link_sender(builds[names[0]],bundle,device,sender_stamp,results)
         for index in range(1,pairs+1):
             for name in names if index%2 else reversed(names):
                 row={}
