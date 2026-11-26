@@ -44,7 +44,7 @@ test('presentation repair is scoped by game identity, authoritative rule hash an
   }
 });
 test('bundled repair hash, independent result copies and fail-safe cryptography behavior remain stable',async()=>{
-  assert.equal(await digest(canonical(replacement)),'666936dafaf8b31d82caecad96e94e4f3d40a83b1c3071687148de36e37a25e3');
+  assert.equal(await digest(canonical(replacement)),'7cb050f0acd41efe25a71bb772f6ccd671a62efdeba1783d6fb703d7e7356ee5');
   const input=game(),first=await reviewedPresentation(input,digest),second=await reviewedPresentation(input,digest);
   assert.notEqual(first,second);assert.deepEqual(first,second);
   assert.equal(await reviewedPresentation(input,async()=>{throw new Error('unavailable');}),input.declarative_ui);
@@ -72,7 +72,7 @@ test('exact modern Backgammon opening repair preserves saved rules and package p
   assert.equal(await reviewedPresentation(input,async()=>{throw new Error('digest unavailable');}),input.declarative_ui);
 });
 
-test('the exact saved Backgammon version9 receives only its dice action cue',async()=>{
+test('the exact saved Backgammon version9 receives the corrected board and dice action cue',async()=>{
   const pkg=read('games/declarative/backgammon.json');
   // Version 9 added checker layering to the previously reviewed presentation.
   const original=read('frontends/portal/src/game/reviewedBackgammon.json');
@@ -85,10 +85,12 @@ test('the exact saved Backgammon version9 receives only its dice action cue',asy
       const moving = new Set((gameUI.getLastMoveAnimations(s, out.scene) || []).map(entry => entry.piece_id));
       for (const piece of pieces) if (moving.has(piece.id)) piece.z = 100000;
     }`;
+  original.assets.board_art=read('tests/fixtures/declarative/backgammon-v7-ui.json').assets.board_art;
   original.ui_code=original.ui_code.replace(startHandler,historicalLayering+'\n'+startHandler);
   original.piece_types.die.action_outline='none';
   const input={...game(),version:9,server_code:pkg.server_code,declarative_ui:original};
   const before=JSON.stringify(input),expected=structuredClone(original);
+  expected.assets.board_art=replacement.assets.board_art;
   expected.piece_types.die.action_outline='rect';
   const first=await reviewedPresentation(input,digest),second=await reviewedPresentation(input,digest);
   assert.deepEqual(first,expected);assert.deepEqual(second,expected);assert.notEqual(first,second);

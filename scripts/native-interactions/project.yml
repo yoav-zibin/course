@@ -1,0 +1,19 @@
+name: Interactions
+settings:
+  IPHONEOS_DEPLOYMENT_TARGET: '26.0'
+  SWIFT_VERSION: '5.0'
+targets:
+  InteractionTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [InteractionTests]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: fun.buildplay.benchmark.tests
+      GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Interactions:
+    build:
+      targets:
+        InteractionTests: [test]
+    test:
+      targets: [InteractionTests]

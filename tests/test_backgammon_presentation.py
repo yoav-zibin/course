@@ -85,7 +85,9 @@ def test_fixed_wood_board_declares_reference_motion_and_invisible_graph_cells():
     assert main['line_color'] == '#00000000'
     assert next(cell for cell in main['cells'] if cell['id'] == '0')['x'] == 636
     artwork = base64.b64decode(spec['assets']['board_art']['uri'].split(',')[1]).decode()
-    assert 'stroke-opacity=".12"' in artwork
+    # Each quadratic segment takes two coordinate pairs before the smooth segment.
+    for y in range(26, 420, 17):
+        assert f'M18 {y}Q180 {y-7} 330 {y}T654 {y+1}' in artwork
     assert '<text' not in artwork
 
 

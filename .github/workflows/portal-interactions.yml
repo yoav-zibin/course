@@ -1,0 +1,82 @@
+name: Native interaction benchmark
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Portal apps run containing the release simulator app
+        type: string
+        required: true
+      baseline:
+        description: Optional baseline commit for a same-simulator JavaScript comparison
+        type: string
+        required: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  measure:
+    runs-on: macos-26-intel
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: actions/download-artifact@v4
+        with:
+          name: BuildPlay-ios-simulator
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: release
+      - name: Set up release fixture and iPhone
+        run: |
+          command -v xcodegen || brew install xcodegen
+          (cd frontends/portal && npm ci)
+          mkdir -p "$RUNNER_TEMP/interaction"
+          frontends/portal/node_modules/.bin/tsx scripts/native-interactions/backgammon.ts "$RUNNER_TEMP/interaction/fixture"
+          ditto -x -k release/BuildPlay-simulator.zip "$RUNNER_TEMP/interaction/release"
+          xcrun simctl list devices available --json | jq '{devices:(.devices | with_entries(select(.key | test("iOS-(2[6-9]|[3-9][0-9])-"))))}' > "$RUNNER_TEMP/interaction/devices.json"
+          python3 frontends/portal/scripts/select-ios-simulator.py "$RUNNER_TEMP/interaction/devices.json" > "$RUNNER_TEMP/interaction/phone.json"
+          echo "SIMULATOR_ID=$(jq -r .udid "$RUNNER_TEMP/interaction/phone.json")" >> "$GITHUB_ENV"
+      - name: Benchmark release JavaScript on the same simulator
+        env:
+          BASELINE: ${{ inputs.baseline }}
+          BUILD_RUN: ${{ inputs.build_run }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          base="$RUNNER_TEMP/interaction"
+          source_sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" --jq '.head_sha')
+          revisions=(current)
+          if [[ -n "$BASELINE" ]]; then
+            [[ "$BASELINE" =~ ^[0-9a-f]{40}$ ]]
+            revisions=(baseline current)
+          fi
+          for name in "${revisions[@]}"; do
+            revision=$GITHUB_SHA
+            if [[ "$name" == baseline ]]; then revision=$BASELINE; fi
+            # Only replace JavaScript in an app with matching native dependencies and config.
+            git diff --exit-code "$source_sha" "$revision" -- frontends/portal/{package-lock.json,app.config.ts,plugins,modules,ios}
+            git worktree add --detach "$base/$name" "$revision"
+            portal="$base/$name/frontends/portal"
+            (cd "$portal" && npm ci && CI=1 npx --no-install expo export --platform ios --output-dir "$base/js-$name")
+            app="$base/release/BuildPlay.app"
+            cp "$base/js-$name"/_expo/static/js/ios/*.hbc "$app/main.jsbundle"
+            codesign --force --sign - --preserve-metadata=identifier,entitlements "$app"
+            bash scripts/native-interactions/ios.sh "$app" "$base/fixture" "$base/results/$name" "$SIMULATOR_ID"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iOS-interaction-metrics
+          path: |
+            ${{ runner.temp }}/interaction/results/*/*.xcresult
+            ${{ runner.temp }}/interaction/results/*/*.json
+            ${{ runner.temp }}/interaction/results/*/*.log
+            ${{ runner.temp }}/interaction/phone.json
+            ${{ runner.temp }}/interaction/fixture/pose.json

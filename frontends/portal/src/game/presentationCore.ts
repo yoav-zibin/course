@@ -13,7 +13,9 @@ const connectFourId='e299b14e-480d-44f3-8132-74282a46cebc';
 const connectFourRulesHash='e4fce270f9481cb7eb22d34c98c12441b7e4db8f859f4ec43019311f41135ae3';
 const connectFourUIHash='49688ae52421550f0a14a92cf2914ebea961a147e344c71d70d80be394aca284';
 const connectFourReplacementHash='1450713baa36d87bdd7b6aa23fba1263c0db48912bbc3bfec9b55f35a9da4d75';
-const replacementHash='666936dafaf8b31d82caecad96e94e4f3d40a83b1c3071687148de36e37a25e3';
+const replacementHash='7cb050f0acd41efe25a71bb772f6ccd671a62efdeba1783d6fb703d7e7356ee5';
+// These published packages have identical malformed wood-grain paths.
+const brokenBoardPackages=new Set(['666936dafaf8b31d82caecad96e94e4f3d40a83b1c3071687148de36e37a25e3','c2f66c7dc590a6ab547f9a5425725fd55cb1064d76f104af4e2cc168bf769caf']);
 
 // Match Python's sort_keys=True, ensure_ascii=False, separators=(',', ':').
 // Building the object text explicitly retains the sort order of numeric keys.
@@ -34,11 +36,11 @@ export async function reviewedPresentation(game:Game|null|undefined,digest:Diges
     }
     if(game.id!==gameId)return original;
     const rulesHash=await digest(game.server_code),uiHash=await digest(canonical(original));
-    if(game.version===9&&rulesHash===modernBackgammonRulesHash&&uiHash===backgammonVersion9UIHash){
-      // Preserve this exact saved presentation, including its checker layers;
-      // only expose the dice's existing roll action with the standard outline.
+    const version9=game.version===9&&uiHash===backgammonVersion9UIHash;
+    if(rulesHash===modernBackgammonRulesHash&&(version9||brokenBoardPackages.has(uiHash))){
       const repaired=JSON.parse(JSON.stringify(original));
-      repaired.piece_types.die.action_outline='rect';
+      repaired.assets.board_art={...replacement.assets.board_art};
+      if(version9)repaired.piece_types.die.action_outline='rect';
       return repaired;
     }
     const modern=rulesHash===modernBackgammonRulesHash&&uiHash===modernBackgammonUIHash;

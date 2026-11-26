@@ -224,7 +224,7 @@ def board_svg():
         '<rect x="16" y="16" width="640" height="408" fill="url(#wood)" stroke="#301507" stroke-width="5"/>',
         ]
     for y in range(26,420,17):
-        parts.append(f'<path d="M18 {y}Q180 {y-7}330 {y}T654 {y+1}" fill="none" stroke="#fff0bf" stroke-opacity=".12" stroke-width="2"/>')
+        parts.append(f'<path d="M18 {y}Q180 {y-7} 330 {y}T654 {y+1}" fill="none" stroke="#fff0bf" stroke-opacity=".12" stroke-width="2"/>')
     for point in range(24):
         x = point_x(point)
         y, tip = (18, 179) if point >= 12 else (422, 261)
