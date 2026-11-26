@@ -159,7 +159,7 @@ test('a late report success preserves a newer reopened draft',async({page})=>{
 
 test('fast draft edits retain their input and survive closing above the account modal without sending',async({page})=>{
   let sent=0;page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/bug-reports')sent++;});
-  await page.goto('/portal');await page.getByRole('button',{name:'Log in',exact:true}).click();
+  await page.goto('/portal');await page.getByTestId('header-account').click();
   await page.getByRole('button',{name:label,exact:true}).click();
   const input=page.getByRole('textbox',{name:'Bug or feature request'}),draft='Local smoke draft with quick edits and no lost characters.';
   await expect(input).toBeVisible();await input.click();
