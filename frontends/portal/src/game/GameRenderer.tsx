@@ -4,7 +4,7 @@ import {createDragFrames} from '../core/dragFrames';
 import {copyText,playerText} from '../platform/i18n';
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
-import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgAst, parse, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgAst, parse, Text as SvgText, Use } from 'react-native-svg';
 import G from './SceneGroup';
 import type { Board, Control, GameSpec, Json, Motion, Piece, Point, PresentationResult, Scene, StateMessage, Target, UIEvent } from './types';
 import { assetURI, boardCell, cameraLimits, contentBounds, pieceActions, position, validateSpec } from './validation';
@@ -570,18 +570,48 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const visibleTargets=boardInput.drawsSelectedTargets?[]:(display.scene.targets||[]).filter(target=>
     !showDestinationsAfterSelection || (active && targetSource?.move_targets?.includes(target.id)));
   const draggedId=drag?.id;
+  // On iOS each SVG element is a native view. Mount shared vector artwork
+  // once per canvas while retaining a separate accessible, movable piece.
+  const templates=useMemo(()=>{
+    type Artwork={asset:string; id:string; width:number; height:number; pieces:Piece[]};
+    const ids=new Map<Piece,string>(),definitions:React.ReactNode[]=[];
+    if(Platform.OS==='ios'){
+      const used=new Map<string,Artwork>(),assets=Object.keys(spec.assets??{});
+      for(const {piece} of painting.paint){
+        const type=spec.piece_types[piece.type],asset=piece.asset??type.asset;
+        if(piece.face==='back'||type.shape!=='image'||!type.width||!type.height||!asset||
+          !spec.assets?.[asset]?.uri.startsWith('data:image/svg+xml;base64,'))continue;
+        const key=`${type.width}x${type.height}:${asset}`;
+        let artwork=used.get(key);
+        if(!artwork){
+          artwork={asset,id:`buildplay-art-${assets.indexOf(asset)}-${type.width}-${type.height}`,
+            width:type.width,height:type.height,pieces:[]};
+          used.set(key,artwork);
+        }
+        artwork.pieces.push(piece);
+      }
+      for(const {id,asset,width,height,pieces} of used.values()){
+        if(pieces.length<2)continue;
+        for(const piece of pieces)ids.set(piece,id);
+        definitions.push(<G id={id} key={id}><Asset spec={spec} id={asset}
+          x={-width/2} y={-height/2} width={width} height={height}/></G>);
+      }
+    }
+    return {ids,definitions};
+  },[painting,spec]);
   const pieceLayers=useMemo(()=>{
     const lower:React.ReactNode[]=[],upper:React.ReactNode[]=[];
     for(const item of painting.paint){
       const rootId=item.piece.parent??item.piece.id;
       const graphic=<PieceGraphic key={`${item.ghost?'ghost':'piece'}:${item.piece.id}`} piece={item.piece} previous={item.previous}
         spec={spec} {...item.options} serial={display.serial} enabled={active&&!item.ghost} selected={item.piece.selected||rootId===selected}
-        started={display.started} concealed={rootId===draggedId} onPress={pressPiece}/>;
+        started={display.started} concealed={rootId===draggedId} onPress={pressPiece}
+        artworkRef={templates.ids.get(item.piece)}/>;
       (item.z<=STATIC_PIECE_Z_MAX?lower:upper).push(!item.ghost&&pieceActions(item.piece).length&&boardInput.wrapPiece?
         boardInput.wrapPiece(graphic,rootId):graphic);
     }
     return {lower,upper};
-  },[painting,spec,display.serial,display.started,active,selected,draggedId,boardInput.wrapPiece,pressPiece]);
+  },[painting,spec,display.serial,display.started,active,selected,draggedId,boardInput.wrapPiece,pressPiece,templates]);
   function draggedPosition(piece:Piece): Point {
     const root=display.scene.pieces!.find(p=>p.id===drag!.id)!;
     const center=position(spec,root), at=position(spec,piece);
@@ -628,7 +658,10 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const boardCanvas=<View ref={canvas} collapsable={false} focusable style={[styles.canvas,framed?{flex:1,minHeight:0}:{height},canvasWebStyle]} {...webProps} {...(!boardInput.wrapCanvas&&responders.panHandlers)}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);setCanvasHeight(event.nativeEvent.layout.height);measureOrigin();}}
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
-      <Svg {...svgFrame} style={{direction:'ltr'}}>{Platform.OS==='android'?lowerArt:[...lowerArt,...upperArt]}</Svg>
+      <Svg {...svgFrame} style={{direction:'ltr'}}>
+        {templates.definitions.length>0&&<Defs>{templates.definitions}</Defs>}
+        {Platform.OS==='android'?lowerArt:[...lowerArt,...upperArt]}
+      </Svg>
       {Platform.OS==='android'&&<Svg {...svgFrame} style={[StyleSheet.absoluteFill,{direction:'ltr'}]}>{upperArt}</Svg>}
       {boardInput.feedback}
     </View>;
@@ -704,7 +737,7 @@ const BoardGraphic=memo(function BoardGraphic({board,spec}:{board:Board;spec:Gam
   </G>;
 });
 
-const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false,concealed=false,dragged=false}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:(piece:Piece)=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean;concealed?:boolean;dragged?:boolean}) {
+const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false,concealed=false,dragged=false,artworkRef}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:(piece:Piece)=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean;concealed?:boolean;dragged?:boolean;artworkRef?:string}) {
   const [frameState,setFrameState]=useState({serial:-1,phase:1});
   const {newEffect,next,before,popAnimation,needsAnimation,duration,delay}=pieceAnimation(spec,piece,previous,
     {animate,effect,inferMovement,moveTrack,sceneTrack,pulseEnabled});
@@ -740,7 +773,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
     {shared ? <TabletopGraphic piece={piece} type={type} width={size.width} height={size.height}
       artwork={customFace && <Asset spec={spec} id={customFace} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>}/> :
      type.shape==='group' ? null : type.shape==='circle'?<Ellipse rx={size.width/2} ry={size.height/2} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:type.shape==='hex'?<Polygon points={Array.from({length:6},(_,i)=>`${Math.cos((i*60+30)*Math.PI/180)*size.width/2},${Math.sin((i*60+30)*Math.PI/180)*size.height/2}`).join(' ')} fill={type.color||'#d2ff5a'} stroke={type.border_color||'#0d202c'} strokeWidth={2}/>:type.shape==='rect'?<Rect x={-size.width/2} y={-size.height/2} width={size.width} height={size.height} rx={4} fill={type.color||'#e4eced'} stroke={type.border_color||'#1d3544'} strokeWidth={2}/>:null}
-    {!shared && <Asset spec={spec} id={piece.asset??type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>}
+    {!shared && (artworkRef?<Use href={`#${artworkRef}`}/>:<Asset spec={spec} id={piece.asset??type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>)}
     {!shared&&piece.text!==undefined&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{playerText(piece.text||'')}</SvgText>}
     {type.action_outline!=='none'&&(type.action_outline==='ellipse'?<Ellipse rx={size.width/2+4} ry={size.height/2+4} fill="none" stroke={outline} strokeWidth={selected?4:2}/>:<Rect x={-size.width/2-4} y={-size.height/2-4} width={size.width+8} height={size.height+8} rx={8} fill="none" stroke={outline} strokeWidth={selected?4:2}/>)}
     {enabled&&actions.length>0&&<G transform={`translate(${-size.width/2} ${-size.height/2-13})`} pointerEvents="none">{actions.map((action,index)=><G key={action} transform={`translate(${index*22} 0)`}><Rect x={0} y={-9} width={20} height={18} rx={5} fill="#122b3a" stroke="#75ceee"/><SvgText x={10} y={0} textAnchor="middle" alignmentBaseline="central" fill="#ffffff" fontSize={14}>{signs[action]}</SvgText></G>)}</G>}

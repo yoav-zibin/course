@@ -1,7 +1,6 @@
 import * as storage from './storage';
 import {isQuotaError,touchTranslationCache,translationEvictions} from './recoverable-cache';
 import {reportCacheFailure} from './cache-diagnostics';
-import sharedCopy from './ui-copy.json';
 let locale = 'en';
 let messages: Record<string, string> = {};
 let bundle: any = null;
@@ -11,7 +10,6 @@ let offlineOnly = false;
 let localeRequest = 0;
 let locales: any[] = [{ code: 'en', name: 'English', direction: 'ltr' }, { code: 'es', name: 'Español', direction: 'ltr' }, { code: 'fr', name: 'Français', direction: 'ltr' }, { code: 'de', name: 'Deutsch', direction: 'ltr' }, { code: 'pt', name: 'Português', direction: 'ltr' }, { code: 'zh', name: '中文', direction: 'ltr' }, { code: 'hi', name: 'हिन्दी', direction: 'ltr' }, { code: 'ar', name: 'العربية', direction: 'rtl' }];
 const listeners = new Set<() => void>();
-const copyCatalog = sharedCopy as Record<string, Record<string, string>>;
 // Renderer terminology can survive in older game packages and cached catalogs.
 // Clean only displayed copy; source packages, identifiers and move values stay intact.
 export function playerText(source: string): string {
@@ -26,7 +24,7 @@ export function playerText(source: string): string {
 // Explicitly authored interface copy only. Game text and account names enter
 // through parameters and are never used as translation keys.
 export function copyText(source: string, params: Record<string, any> = {}): string {
-  const value = locale === 'en' ? source : copyCatalog[source]?.[locale] ?? source;
+  const value = locale === 'en' ? source : (require('./ui-copy.json') as Record<string,Record<string,string>>)[source]?.[locale] ?? source;
   return playerText(value.replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(params, name) ? String(params[name]) : match));
 }
 export function t(key: string, params: Record<string, any> = {}, fallback = key): string {

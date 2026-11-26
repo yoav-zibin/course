@@ -4,10 +4,19 @@ import type { Account, LocalMatch } from './types';
 import { AccountRepository } from './repository';
 import bundled from './bundled-tictactoe.json';
 import { redactedArchive as redactedNativeArchive } from './redaction';
+import { loadAccounts, saveAccounts } from '../platform/credentials';
 export { redactedArchive as redactedNativeArchive } from './redaction';
-export async function importNativeLegacy(baseUrl: string, repository: AccountRepository, accounts: Account[]): Promise<Account[]> {
+export async function restoreAccounts(baseUrl: string, repository: AccountRepository): Promise<Account[]> {
   const marker = `buildplay.native-import.v1.${encodeURIComponent(baseUrl)}`;
-  if (await storage.getItem(marker)) return accounts;
+  const [accounts, imported] = await Promise.all([loadAccounts(baseUrl), storage.getItem(marker)]);
+  if (imported) return accounts;
+  const merged = await importNativeLegacy(baseUrl, repository, accounts, marker);
+  // Commit the marker only after legacy credentials and game data are durable.
+  await saveAccounts(merged, baseUrl);
+  await storage.setItem(marker, '1');
+  return merged;
+}
+async function importNativeLegacy(baseUrl: string, repository: AccountRepository, accounts: Account[], marker: string): Promise<Account[]> {
   const raw = await readLegacyPortal(baseUrl);
   if (raw.errors?.length) {
     await storage.setItem(`${marker}.archive`, redactedNativeArchive(raw));
@@ -53,7 +62,5 @@ export async function importNativeLegacy(baseUrl: string, repository: AccountRep
         turn_of_player_indices: over ? null : [turn], move_count: 0, created_at: created, localMode: 'pass', practiceSeed: 0, moves: [], initialState: view, initialTurn: over ? null : [turn], awaitingHandoff: saved.awaitingHandoff === true } as LocalMatch;
     }
   });
-  // Caller saves credentials before committing the import marker.
   return merged;
 }
-export async function finishNativeImport(baseUrl: string) { await storage.setItem(`buildplay.native-import.v1.${encodeURIComponent(baseUrl)}`, '1'); }

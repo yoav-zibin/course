@@ -5,6 +5,7 @@ import {ActivityIndicator, AppState, BackHandler, Linking, Platform, ScrollView,
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {StatusBar} from 'expo-status-bar';
 import {usePortal} from './core';
+import {nativeLaunch} from './nativeLaunch';
 import {Button, Card, Copy, Notice, Row, Title, colors} from './ui/components';
 import {Context, Screen, text} from './ui/context';
 import {Catalog, GameDetail, Matches, LocalMatches} from './ui/screens';
@@ -34,13 +35,13 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
   const fittedBoard=boardVisible&&!p.selectedMatch?.awaitingHandoff;
   const backgammonStage=fittedBoard&&p.selectedMatch?.game_id===BACKGAMMON_GAME_ID;
   const fillBoard=backgammonStage&&fillsBackgammonLandscape(width,height);
-  const localOnly=useRef(readLocalUiTest()).current;
+  const [localOnly]=useState(readLocalUiTest);
   const [screen, setScreen] = useState<Screen>('games');
-  const [account, setAccount] = useState(false);
+  const [account, setAccount] = useState<boolean|null>(null);
   const [menuDestination,setMenuDestination]=useState<'account'|'inbox'|null>(null);
   const content = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const [notice, setNotice] = useState('');
-  const [inbox,setInbox] = useState(false), [notificationBanner,setNotificationBanner] = useState<InAppNotification|null>(null);
+  const [inbox,setInbox] = useState<boolean|null>(null), [notificationBanner,setNotificationBanner] = useState<InAppNotification|null>(null);
   const observedNotifications = useRef<{scope:string; ids:Set<string>; initialized:boolean}>({scope:'',ids:new Set(),initialized:false});
   const [appSession,setAppSession] = useState('');
   const [pendingInvite,setPendingInvite]=useState(''),[invitePreview,setInvitePreview]=useState<any>(null);
@@ -128,10 +129,16 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
 
   const [launchLink,setLaunchLink]=useState<{url:string;attributed:boolean}|null>(null);
   useEffect(() => {void run(async () => {
-    const initialUrl=Platform.OS==='web'?window.location.href:(await Linking.getInitialURL())??null;
-    if(initialUrl)setLaunchLink({url:initialUrl,attributed:!p.ready});
-    await p.actions.bootstrap(undefined,localOnly,initialUrl??undefined);
-    if (Platform.OS === 'web') installWebApp();
+    if(Platform.OS!=='web'){
+      const {url,bootstrap}=await nativeLaunch();
+      if(url)setLaunchLink({url,attributed:true});
+      await bootstrap;
+    }else{
+      const url=window.location.href;
+      setLaunchLink({url,attributed:!p.ready});
+      await p.actions.bootstrap(undefined,localOnly,url);
+      installWebApp();
+    }
   });}, []);
   useEffect(()=>{
     if(!p.ready||!launchLink)return;
@@ -243,8 +250,8 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
           {contentBody}
         </ScrollView>}
       </View>
-      <AccountDialog visible={account} onClose={()=>setAccount(false)} />
-      <NotificationInbox visible={inbox} onClose={()=>setInbox(false)} onOpen={openNotification}/>
+      {account!==null&&<AccountDialog visible={account} onClose={()=>setAccount(false)} />}
+      {inbox!==null&&<NotificationInbox visible={inbox} onClose={()=>setInbox(false)} onOpen={openNotification}/>}
     </SafeAreaView>
   </Context.Provider>;
 }

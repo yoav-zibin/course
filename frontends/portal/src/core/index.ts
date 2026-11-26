@@ -16,7 +16,7 @@ import {RetryableSyncCompatibilityError} from './sync-compatibility';
 import {hiddenMatchIds, hydrateSinglePlayer, localRevision, needsCloudSave, REMOVED_SAVED_MATCH, removedSavedMatch, savedMatchBranch, singlePlayerKind} from './single-player';
 import {handsTurnToOpponent, pendingNotifications} from './notifications';
 import {redactedArchive} from './redaction';
-import { importNativeLegacy, finishNativeImport } from './native-migration';
+import { restoreAccounts } from './native-migration';
 import * as storage from '../platform/storage';
 import { loadAccounts, saveAccounts, loadCurrentAccount, currentAccountKey } from '../platform/credentials';
 import { isOnline, watchConnectivity } from '../platform/connectivity';
@@ -52,6 +52,7 @@ export class PortalStore {
   private paginated = false;
   private refreshPromise: Promise<void> | null = null;
   private pendingPackages = new Map<string,Promise<Game>>();
+  private preparedPackage?: {generation:number; owner:string; game:Game};
   private offlineDownloadPromise: Promise<void> | null = null;
   private offlineDownloadScope = '';
   private offlineDownloadAfter = 0;
@@ -350,16 +351,20 @@ export class PortalStore {
       const base = (baseUrl ?? (typeof location !== 'undefined' ? location.origin : process.env.EXPO_PUBLIC_API_URL || 'https://buildplay.fun')).replace(/\/$/, '');
       this.localOnly = localOnly;
       this.api = new PortalApi(base, getLocale, localOnly ? async () => { throw new Error('This test launch runs entirely on this device.'); } : fetch); this.repository = new AccountRepository(base); this.patch({ baseUrl: base, network: !localOnly && isOnline() });
-      await purgePersonalAttribution();
-      let accounts: Account[];
-      try { accounts = await loadAccounts(base); accounts = cleanAccounts(await importNativeLegacy(base || 'https://buildplay.fun', this.repository, accounts)); await saveAccounts(accounts, base); await finishNativeImport(base || 'https://buildplay.fun'); }
-      catch (error) { accounts = await loadAccounts(base).catch(() => []); if(isQuotaError(error))reportCacheFailure('migration',error);else this.patch({ storageError: `Saved data needs attention: ${(error as Error).message}. Existing saves were kept.` }); }
-      const id = await loadCurrentAccount(base).catch(() => null);
+      const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);
+      const [accounts,id] = await Promise.all([
+        restoreAccounts(base || 'https://buildplay.fun',this.repository).then(cleanAccounts).catch(async error=>{
+          if(isQuotaError(error))reportCacheFailure('migration',error);else this.patch({storageError:`Saved data needs attention: ${(error as Error).message}. Existing saves were kept.`});
+          return loadAccounts(base).catch(()=>[]);
+        }),
+        loadCurrentAccount(base).catch(()=>null),
+        incoming ? undefined : purgePersonalAttribution(),
+      ]);
       // Only old installs without a selection may restore their first login.
       // An explicit visitor marker or a removed selected account stays out.
       const account = (id === null ? accounts[0] : accounts.find(a => a.id === id)) || null;
-      this.patch({ accounts, account }); await this.reloadData();
-      const incoming=initialUrl??(typeof location!=='undefined'?location.href:null);if(incoming)await this.rememberAttribution(incoming);
+      this.patch({ accounts, account });
+      await Promise.all([this.reloadData(),incoming?this.rememberAttribution(incoming):undefined]);
       const snapshot = this.data, hidden = hiddenMatchIds(snapshot);
       this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']), authConfig:snapshot.responses['/auth/config']||{} });
       if (snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) { const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`]; if (match) this.patch({ selectedMatch: this.decorate(match), game: snapshot.responses[`/games/${match.game_id}/versions/${match.game_version}`] || null }); }
@@ -531,10 +536,19 @@ export class PortalStore {
     if (match.status !== selected.status || match.token_pot !== selected.token_pot || !equal(match.token_payouts, selected.token_payouts)) await this.refreshProfile().catch(() => {});
   }
   private pinnedGame(id: string, version?: number, matchId?: string): Promise<Game> {
-    const key=JSON.stringify([this.generation,this.state.baseUrl,this.identity(),id,version,matchId]);
+    const generation=this.generation,owner=this.identity(),prepared=this.preparedPackage;
+    // Polls for the same immutable rules can reuse the verified presentation.
+    // Only a versioned lookup can do this. Catalog opens must check the latest version.
+    if(version!==undefined&&prepared?.generation===generation&&prepared.owner===owner&&
+      prepared.game.id===id&&prepared.game.version===version&&this.exactPackage(id,version))
+      return Promise.resolve(localizeGame(prepared.game));
+    const key=JSON.stringify([generation,this.state.baseUrl,owner,id,version,matchId]);
     const current=this.pendingPackages.get(key);
     if(current)return current;
-    const pending=this.loadPinnedGame(id,version,matchId).finally(()=>this.pendingPackages.delete(key));
+    const pending=this.loadPinnedGame(id,version,matchId).then(game=>{
+      if(this.generation===generation&&this.identity()===owner)this.preparedPackage={generation,owner,game};
+      return game;
+    }).finally(()=>this.pendingPackages.delete(key));
     this.pendingPackages.set(key,pending);
     return pending;
   }
