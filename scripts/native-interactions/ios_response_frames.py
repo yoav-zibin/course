@@ -4,7 +4,7 @@ from collections import defaultdict
 from pathlib import Path
 import av
 import numpy as np
-from response_frames import destination,response
+from response_frames import destination,response,spent_die_latency
 
 def frames(movie,width,height):
     with av.open(movie) as source:
@@ -36,6 +36,8 @@ def measure(directory):
     anchors=np.array(anchors);offsets=anchors[:,1]-anchors[:,0]
     global_offset=np.median(offsets)
     log=(directory/'responses.log').read_text()
+    dice={(case,name):(float(x),float(y)) for case,name,x,y in
+          re.findall(r'RESPONSE_DIE ([\w-]+) ([\w-]+) ([\d.]+) ([\d.]+)',log)}
     actions=defaultdict(dict)
     for case,name,phase,ms in re.findall(r'RESPONSE_ACTION ([\w-]+) ([\w-]+) (begin|end) ([\d.]+)',log):
         actions[(case,name)][phase]=float(ms)
@@ -54,14 +56,19 @@ def measure(directory):
                    clock_residual_p95_ms=round(residual,1))
         up=next((s for s in states if s.get('phase') in (3,4) and s['t']>=touch['t'] and s['pid']==touch['pid']),None)
         if up:row['hold_ms']=round(up['t']-touch['t'],1)
-        windows.append((touch['t']-median,row,[],[]))
+        if (case,name) in dice:row['spent_die_point']=dice[(case,name)]
+        next_touch=next((s['t'] for s in touches if s['t']>touch['t']),float('inf'))
+        span=min(2300+row.get('hold_ms',0),next_touch-touch['t']-60)
+        windows.append((touch['t']-median,span,row,[],[]))
     for pts,im in frames(movie,max(1,w//2),max(1,h//2)):
-        for start,row,times,pictures in windows:
-            if start-1200<=pts<=start+2300:
+        for start,span,row,times,pictures in windows:
+            if start-1200<=pts<=start+span:
                 times.append(pts);pictures.append(im)
-    for start,row,times,pictures in windows:
+    for start,span,row,times,pictures in windows:
         try:
             row.update(response(times,pictures,start,row['point'],screen))
+            if 'spent_die_point' in row and 'hold_ms' in row:
+                row['release_to_spent_die_ms']=spent_die_latency(times,pictures,start,start+row['hold_ms'],row['spent_die_point'],screen)
             if row['action'] in ('open-menu','close-menu','open-report','dismiss-report'):
                 row['dialog_landmark_ms']=destination(times,pictures,start)
         except ValueError as e:row['error']=str(e)

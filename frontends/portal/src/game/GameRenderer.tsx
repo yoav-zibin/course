@@ -233,12 +233,14 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         motionTimer.current=setTimeout(()=>{if(alive.current){setMotionBusy(false);setDisplay(old=>({...old,animate:false,ghosts:[],tracks:undefined,moves:undefined}));callbacks.current.onAnimationStateChange?.(false);}},duration);
       }else{motionUntil.current=0;setMotionBusy(false);if(motionTimer.current)clearTimeout(motionTimer.current);callbacks.current.onAnimationStateChange?.(false);}
     } else setDisplay(old=>({...old}));
-    if(stateChange)lastPaint.current=copy(latest.current!);
+    // Incoming messages and reducer results are isolated snapshots. Neither
+    // the history observer nor the embedded host's postMessage mutates them.
+    if(stateChange)lastPaint.current=latest.current!;
     setReady(true);setBusy(false);setError('');
-    callbacks.current.onScene?.(copy(raw),copy(latest.current!));
+    callbacks.current.onScene?.(raw,latest.current!);
     if (result.make_move !== undefined) {
       sent.current=true;setBusy(true);
-      try { recordDiagnosticEvent('game_move');await callbacks.current.onMove(copy(result.make_move)); }
+      try { recordDiagnosticEvent('game_move');await callbacks.current.onMove(copy(result.make_move));return true; }
       catch (reason) { if(atRevision===revision.current){sent.current=false;setBusy(false);} report(reason); }
     }
   },[spec,report,omitPieceId,boardPresentation]);
@@ -289,11 +291,13 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const dispatch = useCallback((event: UIEvent) => {
     if(!alive.current || Date.now()<motionUntil.current || !canMove(latest.current,sent.current) || renderedRevision.current!==revision.current || !validEvent(sceneRef.current,event))return;
     const atRevision=revision.current;
-    const input={type:'ui_event',event:copy(event),state_changed:copy(latest.current)};
-    queue.current=queue.current.catch(()=>{}).then(async()=>{
+    const input={type:'ui_event',event:copy(event),state_changed:latest.current};
+    const submitted=queue.current.catch(()=>{}).then(async()=>{
       if(atRevision!==revision.current||Date.now()<motionUntil.current||!canMove(latest.current,sent.current)||!validEvent(sceneRef.current,event))return;
-      await apply(input,atRevision,false);
+      return apply(input,atRevision,false);
     }).catch(report);
+    queue.current=submitted.then(()=>{});
+    return submitted;
   },[apply,report]);
 
   function fitGeometry() {
@@ -536,8 +540,9 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     if(Date.now()<motionUntil.current||!canMove(latest.current,sent.current))return;
     const scene=sceneRef.current;
     if(result.kind==='drop'){
-      if(result.target)dispatch({type:'drop',id:result.piece,piece_id:result.piece,target_id:result.target});
-      select(null);showPreview(null);return;
+      select(null);showPreview(null);
+      if(result.target)return dispatch({type:'drop',id:result.piece,piece_id:result.piece,target_id:result.target});
+      return;
     }
     if(selectedRef.current!==result.selected)return;
     if(result.selected!==result.source)select(result.source);
@@ -563,7 +568,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     .map(({piece})=><PieceGraphic key={piece.id} piece={piece} spec={spec} animate={false}
       serial={display.serial} enabled={false} selected dragged/>);
   const boardInput=useBoardInput({
-    spec,scene:display.scene,order:painting.order,revision:revision.current,active,selected,
+    spec,scene:display.scene,order:painting.order,revision:revision.current,presentedRevision:renderedRevision.current,active,selected,
     selectionRequired:showDestinationsAfterSelection,width,height,view,bounds,camera,fill,
     onResult:finishBoardInput,onCamera:setSafeCamera,renderHeld,renderPreview,
     renderDestination:(target,accessible)=><TargetGraphic target={target} spec={spec} enabled selected={preview===target.id} onPress={accessible?pressTarget:undefined}/>,
@@ -640,10 +645,12 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const canvasWebStyle=Platform.OS==='web'&&(framed||camera.zoom>1)?{...styles.canvas,touchAction:'none'}:undefined;
   const svgFrame={width:'100%' as const,height:'100%' as const,preserveAspectRatio:fill?'none':undefined,
     viewBox:`${view.x} ${view.y} ${view.width} ${view.height}`};
-  // Android SVG invalidates its entire bitmap when a target changes.
-  // Keep the board and stationary pieces cached while the foreground updates.
+  const boards=useMemo(()=>(visibleBoards??spec.boards).map(board=><BoardGraphic key={board.id} board={board} spec={spec}/>),[visibleBoards,spec]);
+  // UIKit redraws a whole SVG surface when a checker or target changes.
+  // The wood, grid and decorative paths can keep their own backing layer.
+  // Android also isolates the stationary pieces from the foreground.
   const lowerArt=[
-    ...(visibleBoards??spec.boards).map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
+    ...(Platform.OS==='ios'?[]:boards),
     ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
     ...pieceLayers.lower,
   ];
@@ -660,7 +667,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const boardCanvas=<View ref={canvas} collapsable={false} focusable style={[styles.canvas,framed?{flex:1,minHeight:0}:{height},canvasWebStyle]} {...webProps} {...(!boardInput.wrapCanvas&&responders.panHandlers)}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);setCanvasHeight(event.nativeEvent.layout.height);measureOrigin();}}
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
-      {(Platform.OS!=='ios'||ready)&&<Svg {...svgFrame} style={{direction:'ltr'}}>
+      {Platform.OS==='ios'&&ready&&<Svg {...svgFrame} pointerEvents="none" style={{direction:'ltr'}}>{boards}</Svg>}
+      {(Platform.OS!=='ios'||ready)&&<Svg {...svgFrame} style={[Platform.OS==='ios'&&StyleSheet.absoluteFill,{direction:'ltr'}]}>
         {templates.definitions.length>0&&<Defs>{templates.definitions}</Defs>}
         {Platform.OS==='android'?lowerArt:[...lowerArt,...upperArt]}
       </Svg>}

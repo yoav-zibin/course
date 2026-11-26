@@ -25,7 +25,11 @@ function isTransferredAncestor(remote:Match, snapshot:Match):boolean {
 export async function syncSinglePlayerMatches(api: PortalApi, repository: AccountRepository, account: Account,
   options: {guard(): void; matchId?: string}): Promise<void> {
   const initial = await repository.read(account.id); options.guard();
-  const ids = options.matchId ? [options.matchId] : Object.keys(initial.local);
+  // Checking a clean match must not parse the entire account file again.
+  // Each queued mutation requests another sync and dirty saves are rechecked
+  // under the storage lock before an upload starts.
+  const ids = options.matchId ? [options.matchId] :
+    Object.keys(initial.local).filter(id=>needsCloudSave(initial.local[id]));
   for (const id of ids) {
     while (true) {
       options.guard();

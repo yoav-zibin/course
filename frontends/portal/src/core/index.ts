@@ -972,7 +972,9 @@ export class PortalStore {
     await this.repository.lock(owner, async () => {
       const data = await this.repository.read(owner); const original = data.local[selected.id];
       if (!original || original.move_count !== selected.move_count || original.status !== 'ongoing' || this.awaitingLocalHandoff(original, data)) throw new Error('Local match changed. Refresh before moving.');
-      const next: LocalMatch = JSON.parse(JSON.stringify(original)); const packagePath=`/games/${next.game_id}/versions/${next.game_version}`;
+      // The isolated rules return fresh state and practiceResult appends to a
+      // new moves array. Existing history can be shared for this transaction.
+      const next: LocalMatch = {...original}; const packagePath=`/games/${next.game_id}/versions/${next.game_version}`;
       const game = data.responses[packagePath] || (next.game_id===bundled.id && next.game_version===bundled.version ? bundled : undefined); if (!game?.server_code) throw new Error('Download this game once before playing offline');
       if(!data.responses[packagePath])data.responses[packagePath]=game;
       const actor = next.localMode === 'pass' ? next.turn_of_player_indices?.find(i => next.players[i].kind === 'human') : localHumanSeat(next);

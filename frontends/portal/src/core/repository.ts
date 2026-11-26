@@ -74,7 +74,7 @@ export class AccountRepository {
   lock<T>(id: string, run: () => Promise<T>): Promise<T> { return this.adapter.exclusive(this.key(id), run); }
   async read(id: string): Promise<AccountData> {
     const text = await this.adapter.getItem(this.key(id));
-    if (text) { const parsed = JSON.parse(text); if (parsed?.version !== 1 || !parsed.responses || !parsed.queues || !parsed.local) throw new Error('Saved portal data needs recovery; the original data was kept.'); if (utf8Size(text) > PRUNE_ON_LOAD_BYTES) this.trim(parsed, id); return parsed; }
+    if (text) { const parsed = JSON.parse(text); if (parsed?.version !== 1 || !parsed.responses || !parsed.queues || !parsed.local) throw new Error('Saved portal data needs recovery; the original data was kept.'); if (text.length * 3 > PRUNE_ON_LOAD_BYTES && utf8Size(text) > PRUNE_ON_LOAD_BYTES) this.trim(parsed, id); return parsed; }
     if (this.adapter.supportsBrowserImports === false) return emptyAccountData();
     // Previous browser saves belong to their serving origin.
     const legacyOrigin=await this.adapter.getItem(LEGACY_ORIGIN_KEY);
@@ -99,7 +99,14 @@ export class AccountRepository {
   }
   async write(id: string, data: AccountData, options: {optionalCache?: boolean} = {}): Promise<void> {
     // One atomic replacement commits queue+snapshot together on every platform.
-    this.trim(data,id);
+    let serialized = JSON.stringify(data);
+    // Each quota group is a subset of this record. Small saves need neither
+    // a second serialization nor a scan of every match and downloaded asset.
+    const smallestBudget = Math.min(RECOVERABLE_BUDGET, MATCH_BUDGET, ARCHIVE_BUDGET, LOCAL_BUDGET);
+    if (serialized.length * 3 > smallestBudget && utf8Size(serialized) > smallestBudget) {
+      this.trim(data,id);
+      serialized = JSON.stringify(data);
+    }
     type Candidate = {key: string; at: number; priority?: number; bytes?: number; evict: () => Promise<void>};
     let candidates: Candidate[] | null = null;
     // Quota recovery sheds in a fixed order: replaceable downloads and legacy
@@ -135,7 +142,7 @@ export class AccountRepository {
       return Object.keys(data.responses).filter(path => !keepActive(path)).map(responseCandidate).sort(byPriority);
     };
     for (let attempt=0;;attempt++) {
-      try {await this.adapter.setItem(this.key(id), JSON.stringify(data));return;}
+      try {await this.adapter.setItem(this.key(id), attempt === 0 ? serialized : JSON.stringify(data));return;}
       catch (error) {
         if (!isQuotaError(error)) throw error;
         if (attempt > 200) throw error;

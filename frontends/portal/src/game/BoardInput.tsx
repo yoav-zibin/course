@@ -12,6 +12,7 @@ export type BoardInputProps = {
   scene:Scene;
   order:ReadonlyMap<string,number>;
   revision:number;
+  presentedRevision:number;
   active:boolean;
   selected:string|null;
   selectionRequired:boolean;
@@ -21,7 +22,7 @@ export type BoardInputProps = {
   view:BoardRect;
   bounds:BoardRect;
   camera:BoardCamera;
-  onResult:(result:BoardInputResult)=>void;
+  onResult:(result:BoardInputResult)=>void|Promise<boolean|void>;
   onCamera:(camera:BoardCamera)=>void;
   renderHeld:(id:string)=>ReactNode;
   renderPreview:(target:Target)=>ReactNode;

@@ -10,7 +10,7 @@ const directory=process.argv[2], packages=process.argv[3];
 const key='buildplay.shared.v1.visitor',filename=createHash('sha256').update(key).digest('hex')+'.json';
 const date='2026-01-01T00:00:00.000Z';
 type Point={x:number;y:number};
-type Action={id:string; label?:string; at?:Point; to?:Point; lift?:number; until?:string; absent?:string};
+type Action={id:string; label?:string; at?:Point; to?:Point; lift?:number; until?:string; absent?:string; spentDie?:Point};
 async function published(slug:string,id:string,version:number) {
   let raw;
   if(packages)raw=JSON.parse(readFileSync(path.join(packages,slug+'-public.json'),'utf8'));
@@ -24,9 +24,9 @@ async function published(slug:string,id:string,version:number) {
   return Object.fromEntries(['id','version','name','description','server_code','declarative_ui','game_schemas','renderer_type',
     'allowed_player_counts','all_state_public','supports_local_practice','ui_instructions','game_logic_rules'].map(k=>[k,raw[k]]));
 }
-function makeCase(slug:string,game:any,mode:string,level:number,setup=false){
+function makeCase(slug:string,game:any,mode:string,level:number,setup=false,midgame=false){
   const bg=slug==='backgammon',computer=mode==='computer';
-  const id=[slug,mode,...(bg&&computer?[['easy','medium','hard','expert'][level]]:[]),...(setup?['setup']:[])].join('-');
+  const id=[slug,mode,...(bg&&computer?[['easy','medium','hard','expert'][level]]:[]),...(setup?['setup']:[]),...(midgame?['midgame']:[])].join('-');
   const dir=path.join(directory,id);mkdirSync(dir,{recursive:true});
   const players=[0,1].map(i=>({id:'local-player-'+i,player_index:i,active:true,kind:computer&&i===1?'computer':'human',
     name:computer&&i===1?'Computer':'Player '+(i+1),user_id:i===0?'visitor':null}));
@@ -49,6 +49,15 @@ function makeCase(slug:string,game:any,mode:string,level:number,setup=false){
   if(bg&&computer&&!setup){
     const first=view().legalMoves[0];move({action:'move',from:first.from,to:first.to});
   }
+  if(midgame){
+    // Run real turns up to a midgame position with two playable checkers.
+    for(let i=0;i<60;i++){
+      const v=view(),first=v.legalMoves?.find((m:any)=>typeof m.from==='number');
+      if(ctx.move_count>=22 && first && v.moves?.length>=2)break;
+      if(first)move({action:'move',from:first.from,to:first.to});
+      else move(rules.computerMove(result.state,result.turn[0],ctx));
+    }
+  }
   if(computer&&players[seat()].kind!=='human')throw Error('Fixture requires an active human seat '+id);
   const state=view(),spec=game.declarative_ui;
   const message={type:'state_changed',state,view:state,status:'ongoing',move_count:ctx.move_count,last_move_player_index:previous,
@@ -59,17 +68,41 @@ function makeCase(slug:string,game:any,mode:string,level:number,setup=false){
   const at=(v:any):Point=>{if(!v)throw Error('Missing control in '+id);const {x,y}=position(spec,v);return{x,y};};
   const piece=(name:string)=>scene.pieces?.find((p:any)=>p.id===name);
   const actions:Action[]=[];
-  let expected:any=null;
+  let expected:any=null,expectedMoves:any[]|undefined;
   if(setup){
     for(const name of ['swap_colors','goal_3','cube_off','cube_on','difficulty_0','difficulty_1','difficulty_2','difficulty_3','start_game'])
       actions.push({id:name,at:at(piece(name))});
   }else{
-    if(mode==='pass'){
+    if(mode==='pass'&&!midgame){
       actions.push({id:'open-menu',label:'match-menu-button',until:'Close dialog'},{id:'close-menu',label:'Close dialog',absent:'Close dialog'},
         {id:'open-report',label:'bug-report-button',until:'Bug or feature request'},{id:'dismiss-report',label:'Close dialog',absent:'Bug or feature request'},
         {id:'history-previous',label:'Previous move'},{id:'history-live',label:'Go to end'});
     }
-    if(bg){
+    if(midgame){
+      expectedMoves=[];
+      let simulated=structuredClone(result);
+      for(let step=0;step<2;step++){
+        const player=simulated.turn[0],v=rules.viewFor(simulated.state,player,ctx);
+        const board=(v:any)=>ui.reduce({...message,state:v,view:v,move_count:ctx.move_count+step},{}).scene;
+        const before=board(v);
+        const options=v.legalMoves.flatMap((m:any)=>{
+          const p=before.pieces.find((p:any)=>p.aria_label==='Player '+(seat()+1)+': Point '+(m.from+1)&&p.move_targets?.includes('to_'+m.to));
+          const t=before.targets?.find((t:any)=>t.id==='to_'+m.to);
+          return p&&t?[{p,t,m,d:Math.hypot(at(p).x-at(t).x,at(p).y-at(t).y)}]:[];
+        }).sort((a:any,b:any)=>b.d-a.d);
+        if(!options.length)throw Error('No midgame checker for '+step);
+        const {p,t,m}=options[0],action={action:'move',from:m.from,to:m.to};
+        simulated=rules.applyMove(simulated.state,player,action,{...ctx,move_count:ctx.move_count+step});
+        if(step===0&&simulated.turn[0]!==player)throw Error('Expected another legal move in the same turn');
+        const after=board(rules.viewFor(simulated.state,player,{...ctx,move_count:ctx.move_count+step+1}));
+        const die=before.pieces.find((p:any)=>p.id.startsWith('die_')&&
+          after.pieces.some((next:any)=>next.id===p.id&&next.asset!==p.asset));
+        if(!die)throw Error('No visible spent die for '+step);
+        actions.push({id:'drag-checker-'+(step+1),at:at(p),to:at(t),lift:spec.piece_types[p.type].height,spentDie:at(die)});
+        expectedMoves.push(action);
+      }
+      expected=expectedMoves[0];
+    }else if(bg){
       const choices=state.legalMoves.flatMap((m:any)=>{
         const p=scene.pieces.find((p:any)=>p.aria_label==='Player '+(seat()+1)+': Point '+(m.from+1)&&p.move_targets?.includes('to_'+m.to));
         const t=scene.targets?.find((t:any)=>t.id==='to_'+m.to);
@@ -93,14 +126,15 @@ function makeCase(slug:string,game:any,mode:string,level:number,setup=false){
     awaitingHandoff:false,token_pot:0,bet_per_player:0};
   const data={version:1,responses:{['/games/'+game.id+'/versions/'+game.version]:game},queues:{},conflicts:{},local:{[match.id]:match},archives:[],archivedMatches:[],selectedId:match.id};
   writeFileSync(path.join(dir,filename),JSON.stringify({key,value:JSON.stringify(data)}));
-  const scenario={id,game:slug,version:game.version,mode,level,setup,filename,match:match.id,moveCount:ctx.move_count,bounds,actions,expected};
+  const scenario={id,game:slug,version:game.version,mode,level,setup,filename,match:match.id,moveCount:ctx.move_count,bounds,actions,expected,expectedMoves};
   writeFileSync(path.join(dir,'scenario.json'),JSON.stringify(scenario,null,2));return scenario;
 }
 async function main(){
   const bg=await published('backgammon','5f5293c3-2a3a-4eec-b631-9debf59be0ca',11);
   const four=await published('connect4','e299b14e-480d-44f3-8132-74282a46cebc',6);
   const cases=[makeCase('connect4',four,'pass',0),makeCase('connect4',four,'computer',0),makeCase('backgammon',bg,'pass',1),
-    ...[0,1,2,3].map(i=>makeCase('backgammon',bg,'computer',i)),makeCase('backgammon',bg,'computer',1,true)];
+    ...[0,1,2,3].map(i=>makeCase('backgammon',bg,'computer',i)),makeCase('backgammon',bg,'computer',1,true),
+    makeCase('backgammon',bg,'pass',1,false,true)];
   writeFileSync(path.join(directory,'scenarios.json'),JSON.stringify(cases,null,2));
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

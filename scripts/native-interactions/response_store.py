@@ -25,7 +25,11 @@ def verify(scenarios,data):
         state=match.get('logicState',{})
         wanted=case['expected'] if not case['setup'] else {'action':'configure','difficulty':3,'goal':3,'cube_enabled':True}
         correct=all(first.get(k)==v for k,v in wanted.items())
+        expected=case.get('expectedMoves')
+        if expected:
+            correct=correct and [m.get('move') for m in moves[:len(expected)]]==expected
         replies=[m['move_number'] for m in moves if match['players'][m['player_index']]['kind']=='computer']
         result[case['id']]={'expected':wanted,'humanMove':first,'computerMoves':replies,'moveCount':match.get('move_count'),
             'verified':correct and (case['mode']!='computer' or case['setup'] or bool(replies))}
+        if expected:result[case['id']]['savedMoves']=[m.get('move') for m in moves[:len(expected)]]
     return result

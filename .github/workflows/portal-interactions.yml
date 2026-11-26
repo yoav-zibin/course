@@ -17,7 +17,7 @@ on:
       scenario:
         description: Interactions to measure
         type: choice
-        options: [board, landscape, startup, startup-video, startup-link, startup-profile, responses, responses-profile, startup-flows, startup-flows-profile]
+        options: [board, landscape, startup, startup-video, startup-link, startup-profile, responses, responses-profile, responses-checkers, responses-checkers-profile, startup-flows, startup-flows-profile]
         default: board
       video_pairs:
         description: Paired trials for recorded launches
@@ -145,6 +145,7 @@ jobs:
             if [[ "$SCENARIO" == responses* || "$SCENARIO" == startup-flows* ]]; then
               measure=(python3 scripts/native-interactions/ios_responses.py "$app" "$base/response-fixtures" "$base/results/$name" "$SIMULATOR_ID")
               if [[ "$SCENARIO" == *-profile ]]; then measure+=(--profile); fi
+              if [[ "$SCENARIO" == responses-checkers* ]]; then measure+=(--checker-pair); fi
               if [[ "$SCENARIO" == startup-flows* ]]; then measure+=(--fresh "$base/fixture"); fi
               "${measure[@]}"
               continue

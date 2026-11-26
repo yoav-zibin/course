@@ -3,7 +3,7 @@ import XCTest
 final class ResponseTests: XCTestCase {
     private struct Point: Decodable { let x, y: CGFloat }
     private struct Bounds: Decodable { let x, y, width, height: CGFloat }
-    private struct Action: Decodable { let id: String; let label, until, absent: String?; let at, to: Point?; let lift: CGFloat? }
+    private struct Action: Decodable { let id: String; let label, until, absent: String?; let at, to, spentDie: Point?; let lift: CGFloat? }
     private struct Scenario: Decodable { let id, match: String; let bounds: Bounds; let actions: [Action] }
     private struct Cases: Decodable { let library: String; let profile: Bool; let scenarios: [Scenario] }
     private let app = XCUIApplication(bundleIdentifier: "edu.columbia.gameportal.starter")
@@ -41,12 +41,17 @@ final class ResponseTests: XCTestCase {
                 target=control.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:0.5))
             }
             let end=action.to.map{coordinate($0,lift:action.lift ?? 0)}
+            if let die=action.spentDie {
+                let p=coordinate(die).screenPoint
+                print("RESPONSE_DIE \(name) \(action.id) \(p.x) \(p.y)")
+            }
             Thread.sleep(forTimeInterval:0.45)
             print("RESPONSE_ACTION \(name) \(action.id) begin \(Date().timeIntervalSince1970*1000)")
             if let end=end { target.press(forDuration:0.035,thenDragTo:end,withVelocity:230,thenHoldForDuration:0) } else { target.tap() }
             if let until=action.until { XCTAssertTrue(element(until).waitForExistence(timeout:12),until) }
             if action.id=="open-report" {XCTAssertTrue(element("Screenshot captured before opening this report").waitForExistence(timeout:10))}
             if let absent=action.absent { XCTAssertTrue(element(absent).waitForNonExistence(timeout:12),absent) }
+            if action.spentDie != nil {Thread.sleep(forTimeInterval:1.0)}
             print("RESPONSE_ACTION \(name) \(action.id) end \(Date().timeIntervalSince1970*1000)")
         }
         Thread.sleep(forTimeInterval:1.3)
@@ -59,4 +64,5 @@ final class ResponseTests: XCTestCase {
     func testHard() throws { try runCase("backgammon-computer-hard") }
     func testExpert() throws { try runCase("backgammon-computer-expert") }
     func testOptions() throws { try runCase("backgammon-computer-medium-setup") }
+    func testMidgamePair() throws { try runCase("backgammon-pass-midgame") }
 }

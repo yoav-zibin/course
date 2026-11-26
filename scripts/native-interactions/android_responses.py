@@ -4,7 +4,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 import numpy as np
 from android import Device,BOARD,center
-from response_frames import destination,response
+from response_frames import destination,response,spent_die_latency
 from response_store import verify
 
 def control(d,label):
@@ -22,7 +22,9 @@ def control(d,label):
                 continue
         for n in tree.iter('node'):
             if label in (n.get('content-desc'),n.get('text'),(n.get('resource-id') or '').split('/')[-1]):
-                return tuple(map(int,re.findall(r'-?\d+',n.get('bounds'))))
+                bounds=tuple(map(int,re.findall(r'-?\d+',n.get('bounds'))))
+                if len(bounds)==4 and bounds[0]<bounds[2] and bounds[1]<bounds[3]:
+                    return bounds
         time.sleep(.3)
     raise RuntimeError('Missing '+label)
 
@@ -47,13 +49,19 @@ def run(args):
             d.adb('push',args.fixtures/case['id']/case['filename'],path)
             d.adb('shell','chown',uid,directory,path);d.adb('shell','restorecon','-R',directory)
             d.adb('shell','am','start','-W','-n',pkg+'/.MainActivity','--ez','buildplayLocalUiTest','true')
-            frame=control(d,BOARD)
+            control(d,BOARD)
             time.sleep(1.3)
-            left,top,right,bottom=frame;b=case['bounds'];sc=min((right-left)/b['width'],(bottom-top)/b['height'])
+            b=case['bounds']
             def project(p):return (round((left+right)/2+(p['x']-b['x']-b['width']/2)*sc),
                                     round((bottom+top)/2+(p['y']-b['y']-b['height']/2)*sc))
             for action in case['actions']:
-                p=project(action['at']) if 'at' in action else center(control(d,action['label']))
+                if 'at' in action:
+                    # The history strip and game status can change the stage's layout.
+                    left,top,right,bottom=control(d,BOARD)
+                    sc=min((right-left)/b['width'],(bottom-top)/b['height'])
+                    p=project(action['at'])
+                else:
+                    p=center(control(d,action['label']))
                 if 'to' in action:
                     x,y=project(action['to']);y+=round(min(54*density,action['lift']*sc*.6+22*density,(bottom-top)/3))
                     command=f'swipe {p[0]} {p[1]} {x} {y} 530'
@@ -75,6 +83,8 @@ def run(args):
                     times,frames,bracket=d.record(folder,action['id'],command)
                     small=[f[::2,::2] for f in frames]
                     row=response(times,small,0,p,dims)
+                    if 'spentDie' in action:
+                        row['release_to_spent_die_ms']=spent_die_latency(times,small,0,bracket,project(action['spentDie']),dims)
                     if action['id'] in ('open-menu','close-menu','open-report','dismiss-report'):
                         row['dialog_landmark_ms']=destination(times,small,0)
                     rows.append({'action':action['id'],'point':p,'injection_ms':round(bracket,1),**row})

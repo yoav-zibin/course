@@ -126,7 +126,7 @@ function pinchCamera(gesture:Gesture,bounds:BoardRect,a:Point,b:Point):BoardCame
 }
 
 export function useBoardInput(props:BoardInputProps):BoardInput {
-  const {spec,scene,order,revision,active,selected,selectionRequired,width,height,view,bounds,camera,fill}=props;
+  const {spec,scene,order,revision,presentedRevision,active,selected,selectionRequired,width,height,view,bounds,camera,fill}=props;
   const latest=useRef(props);
   latest.current=props;
   const play=useMemo(()=>({geometry:boardInputGeometry(spec,scene,order,android),selectionRequired}),
@@ -163,21 +163,36 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
   const feedback=useSharedValue<Feedback|null>(null);
   const glow=useSharedValue(0);
   const origin=useSharedValue<Origin|null>(null);
+  const pendingDrop=useSharedValue<number|null>(null);
+  const dropTiming=useRef<{ended:number;received:number;revision:number;token:number}|null>(null);
   const [lifted,setLifted]=useState<{id:string;token:number;epoch:number}|null>(null);
   const epoch=useRef(0);
 
   const surface=useMemo(()=>({width,height,view,bounds,camera,fill}),
     [width,height,view.x,view.y,view.width,view.height,bounds,camera,fill]);
-  const lastSurface=useRef<{surface:typeof surface;play:typeof play;revision:number}|null>(null);
+  const lastSurface=useRef<{surface:typeof surface;play:typeof play;revision:number;presentedRevision:number}|null>(null);
   useLayoutEffect(()=>{
     const nextEpoch=++epoch.current,previous=lastSurface.current;
     const reset=previous?.surface!==surface||previous.play!==play||previous.revision!==revision;
-    lastSurface.current={surface,play,revision};
+    const boardReplaced=previous?.presentedRevision!==presentedRevision ||
+      previous.surface.width!==width || previous.surface.height!==height;
+    lastSurface.current={surface,play,revision,presentedRevision};
+    const timing=dropTiming.current;
+    if(timing && presentedRevision!==timing.revision){
+      recordDiagnosticEvent('game_drop_board_updated',{js_release_delay_ms:timing.received-timing.ended,
+        release_to_board_commit_ms:Date.now()-timing.ended,playable:active});
+      dropTiming.current=null;
+    }
     scheduleOnUI(()=>{
       'worklet';
       frame.value=surface;
       snapshot.value={epoch:nextEpoch,play,active,selected,spriteIds,directSources};
       pressedTargets.value=[];
+      if(pendingDrop.value!==null){
+        if(!boardReplaced)return;
+        pendingDrop.value=null;
+        origin.value=null;
+      }
       // Preserve a completed tap's brief flash during JavaScript validation.
       if(reset||gesture.value){
         drag.value=null;
@@ -186,7 +201,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
         glow.value=0;
       }
     });
-  },[surface,play,revision,active,selected,spriteIds,directSources,pressedTargets,frame,snapshot,gesture,drag,origin,feedback,glow]);
+  },[surface,play,revision,presentedRevision,width,height,active,selected,spriteIds,directSources,pressedTargets,frame,snapshot,gesture,drag,origin,feedback,glow,pendingDrop]);
 
   const mounted=useRef(true);
   useLayoutEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
@@ -203,8 +218,20 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       input_events:trace.inputs,duration_ms:ended-trace.start,max_ui_update_gap_ms:trace.maxGap,
       ui_gaps_over_34ms:trace.slowGaps,js_release_delay_ms:Math.max(0,Date.now()-ended),
     });
-    if(epoch.current===atEpoch&&result)latest.current.onResult(result);
-  },[]);
+    if(result?.kind==='drop'&&result.target){
+      const received=Date.now();
+      dropTiming.current={ended,received,revision:latest.current.presentedRevision,token};
+      const submitted=epoch.current===atEpoch?latest.current.onResult(result):undefined;
+      const restore=()=>{
+        if(dropTiming.current?.token===token)dropTiming.current=null;
+        scheduleOnUI(()=>{
+          'worklet';
+          if(pendingDrop.value===token){pendingDrop.value=null;origin.value=null;}
+        });
+      };
+      void Promise.resolve(submitted).then(accepted=>{if(!accepted)restore();},restore);
+    }else if(epoch.current===atEpoch&&result)latest.current.onResult(result);
+  },[pendingDrop,origin]);
   const updateCamera=useCallback((next:BoardCamera,atWidth:number,atHeight:number)=>{
     if(mounted.current&&latest.current.width===atWidth&&latest.current.height===atHeight)
       latest.current.onCamera(next);
@@ -229,6 +256,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
     runOnJS:false,shouldCancelWhenOutside:false,cancelsTouchesInView:true,cancelsJSResponder:true,
     onTouchesDown:event=>{
       'worklet';
+      if(pendingDrop.value!==null)return;
       const area=frame.value,current=gesture.value,model=snapshot.value;
       pressedTargets.value=[];
       const canvas=current?.canvas??projectCanvas(area.width,area.height,area.view,area.fill);
@@ -320,13 +348,15 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
         return;
       }
       let result:BoardInputResult|undefined;
+      let landed:Origin|null=null;
       if(!held.pinch&&at&&held.epoch===model.epoch&&model.active){
         const {canvas,hit,source}=held;
         const moved=held.moved||Math.hypot(at.x-held.first.x,at.y-held.first.y)>7;
         if(moved&&hit.piece?.targets.length){
-          const target=at.x>=0&&at.x<=canvas.width&&at.y>=0&&at.y<=canvas.height?
-            projectPiece(canvas,at,held.grab,hit.piece,held.touch).target:undefined;
-          result={kind:'drop',piece:hit.piece.id,target:target?.id};
+          const projected=at.x>=0&&at.x<=canvas.width&&at.y>=0&&at.y<=canvas.height?
+            projectPiece(canvas,at,held.grab,hit.piece,held.touch):undefined;
+          result={kind:'drop',piece:hit.piece.id,target:projected?.target?.id};
+          if(projected?.target)landed={id:hit.piece.id,token:held.token,x:projected.x,y:projected.y,hidden:false};
         }else if(!moved){
           const last=boardHit(model.play.geometry,scenePoint(canvas,at),source,model.play.selectionRequired);
           result={kind:'tap',choice:tapChoice(hit,last,source),source,selected:held.selected,touch:held.touch};
@@ -334,7 +364,10 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       }
       gesture.value=null;
       drag.value=null;
-      origin.value=null;
+      // Keep a legal drop at the point the finger just released while the
+      // isolated reducer and durable save run. Rejection restores the source.
+      pendingDrop.value=landed?.token??null;
+      origin.value=landed;
       if(result?.kind!=='tap'||result.choice?.kind!=='piece')pressedTargets.value=[];
       else if(android&&model.play.selectionRequired&&model.directSources.includes(result.choice.id))
         pressedTargets.value=model.play.geometry.pieces[result.choice.id].targets.map(dest=>dest.id);

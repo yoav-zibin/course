@@ -107,7 +107,7 @@ export function useMatchHistory(p:ReturnType<typeof usePortal>){
   const scope=JSON.stringify([p.baseUrl,p.account?.id,match?.id,p.locale]);
   const snapshot=useRef<HistorySnapshot>(null!);
   snapshot.current={scope,total:match?.move_count??0,replayIndex:p.replayIndex,
-    ready:Boolean(p.ready&&match&&match.status!=='waiting_for_players'&&!match.awaitingHandoff&&p.game?.declarative_ui&&p.actions.presentationMessage()),
+    ready:Boolean(p.ready&&match&&match.status!=='waiting_for_players'&&!match.awaitingHandoff&&p.game?.declarative_ui),
     replay:p.actions.replay};
   const controller=useRef<ReturnType<typeof createMatchHistoryController>>(null!);
   if(!controller.current)controller.current=createMatchHistoryController({snapshot:()=>snapshot.current,onChange:()=>render(value=>value+1),onError:reason=>reportClientIssue('game_error',reason)});

@@ -2,6 +2,25 @@
 import numpy as np
 
 
+def spent_die_latency(times,images,down,up,point,screen):
+    """Release until a changed die keeps the appearance of the accepted board."""
+    before=max((i for i,t in enumerate(times) if t<down),default=None)
+    if before is None or len(images)<2:return None
+    h,w=images[-1].shape[:2]
+    x,y=np.rint(np.array(point)/screen*[w,h]).astype(int)
+    radius=max(4,round(w*.016))
+    patch=np.s_[max(0,y-radius):y+radius+1,max(0,x-radius):x+radius+1]
+    pre=images[before][patch].astype(np.int16);final=images[-1][patch].astype(np.int16)
+    changed=np.max(abs(pre-final),axis=2)>35
+    if changed.sum()<max(6,changed.size*.06):return None
+    index=len(images)-1
+    while index and times[index-1]>=up:
+        previous=images[index-1][patch].astype(np.int16)
+        if np.mean(np.max(abs(previous[changed]-final[changed]),axis=1)<38)<.78:break
+        index-=1
+    return round(max(0,times[index]-up),1)
+
+
 def response(times,images,start,point,screen):
     # Normalize recordings from different devices to the same evidence threshold.
     i=max((i for i,t in enumerate(times) if t<start),default=None)

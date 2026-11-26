@@ -1,8 +1,18 @@
 /** Public translation responses are replaceable; preferences and saves are not. */
 export const I18N_RECENCY_KEY = 'game-platform.i18n-recency.v1';
 export function utf8Size(value: string): number {
-  let size = 0;
-  for (const point of value) { const code = point.codePointAt(0)!; size += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4; }
+  let size = value.length;
+  // Most of a saved game's JSON is ASCII, including the embedded artwork.
+  // Let the native regexp implementation skip those runs in a single scan.
+  const nonAscii = /[^\x00-\x7f]+/g;
+  let run: RegExpExecArray | null;
+  while ((run = nonAscii.exec(value))) {
+    for (let i = run.index; i < nonAscii.lastIndex; i++) {
+      const code = value.codePointAt(i)!;
+      size += code <= 0x7ff ? 1 : 2;
+      if (code > 0xffff) i++;
+    }
+  }
   return size;
 }
 interface CacheStorage {

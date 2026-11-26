@@ -5,7 +5,7 @@ from pathlib import Path
 from response_store import seed,verify
 from startup_ios_video import sim
 
-def run(app,fixtures,output,device,profile,fresh=False):
+def run(app,fixtures,output,device,profile,fresh=False,checker_pair=False):
     scripts=Path(__file__).resolve().parent
     output.mkdir(parents=True,exist_ok=True)
     project=output/'project'
@@ -18,6 +18,7 @@ def run(app,fixtures,output,device,profile,fresh=False):
         '-fobjc-arc','-framework','UIKit','-framework','QuartzCore','-framework','CoreGraphics','-framework','Foundation',scripts/'ResponseClock.m',scripts/'ResponseSamples.m','-o',library],check=True)
     subprocess.run(['codesign','-s','-','--force',library],check=True)
     scenarios,key,data=seed(fixtures)
+    if checker_pair:scenarios=[c for c in scenarios if c['id']=='backgammon-pass-midgame']
     (project/'InteractionTests/response-cases.json').write_text(json.dumps({'library':str(library.resolve()),'scenarios':scenarios,'profile':profile}))
     subprocess.run(['xcodegen','generate'],cwd=project,check=True)
     sim('bootstatus',device,'-b')
@@ -35,7 +36,7 @@ def run(app,fixtures,output,device,profile,fresh=False):
         subprocess.run([*build,'build-for-testing'],stdout=log,stderr=subprocess.STDOUT,check=True)
     stacks=container/'Library/Caches/response-stacks.jsonl'
     stacks.unlink(missing_ok=True)
-    suite='FreshGameResponseTests' if fresh else 'ResponseTests'
+    suite='FreshGameResponseTests' if fresh else ('ResponseTests/testMidgamePair' if checker_pair else 'ResponseTests')
     with (output/'recorder.log').open('w') as log:
         movie=output/'responses.mov'
         rec=subprocess.Popen(['xcrun','simctl','io',device,'recordVideo','--codec=h264',movie],stdout=log,stderr=log)
@@ -67,6 +68,7 @@ if __name__=='__main__':
     p=argparse.ArgumentParser()
     for k in ['app','fixtures','output']:p.add_argument(k,type=Path)
     p.add_argument('device');p.add_argument('--profile',action='store_true')
+    p.add_argument('--checker-pair',action='store_true')
     p.add_argument('--fresh',type=Path,help='Cold-start fixture directory for signed-in game creation')
     a=p.parse_args();server=None
     try:
@@ -79,6 +81,6 @@ if __name__=='__main__':
             _,_,catalog=seed(a.fixtures)
             for g in catalog['responses'].values():
                 with urlopen(Request('http://localhost:18764/__seed',data=json.dumps({'game':g}).encode(),method='POST'),timeout=5):pass
-        run(a.app,a.fixtures,a.output,a.device,a.profile,bool(a.fresh))
+        run(a.app,a.fixtures,a.output,a.device,a.profile,bool(a.fresh),a.checker_pair)
     finally:
         if server:server.terminate();server.wait(timeout=10)
