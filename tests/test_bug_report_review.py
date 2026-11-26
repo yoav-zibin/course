@@ -894,6 +894,27 @@ def test_status_gate_requires_authorization_both_guards_and_fresh_report(state_d
                       expected_status="open", expected_updated_at=report["updated_at"])
 
 
+def test_non_actionable_closure_does_not_require_fix_authorization_or_claim_rollout(state_dir, pending):
+    report = {**foreign_report(reporter=None), "score": 0, "score_rationale": "Test submission."}
+    pending.get.return_value = report
+    pending.request.return_value = {"id": report["id"], "status": "handled"}
+    notes = private_note(state_dir, "notes", "The test submission reached the queue.")
+    changes = private_note(state_dir, "changes", "No code or game logic changes.")
+    opts = dict(status="handled", notes_file=notes, changes_summary_file=changes,
+                expected_status="open", expected_updated_at=report["updated_at"], non_actionable=True)
+    assert review.set_status(state_dir, report["id"], **opts)["status"] == "handled"
+    body = pending.request.call_args.kwargs["body"]
+    assert body == {"status": "handled", "resolution": notes.read_text(),
+                    "changes_summary": changes.read_text(), "expected_status": "open",
+                    "expected_updated_at": report["updated_at"]}
+    pending.request.reset_mock()
+    for field, value in (("score", 1), ("score", None), ("release_commit", "a" * 40), ("status", "handling")):
+        pending.get.return_value = {**report, field: value}
+        with pytest.raises(ValueError, match="No-change closure"):
+            review.set_status(state_dir, report["id"], **{**opts, "expected_status": pending.get.return_value["status"]})
+    pending.request.assert_not_called()
+
+
 def test_concurrent_recovery_cannot_reserve_two_authorization_questions(state_dir, pending):
     pending.get.side_effect = lambda identifier: foreign_report(identifier)
     summary = private_note(state_dir, "summary", "Repair a reported game control.")

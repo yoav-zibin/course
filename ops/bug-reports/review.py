@@ -817,7 +817,8 @@ def assess_report(state_dir, identifier, *, score, rationale_file, analysis_comp
 
 
 def set_status(state_dir, identifier, *, status, notes_file, commit=None, changes_summary_file=None,
-               expected_status=None, expected_updated_at=None, rollout_verified=False):
+               expected_status=None, expected_updated_at=None, rollout_verified=False,
+               non_actionable=False):
     report_id(identifier)
     notes = notes_file.read_text().strip()
     if not notes:
@@ -830,7 +831,13 @@ def set_status(state_dir, identifier, *, status, notes_file, commit=None, change
     if current["status"] != expected_status or current.get("updated_at") != expected_updated_at:
         raise RuntimeError("The report changed; fetch it before updating its status")
     policy = with_review_policy(config, current, authorizations(state_dir, config))["_review_policy"]
-    if status in ("open", "handling", "handled") and policy["authorization_required"]:
+    if non_actionable:
+        if (status != "handled" or current["status"] != "open" or type(current.get("score")) is not int
+                or current["score"] != 0 or commit is not None or rollout_verified
+                or current.get("commit") or current.get("release_commit")
+                or policy["authorization_pending"] or policy["authorization_declined"]):
+            raise ValueError("No-change closure requires an open, assessed score-0 report without release or approval work")
+    elif status in ("open", "handling", "handled") and policy["authorization_required"]:
         raise PermissionError("Yoav's explicit authorization is required before working on this report")
     if status == "handled" and (type(current.get("score")) is not int or not 0 <= current["score"] <= 10
                                  or not isinstance(current.get("score_rationale"), str)
@@ -908,6 +915,8 @@ def main():
     change.add_argument("--changes-summary-file", type=Path)
     change.add_argument("--commit")
     change.add_argument("--rollout-verified", action="store_true")
+    change.add_argument("--non-actionable", action="store_true",
+                        help="Close an analyzed score-0 open report with a documented no-change conclusion")
     change.add_argument("--expected-status", choices=STATUSES)
     change.add_argument("--expected-updated-at")
     args = parser.parse_args()
@@ -943,7 +952,7 @@ def main():
     else:
         result = set_status(args.state_dir, args.id, status=args.status, notes_file=args.notes_file,
                             commit=args.commit, changes_summary_file=args.changes_summary_file,
-                            rollout_verified=args.rollout_verified,
+                            rollout_verified=args.rollout_verified, non_actionable=args.non_actionable,
                             expected_status=args.expected_status,
                             expected_updated_at=args.expected_updated_at)
     print(json.dumps(result), flush=True)

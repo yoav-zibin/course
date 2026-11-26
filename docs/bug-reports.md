@@ -401,7 +401,13 @@ put the proposed plan in this field. For a verified already-fixed report, explai
 that no additional changes were needed and identify the published fix. The CLI
 requires a saved assessment and this summary when marking a report handled;
 resolution notes still record root cause, checks and publication evidence.
-Failed or unfinished repairs remain pending.
+Failed or unfinished repairs remain pending. The hourly review automatically
+closes open reports with score 0 when the reviewed evidence supports a
+non-actionable conclusion, such as a test submission, praise, or an error with
+no usable diagnostic lead after investigation. Use `status --status handled
+--non-actionable` with the documented rationale, no-change summary and both
+status guards. This does not authorize implementation or close in-progress
+repairs, pending approval questions, or reports awaiting rollout verification.
 
 Useful private operations:
 
