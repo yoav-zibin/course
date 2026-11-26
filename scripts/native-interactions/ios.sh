@@ -42,7 +42,9 @@ for action in SelectChecker OpenReport DragChecker CommitChecker; do
   "${build[@]}" test-without-building "-only-testing:InteractionTests/BoardTests/test$action" \
     -resultBundlePath "$results/$action.xcresult" | tee "$results/$action.log"
   stop_recording
-  xcrun xcresulttool get test-results metrics --path "$results/$action.xcresult" > "$results/$action.json"
+  if [[ "$action" != CommitChecker ]]; then
+    xcrun xcresulttool get test-results metrics --path "$results/$action.xcresult" > "$results/$action.json"
+  fi
 done
 python3 - "$fixture/pose.json" "$store/$filename" "$results/legal-drop.json" <<'PY'
 import json, sys
@@ -58,5 +60,5 @@ print('Legal checker drop committed:',proof['committed'])
 
 PY
 
-python3 "$scripts/ios-tracking.py" "$results/drag.mov" "$results/DragChecker.log" "$results/tracking.json"
+python3 "$scripts/tracking.py" "$results/drag.mov" "$results/DragChecker.log" "$results/tracking.json"
 jq -e '.committed' "$results/legal-drop.json" >/dev/null

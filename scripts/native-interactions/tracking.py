@@ -9,10 +9,9 @@ import av
 import numpy as np
 
 
-def measure(video, screen, x, start, end, diameter):
+def checker_sweeps(frames, x, start, end, diameter):
     # The opening's ivory checker moves down its own column into the opposite row.
     # Beyond the stack there are no stationary ivory pieces in this strip.
-    width, height = map(round, screen)
     top, bottom = round(start+diameter*.8), round(end)
     center, radius = round(x), max(2,round(diameter*.18))
     sweeps, forward = [], []
@@ -23,24 +22,29 @@ def measure(video, screen, x, start, end, diameter):
                            'max_gap_ms':round(float(max(gaps)),1)})
         forward.clear()
 
-    with av.open(str(video)) as capture:
-        for frame in capture.decode(video=0):
-            pixels = frame.reformat(width=width, height=height, format='rgb24').to_ndarray()
-            r,g,b = np.moveaxis(pixels[top:bottom,center-radius:center+radius+1].astype(np.int16),2,0)
-            ivory = (r>170) & (g>165) & (b>135) & (np.abs(r-g)<26) & (np.abs(g-b)<38)
-            rows = np.flatnonzero(ivory.sum(axis=1)>=radius)
-            # A checker is a small contiguous patch. Exclude launch screens, dialogs and text.
-            if len(rows)<3 or rows[-1]-rows[0]>diameter*1.55:
-                finish()
-                continue
-            y=float(np.median(rows))
-            t=float(frame.pts*frame.time_base)*1000
-            if forward and (y<forward[-1][1]-4 or t-forward[-1][0]>450):
-                finish()
-            if not forward or y>=forward[-1][1]+1:
-                forward.append((t,y))
+    for t, pixels in frames:
+        r,g,b = np.moveaxis(pixels[top:bottom,center-radius:center+radius+1].astype(np.int16),2,0)
+        ivory = (r>170) & (g>165) & (b>135) & (np.abs(r-g)<26) & (np.abs(g-b)<38)
+        rows = np.flatnonzero(ivory.sum(axis=1)>=radius)
+        # A checker is a small contiguous patch. Exclude launch screens, dialogs and text.
+        if len(rows)<3 or rows[-1]-rows[0]>diameter*1.55:
+            finish()
+            continue
+        y=float(np.median(rows))
+        if forward and (y<forward[-1][1]-4 or t-forward[-1][0]>450):
+            finish()
+        if not forward or y>=forward[-1][1]+1:
+            forward.append((t,y))
     finish()
     return sweeps
+
+
+def measure(video, screen, x, start, end, diameter):
+    width, height = map(round, screen)
+    with av.open(str(video)) as capture:
+        frames = ((float(f.pts*f.time_base)*1000, f.reformat(width=width,height=height,format='rgb24').to_ndarray())
+                  for f in capture.decode(video=0))
+        return checker_sweeps(frames, x, start, end, diameter)
 
 
 if __name__ == '__main__':

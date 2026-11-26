@@ -72,6 +72,19 @@ test('exact modern Backgammon opening repair preserves saved rules and package p
   assert.equal(await reviewedPresentation(input,async()=>{throw new Error('digest unavailable');}),input.declarative_ui);
 });
 
+test('retained Backgammon boards with malformed grain paths receive the corrected artwork',async()=>{
+  const pkg=read('games/declarative/backgammon.json');
+  const oldBoard=read('tests/fixtures/declarative/backgammon-v7-ui.json').assets.board_art;
+  for(const corrected of [replacement,pkg.declarative_ui]){
+    const saved=structuredClone(corrected);
+    saved.assets.board_art=oldBoard;
+    const input={...game(),version:10,server_code:pkg.server_code,declarative_ui:saved};
+    assert.notDeepEqual(saved,corrected);
+    assert.deepEqual(await reviewedPresentation(input,digest),corrected);
+    assert.deepEqual(input.declarative_ui.assets.board_art,oldBoard);
+  }
+});
+
 test('the exact saved Backgammon version9 receives the corrected board and dice action cue',async()=>{
   const pkg=read('games/declarative/backgammon.json');
   // Version 9 added checker layering to the previously reviewed presentation.

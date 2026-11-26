@@ -13,7 +13,7 @@ python3 scripts/native-interactions/android.py --serial emulator-5554 --fixture 
 python3 scripts/native-interactions/android.py --serial emulator-5554 --fixture /tmp/board-fixture --output /tmp/tracking --scenario tracking
 ```
 
-The default package is `fun.buildplay.debug`. Each sample starts a fresh app process, restores the fixture, records the display and timestamps input on the device. The opening scenario verifies the report screenshot, the selected point and the exact saved result after a physical drag. The tracking scenario measures an 850 ms drag down a column without a legal destination. It avoids the intentional pause when the checker snaps to a target.
+The default package is `fun.buildplay.debug`. Each sample starts a fresh app process, restores the fixture, records the display and timestamps input on the device. The opening scenario verifies the report screenshot, the selected point and the exact saved result after a physical drag. The tracking scenario measures an 850 ms drag down a column without a legal destination. It isolates free movement from the intentional snap to a target. The optional `tap-move` scenario verifies the same legal move using a tap on the checker and a second tap on its highlighted point.
 
 Each sample directory contains the video, input bracket, frame timestamps and metrics. Tap latency starts immediately before input injection and includes the recorded injection overhead. The checker metric detects the first frame with the legal point visibly highlighted. The report metric detects the transition to the visible dialog. Drag intervals measure distinct visible board updates. Emulator load, density, GPU and screen recording affect the absolute numbers. Use the same device configuration for comparisons.
 

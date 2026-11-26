@@ -12,6 +12,8 @@ from xml.etree import ElementTree
 import av
 import numpy as np
 
+from tracking import checker_sweeps
+
 BOARD = 'Game board. Use pieces and highlighted destinations.'
 REPORT = 'Report a bug or request a feature'
 
@@ -96,6 +98,19 @@ def highlight_latency(times, frames, board, column, scale):
     return next(t for t, frame in zip(times, frames) if t>=0 and pixels(frame) >= before+(after-before)/2)
 
 
+def checker_lift(times, frames, x, y, diameter):
+    # The bottom of the opening's top ivory checker exposes wood as it lifts.
+    # A press tint alone leaves the checker covering this patch.
+    radius=max(2, round(diameter*.16))
+    top,bottom=round(y+diameter*.16),round(y+diameter*.34)
+    def wood(frame):
+        r,g,b=np.moveaxis(frame[top:bottom,x-radius:x+radius+1].astype(np.int16),2,0)
+        return np.mean((r>g+40)&(g>b+30))
+    if wood(frames[0])>.25:
+        raise RuntimeError('Expected an ivory checker at the source')
+    return next(t for t,frame in zip(times,frames) if t>=0 and wood(frame)>.6)
+
+
 def drag_metrics(times, frames, box, duration):
     previous = roi(frames[0], box)
     changes = []
@@ -111,6 +126,16 @@ def drag_metrics(times, frames, box, duration):
     # Includes pauses between the first and last visible board updates, including target snapping.
     return {'drag_first_change_ms': changes[0], 'drag_frame_gap_p95_ms': np.percentile(np.diff(changes), 95),
             'drag_distinct_frames': len(changes), 'drag_max_gap_ms': max(np.diff(changes))}
+
+
+def saved_match(device, path, pose):
+    envelope = json.loads(device.adb('shell', 'cat', path))
+    return json.loads(envelope['value'])['local'][pose['id']]
+
+
+def expected_move(match, pose):
+    return (match['move_count'] == pose['moveCount']+1 and match['logicState']['cnt'] == pose['expectedCounts']
+            and match['logicState']['owner'] == pose['expectedOwners'])
 
 
 def benchmark(args):
@@ -158,11 +183,28 @@ def benchmark(args):
             end = project({'x':pose['source']['x'], 'y':pose['bounds']['y'] + pose['bounds']['height']*.92})
             times, frames, duration = device.record(result, 'tracking', f'swipe {src[0]} {src[1]} {end[0]} {end[1]} 850')
             row = {k:round(float(v),1) for k,v in drag_metrics(times, frames, board, duration).items()}
-            match = json.loads(json.loads(device.adb('shell', 'cat', dest))['value'])['local'][pose['id']]
+            sweeps = checker_sweeps(zip(times, frames), src[0], src[1], end[1], pose['height']*scale)
+            if len(sweeps) != 1:
+                raise RuntimeError('Could not track the ivory checker through one complete drag')
+            row.update({'checker_'+key:value for key,value in sweeps[0].items()})
+            row['checker_lift_ms'] = round(float(checker_lift(times, frames, *src, pose['height']*scale)),1)
+            match = saved_match(device, dest, pose)
             if match['move_count'] != pose['moveCount']:
                 raise RuntimeError('Free-motion path hit a legal destination')
             (result/'metrics.json').write_text(json.dumps(row, indent=2)+'\n')
             print(sample+1, json.dumps(row), flush=True)
+            continue
+        if args.scenario == 'tap-move':
+            device.adb('shell', 'cmd', 'input', 'tap', *src)
+            device.tap(pose['target'])
+            for _ in range(16):
+                if expected_move(saved_match(device, dest, pose), pose):
+                    break
+                time.sleep(.25)
+            else:
+                raise RuntimeError('Two taps did not commit the expected legal move')
+            (result/'metrics.json').write_text(json.dumps({'legal_tap_move_committed':True})+'\n')
+            print('Verified the legal checker move using two taps', flush=True)
             continue
         row = {}
         for name, label, position in [('report', 'Close dialog', center(device.bounds(REPORT))),
@@ -177,9 +219,8 @@ def benchmark(args):
             time.sleep(.7)
         times, frames, duration = device.record(result, 'drag', f'swipe {src[0]} {src[1]} {target[0]} {target[1]+lift} 850')
         row.update(drag_metrics(times, frames, board, duration))
-        match = json.loads(json.loads(device.adb('shell', 'cat', dest))['value'])['local'][pose['id']]
-        committed = (match['move_count'] == pose['moveCount']+1 and match['logicState']['cnt'] == pose['expectedCounts']
-                     and match['logicState']['owner'] == pose['expectedOwners'])
+        match = saved_match(device, dest, pose)
+        committed = expected_move(match, pose)
         row = {k:round(float(v), 1) for k,v in row.items()}
         row['legal_drop_committed'] = committed
         dropped += int(not committed)
@@ -196,5 +237,5 @@ if __name__ == '__main__':
     parser.add_argument('--fixture', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--samples', type=int, default=5)
-    parser.add_argument('--scenario', choices=['opening','tracking'], default='opening')
+    parser.add_argument('--scenario', choices=['opening','tracking','tap-move'], default='opening')
     benchmark(parser.parse_args())

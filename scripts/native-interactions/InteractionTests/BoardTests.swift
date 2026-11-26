@@ -31,16 +31,42 @@ final class BoardTests: XCTestCase {
         app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ OR label == %@", label, label)).firstMatch
     }
 
-    private var scale: CGFloat {
-        min(board.frame.width / pose.bounds.width, board.frame.height / pose.bounds.height)
+    private func location(_ point: Pose.Point, in frame: CGRect, lift: Bool = false) -> CGPoint {
+        let b = pose.bounds, scale = min(frame.width/b.width, frame.height/b.height)
+        let x = frame.midX + (point.x-b.x-b.width/2)*scale
+        var y = frame.midY + (point.y-b.y-b.height/2)*scale
+        if lift { y += min(54, pose.height*scale*0.6+22, frame.height/3) }
+        return CGPoint(x: x, y: y)
     }
 
-    private func coordinate(_ point: Pose.Point, lift: Bool = false) -> XCUICoordinate {
-        let frame = board.frame, b = pose.bounds, s = scale
-        let dx = (frame.width - b.width * s) / 2 + (point.x - b.x) * s
-        var dy = (frame.height - b.height * s) / 2 + (point.y - b.y) * s
-        if lift { dy += min(54, pose.height * s * 0.6 + 22, frame.height / 3) }
-        return board.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: dx, dy: dy))
+    private func coordinate(_ point: CGPoint) -> XCUICoordinate {
+        let screen = app.frame
+        return app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x-screen.minX, dy: point.y-screen.minY))
+    }
+
+    // The canvas can exist before the pieces have rendered and before the
+    // launch header has collapsed. Verify a real selection at the projected
+    // coordinates, then wait for the unselected canvas to regain its bounds.
+    private func readyOpening() -> CGRect {
+        let cancel = element("Cancel selection")
+        let deadline = Date().addingTimeInterval(35)
+        repeat {
+            let frame = board.frame
+            coordinate(location(pose.source, in: frame)).tap()
+            if cancel.waitForExistence(timeout: 2) {
+                cancel.tap()
+                XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
+                let restored = NSPredicate { _,_ in
+                    let current = self.board.frame
+                    return abs(current.height-frame.height)<1 && abs(current.minY-frame.minY)<1
+                }
+                if XCTWaiter.wait(for: [expectation(for: restored, evaluatedWith: board)], timeout: 3) == .completed {
+                    return board.frame
+                }
+            }
+        } while Date() < deadline
+        XCTFail("Unable to select the opening checker at its projected position")
+        return board.frame
     }
 
     private func sample(_ body: () -> Void) {
@@ -52,8 +78,9 @@ final class BoardTests: XCTestCase {
 
     func testSelectChecker() {
         let cancel = element("Cancel selection")
+        _ = readyOpening()
         sample {
-            let source = coordinate(pose.source)
+            let source = coordinate(location(pose.source, in: board.frame))
             startMeasuring()
             source.tap()
             XCTAssertTrue(cancel.waitForExistence(timeout: 5))
@@ -64,17 +91,15 @@ final class BoardTests: XCTestCase {
     }
 
     func testDragChecker() {
-        let source = coordinate(pose.source)
-        let end = Pose.Point(x: pose.source.x, y: pose.bounds.y + pose.bounds.height * 0.92)
-        let destination = coordinate(end)
-        let frame = board.frame, b = pose.bounds, s = scale
-        let x = frame.midX + (pose.source.x - b.x - b.width/2)*s
-        let y = frame.midY + (pose.source.y - b.y - b.height/2)*s
-        let endY = frame.midY + (end.y - b.y - b.height/2)*s
-        print("TRACK_GEOMETRY \(app.frame.width) \(app.frame.height) \(x) \(y) \(endY) \(s*pose.height)")
+        let frame = readyOpening()
+        let end = Pose.Point(x: pose.source.x, y: pose.bounds.y + pose.bounds.height*0.92)
+        let source = location(pose.source, in: frame), destination = location(end, in: frame)
+        let scale = min(frame.width/pose.bounds.width, frame.height/pose.bounds.height)
+        print("TRACK_GEOMETRY \(app.frame.width) \(app.frame.height) \(source.x) \(source.y) \(destination.y) \(scale*pose.height)")
         sample {
+            let from = coordinate(source), to = coordinate(destination)
             startMeasuring()
-            source.press(forDuration: 0.05, thenDragTo: destination, withVelocity: 180, thenHoldForDuration: 0)
+            from.press(forDuration: 0.05, thenDragTo: to, withVelocity: 95, thenHoldForDuration: 0)
             stopMeasuring()
             let cancel = element("Cancel selection")
             if cancel.exists { cancel.tap() }
@@ -82,7 +107,9 @@ final class BoardTests: XCTestCase {
     }
 
     func testCommitChecker() {
-        let source = coordinate(pose.source), destination = coordinate(pose.destination, lift: true)
+        let frame = readyOpening()
+        let source = coordinate(location(pose.source, in: frame))
+        let destination = coordinate(location(pose.destination, in: frame, lift: true))
         source.press(forDuration: 0.05, thenDragTo: destination, withVelocity: 180, thenHoldForDuration: 0)
         // Keep the app in the foreground until the accepted move is visible.
         // This particular move makes the previously empty destination a playable point.
