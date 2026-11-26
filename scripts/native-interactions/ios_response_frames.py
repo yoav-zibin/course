@@ -4,7 +4,7 @@ from collections import defaultdict
 from pathlib import Path
 import av
 import numpy as np
-from response_frames import destination,response,spent_die_latency
+from response_frames import destination,response,spent_die_feedback
 
 def frames(movie,width,height):
     with av.open(movie) as source:
@@ -68,7 +68,7 @@ def measure(directory):
         try:
             row.update(response(times,pictures,start,row['point'],screen))
             if 'spent_die_point' in row and 'hold_ms' in row:
-                row['release_to_spent_die_ms']=spent_die_latency(times,pictures,start,start+row['hold_ms'],row['spent_die_point'],screen)
+                row.update(spent_die_feedback(times,pictures,start,start+row['hold_ms'],row['spent_die_point'],screen))
             if row['action'] in ('open-menu','close-menu','open-report','dismiss-report'):
                 row['dialog_landmark_ms']=destination(times,pictures,start)
         except ValueError as e:row['error']=str(e)

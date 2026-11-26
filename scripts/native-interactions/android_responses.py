@@ -4,7 +4,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 import numpy as np
 from android import Device,BOARD,center
-from response_frames import destination,response,spent_die_latency
+from response_frames import destination,response,spent_die_feedback
 from response_store import verify
 
 def control(d,label):
@@ -106,7 +106,7 @@ def run(args):
                     small=[f[::2,::2] for f in frames]
                     row=response(times,small,0,p,dims)
                     if die:
-                        row['release_to_spent_die_ms']=spent_die_latency(times,small,0,bracket,die,dims)
+                        row.update(spent_die_feedback(times,small,0,bracket,die,dims))
                     if action['id'] in ('open-menu','close-menu','open-report','dismiss-report'):
                         row['dialog_landmark_ms']=destination(times,small,0)
                     rows.append({'action':action['id'],'point':p,'injection_ms':round(bracket,1),**row})

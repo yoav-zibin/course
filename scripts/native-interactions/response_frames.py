@@ -2,23 +2,28 @@
 import numpy as np
 
 
-def spent_die_latency(times,images,down,up,point,screen):
+def spent_die_feedback(times,images,down,up,point,screen):
     """Release until a changed die keeps the appearance of the accepted board."""
     before=max((i for i,t in enumerate(times) if t<down),default=None)
-    if before is None or len(images)<2:return None
+    if before is None or len(images)<2 or times[-1]<up:return {'release_to_spent_die_ms':None}
     h,w=images[-1].shape[:2]
     x,y=np.rint(np.array(point)/screen*[w,h]).astype(int)
     radius=max(4,round(w*.016))
     patch=np.s_[max(0,y-radius):y+radius+1,max(0,x-radius):x+radius+1]
     pre=images[before][patch].astype(np.int16);final=images[-1][patch].astype(np.int16)
     changed=np.max(abs(pre-final),axis=2)>35
-    if changed.sum()<max(6,changed.size*.06):return None
+    if changed.sum()<max(6,changed.size*.06):return {'release_to_spent_die_ms':None}
     index=len(images)-1
     while index and times[index-1]>=up:
         previous=images[index-1][patch].astype(np.int16)
         if np.mean(np.max(abs(previous[changed]-final[changed]),axis=1)<38)<.78:break
         index-=1
-    return round(max(0,times[index]-up),1)
+    return {'release_to_spent_die_ms':round(max(0,times[index]-up),1),
+            'release_to_spent_die_lower_bound_ms':round(max(0,times[index-1]-up),1) if index else 0}
+
+
+def spent_die_latency(times,images,down,up,point,screen):
+    return spent_die_feedback(times,images,down,up,point,screen)['release_to_spent_die_ms']
 
 
 def response(times,images,start,point,screen):
@@ -40,7 +45,8 @@ def response(times,images,start,point,screen):
         if times[j]<start:continue
         broad,near=diff(images[j])
         if broad>max(.0012,noise[0]+.0008) or near>max(.022,noise[1]+.012):
-            return {'first_ms':round(times[j]-start,1),'frame_ms':round(times[j],2),'previous_frame_ms':round(times[j-1],2),
+            return {'first_ms':round(times[j]-start,1),'first_lower_bound_ms':round(max(0,times[j-1]-start),1),
+                    'frame_ms':round(times[j],2),'previous_frame_ms':round(times[j-1],2),
                     'screen_changed':round(broad,4),'near_input_changed':round(near,4)}
     return {'first_ms':None,'reason':'No visible change met the screen or touch-region threshold'}
 
