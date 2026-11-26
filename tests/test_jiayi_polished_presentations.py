@@ -5,7 +5,7 @@ import pytest
 from game_platform.agent_import import GameImport
 from game_platform.declarative_ui import DeclarativeLogic
 from game_platform.game_contract import ContractLogic
-from game_platform.tools.publish_declarative_games import ui_message
+from game_platform.tools.publish_declarative_games import offered_events, ui_message
 ROOT=Path(__file__).resolve().parents[1]
 KINDS=('nim_single_heap','conquian','big_two','catch_the_ten','court_piece','sergeant_major','pedro','mille_bornes','snap','slapjack')
 
@@ -34,3 +34,25 @@ def test_polished_scene_bounds_and_inactive_guards(kind):
         inactive=ui.reduce({**message,**extra},frame['local_state'])
         assert not inactive['scene']['controls']
         assert not any(p.get('actions') for p in inactive['scene']['pieces'])
+
+
+def test_sergeant_major_opening_only_offers_trump_selection():
+    package = json.loads((ROOT / 'games/declarative/sergeant_major.json').read_text())
+    contract = package['unit_tests']
+    example = contract['cases'][0]
+    ctx = {key: value for key, value in example['ctx'].items() if key != 'seed'}
+    seed = example['ctx']['seed']
+    logic = ContractLogic(package['server_code'], contract)
+    ui = DeclarativeLogic(package['declarative_ui'])
+    result = logic.call('newMatch', ctx=ctx, seed=seed)
+    mover = result['turn'][0]
+    seat = next(i for i, player in enumerate(ctx['players']) if player['id'] == mover)
+    message = ui_message(logic, result, ctx, seat, seed)
+    frame = ui.reduce(message, None)
+
+    assert len(message['view']['hand']) == 16
+    assert message['view']['legal'] == []
+    moves = [ui.reduce({'type': 'ui_event', 'event': event, 'state_changed': message},
+                       frame['local_state']).get('make_move')
+             for event in offered_events(frame['scene'])]
+    assert [move for move in moves if move is not None] == [{'trump': suit} for suit in range(4)]
