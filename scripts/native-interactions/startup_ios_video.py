@@ -41,7 +41,7 @@ def frames(path):
             yield float((frame.pts or 0)*frame.time_base)*1000,small.to_ndarray().astype(np.int16)
 
 
-def measure(movie, before, after, bounds):
+def measure(movie, before, after, bounds, include_first_frame=False):
     h,w=after.shape[:2]
     left,top,right,bottom=np.rint(np.array(bounds)*[w,h,w,h]).astype(int)
     rect=np.s_[max(0,top-1):min(h,bottom+1),max(0,left-1):min(w,right+1)]
@@ -52,8 +52,12 @@ def measure(movie, before, after, bounds):
     expected=final[1:,1:][edges]
     area=np.s_[h//10:9*h//10:4,::4]
     samples=[]
+    references=[before[area]]
     for stamp,image in frames(movie):
-        changed=np.mean(np.max(abs(image[area]-before[area]),axis=2)>38)
+        # Installing can switch SpringBoard pages between the screenshot and
+        # recordVideo. The first recorded frame also precedes app activation.
+        if include_first_frame and not samples:references.append(image[area])
+        changed=min(np.mean(np.max(abs(image[area]-reference),axis=2)>38) for reference in references)
         agreement=np.mean(np.max(abs(image[rect][1:,1:][edges]-expected),axis=1)<46)
         samples.append((stamp,float(changed),float(agreement)))
     # Count the first sustained appearance. XCTest can dismiss its app after
@@ -73,10 +77,11 @@ def measure(movie, before, after, bounds):
     painted=start
     # The XCTest URL actuator returns to SpringBoard before opening the link.
     # Ignore any earlier runner-app launch shown in the recording.
-    launcher=max(i for i in range(painted) if samples[i][1]<.03)
-    transition=next(i for i in range(launcher+1,min(painted+1,len(samples)-1)) if samples[i][1]>.06 and samples[i+1][1]>.06)
-    if painted==transition:
-        raise ValueError('No distinct launch transition before the landmark')
+    launch_frames=[i for i in range(painted) if samples[i][1]<.03]
+    if not launch_frames:raise ValueError('No recorded launcher frame before the landmark')
+    launcher=launch_frames[-1]
+    # A fast launch may reach the content in the very first changed frame.
+    transition=next((i for i in range(launcher+1,painted) if samples[i][1]>.06 and samples[i+1][1]>.06),painted)
     return {'visible_ms':round(samples[painted][0]-samples[transition][0],1),
             'transition_pts_ms':round(samples[transition][0],1),'landmark_pts_ms':round(samples[painted][0],1)}
 
@@ -163,7 +168,7 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
         evidence['link_sent_pts_ms']=last_marker+timing['after_marker_ms']
         evidence['marker_interval_error_ms']=round(last_marker-first_marker-timing['marker_interval_ms'],1)
     prefix.with_suffix('.json').write_text(json.dumps(evidence,indent=2)+'\n')
-    output=measure(movie,next(frames(before))[1],next(frames(after))[1],bounds)
+    output=measure(movie,next(frames(before))[1],next(frames(after))[1],bounds,include_first_frame=not sender_stamp)
     if sender_stamp:
         output['open_url_to_board_ms']=round(output['landmark_pts_ms']-evidence['link_sent_pts_ms'],1)
         if output['open_url_to_board_ms']<=0:raise ValueError('The opening board predates the sender request')
