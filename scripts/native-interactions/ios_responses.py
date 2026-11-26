@@ -89,7 +89,9 @@ def run(app,fixtures,output,device,profile,fresh=False,checker_pair=False,rapid=
         contacts=[e for e in events if e.get('phase') in (0,3,4)]
         phases=[e['phase'] for e in contacts]
         gap=round(contacts[2]['t']-contacts[1]['t'],1) if phases==[0,3,0,3] else None
-        (output/'rapid.json').write_text(json.dumps({'requested_gap_ms':60,'ui_release_to_next_down_ms':gap,'phases':phases},indent=2))
+        delivery=round(contacts[2]['wall']-contacts[1]['wall'],1) if gap is not None else None
+        (output/'rapid.json').write_text(json.dumps({'requested_gap_ms':60,'ui_release_to_next_down_ms':gap,
+            'delivery_gap_ms':delivery,'phases':phases},indent=2))
         if gap is None or not 0<=gap<=100:raise RuntimeError('UIKit did not deliver two drags within 100 ms; see rapid.json')
     if status or not inputs.exists() or not all(i['verified'] for i in results.values()):
         raise RuntimeError('Incomplete response audit; see responses.log, inputs.jsonl and verified.json')

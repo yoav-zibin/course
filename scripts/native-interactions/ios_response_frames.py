@@ -59,7 +59,10 @@ def measure(directory):
         median=float(np.median(offsets_used));residual=float(np.percentile(abs(offsets_used-median),95))
         row.update(input_wall_ms=touch['wall'],point=[touch['x'],touch['y']],anchor_count=len(offsets_used),
                    clock_residual_p95_ms=round(residual,1))
-        up=next((s for s in states if s.get('phase') in (3,4) and s['t']>=touch['t'] and s['pid']==touch['pid']),None)
+        # UIKit can timestamp a finger-up and the following finger-down on
+        # the same refresh. Pair events in delivery order in that case.
+        following=states[states.index(touch)+1:]
+        up=next((s for s in following if s.get('phase') in (3,4) and s['pid']==touch['pid']),None)
         if up:row['hold_ms']=round(up['t']-touch['t'],1)
         if (case,name) in dice:row['spent_die_point']=dice[(case,name)]
         next_touch=next((s['t'] for s in touches if s['t']>touch['t']),float('inf'))
