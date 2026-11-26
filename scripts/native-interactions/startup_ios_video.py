@@ -2,6 +2,8 @@
 import argparse
 import json
 from pathlib import Path
+import platform
+import plistlib
 import shutil
 import signal
 import subprocess
@@ -14,6 +16,8 @@ import av
 import numpy as np
 
 from startup_frames import opening_bounds
+
+SENDER = 'fun.buildplay.benchmark.linksender'
 
 
 def sim(*args, **kwargs):
@@ -77,7 +81,7 @@ def measure(movie, before, after, bounds):
             'transition_pts_ms':round(samples[transition][0],1),'landmark_pts_ms':round(samples[painted][0],1)}
 
 
-def trial(app, bundle, device, directory, index, action, ocr, match_command):
+def trial(app, bundle, device, directory, index, action, ocr, match_command, sender_stamp=None):
     directory.mkdir(exist_ok=True,parents=True)
     prefix=directory/f'{index}-{action}'
     movie=prefix.with_suffix('.mov')
@@ -87,7 +91,7 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command):
     sim('install',device,app)
     api('/__reset','POST')
     time.sleep(1.5)
-    sim('io',device,'screenshot',before,capture_output=True)
+    if not sender_stamp:sim('io',device,'screenshot',before,capture_output=True)
     with prefix.with_suffix('.log').open('w') as log, Path(str(prefix)+'-launch.log').open('w') as launch_log:
         recorder=subprocess.Popen(['xcrun','simctl','io',device,'recordVideo','--codec=h264',str(movie)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
         try:
@@ -108,6 +112,17 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command):
                     if time.monotonic()>=deadline:raise RuntimeError('The home title never appeared')
                     time.sleep(.5)
                 time.sleep(.5)
+            elif sender_stamp:
+                sender_stamp.unlink(missing_ok=True)
+                sim('launch','--terminate-running-process',device,SENDER,stdout=launch_log,stderr=subprocess.STDOUT)
+                deadline=time.monotonic()+100
+                while time.monotonic()<deadline:
+                    sim('io',device,'screenshot',after,capture_output=True)
+                    if sender_stamp.exists() and opening_bounds(next(frames(after))[1]) is not None:
+                        time.sleep(.5)
+                        break
+                    time.sleep(.7)
+                else:raise RuntimeError('An ordinary URL open did not display the populated board')
             else:
                 # Keep recording through the actual XCTest launch, including a
                 # slow runner startup. Its screenshot independently verifies the
@@ -122,17 +137,25 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command):
     if action=='match':
         # XCTest may leave the app after verifying the opening. Find its last
         # populated frame in the movie and retain that exact comparison image.
-        reference=None
+        reference=sender_frame=None
         for _,image in frames(movie):
+            if sender_stamp:
+                r,g,b=image[::8,::8].transpose(2,0,1)
+                if ((r<30)&(g>160)&(b>160)&(abs(g-b)<15)).mean()>.90:sender_frame=image
             box=opening_bounds(image)
             if box is not None:reference,bounds=image,box
         if reference is None:raise RuntimeError('No populated Backgammon opening in the verified recording')
         Image.fromarray(reference.astype(np.uint8)).save(after)
+        if sender_stamp:
+            if sender_frame is None:raise RuntimeError('Missing the link sender in the recording')
+            Image.fromarray(sender_frame.astype(np.uint8)).save(before)
     requests=api('/__requests')
     paths={item['path'] for item in requests}
     required={'/games/popular'} if action=='home' else {'/matches/benchmark-opening','/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10'}
     if not required<=paths:raise RuntimeError(f'Missing cold-start requests: {required-paths}')
     evidence={'bounds':list(bounds),'requests':requests}
+    if sender_stamp:
+        evidence['link_sent_epoch_ms']=float(sender_stamp.read_text())*1000
     prefix.with_suffix('.json').write_text(json.dumps(evidence,indent=2)+'\n')
     output=measure(movie,next(frames(before))[1],next(frames(after))[1],bounds)
     prefix.with_suffix('.json').write_text(json.dumps({**output,**evidence},indent=2)+'\n')
@@ -153,13 +176,36 @@ def match_launcher(scripts, results, device):
     return [*build,'test-without-building','-only-testing:InteractionTests/StartupTests/testOpenMatchForVideo']
 
 
-def run(apps, fixture, results, device, pairs):
+def install_sender(scripts, results, device):
+    app=results/'LinkSender.app'
+    app.mkdir()
+    scene={'UISceneDelegateClassName':'LinkSceneDelegate','UISceneConfigurationName':'Link'}
+    info={'CFBundleExecutable':'LinkSender','CFBundleIdentifier':SENDER,'CFBundleName':'LinkSender',
+          'CFBundlePackageType':'APPL','CFBundleShortVersionString':'1.0','CFBundleVersion':'1',
+          'MinimumOSVersion':'17.0','LSRequiresIPhoneOS':True,'UIDeviceFamily':[1,2],'UILaunchScreen':{},
+          'UIApplicationSceneManifest':{'UIApplicationSupportsMultipleScenes':False,
+              'UISceneConfigurations':{'UIWindowSceneSessionRoleApplication':[scene]}}}
+    (app/'Info.plist').write_bytes(plistlib.dumps(info))
+    sdk=subprocess.check_output(['xcrun','--sdk','iphonesimulator','--show-sdk-path'],text=True).strip()
+    subprocess.run(['xcrun','--sdk','iphonesimulator','swiftc','-sdk',sdk,'-target',
+                    platform.machine()+'-apple-ios17.0-simulator','-parse-as-library','-O',
+                    scripts/'LinkSender.swift','-o',app/'LinkSender'],check=True)
+    subprocess.run(['codesign','--force','--sign','-',app],check=True)
+    sim('install',device,app)
+    container=sim('get_app_container',device,SENDER,'data',capture_output=True,text=True).stdout.strip()
+    return Path(container)/'Library/Caches/link-sent.txt'
+
+
+def run(apps, fixture, results, device, pairs, sender=False):
     scripts=Path(__file__).resolve().parent
     results.mkdir(parents=True,exist_ok=True)
     ocr=results/'home-title'
-    subprocess.run(['xcrun','swiftc',scripts/'HomeTitle.swift','-o',ocr],check=True)
     sim('bootstatus',device,'-b')
-    match_command=match_launcher(scripts,results,device)
+    sender_stamp=install_sender(scripts,results,device) if sender else None
+    match_command=None
+    if not sender:
+        subprocess.run(['xcrun','swiftc',scripts/'HomeTitle.swift','-o',ocr],check=True)
+        match_command=match_launcher(scripts,results,device)
     builds={p.parent.name:p for p in apps.glob('*/BuildPlay.app')}
     names=['baseline','current'] if 'baseline' in builds else ['current']
     bundle=subprocess.check_output(['/usr/libexec/PlistBuddy','-c','Print CFBundleIdentifier',builds['current']/'Info.plist'],text=True).strip()
@@ -172,8 +218,8 @@ def run(apps, fixture, results, device, pairs):
         for index in range(1,pairs+1):
             for name in names if index%2 else reversed(names):
                 row={}
-                for action in ('home','match'):
-                    row[action+'_ms']=trial(builds[name],bundle,device,results/name,index,action,ocr,match_command)
+                for action in (('match',) if sender else ('home','match')):
+                    row[action+'_ms']=trial(builds[name],bundle,device,results/name,index,action,ocr,match_command,sender_stamp)
                 samples[name].append(row)
                 (results/name/'startup-video.json').write_text(json.dumps(samples[name],indent=2)+'\n')
     finally:
@@ -188,5 +234,6 @@ if __name__=='__main__':
     parser.add_argument('results',type=Path)
     parser.add_argument('device')
     parser.add_argument('--pairs',type=int,choices=range(1,6),default=5)
+    parser.add_argument('--sender',action='store_true',help='Open the match from a normal foreground UIKit app')
     args=parser.parse_args()
-    run(args.apps,args.fixture,args.results,args.device,args.pairs)
+    run(args.apps,args.fixture,args.results,args.device,args.pairs,args.sender)

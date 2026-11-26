@@ -13,10 +13,10 @@ on:
       scenario:
         description: Interactions to measure
         type: choice
-        options: [board, startup, startup-video]
+        options: [board, startup, startup-video, startup-link]
         default: board
       video_pairs:
-        description: Paired trials for startup-video
+        description: Paired trials for recorded launches
         type: choice
         options: ['5', '1', '2', '3', '4']
         default: '5'
@@ -105,7 +105,7 @@ jobs:
             app="$base/release/BuildPlay.app"
             cp "$base/js-$name"/_expo/static/js/ios/*.hbc "$app/main.jsbundle"
             codesign --force --sign - --preserve-metadata=identifier,entitlements "$app"
-            if [[ "$SCENARIO" == startup-video ]]; then
+            if [[ "$SCENARIO" == startup-video || "$SCENARIO" == startup-link ]]; then
               mkdir -p "$base/video-apps/$name"
               ditto "$app" "$base/video-apps/$name/BuildPlay.app"
               continue
@@ -115,8 +115,10 @@ jobs:
               echo "::warning::Baseline verification failed. Continuing with the independent candidate."
             fi
           done
-          if [[ "$SCENARIO" == startup-video ]]; then
-            python3 scripts/native-interactions/startup_ios_video.py "$base/video-apps" "$base/fixture" "$base/results" "$SIMULATOR_ID" --pairs "$VIDEO_PAIRS"
+          if [[ "$SCENARIO" == startup-video || "$SCENARIO" == startup-link ]]; then
+            flags=(--pairs "$VIDEO_PAIRS")
+            if [[ "$SCENARIO" == startup-link ]]; then flags+=(--sender); fi
+            python3 scripts/native-interactions/startup_ios_video.py "$base/video-apps" "$base/fixture" "$base/results" "$SIMULATOR_ID" "${flags[@]}"
           fi
       - uses: actions/upload-artifact@v4
         if: always()

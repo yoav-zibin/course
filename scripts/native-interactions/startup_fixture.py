@@ -2,13 +2,14 @@
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import mimetypes
 from pathlib import Path
 import secrets
 import time
 from urllib.parse import urlsplit
 
 
-def serve(fixture, port, delay_ms):
+def serve(fixture, port, delay_ms, web_build=None):
     pose = json.loads((fixture/'pose.json').read_text())
     data = json.loads(json.loads((fixture/pose['filename']).read_text())['value'])
     game = dict(next(iter(data['responses'].values())), description='A game for two players.')
@@ -40,6 +41,18 @@ def serve(fixture, port, delay_ms):
 
         def handle_request(self):
             path = urlsplit(self.path).path
+            if web_build and self.command=='GET' and (path=='/portal' or path.startswith('/static/app/')):
+                relative='index.html' if path=='/portal' else path[len('/static/app/'):]
+                asset=(web_build/relative).resolve()
+                if not asset.is_relative_to(web_build) or not asset.is_file():
+                    return self.send_error(404)
+                payload=asset.read_bytes()
+                self.send_response(200)
+                self.send_header('Content-Type', mimetypes.guess_type(asset.name)[0] or 'application/octet-stream')
+                self.send_header('Content-Length',str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
             if path=='/__requests':
                 return self.reply(list(arrivals))
             if path=='/__saves':
@@ -87,5 +100,6 @@ if __name__=='__main__':
     parser.add_argument('fixture',type=Path)
     parser.add_argument('--port',type=int,default=18764)
     parser.add_argument('--delay-ms',type=int,default=200)
+    parser.add_argument('--web-build',type=Path,help='Serve an exported Portal at /portal for browser comparisons')
     args = parser.parse_args()
-    serve(args.fixture,args.port,args.delay_ms)
+    serve(args.fixture,args.port,args.delay_ms,args.web_build.resolve() if args.web_build else None)
