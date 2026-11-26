@@ -581,11 +581,11 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   // On iOS each SVG element is a native view. Mount shared vector artwork
   // once per canvas while retaining a separate accessible, movable piece.
   const templates=useMemo(()=>{
-    type Artwork={asset:string; id:string; width:number; height:number; pieces:Piece[]};
-    const ids=new Map<Piece,string>(),definitions:React.ReactNode[]=[];
+    type Artwork={asset:string; id:string; width:number; height:number; pieces:Piece[];lower:boolean;upper:boolean};
+    const ids=new Map<Piece,string>(),lower:React.ReactNode[]=[],upper:React.ReactNode[]=[];
     if(Platform.OS==='ios'){
       const used=new Map<string,Artwork>(),assets=Object.keys(spec.assets??{});
-      for(const {piece} of painting.paint){
+      for(const {piece,z} of painting.paint){
         const type=spec.piece_types[piece.type],asset=piece.asset??type.asset;
         if(piece.face==='back'||type.shape!=='image'||!type.width||!type.height||!asset||
           !spec.assets?.[asset]?.uri.startsWith('data:image/svg+xml;base64,'))continue;
@@ -593,19 +593,23 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         let artwork=used.get(key);
         if(!artwork){
           artwork={asset,id:`buildplay-art-${assets.indexOf(asset)}-${type.width}-${type.height}`,
-            width:type.width,height:type.height,pieces:[]};
+            width:type.width,height:type.height,pieces:[],lower:false,upper:false};
           used.set(key,artwork);
         }
         artwork.pieces.push(piece);
+        if(z<=STATIC_PIECE_Z_MAX)artwork.lower=true;else artwork.upper=true;
       }
-      for(const {id,asset,width,height,pieces} of used.values()){
+      for(const artwork of used.values()){
+        const {id,asset,width,height,pieces}=artwork;
         if(pieces.length<2)continue;
         for(const piece of pieces)ids.set(piece,id);
-        definitions.push(<G id={id} key={id}><Asset spec={spec} id={asset}
-          x={-width/2} y={-height/2} width={width} height={height}/></G>);
+        const definition=<G id={id} key={id}><Asset spec={spec} id={asset}
+          x={-width/2} y={-height/2} width={width} height={height}/></G>;
+        if(artwork.lower)lower.push(definition);
+        if(artwork.upper)upper.push(definition);
       }
     }
-    return {ids,definitions};
+    return {ids,lower,upper};
   },[painting,spec]);
   const pieceLayers=useMemo(()=>{
     const lower:React.ReactNode[]=[],upper:React.ReactNode[]=[];
@@ -646,10 +650,12 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const canvasWebStyle=Platform.OS==='web'&&(framed||camera.zoom>1)?{...styles.canvas,touchAction:'none'}:undefined;
   const svgFrame={width:'100%' as const,height:'100%' as const,preserveAspectRatio:fill?'none':undefined,
     viewBox:`${view.x} ${view.y} ${view.width} ${view.height}`};
+  const nativeLayers=Platform.OS==='ios'||Platform.OS==='android';
   const boards=useMemo(()=>(visibleBoards??spec.boards).map(board=><BoardGraphic key={board.id} board={board} spec={spec}/>),[visibleBoards,spec]);
   // UIKit redraws a whole SVG surface when a checker or target changes.
   // The wood, grid and decorative paths can keep their own backing layer.
-  // Android also isolates the stationary pieces from the foreground.
+  // Both native renderers isolate the stationary pieces from the changing
+  // destination hints and drag highlights. Each SVG owns its definitions.
   const lowerArt=[
     ...(Platform.OS==='ios'?[]:boards),
     ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
@@ -670,10 +676,11 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
       {Platform.OS==='ios'&&ready&&<Svg {...svgFrame} pointerEvents="none" style={{direction:'ltr'}}>{boards}</Svg>}
       {(Platform.OS!=='ios'||ready)&&<Svg {...svgFrame} style={[Platform.OS==='ios'&&StyleSheet.absoluteFill,{direction:'ltr'}]}>
-        {templates.definitions.length>0&&<Defs>{templates.definitions}</Defs>}
-        {Platform.OS==='android'?lowerArt:[...lowerArt,...upperArt]}
+        {templates.lower.length>0&&<Defs>{templates.lower}</Defs>}
+        {nativeLayers?lowerArt:[...lowerArt,...upperArt]}
       </Svg>}
-      {Platform.OS==='android'&&<Svg {...svgFrame} style={[StyleSheet.absoluteFill,{direction:'ltr'}]}>{upperArt}</Svg>}
+      {nativeLayers&&(Platform.OS!=='ios'||ready)&&<Svg {...svgFrame} style={[StyleSheet.absoluteFill,{direction:'ltr'}]}>
+        {templates.upper.length>0&&<Defs>{templates.upper}</Defs>}{upperArt}</Svg>}
       {boardInput.feedback}
     </View>;
   return <View ref={surface} style={[styles.container,framed&&{height:frameHeight,minHeight:0}]}>
