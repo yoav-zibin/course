@@ -49,7 +49,10 @@ def android_stacks(filename,window=None):
 def ios_stacks(rows,down,duration):
     result=Counter();selected=[r for r in rows if down<=r['t']<=down+duration]
     stamps=sorted({r['t'] for r in selected})
-    lengths={t:round(1000*(min(down+duration,stamps[i+1] if i+1<len(stamps) else t+10)-t)) for i,t in enumerate(stamps)}
+    # The sampler aims for 10 ms. A busy simulator can leave much longer
+    # gaps. A stack snapshot cannot identify what ran during those gaps.
+    lengths={t:round(1000*(min(down+duration,t+10,stamps[i+1] if i+1<len(stamps) else t+10)-t))
+             for i,t in enumerate(stamps)}
     for r in selected:
         # Render one lane per sampled thread. Waiting threads account for time
         # on their own lane. Simultaneously running threads add independent time.
