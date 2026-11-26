@@ -36,16 +36,19 @@ final class ResponseTests: XCTestCase {
             return app.coordinate(withNormalizedOffset:.zero).withOffset(CGVector(dx:x-app.frame.minX,dy:y-app.frame.minY+(lift>0 ? min(54,lift*s*0.6+22,f.height/3):0)))
         }
         if data.rapid==true {
-            // Resolve every coordinate before either drag. The UIKit touch
-            // log measures the actual system-imposed gap between gestures.
             let paths=try scenario.actions.map { action in
-                (action.id,coordinate(try XCTUnwrap(action.at)),coordinate(try XCTUnwrap(action.to),lift:action.lift ?? 0))
+                (action.id,coordinate(try XCTUnwrap(action.at)).screenPoint,coordinate(try XCTUnwrap(action.to),lift:action.lift ?? 0).screenPoint)
             }
-            for (id,from,to) in paths {
-                print("RESPONSE_ACTION \(name) \(id) begin \(Date().timeIntervalSince1970*1000)")
-                from.press(forDuration:0.035,thenDragTo:to,withVelocity:230,thenHoldForDuration:0)
-                print("RESPONSE_ACTION \(name) \(id) end \(Date().timeIntervalSince1970*1000)")
+            XCTAssertEqual(paths.count,2)
+            let end=expectation(description:"UIKit delivered both drags")
+            let pair="RESPONSE_PAIR \(name) \(paths[0].0) \(paths[1].0)"
+            print("\(pair) begin \(Date().timeIntervalSince1970*1000)")
+            BPPerformCheckerDrags(paths[0].1,paths[0].2,paths[1].1,paths[1].2) { ok,error in
+                XCTAssertTrue(ok,error?.localizedDescription ?? "XCTest could not inject the two drags")
+                end.fulfill()
             }
+            wait(for:[end],timeout:30)
+            print("\(pair) end \(Date().timeIntervalSince1970*1000)")
             Thread.sleep(forTimeInterval:1.3)
             return
         }

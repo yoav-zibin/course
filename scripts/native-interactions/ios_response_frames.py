@@ -41,11 +41,16 @@ def measure(directory):
     actions=defaultdict(dict)
     for case,name,phase,ms in re.findall(r'RESPONSE_ACTION ([\w-]+) ([\w-]+) (begin|end) ([\d.]+)',log):
         actions[(case,name)][phase]=float(ms)
+    for case,first,second,phase,ms in re.findall(r'RESPONSE_PAIR ([\w-]+) ([\w-]+) ([\w-]+) (begin|end) ([\d.]+)',log):
+        for i,name in enumerate((first,second)):
+            actions[(case,name)].update({phase:float(ms),'contact':i})
     windows=[];proof=json.loads((directory/'verified.json').read_text())
     result={k:{'proof':v,'actions':[]} for k,v in proof.items()}
     for (case,name),bounds in actions.items():
         begin=bounds['begin'];end=bounds.get('end',begin+8000)
-        touch=next((s for s in touches if begin-5<=s['wall']<=end),None)
+        contacts=[s for s in touches if begin-5<=s['wall']<=end]
+        index=bounds.get('contact',0)
+        touch=contacts[index] if index<len(contacts) else None
         row={'action':name};result[case]['actions'].append(row)
         if not touch:
             row['error']='No UIKit down event in the XCTest action';continue

@@ -10,6 +10,7 @@ targets:
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: fun.buildplay.benchmark.tests
       GENERATE_INFOPLIST_FILE: YES
+      SWIFT_OBJC_BRIDGING_HEADER: InteractionTests/RapidDrags.h
 schemes:
   Interactions:
     build:
