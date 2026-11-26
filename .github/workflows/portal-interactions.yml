@@ -20,12 +20,17 @@ on:
         type: choice
         options: ['5', '1', '2', '3', '4']
         default: '5'
+      simulator_host:
+        description: Mac hosting the iPhone simulator
+        type: choice
+        options: [macos-26-intel, macos-26]
+        default: macos-26-intel
 permissions:
   contents: read
   actions: read
 jobs:
   measure:
-    runs-on: macos-26-intel
+    runs-on: ${{ inputs.simulator_host || 'macos-26-intel' }}
     timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +61,7 @@ jobs:
           ditto -x -k release/BuildPlay-simulator.zip "$RUNNER_TEMP/interaction/release"
           xcrun simctl list devices available --json | jq '{devices:(.devices | with_entries(select(.key | test("iOS-(2[6-9]|[3-9][0-9])-"))))}' > "$RUNNER_TEMP/interaction/devices.json"
           python3 frontends/portal/scripts/select-ios-simulator.py "$RUNNER_TEMP/interaction/devices.json" > "$RUNNER_TEMP/interaction/phone.json"
+          uname -m > "$RUNNER_TEMP/interaction/host-architecture.txt"
           echo "SIMULATOR_ID=$(jq -r .udid "$RUNNER_TEMP/interaction/phone.json")" >> "$GITHUB_ENV"
       - name: Benchmark release JavaScript on the same simulator
         env:
@@ -123,4 +129,5 @@ jobs:
             ${{ runner.temp }}/interaction/results/*/*.mov
             ${{ runner.temp }}/interaction/results/*/*.png
             ${{ runner.temp }}/interaction/phone.json
+            ${{ runner.temp }}/interaction/host-architecture.txt
             ${{ runner.temp }}/interaction/fixture/pose.json
