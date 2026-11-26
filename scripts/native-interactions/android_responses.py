@@ -32,6 +32,7 @@ def run(args):
         rows=[];folder=args.results/case['id'];folder.mkdir()
         try:
             d.adb('shell','am','force-stop',pkg)
+            d.adb('logcat','-c')
             path=directory+'/'+case['filename']
             d.adb('shell','mkdir','-p',directory)
             d.adb('push',args.fixtures/case['id']/case['filename'],path)
@@ -73,6 +74,10 @@ def run(args):
         except Exception as e:
             all_rows[case['id']]={'actions':rows,'error':str(e)}
             print(case['id'],str(e),flush=True)
+            with (folder/'crash.log').open('w') as log:
+                for cmd in (('logcat','-b','crash','-d'),('logcat','-d','-s','AndroidRuntime:E','ReactNativeJS:E','libc:F','DEBUG:E'),
+                            ('shell','dumpsys','activity','exit-info',pkg)):
+                    subprocess.run([*d.command,*cmd],stdout=log,stderr=subprocess.STDOUT,timeout=12)
             try:(folder/'last.xml').write_text(d.adb('shell','cat','/sdcard/buildplay-response.xml'))
             except Exception:pass
         (args.results/'responses.json').write_text(json.dumps(all_rows,indent=2))

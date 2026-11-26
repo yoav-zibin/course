@@ -24,6 +24,7 @@ def serve(fixture, port, delay_ms, web_build=None):
     arrivals = []
     saves = {}
     startup = []
+    extra_games = {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -54,6 +55,15 @@ def serve(fixture, port, delay_ms, web_build=None):
                 self.end_headers()
                 self.wfile.write(payload)
                 return
+            if path=='/__seed' and self.command=='POST':
+                seed=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                g=seed['game']
+                extra_games['/games/'+g['id']]=g
+                extra_games['/games/'+g['id']+'/versions/'+str(g['version'])]=g
+                if 'match' in seed:
+                    m=seed['match']
+                    saves['/matches/'+m['id']]={**m,'single_player_state':m,'cloud_revision':1}
+                return self.reply({})
             if path=='/__startup':
                 if self.command=='POST':
                     startup.append(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
@@ -88,6 +98,11 @@ def serve(fixture, port, delay_ms, web_build=None):
                       '/v2'+match_path+'/history':{'items':[],'total':match['move_count']},match_path+'/moves':[],
                       '/users/'+account['id']:account,'/users':[account],'/matches':[],
                       '/users/me/recent-games':[],'/users/me/saved-games':[]}
+            if path in extra_games: return self.reply(extra_games[path])
+            if path in ('/games','/v2/games','/games/popular') and extra_games:
+                unique={g['id']:g for g in [game,*extra_games.values()]}
+                cards=[{k:g[k] for k in card} for g in unique.values()]
+                return self.reply({'items':cards,'next_cursor':None} if path=='/v2/games' else cards)
             if path in values:
                 return self.reply(values[path])
             if path in saves:
