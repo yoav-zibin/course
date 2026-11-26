@@ -22,8 +22,11 @@ final class ResponseTests: XCTestCase {
         app.launchEnvironment["DYLD_INSERT_LIBRARIES"] = data.library
         if data.profile {app.launchEnvironment["BUILDPLAY_RESPONSE_STACKS"]="1"}
         app.launch()
-        app.open(try XCTUnwrap(URL(string:"buildplay:///#match="+scenario.match)))
         let canvas = element("Game board. Use pieces and highlighted destinations.")
+        // The restored game installs its URL listener as part of startup.
+        // Wait for the warm board before asking UIKit to open the test match.
+        XCTAssertTrue(canvas.waitForExistence(timeout:30),app.debugDescription)
+        app.open(try XCTUnwrap(URL(string:"buildplay:///#match="+scenario.match)))
         let board = canvas.waitForExistence(timeout:10) ? canvas : element("game-stage")
         XCTAssertTrue(board.waitForExistence(timeout:25),app.debugDescription)
         Thread.sleep(forTimeInterval:1.4)

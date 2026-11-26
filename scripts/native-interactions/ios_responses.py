@@ -17,8 +17,7 @@ def run(app,fixtures,output,device,profile,fresh=False,checker_pair=False,rapid=
     subprocess.run(['xcrun','clang','-isysroot',sdk,'-target',platform.machine()+'-apple-ios17.0-simulator','-dynamiclib',
         '-fobjc-arc','-framework','UIKit','-framework','QuartzCore','-framework','CoreGraphics','-framework','Foundation',scripts/'ResponseClock.m',scripts/'ResponseSamples.m','-o',library],check=True)
     subprocess.run(['codesign','-s','-','--force',library],check=True)
-    scenarios,key,data=seed(fixtures)
-    if checker_pair:scenarios=[c for c in scenarios if c['id']=='backgammon-pass-midgame']
+    scenarios,key,data=seed(fixtures,'backgammon-pass-midgame' if checker_pair else None)
     (project/'InteractionTests/response-cases.json').write_text(json.dumps({'library':str(library.resolve()),'scenarios':scenarios,'profile':profile,'rapid':rapid}))
     subprocess.run(['xcodegen','generate'],cwd=project,check=True)
     sim('bootstatus',device,'-b')

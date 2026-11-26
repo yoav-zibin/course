@@ -3,8 +3,11 @@ import json
 from pathlib import Path
 
 
-def seed(fixtures):
+def seed(fixtures,case_id=None):
     scenarios=json.loads((fixtures/'scenarios.json').read_text())
+    if case_id is not None:
+        scenarios=[case for case in scenarios if case['id']==case_id]
+        if not scenarios:raise ValueError('Unknown interaction scenario: '+case_id)
     master=None
     for case in scenarios:
         envelope=json.loads((fixtures/case['id']/case['filename']).read_text())
