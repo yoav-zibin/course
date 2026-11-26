@@ -1,7 +1,7 @@
 import {visibleErrorMessage} from '../core/account-scope';
 import {copyText,playerText} from '../platform/i18n';
 import React, {useEffect, useRef, useState} from 'react';
-import {Image, Pressable, ScrollView, StyleSheet, View} from 'react-native';
+import {Image, Platform, Pressable, ScrollView, StyleSheet, View} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import type {Game, Match} from '../core/types';
 import {Button, Card, Choices, Copy, Dialog, Empty, Field, Notice, Row, Title, colors} from './components';
@@ -44,13 +44,34 @@ export function Catalog() {
 
 export function GameDetail() {
   const {p,run,openAccount,showSelectedMatch} = useApp(),t=useText();
-  const game=p.selectedGame;
+  // Catalog cards already include the available player counts. A player can
+  // choose a mode while the same full, version-checked package is downloading.
+  const summary=!p.selectedGame && [p.games,p.popularGames,p.savedGames,p.recentGames]
+    .map(games=>games.find(item=>item.id===p.selectedGameId)).find(item=>item?.renderer_type==='declarative'&&item.allowed_player_counts?.length);
+  const game=p.selectedGame||summary||null;
+  const creating=useRef(false);
   const [computerPlayers,setComputerPlayers]=useState(2),[passPlayers,setPassPlayers]=useState(2),[stake,setStake]=useState(0),[speed,setSpeed]=useState(0);
-  useEffect(()=>{if(game){const min=Math.min(...game.allowed_player_counts),counts=game.allowed_player_counts.filter(count=>count>1);setComputerPlayers(counts.length?Math.min(...counts):min);setPassPlayers(min);}},[game?.id]);
+  useEffect(()=>{if(game){const min=Math.min(...game.allowed_player_counts),counts=game.allowed_player_counts.filter(count=>count>1);setComputerPlayers(counts.length?Math.min(...counts):min);setPassPlayers(min);}},[game?.id,game?.version]);
+  useEffect(()=>{
+    if(Platform.OS==='web')return;
+    const idle=requestIdleCallback(()=>{void import('./MatchStage').then(module=>module.preparePresentationRuntime()).catch(()=>{});});
+    return ()=>cancelIdleCallback(idle);
+  },[]);
   if(!game)return <Empty>{copyText("Loading game…")}</Empty>;
   const solo=game.allowed_player_counts.length===1&&game.allowed_player_counts[0]===1;
   const computerCounts=game.allowed_player_counts.filter(count=>count>1);
-  const start=async(mode:'computer'|'online'|'pass')=>{if(!p.account){openAccount();return;}let match;if(mode!=='online'){const computer=mode==='computer',players=computer?computerPlayers:passPlayers;match=await p.actions.startPractice(game.id,{humans:computer?1:players,computers:computer?players-1:0,humanSeat:computer?Math.floor(Math.random()*players):0});}else{match=await p.actions.createMatch({game_id:game.id,match_kind:'multiplayer',bet_per_player:stake,turn_seconds:speed||null});}showSelectedMatch(match.id);};
+  const start=async(mode:'computer'|'online'|'pass')=>{
+    if(!p.account){openAccount();return;}
+    if(creating.current)return;
+    creating.current=true;
+    try {
+      const computer=mode==='computer',players=computer?computerPlayers:passPlayers;
+      const match=mode==='online'
+        ? await p.actions.createMatch({game_id:game.id,match_kind:'multiplayer',bet_per_player:stake,turn_seconds:speed||null})
+        : await p.actions.startPractice(game.id,{humans:computer?1:players,computers:computer?players-1:0,humanSeat:computer?Math.floor(Math.random()*players):0});
+      showSelectedMatch(match.id);
+    } finally {creating.current=false;}
+  };
   return <>
     <Card style={{borderTopWidth:3,borderTopColor:colors.purple}}><Title>{game.name}</Title><Copy muted>{game.description}</Copy><Copy small style={{color:colors.blue}}>{game.allowed_player_counts.join(', ')} {copyText("players")}</Copy></Card>
     <Title small>{t('ui.portal.choose_play_mode','How would you like to play?')}</Title>

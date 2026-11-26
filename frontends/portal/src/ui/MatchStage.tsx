@@ -104,3 +104,4 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
     </Dialog>
   </View>;
 }
+export {preparePresentationRuntime} from '../game/preparePresentationResponse';

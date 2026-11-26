@@ -23,7 +23,7 @@ build=(xcodebuild -project "$results/project/Interactions.xcodeproj" -scheme Int
   -destination "platform=iOS Simulator,id=$sim" -derivedDataPath "$results/derived" -parallel-testing-enabled NO)
 "${build[@]}" build-for-testing >"$results/build.log"
 for ((sample=1;sample<=samples;sample++)); do
-  for action in ColdHome ColdBackgammon; do
+  for action in ColdHome ColdBackgammon NewBackgammon; do
     name="$sample-$action"
     xcrun simctl uninstall "$sim" "$bundle" 2>/dev/null || true
     xcrun simctl install "$sim" "$app"
@@ -35,6 +35,13 @@ for ((sample=1;sample<=samples;sample++)); do
     if ((status)); then exit "$status"; fi
     if [[ "$action" == ColdBackgammon ]]; then
       jq -e '([.[].path] | index("/matches/benchmark-opening")!=null and index("/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10")!=null)' "$results/$name-requests.json" >/dev/null
+    elif [[ "$action" == NewBackgammon ]]; then
+      for attempt in {1..20}; do
+        curl -fsS http://127.0.0.1:18764/__saves >"$results/$name-saves.json"
+        if jq -e 'length>0' "$results/$name-saves.json" >/dev/null; then break; fi
+        sleep .25
+      done
+      jq -e 'length==1 and .[0].game_id=="5f5293c3-2a3a-4eec-b631-9debf59be0ca" and .[0].move_count==0' "$results/$name-saves.json" >/dev/null
     fi
   done
 done
@@ -45,10 +52,10 @@ directory=Path(sys.argv[1])
 rows=[]
 for sample in range(1,int(sys.argv[2])+1):
     events={}
-    for action in ('ColdHome','ColdBackgammon'):
+    for action in ('ColdHome','ColdBackgammon','NewBackgammon'):
         for key,elapsed in re.findall(r'STARTUP_MS (\w+) ([\d.]+)',(directory/f'{sample}-{action}.log').read_text()):
             events[key+'_ms']=round(float(elapsed),1)
-    if len(events)!=3:
+    if set(events)!={'home_ms','catalog_ms','board_ms','details_ms','new_board_ms'}:
         raise ValueError(f'Missing a verified startup milestone in trial {sample}')
     rows.append(events)
 (directory/'startup.json').write_text(json.dumps(rows,indent=2)+'\n')

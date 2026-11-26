@@ -6,6 +6,10 @@ import type {GameSpec,Scene} from './types';
 let worker: ReturnType<typeof createWorkletRuntime> | undefined;
 const validationSpecs = new WeakMap<GameSpec,string>();
 
+export function preparePresentationRuntime() {
+  return worker ??= createWorkletRuntime({name:'Game presentation',enableEventLoop:false});
+}
+
 function resolveResponse(specJSON: string, text: string) {
   'worklet';
   const result = decodeResult(text);
@@ -21,9 +25,8 @@ export async function preparePresentationResponse(spec: GameSpec, text: string) 
     specJSON = JSON.stringify({boards,piece_types,motion,assets:Object.fromEntries(Object.keys(assets??{}).map(id=>[id,true]))});
     validationSpecs.set(spec,specJSON);
   }
-  worker ??= createWorkletRuntime({name:'Game presentation',enableEventLoop:false});
   // Keep arbitrary game output as JSON text across the Worklets boundary.
-  const resolvedJSON = await runOnRuntimeAsync(worker,resolveResponse,specJSON,text);
+  const resolvedJSON = await runOnRuntimeAsync(preparePresentationRuntime(),resolveResponse,specJSON,text);
   const result = decodeResult(text);
   return {result,resolved:resolvedJSON === undefined ? result.scene : JSON.parse(resolvedJSON) as Scene};
 }

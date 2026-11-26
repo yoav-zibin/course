@@ -51,6 +51,7 @@ export class PortalStore {
   private accountSelectionWrites: Promise<void> = Promise.resolve();
   private paginated = false;
   private refreshPromise: Promise<void> | null = null;
+  private pendingPackages = new Map<string,Promise<Game>>();
   private offlineDownloadPromise: Promise<void> | null = null;
   private offlineDownloadScope = '';
   private offlineDownloadAfter = 0;
@@ -529,7 +530,15 @@ export class PortalStore {
     await this.recoverPresentation(match, selected).catch(() => {});
     if (match.status !== selected.status || match.token_pot !== selected.token_pot || !equal(match.token_payouts, selected.token_payouts)) await this.refreshProfile().catch(() => {});
   }
-  private async pinnedGame(id: string, version?: number, matchId?: string): Promise<Game> {
+  private pinnedGame(id: string, version?: number, matchId?: string): Promise<Game> {
+    const key=JSON.stringify([this.generation,this.state.baseUrl,this.identity(),id,version,matchId]);
+    const current=this.pendingPackages.get(key);
+    if(current)return current;
+    const pending=this.loadPinnedGame(id,version,matchId).finally(()=>this.pendingPackages.delete(key));
+    this.pendingPackages.set(key,pending);
+    return pending;
+  }
+  private async loadPinnedGame(id: string, version?: number, matchId?: string): Promise<Game> {
     if (id === bundled.id) return localizeGame(bundled as Game);
     const guard = this.capture();
     const path = version === undefined ? `/games/${encodeURIComponent(id)}` : `/games/${encodeURIComponent(id)}/versions/${version}`;

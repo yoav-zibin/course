@@ -27,6 +27,50 @@ final class StartupTests: XCTestCase {
         let link = try XCTUnwrap(URL(string: "buildplay:///#match=benchmark-opening"))
         let start = ProcessInfo.processInfo.systemUptime
         app.open(link)
+        measureBoard(from: start, metric: "board")
+    }
+
+    private func reveal(_ control: XCUIElement) {
+        XCTAssertTrue(control.waitForExistence(timeout: 20), app.debugDescription)
+        for _ in 0..<8 {
+            if control.isHittable { return }
+            app.swipeUp()
+        }
+        XCTAssertTrue(control.isHittable, control.debugDescription)
+    }
+
+    func testNewBackgammon() {
+        app.launch()
+        let login = app.buttons["Log in / continue as guest"]
+        reveal(login)
+        login.tap()
+        let guest = app.buttons.matching(NSPredicate(format: "label == %@ OR label ENDSWITH %@", "Guest", ": Guest")).firstMatch
+        reveal(guest)
+        guest.tap()
+        let field = app.textFields.firstMatch
+        reveal(field)
+        field.tap()
+        field.typeText("Benchmark\n")
+        let signup = app.buttons["Continue as guest"]
+        reveal(signup)
+        signup.tap()
+        XCTAssertTrue(signup.waitForNonExistence(timeout: 20))
+
+        let card = element("Play Backgammon")
+        reveal(card)
+        let detailsStart = ProcessInfo.processInfo.systemUptime
+        card.tap()
+        XCTAssertTrue(element("How would you like to play?").waitForExistence(timeout: 20))
+        print("STARTUP_MS details \((ProcessInfo.processInfo.systemUptime-detailsStart)*1000)")
+
+        let play = app.buttons["Pass and play"]
+        reveal(play)
+        let boardStart = ProcessInfo.processInfo.systemUptime
+        play.tap()
+        measureBoard(from: boardStart, metric: "new_board")
+    }
+
+    private func measureBoard(from start: TimeInterval, metric: String) {
         XCTAssertTrue(element("game-stage").waitForExistence(timeout: 25), app.debugDescription)
         // SVG accessibility grouping varies between iOS versions. Verify the
         // wooden board is actually drawn before reporting the load as complete.
@@ -34,7 +78,7 @@ final class StartupTests: XCTestCase {
         repeat {
             let screenshot = app.screenshot()
             if showsBoard(screenshot) {
-                print("STARTUP_MS board \((ProcessInfo.processInfo.systemUptime-start)*1000)")
+                print("STARTUP_MS \(metric) \((ProcessInfo.processInfo.systemUptime-start)*1000)")
                 let evidence = XCTAttachment(screenshot: screenshot)
                 evidence.name = "Backgammon opened without cached match data"
                 evidence.lifetime = .keepAlways

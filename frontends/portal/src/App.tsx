@@ -126,18 +126,18 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
     else void p.actions.claimNotificationPrompt().catch(() => p.actions.dismissNotificationPrompt());
   }, [p.notificationPrompt,p.notificationPromptReady,notificationDelivery.status]);
 
-  const launchLink=useRef<string|null>(null);
+  const [launchLink,setLaunchLink]=useState<{url:string;attributed:boolean}|null>(null);
   useEffect(() => {void run(async () => {
     const initialUrl=Platform.OS==='web'?window.location.href:(await Linking.getInitialURL())??null;
-    launchLink.current=initialUrl;
+    if(initialUrl)setLaunchLink({url:initialUrl,attributed:!p.ready});
     await p.actions.bootstrap(undefined,localOnly,initialUrl??undefined);
     if (Platform.OS === 'web') installWebApp();
   });}, []);
   useEffect(()=>{
-    if(!p.ready||!launchLink.current)return;
-    const url=launchLink.current;launchLink.current=null;
-    void run(()=>receiveLink(url,true));
-  },[p.ready]);
+    if(!p.ready||!launchLink)return;
+    setLaunchLink(null);
+    void run(()=>receiveLink(launchLink.url,launchLink.attributed));
+  },[p.ready,launchLink]);
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({url}) => {void run(()=>receiveLink(url));});
     const resume = AppState.addEventListener('change', state => {if (state === 'active') void run(() => p.actions.refresh());});

@@ -1018,3 +1018,26 @@ test('starting practice from game details reuses the exact loaded package', asyn
     assert.equal(store.getSnapshot().selectedMatch?.id,match.id);
   } finally {restore();}
 });
+
+test('choosing pass and play while the details download creates one match from the shared package',async()=>{
+  browserStorage(true);
+  const fixture={...JSON.parse(readFileSync(new URL('../src/core/bundled-tictactoe.json',import.meta.url),'utf8')),id:'still-downloading',version:7};
+  let release!:(game:typeof fixture)=>void,requested!:()=>void,downloads=0;
+  const download=new Promise<typeof fixture>(resolve=>{release=resolve;});
+  const firstRequest=new Promise<void>(resolve=>{requested=resolve;});
+  const restore=mockedFetch(url=>{
+    if(url.pathname==='/games/'+fixture.id){downloads++;requested();return download;}
+  });
+  try {
+    const store=new PortalStore(testRuntime());
+    await store.actions.bootstrap('https://local.test');
+    const details=store.actions.selectGame(fixture.id);
+    await firstRequest;
+    const starting=store.actions.startPractice(fixture.id,{humans:2,computers:0});
+    release(fixture);
+    const [,match]=await Promise.all([details,starting]);
+    assert.equal(downloads,1);
+    assert.equal(match.game_version,fixture.version);
+    assert.deepEqual(store.getSnapshot().localMatches.filter(saved=>saved.game_id===fixture.id).map(saved=>saved.id),[match.id]);
+  } finally {release(fixture);restore();}
+});

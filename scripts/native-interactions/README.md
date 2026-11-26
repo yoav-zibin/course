@@ -35,7 +35,7 @@ XCTest measures checker selection, dragging and opening the report. The wall-clo
 
 The startup fixture serves the opening position and its pinned game package over loopback. It adds 200 ms to each API response. Both revisions use the same fixture, and each trial clears the app's data. A cold match launch must request both the match and the game package and display the wooden board.
 
-For iOS, choose `startup` in the **Native interaction benchmark** workflow. It measures three clean installs per case per revision. The home and playable catalog milestones use XCTest accessibility. The match milestone also verifies a screenshot. The artifact includes individual times and the API request log for every launch.
+For iOS, choose `startup` in the **Native interaction benchmark** workflow. It measures three clean installs per case per revision. The home and catalog milestones use XCTest accessibility. The match milestones also verify a screenshot. A new guest opens the play options, starts a pass-and-play game, and the runner checks that the new match reached the server. The artifact includes individual times and the API request log for every launch.
 
 For Android, install a release benchmark build with `EXPO_PUBLIC_API_URL=http://127.0.0.1:18764` embedded in the bundle and loopback HTTP allowed in the test app. Generate the board fixture as above. Start the server in a separate terminal, then connect the disposable emulator and record each scenario.
 

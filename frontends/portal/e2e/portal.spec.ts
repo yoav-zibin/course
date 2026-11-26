@@ -166,6 +166,29 @@ test('visitors can watch existing matches after the game leaves the catalog',asy
   await expect(page.getByText('Game in progress',{exact:true})).toBeVisible();
 });
 
+test('the first play-mode tap works while an uncached game is downloading',async({page,request})=>{
+  const rules=await game(request,uniqueName('First match'));
+  const card={id:rules.id,version:rules.version,name:rules.name,description:rules.description,
+    allowed_player_counts:rules.allowed_player_counts,renderer_type:rules.renderer_type};
+  await restore(page,await account(request,'First game guest'));
+  await page.route('**/games/popular',route=>route.fulfill({json:[card]}));
+  let release!:()=>void,downloads=0;
+  const downloading=new Promise<void>(resolve=>{release=resolve;});
+  await page.route(url=>url.pathname==='/games/'+rules.id,async route=>{
+    downloads++;await downloading;await route.continue();
+  });
+  try {
+    await page.goto('/portal');
+    await page.getByRole('link',{name:'Play '+card.name,exact:true}).first().click();
+    await page.getByRole('button',{name:'Pass and play',exact:true}).click();
+    await expect.poll(()=>downloads).toBe(1);
+    release();
+    await expect(page).toHaveURL(/#match=local-/);
+    await expect(page.getByTestId('game-stage')).toBeVisible();
+    expect(downloads).toBe(1);
+  } finally {release();}
+});
+
 test('browser Back from a local match restores its game detail screen and play controls',async({page,request})=>{
   const created=await game(request,uniqueName('History game'));await page.goto(`/portal#game=${created.id}`);
   await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
