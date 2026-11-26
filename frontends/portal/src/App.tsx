@@ -155,9 +155,13 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
   useEffect(()=>{
     if(!p.ready)return;
     let stopped=false,timer:ReturnType<typeof setTimeout>;
-    const poll=async()=>{try{if(AppState.currentState==='active'&&(Platform.OS!=='web'||!document.hidden)){if(p.selectedMatch)await p.actions.refreshMatch();else await p.actions.refresh();}}catch{/* Store exposes connection status and preserves the last board. */}finally{if(!stopped)timer=setTimeout(poll,p.selectedMatch?.status==='ongoing'?400:p.selectedMatch?2000:5000);}};
-    timer=setTimeout(poll,1000);return()=>{stopped=true;clearTimeout(timer);};
-  },[p.ready,p.selectedMatch?.id,p.selectedMatch?.status,p.account?.id]);
+    // Local moves publish immediately. Poll their shared save at the home-screen
+    // cadence so large game packages do not compete with each touch on native.
+    const localGame=Platform.OS!=='web'&&!!p.selectedMatch?.localMode;
+    const interval=localGame?5000:p.selectedMatch?.status==='ongoing'?400:p.selectedMatch?2000:5000;
+    const poll=async()=>{try{if(AppState.currentState==='active'&&(Platform.OS!=='web'||!document.hidden)){if(p.selectedMatch)await p.actions.refreshMatch();else await p.actions.refresh();}}catch{/* Store exposes connection status and preserves the last board. */}finally{if(!stopped)timer=setTimeout(poll,interval);}};
+    timer=setTimeout(poll,localGame?interval:1000);return()=>{stopped=true;clearTimeout(timer);};
+  },[p.ready,p.selectedMatch?.id,p.selectedMatch?.status,p.selectedMatch?.localMode,p.account?.id]);
   useEffect(()=>{
     if(Platform.OS!=='android')return;
     const listener=BackHandler.addEventListener('hardwareBackPress',()=>{

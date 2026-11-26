@@ -25,6 +25,7 @@ export type BoardInputProps = {
   onCamera:(camera:BoardCamera)=>void;
   renderHeld:(id:string)=>ReactNode;
   renderPreview:(target:Target)=>ReactNode;
+  renderDestination:(target:Target,accessible:boolean)=>ReactNode;
 };
 
 export type BoardInput = {
@@ -32,6 +33,8 @@ export type BoardInput = {
   wrapCanvas?:(canvas:ReactElement)=>ReactElement;
   wrapPiece?:(piece:ReactElement,root:string)=>ReactElement;
   feedback?:ReactNode;
+  destinationHints?:ReactNode;
+  drawsSelectedTargets?:boolean;
 };
 
 export function useBoardInput(_props:BoardInputProps):BoardInput {

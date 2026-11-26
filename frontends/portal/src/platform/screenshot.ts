@@ -15,11 +15,23 @@ function capturePlan(width:number,height:number) {
   };
 }
 
+let cached:{width:number;height:number;plan:Promise<ReturnType<typeof capturePlan>>}|undefined;
+function planForWindow() {
+  const {width,height}=Dimensions.get('window');
+  if(cached?.width===width&&cached.height===height)return cached.plan;
+  worker ??= createWorkletRuntime({name:'Bug screenshot',enableEventLoop:false});
+  const plan=runOnRuntimeAsync(worker,capturePlan,width,height);
+  cached={width,height,plan};
+  void plan.catch(()=>{if(cached?.plan===plan)cached=undefined;});
+  return plan;
+}
+
+// Prepare the worker and its capture settings before the first bug-button tap.
+requestIdleCallback(()=>{void Promise.resolve().then(planForWindow).catch(()=>{});});
+
 /** Capture the current native window before presenting the report modal. */
 export async function captureBugScreenshot():Promise<string> {
-  const {width,height}=Dimensions.get('window');
-  worker ??= createWorkletRuntime({name:'Bug screenshot',enableEventLoop:false});
-  const {size,qualities,maxLength}=await runOnRuntimeAsync(worker,capturePlan,width,height);
+  const {size,qualities,maxLength}=await planForWindow();
   for(const quality of qualities) {
     const options={format:'jpg' as const,quality,result:'data-uri' as const,...size};
     // Android RN Modal owns a separate Dialog window. Activity captureScreen

@@ -83,6 +83,19 @@ def visible_latency(times, frames, box):
                 np.abs(roi(f, box)[changed]-after[changed]).mean() < span*.5)
 
 
+def highlight_latency(times, frames, board, column, scale):
+    # The authored Backgammon target is green and the board is wood. Its column
+    # stays fixed when the selection toolbar changes the vertical board frame.
+    radius = max(3, round(14*scale))
+    def pixels(frame):
+        r, g, b = np.moveaxis(frame[board[1]:board[3],column-radius:column+radius].astype(np.int16), 2, 0)
+        return np.count_nonzero((g > r+18) & (g > b+40) & (g > 130))
+    before, after = pixels(frames[0]), pixels(frames[-1])
+    if after-before < 40:
+        raise RuntimeError('The expected point did not visibly highlight')
+    return next(t for t, frame in zip(times, frames) if t>=0 and pixels(frame) >= before+(after-before)/2)
+
+
 def drag_metrics(times, frames, box, duration):
     previous = roi(frames[0], box)
     changes = []
@@ -116,6 +129,7 @@ def benchmark(args):
     device.adb('push', args.fixture / pose['filename'], '/data/local/tmp/buildplay-benchmark.json')
     uid = device.adb('shell', 'stat', '-c', '%u:%g', '/data/user/0/' + args.package)
     args.output.mkdir(parents=True, exist_ok=True)
+    dropped = 0
     for sample in range(args.samples):
         result = args.output / str(sample+1)
         result.mkdir()
@@ -138,11 +152,25 @@ def benchmark(args):
         # Physical pixels per logical unit in Android's gesture coordinates.
         density = int(re.findall(r'(\d+)', device.adb('shell', 'wm', 'density'))[-1])/160
         lift = round(min(54*density, pose['height']*scale*.6+22*density, (bottom-top)/3))
+        if args.scenario == 'tracking':
+            # The source column contains no legal destination. This isolates free
+            # motion from the intentional hold when a piece snaps to a legal point.
+            end = project({'x':pose['source']['x'], 'y':pose['bounds']['y'] + pose['bounds']['height']*.92})
+            times, frames, duration = device.record(result, 'tracking', f'swipe {src[0]} {src[1]} {end[0]} {end[1]} 850')
+            row = {k:round(float(v),1) for k,v in drag_metrics(times, frames, board, duration).items()}
+            match = json.loads(json.loads(device.adb('shell', 'cat', dest))['value'])['local'][pose['id']]
+            if match['move_count'] != pose['moveCount']:
+                raise RuntimeError('Free-motion path hit a legal destination')
+            (result/'metrics.json').write_text(json.dumps(row, indent=2)+'\n')
+            print(sample+1, json.dumps(row), flush=True)
+            continue
         row = {}
         for name, label, position in [('report', 'Close dialog', center(device.bounds(REPORT))),
                                       ('select', 'Cancel selection', src)]:
             times, frames, bracket = device.record(result, name, f'tap {position[0]} {position[1]}')
             row[name+'_visible_ms'] = visible_latency(times, frames, board)
+            if name == 'select':
+                row['legal_target_visible_ms'] = highlight_latency(times, frames, board, target[0], scale)
             row[name+'_input_bracket_ms'] = bracket
             device.bounds('Screenshot captured before opening this report' if name=='report' else pose['target'])
             device.tap(label)
@@ -150,12 +178,15 @@ def benchmark(args):
         times, frames, duration = device.record(result, 'drag', f'swipe {src[0]} {src[1]} {target[0]} {target[1]+lift} 850')
         row.update(drag_metrics(times, frames, board, duration))
         match = json.loads(json.loads(device.adb('shell', 'cat', dest))['value'])['local'][pose['id']]
-        if (match['move_count'] != pose['moveCount']+1 or match['logicState']['cnt'] != pose['expectedCounts']
-                or match['logicState']['owner'] != pose['expectedOwners']):
-            raise RuntimeError('Drag did not commit the expected legal move')
+        committed = (match['move_count'] == pose['moveCount']+1 and match['logicState']['cnt'] == pose['expectedCounts']
+                     and match['logicState']['owner'] == pose['expectedOwners'])
         row = {k:round(float(v), 1) for k,v in row.items()}
+        row['legal_drop_committed'] = committed
+        dropped += int(not committed)
         (result/'metrics.json').write_text(json.dumps(row, indent=2)+'\n')
         print(sample+1, json.dumps(row), flush=True)
+    if dropped:
+        raise RuntimeError(f'{dropped} of {args.samples} gestures did not commit the expected legal move')
 
 
 if __name__ == '__main__':
@@ -165,4 +196,5 @@ if __name__ == '__main__':
     parser.add_argument('--fixture', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--samples', type=int, default=5)
+    parser.add_argument('--scenario', choices=['opening','tracking'], default='opening')
     benchmark(parser.parse_args())

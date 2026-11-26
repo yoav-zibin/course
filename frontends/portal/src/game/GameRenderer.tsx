@@ -4,7 +4,7 @@ import {createDragFrames} from '../core/dragFrames';
 import {copyText,playerText} from '../platform/i18n';
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
-import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgXml, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Ellipse, Image as SvgImage, Line, Polygon, Polyline, Rect, SvgAst, parse, Text as SvgText } from 'react-native-svg';
 import G from './SceneGroup';
 import type { Board, Control, GameSpec, Json, Motion, Piece, Point, PresentationResult, Scene, StateMessage, Target, UIEvent } from './types';
 import { assetURI, boardCell, cameraLimits, contentBounds, pieceActions, position, validateSpec } from './validation';
@@ -354,6 +354,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
 
   const actions = useRef({boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview});
   actions.current={boardPoint,setSafeCamera,zoomTo,activatePiece,activateTarget,dispatch,transform,select,showPreview};
+  const pressPiece=useCallback((piece:Piece)=>actions.current.activatePiece(piece),[]);
+  const pressTarget=useCallback((target:Target)=>actions.current.activateTarget(target,Platform.OS!=='web'),[]);
   function projectDrag(at:Point,g:Gesture,piece:Piece){
     const c=current.current,size=pieceSize(spec,piece);
     const {scale,scaleX,scaleY}=projectCanvas(c.width,c.height,c.view,c.fill);
@@ -557,9 +559,10 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     spec,scene:display.scene,order:painting.order,revision:revision.current,active,selected,
     selectionRequired:showDestinationsAfterSelection,width,height,view,bounds,camera,fill,
     onResult:finishBoardInput,onCamera:setSafeCamera,renderHeld,renderPreview,
+    renderDestination:(target,accessible)=><TargetGraphic target={target} spec={spec} enabled selected={preview===target.id} onPress={accessible?pressTarget:undefined}/>,
   });
   const targetSource=boardInput.heldId?display.scene.pieces?.find(piece=>piece.id===boardInput.heldId):selectedPiece;
-  const visibleTargets=(display.scene.targets||[]).filter(target=>
+  const visibleTargets=boardInput.drawsSelectedTargets?[]:(display.scene.targets||[]).filter(target=>
     !showDestinationsAfterSelection || (active && targetSource?.move_targets?.includes(target.id)));
   const draggedId=drag?.id;
   const pieceLayers=useMemo(()=>{
@@ -568,12 +571,12 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       const rootId=item.piece.parent??item.piece.id;
       const graphic=<PieceGraphic key={`${item.ghost?'ghost':'piece'}:${item.piece.id}`} piece={item.piece} previous={item.previous}
         spec={spec} {...item.options} serial={display.serial} enabled={active&&!item.ghost} selected={item.piece.selected||rootId===selected}
-        started={display.started} concealed={rootId===draggedId} onPress={()=>actions.current.activatePiece(item.piece)}/>;
+        started={display.started} concealed={rootId===draggedId} onPress={pressPiece}/>;
       (item.z<=STATIC_PIECE_Z_MAX?lower:upper).push(!item.ghost&&pieceActions(item.piece).length&&boardInput.wrapPiece?
         boardInput.wrapPiece(graphic,rootId):graphic);
     }
     return {lower,upper};
-  },[painting,spec,display.serial,display.started,active,selected,draggedId,boardInput.wrapPiece]);
+  },[painting,spec,display.serial,display.started,active,selected,draggedId,boardInput.wrapPiece,pressPiece]);
   function draggedPosition(piece:Piece): Point {
     const root=display.scene.pieces!.find(p=>p.id===drag!.id)!;
     const center=position(spec,root), at=position(spec,piece);
@@ -607,9 +610,10 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
         ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
         ...pieceLayers.lower,
         ...(previewTarget&&!boardInput.heldId?renderPreview(previewTarget):[]),
+        boardInput.destinationHints,
         ...visibleTargets.map(target=><TargetGraphic key={`target:${target.id}`} target={target} spec={spec}
           enabled={active&&(!targetSource?.move_targets?.length||targetSource.move_targets.includes(target.id))}
-          selected={preview===target.id||drag?.target===target.id} onPress={()=>activateTarget(target,Platform.OS!=='web')}/>),
+          selected={preview===target.id||drag?.target===target.id} onPress={pressTarget}/>),
         ...(display.scene.labels||[]).map(label=><SvgText key={`label:${label.id}`} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>),
         ...pieceLayers.upper,
         ...(drag?display.scene.pieces?.filter(piece=>!piece.hidden && (piece.parent??piece.id)===drag.id)||[]:[]).map(piece=><PieceGraphic key={`drag:${piece.id}`} piece={{...piece,hand:undefined,position:draggedPosition(piece)}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true} dragged/>),
@@ -647,21 +651,27 @@ function Tool({label,text,onPress,disabled=false}:{label:string;text:string;onPr
   return <Pressable accessibilityRole="button" accessibilityLabel={playerText(label)} accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.tool,disabled&&styles.disabled,pressed&&styles.pressed]}><Text style={styles.toolText}>{playerText(text)}</Text></Pressable>;
 }
 
+// Artwork is immutable within a validated game spec. A stack of identical
+// checkers, its drag preview and its lifted copy can share one parsed document.
+const svgArtwork=new WeakMap<{uri:string},ReturnType<typeof parse>>();
+function parsedArtwork(asset:{uri:string},uri:string) {
+  if(svgArtwork.has(asset))return svgArtwork.get(asset)??null;
+  let ast:ReturnType<typeof parse>=null;
+  try {
+    const source=decodeURIComponent(Array.from(atob(uri.split(',')[1])).map(c=>`%${c.charCodeAt(0).toString(16).padStart(2,'0')}`).join(''));
+    if(source.length<=120000&&!/<(?:script|foreignObject|iframe|object|embed|style)\b|\son\w+\s*=|(?:href\s*=\s*["']\s*(?!#)|url\(\s*(?!#))|<!ENTITY/i.test(source))ast=parse(source);
+  }catch{/* Ignore invalid embedded artwork. */}
+  svgArtwork.set(asset,ast);
+  return ast;
+}
+
 const Asset = memo(function Asset({spec,id,x,y,width,height}:{spec:GameSpec;id?:string;x:number;y:number;width:number;height:number}) {
-  const uri=assetURI(id?spec.assets?.[id]:undefined);
-  const xml=useMemo(()=>{
-    if(!uri?.startsWith('data:image/svg+xml;base64,'))return null;
-    try {
-      const source=decodeURIComponent(Array.from(atob(uri.split(',')[1])).map(c=>`%${c.charCodeAt(0).toString(16).padStart(2,'0')}`).join(''));
-      if(source.length>120000||/<(?:script|foreignObject|iframe|object|embed|style)\b|\son\w+\s*=|(?:href\s*=\s*["']\s*(?!#)|url\(\s*(?!#))|<!ENTITY/i.test(source))return null;
-      return source;
-    }catch{return null;}
-  },[uri]);
+  const asset=id?spec.assets?.[id]:undefined,uri=assetURI(asset);
   if(!uri)return null;
   // Native nested SVG viewports draw at (0, 0), ignoring the root's x/y props.
   // Translate a parent group so centered piece artwork shares its hit geometry
   // on iOS, Android and web, including negative half-width/height offsets.
-  if(uri.startsWith('data:image/svg+xml;base64,'))return xml?<G transform={`translate(${x} ${y})`}><SvgXml xml={xml} x={0} y={0} width={width} height={height}/></G>:null;
+  if(uri.startsWith('data:image/svg+xml;base64,'))return <G transform={`translate(${x} ${y})`}><SvgAst ast={parsedArtwork(asset!,uri)} override={{x:0,y:0,width,height}}/></G>;
   return <SvgImage href={{uri}} x={x} y={y} width={width} height={height} preserveAspectRatio="xMidYMid meet"/>;
 });
 
@@ -682,7 +692,7 @@ const BoardGraphic=memo(function BoardGraphic({board,spec}:{board:Board;spec:Gam
   </G>;
 });
 
-const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false,concealed=false,dragged=false}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:()=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean;concealed?:boolean;dragged?:boolean}) {
+const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false,concealed=false,dragged=false}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:(piece:Piece)=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean;concealed?:boolean;dragged?:boolean}) {
   const [frameState,setFrameState]=useState({serial:-1,phase:1});
   const {newEffect,next,before,popAnimation,needsAnimation,duration,delay}=pieceAnimation(spec,piece,previous,
     {animate,effect,inferMovement,moveTrack,sceneTrack,pulseEnabled});
@@ -706,7 +716,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   const fade=sceneTrack?1:effect==='enter'?p:effect==='change'?.25+.75*p:effect==='exit'?(p<.65?1-p/.65*.2:.8*(1-(p-.65)/.35)):1;
   const accessibleName=`${playerText(pieceName(piece))}${enabled&&actions.length?`: ${actions.map(a=>copyText(labels[a])).join(', ')}`:''}`;
   const accessibility:Record<string,unknown>=effect==='exit'||concealed||dragged?{accessible:false,accessibilityElementsHidden:true,importantForAccessibility:'no-hide-descendants','aria-hidden':true,testID:effect==='exit'?'history-ghost':dragged?'dragged-piece':'held-piece-origin',pointerEvents:'none'}:{accessible:true,accessibilityLabel:accessibleName,accessibilityRole:actions.length?'button':'image',
-    accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length?onPress:undefined};
+    accessibilityState:{disabled:!enabled,selected:!!selected},onPress:enabled&&actions.length&&onPress?()=>onPress(piece):undefined};
   // Keep the original SVG subtree mounted while dragging. Browser touch
   // sequences retain their initial target; removing it severs subsequent
   // touchMove/touchEnd delivery even though mouse dragging still appears fine.
@@ -725,14 +735,15 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
   </G>;
 });
 
-const TargetGraphic=memo(function TargetGraphic({target,spec,enabled,selected,onPress}:{target:Target;spec:GameSpec;enabled:boolean;selected:boolean;onPress:()=>void}) {
+const TargetGraphic=memo(function TargetGraphic({target,spec,enabled,selected,onPress}:{target:Target;spec:GameSpec;enabled:boolean;selected:boolean;onPress?:(target:Target)=>void}) {
   const point=position(spec,target),box=targetBox(spec,target),art=!!target.asset,board=point.board,shape=targetShape(spec,target);
   // Keep the accessible group's geometry in scene coordinates. Android SVG
   // virtual-node bounds misplace a translated group under a scaled viewBox;
   // its reported Cell 1 rectangle can otherwise physically hit Cell 4.
   return <G opacity={enabled?selected?1:.72:.18}
-    accessible accessibilityRole="button" accessibilityLabel={playerText(target.aria_label||target.label||copyText("Destination {v0}",{v0:target.id}))} accessibilityState={{disabled:!enabled,selected}}
-    onPress={enabled?onPress:undefined}>
+    accessible={!!onPress} accessibilityRole={onPress?'button':undefined} pointerEvents={onPress?undefined:'none'}
+    accessibilityLabel={onPress?playerText(target.aria_label||target.label||copyText("Destination {v0}",{v0:target.id})):undefined}
+    accessibilityState={{disabled:!enabled,selected}} onPress={enabled&&onPress?()=>onPress(target):undefined}>
     {shape?<>
       {shape.kind==='line'
         ?<Line x1={shape.from.x} y1={shape.from.y} x2={shape.to.x} y2={shape.to.y} strokeLinecap="round" strokeWidth={shape.width} stroke={art?'transparent':target.color||'#b8ef5b'}/>
