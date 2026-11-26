@@ -367,7 +367,19 @@ export class PortalStore {
       await Promise.all([this.reloadData(),incoming?this.rememberAttribution(incoming):undefined]);
       const snapshot = this.data, hidden = hiddenMatchIds(snapshot);
       this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']), authConfig:snapshot.responses['/auth/config']||{} });
-      if (!initialMatchId && snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) { const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`]; if (match) this.patch({ selectedMatch: this.decorate(match), game: snapshot.responses[`/games/${match.game_id}/versions/${match.game_version}`] || null }); }
+      if (!initialMatchId && snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) {
+        const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`];
+        if (match) {
+          const token=this.selection,guard=this.capture();
+          this.patch({selectedMatch:this.decorate(match),selectedGameId:match.game_id});
+          // The stored package is the author's original. Restore through the
+          // same presentation repair as an explicit open before mounting SVG.
+          if (this.exactPackage(match.game_id,match.game_version)) {
+            const game=await this.pinnedGame(match.game_id,match.game_version,match.localMode?undefined:match.id);
+            guard();if(token===this.selection)this.patch({game});
+          }
+        }
+      }
       // A cold native link can begin as soon as its account and attribution are
       // known. Opening the board does not depend on React mounting or the catalog.
       const opening = initialMatchId

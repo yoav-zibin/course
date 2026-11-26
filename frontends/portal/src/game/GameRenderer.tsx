@@ -703,7 +703,12 @@ function parsedArtwork(asset:{uri:string},uri:string) {
   if(svgArtwork.has(asset))return svgArtwork.get(asset)??null;
   let ast:ReturnType<typeof parse>=null;
   try {
-    const source=decodeURIComponent(Array.from(atob(uri.split(',')[1])).map(c=>`%${c.charCodeAt(0).toString(16).padStart(2,'0')}`).join(''));
+    const bytes=atob(uri.slice(uri.indexOf(',')+1));
+    // ASCII is already valid UTF-8. Most tabletop artwork consists entirely of
+    // ASCII paths and colors, so avoid allocating an encoded string per byte.
+    const source=/[^\x00-\x7f]/.test(bytes)
+      ? decodeURIComponent(Array.from(bytes,c=>`%${c.charCodeAt(0).toString(16).padStart(2,'0')}`).join(''))
+      : bytes;
     if(source.length<=120000&&!/<(?:script|foreignObject|iframe|object|embed|style)\b|\son\w+\s*=|(?:href\s*=\s*["']\s*(?!#)|url\(\s*(?!#))|<!ENTITY/i.test(source))ast=parse(source);
   }catch{/* Ignore invalid embedded artwork. */}
   svgArtwork.set(asset,ast);

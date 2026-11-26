@@ -15,7 +15,7 @@ const connectFourUIHash='49688ae52421550f0a14a92cf2914ebea961a147e344c71d70d80be
 const connectFourReplacementHash='1450713baa36d87bdd7b6aa23fba1263c0db48912bbc3bfec9b55f35a9da4d75';
 const replacementHash='7cb050f0acd41efe25a71bb772f6ccd671a62efdeba1783d6fb703d7e7356ee5';
 // These published packages have identical malformed wood-grain paths.
-const brokenBoardPackages=new Set(['666936dafaf8b31d82caecad96e94e4f3d40a83b1c3071687148de36e37a25e3','c2f66c7dc590a6ab547f9a5425725fd55cb1064d76f104af4e2cc168bf769caf']);
+const brokenBoardPackages=new Set(['666936dafaf8b31d82caecad96e94e4f3d40a83b1c3071687148de36e37a25e3','c2f66c7dc590a6ab547f9a5425725fd55cb1064d76f104af4e2cc168bf769caf','f1757543d7e08443f1107060141e2c831ef83e911383a2f9d88c409b275d0fcf']);
 
 // Match Python's sort_keys=True, ensure_ascii=False, separators=(',', ':').
 // Building the object text explicitly retains the sort order of numeric keys.

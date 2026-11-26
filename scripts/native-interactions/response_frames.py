@@ -24,20 +24,3 @@ def response(times,images,start,point,screen):
             return {'first_ms':round(times[j]-start,1),'frame_ms':round(times[j],2),'previous_frame_ms':round(times[j-1],2),
                     'screen_changed':round(broad,4),'near_input_changed':round(near,4)}
     return {'first_ms':None,'reason':'No visible change met the screen or touch-region threshold'}
-
-
-def clock_alignment(times,images,points_width,points_height,touch):
-    anchors=[]
-    for t,im in zip(times,images):
-        h,w=im.shape[:2]
-        def color(x):return im[round(70*h/points_height),round(x*w/points_width),:3].astype(int)
-        left,right=color(6),color(107)
-        if not (left[0]>145 and left[1]<95 and left[2]>145 and right[0]<105 and min(right[1:])>145):continue
-        word=sum((1<<i) for i in range(24) if np.mean(color(11+4*i))>127)
-        if not anchors or word!=anchors[-1][2]:
-            native=word+2**24*round((touch-word)/2**24)
-            anchors.append((t,native-t,word))
-    if len(anchors)<3:raise ValueError('Missing simulator clock stripe in video')
-    offsets=np.array([a[1] for a in anchors]);center=float(np.median(offsets))
-    return center, {'anchors':len(anchors),'median_offset_ms':center,
-                    'p95_residual_ms':round(float(np.percentile(abs(offsets-center),95)),1)}

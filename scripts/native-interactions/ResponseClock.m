@@ -27,6 +27,7 @@
 @property(nonatomic,strong) ResponseWindow *window;
 @property(nonatomic,strong) ResponseStripe *stripe;
 @end
+extern void recordResponseStacks(void);
 static int logfd = -1;
 @implementation ResponseRecorder
 - (void)frame:(CADisplayLink*)link {
@@ -47,6 +48,11 @@ static int logfd = -1;
     CGRect bounds=scene.coordinateSpace.bounds;
     dprintf(logfd,"{\"width\":%.1f,\"height\":%.1f,\"pid\":%d}\n",bounds.size.width,bounds.size.height,getpid());
   }
+  // Use the target of one hardware refresh. Limiting the display link itself
+  // to 5 Hz can put its advertised presentation time a whole interval ahead.
+  static CFTimeInterval nextStamp;
+  if (link.targetTimestamp < nextStamp) return;
+  nextStamp=link.targetTimestamp+0.19;
   _stripe.stamp=(uint32_t)llround(link.targetTimestamp*1000)&0xffffff;
   [_stripe setNeedsDisplay];
 }
@@ -59,6 +65,7 @@ static int logfd = -1;
   if(logfd>=0 && event.type==UIEventTypeTouches){
     for(UITouch *t in event.allTouches){
       if(t.phase==UITouchPhaseStationary) continue;
+      if(t.phase==UITouchPhaseBegan)recordResponseStacks();
       CGPoint p=[t locationInView:nil];
       dprintf(logfd,"{\"phase\":%ld,\"t\":%.3f,\"x\":%.2f,\"y\":%.2f,\"wall\":%.3f,\"pid\":%d}\n",
         (long)t.phase,t.timestamp*1000,p.x,p.y,NSDate.date.timeIntervalSince1970*1000,getpid());
@@ -74,7 +81,7 @@ __attribute__((constructor)) static void installRecorder(void) {
     static ResponseRecorder *recorder;
     recorder=[ResponseRecorder new];
     CADisplayLink *link=[CADisplayLink displayLinkWithTarget:recorder selector:@selector(frame:)];
-    link.preferredFramesPerSecond=5;
+    link.preferredFramesPerSecond=60;
     [link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
   });
 }

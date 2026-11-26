@@ -5,7 +5,7 @@ final class ResponseTests: XCTestCase {
     private struct Bounds: Decodable { let x, y, width, height: CGFloat }
     private struct Action: Decodable { let id: String; let label, until, absent: String?; let at, to: Point?; let lift: CGFloat? }
     private struct Scenario: Decodable { let id, match: String; let bounds: Bounds; let actions: [Action] }
-    private struct Cases: Decodable { let library: String; let scenarios: [Scenario] }
+    private struct Cases: Decodable { let library: String; let profile: Bool; let scenarios: [Scenario] }
     private let app = XCUIApplication(bundleIdentifier: "edu.columbia.gameportal.starter")
 
     private func element(_ name: String) -> XCUIElement {
@@ -20,6 +20,7 @@ final class ResponseTests: XCTestCase {
         let scenario = try XCTUnwrap(data.scenarios.first { $0.id == name })
         app.launchEnvironment["BUILDPLAY_LOCAL_UI_TEST"] = "1"
         app.launchEnvironment["DYLD_INSERT_LIBRARIES"] = data.library
+        if data.profile {app.launchEnvironment["BUILDPLAY_RESPONSE_STACKS"]="1"}
         app.launch()
         app.open(try XCTUnwrap(URL(string:"buildplay:///#match="+scenario.match)))
         let canvas = element("Game board. Use pieces and highlighted destinations.")
