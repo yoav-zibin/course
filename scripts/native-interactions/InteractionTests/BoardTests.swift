@@ -31,11 +31,13 @@ final class BoardTests: XCTestCase {
         app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ OR label == %@", label, label)).firstMatch
     }
 
-    private func location(_ point: Pose.Point, in frame: CGRect, lift: Bool = false) -> CGPoint {
+    private func location(_ point: Pose.Point, in frame: CGRect, lift: Bool = false, fill: Bool = false) -> CGPoint {
         let b = pose.bounds, scale = min(frame.width/b.width, frame.height/b.height)
-        let x = frame.midX + (point.x-b.x-b.width/2)*scale
-        var y = frame.midY + (point.y-b.y-b.height/2)*scale
-        if lift { y += min(54, pose.height*scale*0.6+22, frame.height/3) }
+        let scaleX = fill ? frame.width/b.width : scale
+        let scaleY = fill ? frame.height/b.height : scale
+        let x = frame.midX + (point.x-b.x-b.width/2)*scaleX
+        var y = frame.midY + (point.y-b.y-b.height/2)*scaleY
+        if lift { y += min(54, pose.height*scaleY*0.6+22, frame.height/3) }
         return CGPoint(x: x, y: y)
     }
 
@@ -47,12 +49,12 @@ final class BoardTests: XCTestCase {
     // The canvas can exist before the pieces have rendered and before the
     // launch header has collapsed. Verify a real selection at the projected
     // coordinates, then wait for the unselected canvas to regain its bounds.
-    private func readyOpening() -> CGRect {
+    private func readyOpening(fill: Bool = false) -> CGRect {
         let cancel = element("Cancel selection")
         let deadline = Date().addingTimeInterval(35)
         repeat {
             let frame = board.frame
-            coordinate(location(pose.source, in: frame)).tap()
+            coordinate(location(pose.source, in: frame, fill: fill)).tap()
             if cancel.waitForExistence(timeout: 2) {
                 cancel.tap()
                 XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
@@ -111,6 +113,38 @@ final class BoardTests: XCTestCase {
         let source = coordinate(location(pose.source, in: frame))
         let destination = coordinate(location(pose.destination, in: frame, lift: true))
         source.press(forDuration: 0.05, thenDragTo: destination, withVelocity: 180, thenHoldForDuration: 0)
+        waitForCommittedChecker()
+    }
+
+    private func landscapeOpening() -> CGRect {
+        _ = readyOpening()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let fitted = NSPredicate { _,_ in
+            let frame = self.board.frame, screen = self.app.frame
+            // The usable frame excludes the iPhone's notch and home indicator.
+            return screen.width > screen.height && frame.width > screen.width*0.8 && frame.height > screen.height*0.90
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: fitted, evaluatedWith: board)], timeout: 15), .completed)
+        return readyOpening(fill: true)
+    }
+
+    func testCommitLandscapeChecker() {
+        let frame = landscapeOpening()
+        let source = coordinate(location(pose.source, in: frame, fill: true))
+        let destination = coordinate(location(pose.destination, in: frame, lift: true, fill: true))
+        source.press(forDuration: 0.05, thenDragTo: destination, withVelocity: 180, thenHoldForDuration: 0)
+        waitForCommittedChecker()
+    }
+
+    func testTapLandscapeChecker() {
+        let frame = landscapeOpening()
+        coordinate(location(pose.source, in: frame, fill: true)).tap()
+        XCTAssertTrue(element("Cancel selection").waitForExistence(timeout: 5))
+        coordinate(location(pose.destination, in: board.frame, fill: true)).tap()
+        waitForCommittedChecker()
+    }
+
+    private func waitForCommittedChecker() {
         // Keep the app in the foreground until the accepted move is visible.
         // This particular move makes the previously empty destination a playable point.
         let checker = pose.checker.components(separatedBy: ": ")[0] + ": " + pose.target + ": Move"

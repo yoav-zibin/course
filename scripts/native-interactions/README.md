@@ -31,6 +31,8 @@ Run the **Native interaction benchmark** workflow with a Portal apps workflow ru
 
 XCTest measures checker selection, dragging and opening the report. The wall-clock metric includes UI automation and accessibility waits. XCTest also requests the application hitch metric, whose availability depends on the device. A simulator recording independently measures intervals between visibly distinct checker positions. When recorded movement aligns with every XCTest drag, the output also reports visible positions for each gesture, including partial strokes and the initial warm-up. A separate test starts from a fresh opening and verifies the exact saved result of a legal drop. The artifact includes the individual metrics, drop result, video, simulator model, logs and Xcode result bundles.
 
+Choose the `landscape` scenario to open the board in portrait, rotate the iPhone simulator and check that the board fills the usable frame. Two independent runs verify a legal drag and a two-tap move against the expected saved checker counts and owners.
+
 ## Cold launch and uncached Backgammon
 
 The startup fixture serves the opening position and its pinned game package over loopback. It adds 200 ms to each API response. Both revisions use the same fixture, and each trial clears the app's data. A cold match launch must request both the match and the game package and display red and ivory checkers on the wooden board.

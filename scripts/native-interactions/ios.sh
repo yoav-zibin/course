@@ -32,21 +32,8 @@ stop_recording() {
   fi
 }
 trap stop_recording EXIT
-for action in SelectChecker OpenReport DragChecker CommitChecker; do
-  xcrun simctl terminate "$sim" "$bundle" 2>/dev/null || true
-  cp "$fixture/$filename" "$store/$filename"
-  if [[ "$action" == DragChecker ]]; then
-    xcrun simctl io "$sim" recordVideo --codec=h264 "$results/drag.mov" >"$results/recording.log" 2>&1 &
-    record_pid=$!
-  fi
-  "${build[@]}" test-without-building "-only-testing:InteractionTests/BoardTests/test$action" \
-    -resultBundlePath "$results/$action.xcresult" | tee "$results/$action.log"
-  stop_recording
-  if [[ "$action" != CommitChecker ]]; then
-    xcrun xcresulttool get test-results metrics --path "$results/$action.xcresult" > "$results/$action.json"
-  fi
-done
-python3 - "$fixture/pose.json" "$store/$filename" "$results/legal-drop.json" <<'PY'
+verify_move() {
+  python3 - "$fixture/pose.json" "$store/$filename" "$1" <<'PY'
 import json, sys
 pose = json.load(open(sys.argv[1]))
 match = json.loads(json.load(open(sys.argv[2]))['value'])['local'][pose['id']]
@@ -56,9 +43,33 @@ proof['committed'] = (proof['move_count']==proof['expected_move_count'] and proo
                       and proof['owners']==pose['expectedOwners'])
 with open(sys.argv[3],'w') as output:
     json.dump(proof,output,indent=2)
-print('Legal checker drop committed:',proof['committed'])
-
+print('Legal checker move committed:',proof['committed'])
 PY
+  jq -e '.committed' "$1" >/dev/null
+}
+case "${SCENARIO:-board}" in
+  board) actions=(SelectChecker OpenReport DragChecker CommitChecker) ;;
+  landscape) actions=(CommitLandscapeChecker TapLandscapeChecker) ;;
+  *) echo "Expected board or landscape scenario" >&2; exit 2 ;;
+esac
+for action in "${actions[@]}"; do
+  xcrun simctl terminate "$sim" "$bundle" 2>/dev/null || true
+  cp "$fixture/$filename" "$store/$filename"
+  if [[ "$action" == DragChecker ]]; then
+    xcrun simctl io "$sim" recordVideo --codec=h264 "$results/drag.mov" >"$results/recording.log" 2>&1 &
+    record_pid=$!
+  fi
+  "${build[@]}" test-without-building "-only-testing:InteractionTests/BoardTests/test$action" \
+    -resultBundlePath "$results/$action.xcresult" | tee "$results/$action.log"
+  stop_recording
+  case "$action" in
+    CommitChecker) verify_move "$results/legal-drop.json" ;;
+    CommitLandscapeChecker) verify_move "$results/landscape-drop.json" ;;
+    TapLandscapeChecker) verify_move "$results/landscape-tap.json" ;;
+    *) xcrun xcresulttool get test-results metrics --path "$results/$action.xcresult" > "$results/$action.json" ;;
+  esac
+done
 
-python3 "$scripts/tracking.py" "$results/drag.mov" "$results/DragChecker.log" "$results/tracking.json"
-jq -e '.committed' "$results/legal-drop.json" >/dev/null
+if [[ "${SCENARIO:-board}" == board ]]; then
+  python3 "$scripts/tracking.py" "$results/drag.mov" "$results/DragChecker.log" "$results/tracking.json"
+fi

@@ -13,7 +13,7 @@ on:
       scenario:
         description: Interactions to measure
         type: choice
-        options: [board, startup, startup-video, startup-link]
+        options: [board, landscape, startup, startup-video, startup-link]
         default: board
       video_pairs:
         description: Paired trials for recorded launches
