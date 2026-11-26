@@ -23,6 +23,7 @@ def serve(fixture, port, delay_ms, web_build=None):
     password = secrets.token_urlsafe(18)
     arrivals = []
     saves = {}
+    startup = []
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -53,6 +54,10 @@ def serve(fixture, port, delay_ms, web_build=None):
                 self.end_headers()
                 self.wfile.write(payload)
                 return
+            if path=='/__startup':
+                if self.command=='POST':
+                    startup.append(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
+                return self.reply(list(startup))
             if path=='/__requests':
                 return self.reply(list(arrivals))
             if path=='/__saves':
@@ -60,6 +65,7 @@ def serve(fixture, port, delay_ms, web_build=None):
                                     'opening':m['state'].get('opening',False)} for m in saves.values()])
             if path=='/__reset' and self.command=='POST':
                 arrivals.clear()
+                startup.clear()
                 saves.clear()
                 return self.reply({})
             arrivals.append({'method':self.command,'path':path,'at':time.time()})

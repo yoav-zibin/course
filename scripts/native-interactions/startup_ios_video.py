@@ -118,7 +118,7 @@ def measure(movie, before, after, bounds, include_first_frame=False):
             'transition_pts_ms':round(samples[transition][0],1),'landmark_pts_ms':round(samples[painted][0],1)}
 
 
-def trial(app, bundle, device, directory, index, action, ocr, match_command, sender_stamp=None, drive_sender=False):
+def trial(app, bundle, device, directory, index, action, ocr, match_command, sender_stamp=None, drive_sender=False, profile=False):
     directory.mkdir(exist_ok=True,parents=True)
     prefix=directory/f'{index}-{action}'
     movie=prefix.with_suffix('.mov')
@@ -129,6 +129,7 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
     sim('install',device,app)
     if sender_stamp:clear_game_data(device,bundle)
     driver=None
+    sampler=None
     api('/__reset','POST')
     time.sleep(1.5)
     if not sender_stamp:sim('io',device,'screenshot',before,capture_output=True)
@@ -153,6 +154,9 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
                     time.sleep(.5)
                 time.sleep(.5)
             elif sender_stamp:
+                if profile:
+                    sampler=subprocess.Popen(['sample', 'BuildPlay', '6', '5', '-wait', '-mayDie', '-file',
+                                              str(prefix)+'.sample.txt'], stdout=launch_log,stderr=subprocess.STDOUT)
                 sender_stamp.unlink(missing_ok=True)
                 if drive_sender:
                     driver=subprocess.Popen([*match_command,'-resultBundlePath',prefix.with_suffix('.xcresult')],
@@ -182,6 +186,12 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
             if recorder.poll() is None:recorder.send_signal(signal.SIGINT)
             output,_=recorder.communicate(timeout=60)
             log.write(output)
+            if sampler:
+                try:
+                    sampler.wait(timeout=18)
+                except subprocess.TimeoutExpired:
+                    sampler.terminate()
+                    sampler.wait(timeout=10)
             if driver and driver.wait(timeout=90):
                 raise RuntimeError('The iOS confirmation driver failed')
     if recorder.returncode not in (0,-signal.SIGINT,130) or not movie.exists():raise RuntimeError('Simulator recorder failed')
@@ -213,6 +223,9 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
     required={'/games/popular'} if action=='home' else {'/matches/benchmark-opening','/games/5f5293c3-2a3a-4eec-b631-9debf59be0ca/versions/10'}
     if not required<=paths:raise RuntimeError(f'Missing cold-start requests: {required-paths}')
     evidence={'bounds':list(bounds),'requests':requests}
+    if profile:
+        evidence['runtime']=api('/__startup')
+        if not evidence['runtime']:raise ValueError('No React Native startup timings reached the fixture')
     if sender_stamp:
         timing=json.loads(sender_stamp.read_text())
         evidence['link_sent_epoch_ms']=timing['sent_epoch_ms']
@@ -268,7 +281,7 @@ def install_sender(scripts, results, device):
     return Path(container)/'Library/Caches/link-sent.json'
 
 
-def run(apps, fixture, results, device, pairs, sender=False):
+def run(apps, fixture, results, device, pairs, sender=False, profile=False):
     scripts=Path(__file__).resolve().parent
     results.mkdir(parents=True,exist_ok=True)
     ocr=results/'home-title'
@@ -293,7 +306,7 @@ def run(apps, fixture, results, device, pairs, sender=False):
                 row={}
                 for action in (('match',) if sender else ('home','match')):
                     args=(builds[name],bundle,device,results/name,index,action,ocr,match_command,sender_stamp)
-                    try:row[action+'_ms']=trial(*args,drive_sender)
+                    try:row[action+'_ms']=trial(*args,drive_sender,profile)
                     except LinkConfirmationRequired:
                         # A host can request permission again after replacing the app.
                         # Drive the foreground sender and system sheet, leaving BuildPlay uninstrumented.
@@ -301,7 +314,7 @@ def run(apps, fixture, results, device, pairs, sender=False):
                             artifact=results/name/(f'{index}-{action}'+ext)
                             if artifact.exists():artifact.rename(artifact.with_name('unconfirmed-'+artifact.name))
                         drive_sender=True
-                        row[action+'_ms']=trial(*args,drive_sender)
+                        row[action+'_ms']=trial(*args,drive_sender,profile)
                 samples[name].append(row)
                 (results/name/'startup-video.json').write_text(json.dumps(samples[name],indent=2)+'\n')
     finally:
@@ -317,5 +330,6 @@ if __name__=='__main__':
     parser.add_argument('device')
     parser.add_argument('--pairs',type=int,choices=range(1,6),default=5)
     parser.add_argument('--sender',action='store_true',help='Open the match from a normal foreground UIKit app')
+    parser.add_argument('--profile',action='store_true',help='Collect macOS sample stacks and React Native runtime timestamps')
     args=parser.parse_args()
-    run(args.apps,args.fixture,args.results,args.device,args.pairs,args.sender)
+    run(args.apps,args.fixture,args.results,args.device,args.pairs,args.sender,args.profile)

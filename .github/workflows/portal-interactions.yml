@@ -17,7 +17,7 @@ on:
       scenario:
         description: Interactions to measure
         type: choice
-        options: [board, landscape, startup, startup-video, startup-link]
+        options: [board, landscape, startup, startup-video, startup-link, startup-profile]
         default: board
       video_pairs:
         description: Paired trials for recorded launches
@@ -122,10 +122,19 @@ jobs:
             git diff --exit-code "$source_sha" "$revision" -- frontends/portal/{package-lock.json,app.config.ts,plugins,modules,ios}
             git worktree add --detach "$base/$name" "$revision"
             portal="$base/$name/frontends/portal"
+            if [[ "$SCENARIO" == startup-profile ]]; then
+              cp scripts/native-interactions/profile-launch.js "$portal/benchmark-profile.js"
+              python3 - "$portal/index.ts" <<'PYPROFILE'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          p.write_text("import './benchmark-profile';\n"+p.read_text()+"\n;(globalThis as any).__finishBenchmarkEntry();\n")
+          PYPROFILE
+            fi
             (cd "$portal" && npm ci && CI=1 npx --no-install expo export --platform ios --output-dir "$base/js-$name")
             cp "$base/js-$name"/_expo/static/js/ios/*.hbc "$app/main.jsbundle"
             codesign --force --sign - --preserve-metadata=identifier,entitlements "$app"
-            if [[ "$SCENARIO" == startup-video || "$SCENARIO" == startup-link ]]; then
+            if [[ "$SCENARIO" == startup-video || "$SCENARIO" == startup-link || "$SCENARIO" == startup-profile ]]; then
               mkdir -p "$base/video-apps/$name"
               ditto "$app" "$base/video-apps/$name/BuildPlay.app"
               continue
@@ -135,9 +144,10 @@ jobs:
               echo "::warning::Baseline verification failed. Continuing with the independent candidate."
             fi
           done
-          if [[ "$SCENARIO" == startup-video || "$SCENARIO" == startup-link ]]; then
+          if [[ "$SCENARIO" == startup-video || "$SCENARIO" == startup-link || "$SCENARIO" == startup-profile ]]; then
             flags=(--pairs "$VIDEO_PAIRS")
-            if [[ "$SCENARIO" == startup-link ]]; then flags+=(--sender); fi
+            if [[ "$SCENARIO" == startup-link || "$SCENARIO" == startup-profile ]]; then flags+=(--sender); fi
+            if [[ "$SCENARIO" == startup-profile ]]; then flags+=(--profile); fi
             python3 scripts/native-interactions/startup_ios_video.py "$base/video-apps" "$base/fixture" "$base/results" "$SIMULATOR_ID" "${flags[@]}"
           fi
       - uses: actions/upload-artifact@v4
@@ -147,6 +157,7 @@ jobs:
           path: |
             ${{ runner.temp }}/interaction/results/*/*.xcresult
             ${{ runner.temp }}/interaction/results/*/*.json
+            ${{ runner.temp }}/interaction/results/*/*.sample.txt
             ${{ runner.temp }}/interaction/results/*/*.log
             ${{ runner.temp }}/interaction/results/*/*.mov
             ${{ runner.temp }}/interaction/results/*/*.png
