@@ -2,13 +2,14 @@ import React,{useCallback,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import Animated,{useAnimatedProps,useAnimatedStyle,useSharedValue,withDelay,withTiming,type SharedValue} from 'react-native-reanimated';
 import {GestureDetector,GestureStateManager,PointerType,useManualGesture} from 'react-native-gesture-handler';
 import {scheduleOnRN,scheduleOnUI} from 'react-native-worklets';
-import {StyleSheet,View} from 'react-native';
+import {Platform,StyleSheet,View} from 'react-native';
 import Svg,{G,Path,type GProps} from 'react-native-svg';
 import {recordDiagnosticEvent} from '../core/diagnostics';
 import {boardHit,boardInputGeometry,projectCanvas,projectPiece,scenePoint,tapChoice,type BoardCamera,type BoardRect,type InputTarget,type Projection} from './boardInputGeometry';
 import type {BoardInput,BoardInputProps,BoardInputResult} from './BoardInput';
 import type {Point} from './types';
 
+const android=Platform.OS==='android';
 const AnimatedGroup=Animated.createAnimatedComponent(G);
 const AnimatedPath=Animated.createAnimatedComponent(Path);
 const identity={matrix:[1,0,0,1,0,0]} as Partial<GProps>;
@@ -21,23 +22,25 @@ type Gesture={
 };
 type Drag={id:string; token:number; x:number; y:number};
 type Origin=Drag & {hidden:boolean};
-type Feedback={piece?:string; target?:InputTarget; scale:number};
+type Feedback={piece?:string;piecePath?:string; target?:InputTarget; scale:number};
 
 function translation(x:number,y:number) {
   'worklet';
   return x||y?{matrix:[1,0,0,1,x,y]} as Partial<GProps>:identity;
 }
 
-function MovingPiece({root,origin,feedback,glow,children}:{
-  root:string;origin:SharedValue<Origin|null>;
-  feedback:SharedValue<Feedback|null>;glow:SharedValue<number>;children:React.ReactNode;
-}) {
-  const animatedProps=useAnimatedProps(()=>{
+function MovingPiece({root,origin,feedback,glow,children}:{root:string;origin:SharedValue<Origin|null>;
+  feedback:SharedValue<Feedback|null>;glow:SharedValue<number>;children:React.ReactNode}) {
+  const animatedProps=useAnimatedProps<GProps>(()=>{
     const held=origin.value;
-    if(held?.id===root)return {...translation(held.x,held.y),opacity:held.hidden?0:1};
-    return {...identity,opacity:feedback.value?.piece===root?1-.28*glow.value:1};
+    if(held?.id===root)return android?{...translation(held.x,held.y),display:held.hidden?'none':'inline',opacity:1}:
+      {...translation(held.x,held.y),opacity:held.hidden?0:1};
+    return {...identity,...(android?{display:'inline'}:{}),opacity:feedback.value?.piece===root?1-.28*glow.value:1};
   });
-  return <AnimatedGroup animatedProps={animatedProps}>{children}</AnimatedGroup>;
+  // The static parent lets Android SVG skip the concealed source without
+  // blending an offscreen copy of the full board to achieve zero opacity.
+  const group=<AnimatedGroup animatedProps={animatedProps}>{children}</AnimatedGroup>;
+  return android?<G>{group}</G>:group;
 }
 
 function HeldArtwork({token,drag,origin,children}:{
@@ -58,10 +61,21 @@ function HeldArtwork({token,drag,origin,children}:{
 }
 
 type Sprite={id:string;x:number;y:number;side:number};
-function DragSprite({sprite,canvas,drag,children}:{sprite:Sprite;canvas:Projection;drag:SharedValue<Drag|null>;children:React.ReactNode}) {
+function DragSprite({sprite,canvas,drag,origin,token,children}:{sprite:Sprite;canvas:Projection;drag:SharedValue<Drag|null>;
+  origin:SharedValue<Origin|null>;token?:number;children:React.ReactNode}) {
+  useLayoutEffect(()=>{
+    if(!android||token===undefined)return;
+    // The original moves on the first input. Conceal it only when the cropped
+    // Android texture is mounted and ready to take over subsequent frames.
+    scheduleOnUI(()=>{
+      'worklet';
+      const held=drag.value;
+      if(held?.token===token)origin.value={...held,x:0,y:0,hidden:true};
+    });
+  },[drag,origin,token]);
   const {id,x,y,side}=sprite,{scaleX,scaleY}=canvas;
   const style=useAnimatedStyle(()=>{
-    const held=drag.value,visible=held?.id===id;
+    const held=drag.value,visible=held?.id===id&&(token===undefined||held.token===token);
     return {opacity:visible?1:0,transform:[
       {translateX:visible?held.x*scaleX:0},{translateY:visible?held.y*scaleY:0},
     ]};
@@ -73,10 +87,10 @@ function DragSprite({sprite,canvas,drag,children}:{sprite:Sprite;canvas:Projecti
   </Animated.View>;
 }
 
-function TargetFeedback({feedback,glow}:{feedback:SharedValue<Feedback|null>;glow:SharedValue<number>}) {
+function TouchFeedback({feedback,glow}:{feedback:SharedValue<Feedback|null>;glow:SharedValue<number>}) {
   const animatedProps=useAnimatedProps(()=>{
     const mark=feedback.value,target=mark?.target;
-    return {d:target?.path??'',opacity:target?glow.value:0,
+    return {d:target?.path??mark?.piecePath??'',opacity:target||mark?.piecePath?glow.value:0,
       strokeWidth:(target?.lineWidth??0)+3/(mark?.scale??1)};
   });
   return <AnimatedPath animatedProps={animatedProps} pointerEvents="none" fill="#d5ff87" fillOpacity={.25}
@@ -115,7 +129,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
   const {spec,scene,order,revision,active,selected,selectionRequired,width,height,view,bounds,camera,fill}=props;
   const latest=useRef(props);
   latest.current=props;
-  const play=useMemo(()=>({geometry:boardInputGeometry(spec,scene,order),selectionRequired}),
+  const play=useMemo(()=>({geometry:boardInputGeometry(spec,scene,order,android),selectionRequired}),
     [spec,scene,order,selectionRequired]);
   const projection=useMemo(()=>projectCanvas(width,height,view,fill),[width,height,view.x,view.y,view.width,view.height,fill]);
   const sprites=useMemo(()=>{
@@ -243,13 +257,13 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
         !!model.play.geometry.pieces[model.selected]?.targets.some(item=>item.id===target.id);
       const source=piece?.targets.length&&!selectedDestination?piece.id:model.selected;
       const claimsTouch=!!(piece||target||area.camera.zoom>1);
-      if(model.play.selectionRequired&&model.selected===null&&piece&&model.directSources.includes(piece.id))
+      if(!android&&model.play.selectionRequired&&model.selected===null&&piece&&model.directSources.includes(piece.id))
         pressedTargets.value=piece.targets.map(dest=>dest.id);
       gesture.value={epoch:model.epoch,token:++sequence.value,first:{x:first.x,y:first.y},canvas,
         camera:area.camera,hit,source,selected:model.selected,touch:event.pointerType!==PointerType.MOUSE,moved:false,claimsTouch,
         grab:piece?{x:(piece.center.x-point.x)*canvas.scaleX,y:(piece.center.y-point.y)*canvas.scaleY}:{x:0,y:0}};
       feedback.value=target&&(selectedDestination||!piece)?{target,scale:canvas.scale}:
-        piece?{piece:piece.id,scale:canvas.scale}:null;
+        piece?{...(android&&model.spriteIds.includes(piece.id)?{piecePath:piece.pressPath}:{piece:piece.id}),scale:canvas.scale}:null;
       glow.value=1;
       if(claimsTouch)GestureStateManager.activate(event.handlerTag);
     },
@@ -257,7 +271,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       'worklet';
       const held=gesture.value;
       if(!held?.claimsTouch)return;
-      const {canvas,camera:initialCamera}=held,area=frame.value;
+      const {canvas,camera:initialCamera}=held,area=frame.value,model=snapshot.value;
       if(held.pinch){
         if(cameraEnabled&&event.allTouches.length>=2)
           scheduleOnRN(updateCamera,pinchCamera(held,area.bounds,event.allTouches[0],event.allTouches[1]),canvas.width,canvas.height);
@@ -268,7 +282,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       const dx=at.x-held.first.x,dy=at.y-held.first.y;
       if(!held.moved&&Math.hypot(dx,dy)<=7)return;
       const pans=!held.hit.piece&&(!held.hit.target||cameraControls&&initialCamera.zoom>1);
-      if(held.epoch!==snapshot.value.epoch&&!pans)return;
+      if(held.epoch!==model.epoch&&!pans)return;
       const piece=held.hit.piece;
       if(piece?.targets.length){
         const now=Date.now(),previous=trace.value,gap=previous?now-previous.last:0;
@@ -276,15 +290,19 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
         trace.value={start:previous?.start??now,last:now,inputs:(previous?.inputs??0)+1,
           maxGap:Math.max(previous?.maxGap??0,gap),slowGaps:(previous?.slowGaps??0)+(gap>=34?1:0)};
         const next=projectPiece(canvas,at,held.grab,piece,held.touch);
+        const prepared=model.spriteIds.includes(piece.id);
         const position={id:piece.id,token:held.token,x:next.x,y:next.y};
         drag.value=position;
-        // A prepared sprite can follow the very first move. For other artwork
-        // keep moving the original until its lifted copy mounts.
-        if(!previous&&snapshot.value.spriteIds.includes(piece.id))origin.value={...position,x:0,y:0,hidden:true};
+        // Let the checker start moving before drawing all of its destination
+        // artwork. A tap reveals the same points as soon as the finger lifts.
+        if(android&&previous&&now-previous.start>=34&&model.play.selectionRequired&&held.selected===null&&
+            !pressedTargets.value.length&&model.directSources.includes(piece.id))
+          pressedTargets.value=piece.targets.map(dest=>dest.id);
+        if(!previous&&prepared&&!android)origin.value={...position,x:0,y:0,hidden:true};
         else if(!origin.value?.hidden)origin.value={...position,hidden:false};
         if(feedback.value?.target?.id!==next.target?.id||!previous)
           feedback.value=next.target?{target:next.target,scale:canvas.scale}:null;
-        if(!previous&&(held.selected!==null||!snapshot.value.directSources.includes(piece.id)))
+        if(!previous&&(android||held.selected!==null||!model.directSources.includes(piece.id)))
           scheduleOnRN(reportLift,piece.id,held.token,held.epoch);
       }else{
         if(!held.moved){gesture.value={...held,moved:true};feedback.value=null;}
@@ -318,6 +336,8 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       drag.value=null;
       origin.value=null;
       if(result?.kind!=='tap'||result.choice?.kind!=='piece')pressedTargets.value=[];
+      else if(android&&model.play.selectionRequired&&model.directSources.includes(result.choice.id))
+        pressedTargets.value=model.play.geometry.pieces[result.choice.id].targets.map(dest=>dest.id);
       if(result?.kind==='tap'&&result.choice)glow.value=withDelay(80,withTiming(0,{duration:100}));
       else{feedback.value=null;glow.value=0;}
       scheduleOnRN(finish,held.epoch,held.token,result,trace.value,Date.now());
@@ -331,11 +351,12 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
     <MovingPiece key={piece.key} root={root} origin={origin} feedback={feedback} glow={glow}>{piece}</MovingPiece>,
     [origin,feedback,glow]);
   const held=active&&lifted?.epoch===epoch.current?lifted:null;
-  const destinations=held?play.geometry.pieces[held.id]?.targets:undefined;
+  const spriteOnly=android&&held&&selected===null&&directSources.includes(held.id);
+  const destinations=held&&!spriteOnly?play.geometry.pieces[held.id]?.targets:undefined;
   const selectedTargets=selectionRequired&&!held&&selected!==null&&directSources.includes(selected)
     ?play.geometry.pieces[selected].targets:undefined;
   return {
-    heldId:held?.id,
+    heldId:spriteOnly?undefined:held?.id,
     drawsSelectedTargets:!!selectedTargets,
     // Reveal the already drawn art on contact. Once selection commits, expose
     // those same nodes as accessible buttons without mounting another SVG tree.
@@ -355,10 +376,11 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       <Svg width="100%" height="100%" preserveAspectRatio={fill?"none":undefined} style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
         {destinations&&<G>{scene.targets?.filter(target=>target.preview?.length&&destinations.some(d=>d.id===target.id)).map(target=>
           <DragPreview key={target.id} id={target.id} feedback={feedback}>{props.renderPreview(target)}</DragPreview>)}</G>}
-        <TargetFeedback feedback={feedback} glow={glow}/>
+        <TouchFeedback feedback={feedback} glow={glow}/>
         {held&&!spriteIds.includes(held.id)&&<HeldArtwork token={held.token} drag={drag} origin={origin}>{props.renderHeld(held.id)}</HeldArtwork>}
       </Svg>
-      {sprites.map(sprite=><DragSprite key={sprite.id} sprite={sprite} canvas={projection} drag={drag}>
+      {sprites.filter(sprite=>!android||held?.id===sprite.id).map(sprite=><DragSprite key={sprite.id} sprite={sprite} canvas={projection}
+        drag={drag} origin={origin} token={android?held?.token:undefined}>
         {props.renderHeld(sprite.id)}
       </DragSprite>)}
     </View>,

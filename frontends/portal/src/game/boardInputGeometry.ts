@@ -5,7 +5,7 @@ import type {GameSpec, Point, Scene} from './types';
 export type BoardRect = Point & {width:number;height:number};
 export type BoardCamera = {zoom:number;x:number;y:number};
 
-export function boardInputGeometry(spec:GameSpec,scene:Scene,order:ReadonlyMap<string,number>) {
+export function boardInputGeometry(spec:GameSpec,scene:Scene,order:ReadonlyMap<string,number>,pressOutlines=false) {
   const targets=(scene.targets??[]).map(target=>{
     const geometry=targetGeometry(spec,target),{shape,box}=geometry;
     const path=shape?.kind==='line' ? `M ${shape.from.x} ${shape.from.y} L ${shape.to.x} ${shape.to.y}` :
@@ -13,9 +13,15 @@ export function boardInputGeometry(spec:GameSpec,scene:Scene,order:ReadonlyMap<s
       `M ${box.x} ${box.y} h ${box.width} v ${box.height} h ${-box.width} Z`;
     return {...geometry,path,lineWidth:shape?.kind==='line'?shape.width:0};
   });
-  const pieces=Object.fromEntries((scene.pieces??[]).filter(piece=>!piece.parent).map(piece=>[
-    piece.id,{...pieceGeometry(spec,piece),targets:targets.filter(target=>piece.move_targets?.includes(target.id))},
-  ]));
+  const pieces=Object.fromEntries((scene.pieces??[]).filter(piece=>!piece.parent).map(piece=>{
+    const geometry=pieceGeometry(spec,piece),{x,y}=geometry.center;
+    const rx=geometry.size.width*geometry.scale/2,ry=geometry.size.height*geometry.scale/2;
+    const corner=(dx:number,dy:number)=>`${x+dx*geometry.cos+dy*geometry.sin} ${y-dx*geometry.sin+dy*geometry.cos}`;
+    const pressPath=!pressOutlines||!piece.move_targets?.length||geometry.shape!=='image'?undefined:spec.piece_types[piece.type].action_outline==='ellipse'
+      ?`M ${corner(-rx,0)} A ${rx} ${ry} ${piece.rotation??0} 1 0 ${corner(rx,0)} A ${rx} ${ry} ${piece.rotation??0} 1 0 ${corner(-rx,0)} Z`
+      :`M ${corner(-rx,-ry)} L ${corner(rx,-ry)} L ${corner(rx,ry)} L ${corner(-rx,ry)} Z`;
+    return [piece.id,{...geometry,pressPath,targets:targets.filter(target=>piece.move_targets?.includes(target.id))}];
+  }));
   return {pieces,targets,hits:pieceHitOrder(scene,order).map(piece=>pieceGeometry(spec,piece))};
 }
 

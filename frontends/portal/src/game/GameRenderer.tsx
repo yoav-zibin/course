@@ -606,24 +606,30 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   }}:{};
 
   const canvasWebStyle=Platform.OS==='web'&&(framed||camera.zoom>1)?{...styles.canvas,touchAction:'none'}:undefined;
+  const svgFrame={width:'100%' as const,height:'100%' as const,preserveAspectRatio:fill?'none':undefined,
+    viewBox:`${view.x} ${view.y} ${view.width} ${view.height}`};
+  // Android SVG invalidates its entire bitmap when a target changes.
+  // Keep the board and stationary pieces cached while the foreground updates.
+  const lowerArt=[
+    ...(visibleBoards??spec.boards).map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
+    ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
+    ...pieceLayers.lower,
+  ];
+  const upperArt=[
+    ...(previewTarget&&!boardInput.heldId?renderPreview(previewTarget):[]),
+    boardInput.destinationHints,
+    ...visibleTargets.map(target=><TargetGraphic key={`target:${target.id}`} target={target} spec={spec}
+      enabled={active&&(!targetSource?.move_targets?.length||targetSource.move_targets.includes(target.id))}
+      selected={preview===target.id||drag?.target===target.id} onPress={pressTarget}/>),
+    ...(display.scene.labels||[]).map(label=><SvgText key={`label:${label.id}`} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>),
+    ...pieceLayers.upper,
+    ...(drag?display.scene.pieces?.filter(piece=>!piece.hidden && (piece.parent??piece.id)===drag.id)||[]:[]).map(piece=><PieceGraphic key={`drag:${piece.id}`} piece={{...piece,hand:undefined,position:draggedPosition(piece)}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true} dragged/>),
+  ];
   const boardCanvas=<View ref={canvas} collapsable={false} focusable style={[styles.canvas,framed?{flex:1,minHeight:0}:{height},canvasWebStyle]} {...webProps} {...(!boardInput.wrapCanvas&&responders.panHandlers)}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);setCanvasHeight(event.nativeEvent.layout.height);measureOrigin();}}
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
-      <Svg width="100%" height="100%" preserveAspectRatio={fill?"none":undefined} style={{direction:'ltr'}} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
-        {[
-        ...(visibleBoards??spec.boards).map(board=><BoardGraphic key={`board:${board.id}`} board={board} spec={spec}/>),
-        ...(display.scene.paths||[]).map(path=><Polyline key={`path:${path.id}`} points={path.points.map(p=>`${p.x},${p.y}`).join(' ')} fill="none" stroke={path.color||'#d2ff5a'} strokeWidth={path.width||3}/>),
-        ...pieceLayers.lower,
-        ...(previewTarget&&!boardInput.heldId?renderPreview(previewTarget):[]),
-        boardInput.destinationHints,
-        ...visibleTargets.map(target=><TargetGraphic key={`target:${target.id}`} target={target} spec={spec}
-          enabled={active&&(!targetSource?.move_targets?.length||targetSource.move_targets.includes(target.id))}
-          selected={preview===target.id||drag?.target===target.id} onPress={pressTarget}/>),
-        ...(display.scene.labels||[]).map(label=><SvgText key={`label:${label.id}`} x={label.x} y={label.y} textAnchor="start" fill={label.color||'#e4edf4'} fontSize={label.font_size||18} alignmentBaseline="hanging">{playerText(label.text)}</SvgText>),
-        ...pieceLayers.upper,
-        ...(drag?display.scene.pieces?.filter(piece=>!piece.hidden && (piece.parent??piece.id)===drag.id)||[]:[]).map(piece=><PieceGraphic key={`drag:${piece.id}`} piece={{...piece,hand:undefined,position:draggedPosition(piece)}} spec={spec} animate={false} serial={display.serial} enabled={false} selected={true} dragged/>),
-        ]}
-      </Svg>
+      <Svg {...svgFrame} style={{direction:'ltr'}}>{Platform.OS==='android'?lowerArt:[...lowerArt,...upperArt]}</Svg>
+      {Platform.OS==='android'&&<Svg {...svgFrame} style={[StyleSheet.absoluteFill,{direction:'ltr'}]}>{upperArt}</Svg>}
       {boardInput.feedback}
     </View>;
   return <View ref={surface} style={[styles.container,framed&&{height:frameHeight,minHeight:0}]}>

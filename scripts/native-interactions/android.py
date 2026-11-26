@@ -12,6 +12,7 @@ from xml.etree import ElementTree
 import av
 import numpy as np
 
+from connect4 import reserve_motion
 from tracking import checker_sweeps
 
 BOARD = 'Game board. Use pieces and highlighted destinations.'
@@ -174,6 +175,24 @@ def benchmark(args):
                     round((top+bottom)/2 + (point['y']-bounds['y']-bounds['height']/2)*scale))
         src = project(pose['source'])
         target = project(pose['destination'])
+        if args.scenario == 'report' or pose.get('game') == 'connect4':
+            if args.scenario == 'report':
+                bug = center(device.bounds(REPORT))
+                times, frames, bracket = device.record(result, 'report', f'tap {bug[0]} {bug[1]}')
+                box = (left+10, top+40, right-10, bottom-40)
+                row = {'report_visible_ms':round(float(visible_latency(times, frames, box)),1),
+                       'input_bracket_ms':round(bracket,1)}
+                device.bounds('Screenshot captured before opening this report')
+            elif args.scenario == 'tracking':
+                times, frames, _ = device.record(result, 'tracking', f'swipe {src[0]} {src[1]} {target[0]} {target[1]} 850')
+                row = reserve_motion(times, frames, board, src, target, scale)
+                if saved_match(device, dest, pose)['move_count'] != pose['moveCount']:
+                    raise RuntimeError('Tracking along the reserve unexpectedly placed a disc')
+            else:
+                raise ValueError('Use tracking or report with the Connect Four fixture')
+            (result/'metrics.json').write_text(json.dumps(row, indent=2)+'\n')
+            print(sample+1, json.dumps(row), flush=True)
+            continue
         # Physical pixels per logical unit in Android's gesture coordinates.
         density = int(re.findall(r'(\d+)', device.adb('shell', 'wm', 'density'))[-1])/160
         lift = round(min(54*density, pose['height']*scale*.6+22*density, (bottom-top)/3))
@@ -237,5 +256,5 @@ if __name__ == '__main__':
     parser.add_argument('--fixture', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--samples', type=int, default=5)
-    parser.add_argument('--scenario', choices=['opening','tracking','tap-move'], default='opening')
+    parser.add_argument('--scenario', choices=['opening','tracking','tap-move','report'], default='opening')
     benchmark(parser.parse_args())

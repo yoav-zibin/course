@@ -24,6 +24,14 @@ const scene:Scene={
 };
 const geometry=boardInputGeometry(spec,scene,new Map());
 
+test('Android press feedback follows the rotated image without rebuilding the board artwork',()=>{
+  const imageSpec:GameSpec={...spec,piece_types:{disc:{shape:'image',asset:'checker',width:40,height:20,action_outline:'ellipse'}}};
+  const pieces:Scene={pieces:[{id:'checker',type:'disc',board:'board',position:{x:50,y:50},rotation:90,move_targets:['point']}]};
+  assert.equal(boardInputGeometry(imageSpec,pieces,new Map(),true).pieces.checker.pressPath,
+    'M 50 30 A 20 10 90 1 0 50 70 A 20 10 90 1 0 50 30 Z');
+  assert.equal(boardInputGeometry(imageSpec,pieces,new Map()).pieces.checker.pressPath,undefined);
+});
+
 test('native hit geometry selects a rotated group member and prefers a selected legal target over an occupant',()=>{
   const member=boardHit(geometry,{x:50,y:67},null,true);
   assert.equal(member.piece?.id,'source');

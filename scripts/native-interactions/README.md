@@ -15,7 +15,15 @@ python3 scripts/native-interactions/android.py --serial emulator-5554 --fixture 
 
 The default package is `fun.buildplay.debug`. Each sample starts a fresh app process, restores the fixture, records the display and timestamps input on the device. The opening scenario verifies the report screenshot, the selected point and the exact saved result after a physical drag. The tracking scenario measures an 850 ms drag down a column without a legal destination. It isolates free movement from the intentional snap to a target. The optional `tap-move` scenario verifies the same legal move using a tap on the checker and a second tap on its highlighted point.
 
-Each sample directory contains the video, input bracket, frame timestamps and metrics. Tap latency starts immediately before input injection and includes the recorded injection overhead. The checker metric detects the first frame with the legal point visibly highlighted. The report metric detects the transition to the visible dialog. Drag intervals measure distinct visible board updates. Emulator load, density, GPU and screen recording affect the absolute numbers. Use the same device configuration for comparisons.
+Each sample directory contains the video, input bracket, frame timestamps and metrics. Tap latency starts immediately before input injection and includes the recorded injection overhead. The checker selection metric detects the first frame with the legal point visibly highlighted. The report metric detects the transition to the visible dialog. During free dragging, the recorder separately measures when the checker first uncovers the wood beneath it and the intervals between distinct checker positions. Emulator load, density, GPU and screen recording affect the absolute numbers. Use the same device configuration for comparisons.
+
+For Connect Four, export the six-move native fixture and use a disposable emulator with an empty visitor store or this fixture already installed. Each report trial starts on the same board. The tracking trial follows the yellow reserve disc across the screen and checks that the saved move count stays at six.
+
+```sh
+python3 scripts/native-interactions/connect4.py /tmp/connect-four-fixture
+python3 scripts/native-interactions/android.py --serial emulator-5554 --fixture /tmp/connect-four-fixture --output /tmp/connect-four-drag --scenario tracking
+python3 scripts/native-interactions/android.py --serial emulator-5554 --fixture /tmp/connect-four-fixture --output /tmp/connect-four-report --scenario report
+```
 
 ## iOS
 
