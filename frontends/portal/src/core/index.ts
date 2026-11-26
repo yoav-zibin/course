@@ -956,11 +956,14 @@ export class PortalStore {
     }
     await this.archiveMatch(id,{deleted:true});
   }
+  private localHistory(match: LocalMatch) {
+    return { initial_state: match.initialState, initial_turn_player_indices: match.initialTurn, moves: match.moves, total: match.move_count };
+  }
   async loadHistory() {
     const match = this.state.selectedMatch; if (!match) return;
     const guard = this.capture(); const token = this.selection; const replayToken = this.replaySelection;
     const local = this.data.local[match.id]; let history: any;
-    if (local) history = { initial_state: local.initialState, initial_turn_player_indices: local.initialTurn, moves: local.moves, total: local.move_count };
+    if (local) history = this.localHistory(local);
     else if (this.paginated) {
       const result = await this.read(`/v2/matches/${encodeURIComponent(match.id)}/history?start=0&limit=100`); history = { ...result, moves: result.items, nextStart: result.next_start };
     } else history = await this.read(`/matches/${encodeURIComponent(match.id)}/history`);
@@ -968,10 +971,13 @@ export class PortalStore {
   }
   async replay(index: number | null) {
     const replayToken = ++this.replaySelection; const match = this.state.selectedMatch; if (!match) return; if (index === null) { this.patch({ replayIndex: null }); return; }
-    if (this.awaitingLocalHandoff(this.data.local[match.id])) throw new Error(copyText('Confirm the next player is ready before viewing history.'));
+    const local = this.data.local[match.id];
+    if (this.awaitingLocalHandoff(local)) throw new Error(copyText('Confirm the next player is ready before viewing history.'));
     const guard = this.capture(); const token = this.selection; let wanted = Math.max(0, Math.min(match.move_count, index));
     let history = this.state.history;
-    if (this.paginated && !this.data.local[match.id]) {
+    // Returning live keeps the last replay snapshot, even as new moves are saved.
+    if (local) history = this.localHistory(local);
+    else if (this.paginated) {
       const result = await this.read(`/v2/matches/${encodeURIComponent(match.id)}/history?start=${Math.max(0, wanted - 1)}&limit=1`); history = { ...result, moves: result.items, offset: Math.max(0, wanted - 1), total: result.total };
     } else if (!history) history = await this.loadHistory();
     guard(); if (token !== this.selection || replayToken !== this.replaySelection) return;

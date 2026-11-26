@@ -105,13 +105,15 @@ test('floating history remote disables empty history, seeks frames and returns t
   await page.getByTestId('history-previous').click();await expect(page.getByText('Replay · move 1 of 3',{exact:true})).toBeVisible();
   await page.getByTestId('history-end').click();await expect(page.getByText('Live board',{exact:true})).toBeVisible();
   await expect(page.getByTestId('history-end')).toBeDisabled();await expect(page.getByRole('button',{name:'Cell 3',exact:true})).toBeVisible();
+  const nextMove=page.getByRole('button',{name:'Cell 3',exact:true});
+  await nextMove.click();await expect(nextMove).toHaveCount(0);
   await page.getByTestId('history-play').click();await expect(page.getByTestId('history-play')).toHaveAccessibleName('Pause history');
   await page.getByTestId('history-play').click();await expect(page.getByTestId('history-play')).toHaveAccessibleName('Play history');
   await page.getByTestId('history-play').click();
   await expect(page.getByTestId('history-play')).toHaveAccessibleName('Pause history');
   await expect(page.getByText('Live board',{exact:true})).toBeVisible({timeout:15000});
   await expect(page.getByTestId('history-play')).toHaveAccessibleName('Play history');
-  await expect(page.getByTestId('history-end')).toBeDisabled();await expect(page.getByRole('button',{name:'Cell 3',exact:true})).toBeVisible();
+  await expect(page.getByTestId('history-end')).toBeDisabled();await expect(page.getByRole('button',{name:'Cell 5',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:/^(?:← Previous|Next →|Live board)$/})).toHaveCount(0);
 });
 

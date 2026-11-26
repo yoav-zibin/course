@@ -306,6 +306,12 @@ test('public bundled rules support continuous pass-and-play, win, restart and re
     await restarted.actions.replay(1); assert.equal(restarted.getSnapshot().replayIndex, 1); await restarted.actions.replay(null);
     for (const cell of [3,1,4,2]) await restarted.actions.submitMove({ cell });
     const match = restarted.getSnapshot().selectedMatch!; assert.equal(match.status, 'over'); assert.equal(match.state.winner, 0); assert.equal(match.move_count, 5);
+    await restarted.actions.replay(0);
+    for (let frame = 1; frame <= match.move_count; frame++) {
+      assert.equal(await restarted.actions.replay(frame), frame);
+      assert.equal(restarted.actions.presentationMessage().acting_for_player_index, null);
+    }
+    assert.deepEqual(restarted.actions.presentationMessage().view, match.state);
     await restarted.actions.loadHistory(); await restarted.actions.replay(2); const message = restarted.actions.presentationMessage(); assert.equal(message.replay.index, 2); assert.equal(message.acting_for_player_index, null); assert.equal(message.last_move_player_index,1); assert.equal(message.state.board[1], -1);
     await assert.rejects(restarted.actions.submitMove({ cell: 8 }), /live board/);
   } finally { restore(); }
