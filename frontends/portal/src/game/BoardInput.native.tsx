@@ -126,7 +126,7 @@ function pinchCamera(gesture:Gesture,bounds:BoardRect,a:Point,b:Point):BoardCame
 }
 
 export function useBoardInput(props:BoardInputProps):BoardInput {
-  const {spec,scene,order,revision,presentedRevision,active,selected,selectionRequired,width,height,view,bounds,camera,fill}=props;
+  const {spec,scene,order,revision,presentedRevision,moveCount,active,selected,selectionRequired,width,height,view,bounds,camera,fill}=props;
   const latest=useRef(props);
   latest.current=props;
   const play=useMemo(()=>({geometry:boardInputGeometry(spec,scene,order,android),selectionRequired}),
@@ -156,7 +156,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
   const hintedTargets=useMemo(()=>selectionRequired?(scene.targets??[]).filter(t=>
     directSources.some(id=>play.geometry.pieces[id].targets.some(dest=>dest.id===t.id))):[],[selectionRequired,scene,directSources,play]);
   const pressedTargets=useSharedValue<string[]>([]);
-  const snapshot=useSharedValue({epoch:0,play,active,selected,spriteIds,directSources});
+  const snapshot=useSharedValue({epoch:0,play,active,selected,spriteIds,directSources,moveCount});
   const frame=useSharedValue({width,height,view,bounds,camera,fill});
   const gesture=useSharedValue<Gesture|null>(null);
   const sequence=useSharedValue(0);
@@ -166,6 +166,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
   const glow=useSharedValue(0);
   const origin=useSharedValue<Origin|null>(null);
   const pendingDrop=useSharedValue<number|null>(null);
+  const nextContact=useSharedValue<{first:Point;touch:boolean;moveCount:number;width:number;height:number}|null>(null);
   const dropTiming=useRef<{ended:number;received:number;revision:number;token:number}|null>(null);
   const [lifted,setLifted]=useState<{id:string;token:number;epoch:number}|null>(null);
   const epoch=useRef(0);
@@ -188,7 +189,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
     scheduleOnUI(()=>{
       'worklet';
       frame.value=surface;
-      snapshot.value={epoch:nextEpoch,play,active,selected,spriteIds,directSources};
+      snapshot.value={epoch:nextEpoch,play,active,selected,spriteIds,directSources,moveCount};
       pressedTargets.value=[];
       if(pendingDrop.value!==null){
         if(!boardReplaced)return;
@@ -203,7 +204,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
         glow.value=0;
       }
     });
-  },[surface,play,revision,presentedRevision,width,height,active,selected,spriteIds,directSources,pressedTargets,frame,snapshot,gesture,drag,origin,feedback,glow,pendingDrop]);
+  },[surface,play,revision,presentedRevision,moveCount,width,height,active,selected,spriteIds,directSources,pressedTargets,frame,snapshot,gesture,drag,origin,feedback,glow,pendingDrop]);
 
   const mounted=useRef(true);
   useLayoutEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
@@ -228,12 +229,12 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
         if(dropTiming.current?.token===token)dropTiming.current=null;
         scheduleOnUI(()=>{
           'worklet';
-          if(pendingDrop.value===token){pendingDrop.value=null;origin.value=null;}
+          if(pendingDrop.value===token){pendingDrop.value=null;origin.value=null;nextContact.value=null;}
         });
       };
       void Promise.resolve(submitted).then(accepted=>{if(!accepted)restore();},restore);
     }else if(epoch.current===atEpoch&&result)latest.current.onResult(result);
-  },[pendingDrop,origin]);
+  },[pendingDrop,origin,nextContact]);
   const updateCamera=useCallback((next:BoardCamera,atWidth:number,atHeight:number)=>{
     if(mounted.current&&latest.current.width===atWidth&&latest.current.height===atHeight)
       latest.current.onCamera(next);
@@ -254,12 +255,55 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
 
   const cameraEnabled=spec.viewport.camera_enabled!==false;
   const cameraControls=spec.viewport.camera_controls===true;
+  function beginContact(first:Point,touch:boolean,tag:number){
+    'worklet';
+    const area=frame.value,model=snapshot.value,canvas=projectCanvas(area.width,area.height,area.view,area.fill);
+    if(!(canvas.scale>0))return;
+    const point=scenePoint(canvas,first);
+    const hit=model.active?boardHit(model.play.geometry,point,model.selected,model.play.selectionRequired):
+      {piece:undefined,target:undefined};
+    const {piece,target}=hit;
+    const selectedDestination=!!target&&model.selected!==null&&
+      !!model.play.geometry.pieces[model.selected]?.targets.some(item=>item.id===target.id);
+    const source=piece?.targets.length&&!selectedDestination?piece.id:model.selected;
+    const claimsTouch=!!(piece||target||area.camera.zoom>1);
+    if(!android&&model.play.selectionRequired&&model.selected===null&&piece&&model.directSources.includes(piece.id))
+      pressedTargets.value=piece.targets.map(dest=>dest.id);
+    gesture.value={epoch:model.epoch,token:++sequence.value,first:{x:first.x,y:first.y},canvas,
+      camera:area.camera,hit,source,selected:model.selected,touch,moved:false,claimsTouch,
+      grab:piece?{x:(piece.center.x-point.x)*canvas.scaleX,y:(piece.center.y-point.y)*canvas.scaleY}:{x:0,y:0}};
+    feedback.value=target&&(selectedDestination||!piece)?{target,scale:canvas.scale}:
+      piece?{...(piece.pressPath&&(!piece.targets.length||android&&model.spriteIds.includes(piece.id))?{piecePath:piece.pressPath}:{piece:piece.id}),scale:canvas.scale}:null;
+    glow.value=1;
+    if(claimsTouch)GestureStateManager.activate(tag);
+  }
+  function resumeContact(tag:number){
+    'worklet';
+    const contact=nextContact.value,model=snapshot.value,area=frame.value;
+    if(!contact||pendingDrop.value!==null||!model.active)return;
+    if(model.moveCount===contact.moveCount)return;
+    nextContact.value=null;
+    // Re-hit-test the *new* legal board. A turn change remounts this
+    // renderer. Replays, skipped moves and rotated boards cannot reuse a touch.
+    if(model.moveCount===contact.moveCount+1&&area.width===contact.width&&area.height===contact.height)
+      beginContact(contact.first,contact.touch,tag);
+  }
   const manual=useManualGesture({
     runOnJS:false,shouldCancelWhenOutside:false,cancelsTouchesInView:true,cancelsJSResponder:true,
     onTouchesDown:event=>{
       'worklet';
-      if(pendingDrop.value!==null)return;
       const area=frame.value,current=gesture.value,model=snapshot.value;
+      if(pendingDrop.value!==null){
+        const first=event.changedTouches[0];
+        nextContact.value=null;
+        if(event.allTouches.length===1&&first&&model.moveCount!==undefined){
+          nextContact.value={first:{x:first.x,y:first.y},touch:event.pointerType!==PointerType.MOUSE,
+            moveCount:model.moveCount,width:area.width,height:area.height};
+          GestureStateManager.activate(event.handlerTag);
+        }
+        return;
+      }
+      nextContact.value=null;
       pressedTargets.value=[];
       const canvas=current?.canvas??projectCanvas(area.width,area.height,area.view,area.fill);
       if(event.allTouches.length>=2){
@@ -279,26 +323,11 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       trace.value=undefined;
       const first=event.changedTouches[0];
       if(!first||!(canvas.scale>0))return;
-      const point=scenePoint(canvas,first);
-      const hit=model.active?boardHit(model.play.geometry,point,model.selected,model.play.selectionRequired):
-        {piece:undefined,target:undefined};
-      const {piece,target}=hit;
-      const selectedDestination=!!target&&model.selected!==null&&
-        !!model.play.geometry.pieces[model.selected]?.targets.some(item=>item.id===target.id);
-      const source=piece?.targets.length&&!selectedDestination?piece.id:model.selected;
-      const claimsTouch=!!(piece||target||area.camera.zoom>1);
-      if(!android&&model.play.selectionRequired&&model.selected===null&&piece&&model.directSources.includes(piece.id))
-        pressedTargets.value=piece.targets.map(dest=>dest.id);
-      gesture.value={epoch:model.epoch,token:++sequence.value,first:{x:first.x,y:first.y},canvas,
-        camera:area.camera,hit,source,selected:model.selected,touch:event.pointerType!==PointerType.MOUSE,moved:false,claimsTouch,
-        grab:piece?{x:(piece.center.x-point.x)*canvas.scaleX,y:(piece.center.y-point.y)*canvas.scaleY}:{x:0,y:0}};
-      feedback.value=target&&(selectedDestination||!piece)?{target,scale:canvas.scale}:
-        piece?{...(piece.pressPath&&(!piece.targets.length||android&&model.spriteIds.includes(piece.id))?{piecePath:piece.pressPath}:{piece:piece.id}),scale:canvas.scale}:null;
-      glow.value=1;
-      if(claimsTouch)GestureStateManager.activate(event.handlerTag);
+      beginContact(first,event.pointerType!==PointerType.MOUSE,event.handlerTag);
     },
     onTouchesMove:event=>{
       'worklet';
+      resumeContact(event.handlerTag);
       const held=gesture.value;
       if(!held?.claimsTouch)return;
       const {canvas,camera:initialCamera}=held,area=frame.value,model=snapshot.value;
@@ -343,6 +372,8 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
     onTouchesUp:event=>{
       'worklet';
       if(event.numberOfTouches>0)return;
+      resumeContact(event.handlerTag);
+      nextContact.value=null;
       const held=gesture.value,model=snapshot.value,at=event.changedTouches[0];
       if(!held?.claimsTouch){
         gesture.value=null;
@@ -378,7 +409,7 @@ export function useBoardInput(props:BoardInputProps):BoardInput {
       scheduleOnRN(finish,held.epoch,held.token,result,trace.value,Date.now());
       GestureStateManager.deactivate(event.handlerTag);
     },
-    onTouchesCancel:cancel,
+    onTouchesCancel:()=>{'worklet';nextContact.value=null;cancel();},
     onFinalize:cancel,
   });
 

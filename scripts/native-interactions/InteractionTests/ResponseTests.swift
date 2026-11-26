@@ -5,7 +5,7 @@ final class ResponseTests: XCTestCase {
     private struct Bounds: Decodable { let x, y, width, height: CGFloat }
     private struct Action: Decodable { let id: String; let label, until, absent: String?; let at, to, spentDie: Point?; let lift: CGFloat? }
     private struct Scenario: Decodable { let id, match: String; let bounds: Bounds; let actions: [Action] }
-    private struct Cases: Decodable { let library: String; let profile: Bool; let scenarios: [Scenario] }
+    private struct Cases: Decodable { let library: String; let profile: Bool; let rapid: Bool?; let scenarios: [Scenario] }
     private let app = XCUIApplication(bundleIdentifier: "edu.columbia.gameportal.starter")
 
     private func element(_ name: String) -> XCUIElement {
@@ -31,6 +31,20 @@ final class ResponseTests: XCTestCase {
             let f=board.frame, b=scenario.bounds, s=min(f.width/b.width,f.height/b.height)
             let x=f.midX+(point.x-b.x-b.width/2)*s, y=f.midY+(point.y-b.y-b.height/2)*s
             return app.coordinate(withNormalizedOffset:.zero).withOffset(CGVector(dx:x-app.frame.minX,dy:y-app.frame.minY+(lift>0 ? min(54,lift*s*0.6+22,f.height/3):0)))
+        }
+        if data.rapid==true {
+            // Resolve every coordinate before either drag. The UIKit touch
+            // log measures the actual system-imposed gap between gestures.
+            let paths=try scenario.actions.map { action in
+                (action.id,coordinate(try XCTUnwrap(action.at)),coordinate(try XCTUnwrap(action.to),lift:action.lift ?? 0))
+            }
+            for (id,from,to) in paths {
+                print("RESPONSE_ACTION \(name) \(id) begin \(Date().timeIntervalSince1970*1000)")
+                from.press(forDuration:0.035,thenDragTo:to,withVelocity:230,thenHoldForDuration:0)
+                print("RESPONSE_ACTION \(name) \(id) end \(Date().timeIntervalSince1970*1000)")
+            }
+            Thread.sleep(forTimeInterval:1.3)
+            return
         }
         for action in scenario.actions {
             let target: XCUICoordinate

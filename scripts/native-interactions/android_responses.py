@@ -28,6 +28,25 @@ def control(d,label):
         time.sleep(.3)
     raise RuntimeError('Missing '+label)
 
+def board_input(d,b,action,density,tap_ms):
+    # The history strip and game status can change the stage's layout.
+    left,top,right,bottom=control(d,BOARD)
+    scale=min((right-left)/b['width'],(bottom-top)/b['height'])
+    def project(v):
+        return (round((left+right)/2+(v['x']-b['x']-b['width']/2)*scale),
+                round((top+bottom)/2+(v['y']-b['y']-b['height']/2)*scale))
+    p=project(action['at'])
+    if 'to' in action:
+        x,y=project(action['to'])
+        y+=round(min(54*density,action['lift']*scale*.6+22*density,(bottom-top)/3))
+        command=f'swipe {p[0]} {p[1]} {x} {y} 530'
+    else:
+        command=tap_command(p,tap_ms)
+    return p,command,project(action['spentDie']) if 'spentDie' in action else None
+
+def tap_command(p,duration):
+    return f'swipe {p[0]} {p[1]} {p[0]} {p[1]} {duration}' if duration else f'tap {p[0]} {p[1]}'
+
 def run(args):
     d=Device(args.serial);pkg=args.package
     if d.adb('shell','getprop','ro.kernel.qemu')!='1':raise RuntimeError('Requires a disposable emulator')
@@ -37,6 +56,10 @@ def run(args):
     directory='/data/user/0/'+pkg+'/files/BuildPlayShared'
     uid=d.adb('shell','stat','-c','%u:%g','/data/user/0/'+pkg)
     cases=json.loads((args.fixtures/'scenarios.json').read_text())
+    if args.followup_gap_ms is not None:
+        if args.followup_gap_ms<0 or args.profile:raise ValueError('A paired-gesture run requires a nonnegative gap and unprofiled input')
+        cases=[c for c in cases if c['id']=='backgammon-pass-midgame']
+        if not cases:raise ValueError('Midgame checker fixture missing')
     args.results.mkdir(parents=True,exist_ok=True)
     all_rows={}
     for case in cases:
@@ -51,21 +74,20 @@ def run(args):
             d.adb('shell','am','start','-W','-n',pkg+'/.MainActivity','--ez','buildplayLocalUiTest','true')
             control(d,BOARD)
             time.sleep(1.3)
-            b=case['bounds']
-            def project(p):return (round((left+right)/2+(p['x']-b['x']-b['width']/2)*sc),
-                                    round((bottom+top)/2+(p['y']-b['y']-b['height']/2)*sc))
-            for action in case['actions']:
+            actions=case['actions'];gap=None
+            if args.followup_gap_ms is not None:
+                first,second=[board_input(d,case['bounds'],a,density,args.tap_ms)[1] for a in actions]
+                time.sleep(.8)
+                ticks=d.adb('shell',f'cmd input {first}; cat /proc/uptime; sleep {args.followup_gap_ms/1000}; cat /proc/uptime; cmd input {second}').splitlines()
+                gap=round((float(ticks[1].split()[0])-float(ticks[0].split()[0]))*1000)
+                actions=[]
+            for action in actions:
+                die=None
                 if 'at' in action:
-                    # The history strip and game status can change the stage's layout.
-                    left,top,right,bottom=control(d,BOARD)
-                    sc=min((right-left)/b['width'],(bottom-top)/b['height'])
-                    p=project(action['at'])
+                    p,command,die=board_input(d,case['bounds'],action,density,args.tap_ms)
                 else:
                     p=center(control(d,action['label']))
-                if 'to' in action:
-                    x,y=project(action['to']);y+=round(min(54*density,action['lift']*sc*.6+22*density,(bottom-top)/3))
-                    command=f'swipe {p[0]} {p[1]} {x} {y} 530'
-                else:command=f'swipe {p[0]} {p[1]} {p[0]} {p[1]} {args.tap_ms}' if args.tap_ms else f'tap {p[0]} {p[1]}'
+                    command=tap_command(p,args.tap_ms)
                 time.sleep(.4)
                 if args.profile:
                     pid=d.adb('shell','pidof',pkg);remote='/data/local/tmp/buildplay-samples.data'
@@ -83,8 +105,8 @@ def run(args):
                     times,frames,bracket=d.record(folder,action['id'],command)
                     small=[f[::2,::2] for f in frames]
                     row=response(times,small,0,p,dims)
-                    if 'spentDie' in action:
-                        row['release_to_spent_die_ms']=spent_die_latency(times,small,0,bracket,project(action['spentDie']),dims)
+                    if die:
+                        row['release_to_spent_die_ms']=spent_die_latency(times,small,0,bracket,die,dims)
                     if action['id'] in ('open-menu','close-menu','open-report','dismiss-report'):
                         row['dialog_landmark_ms']=destination(times,small,0)
                     rows.append({'action':action['id'],'point':p,'injection_ms':round(bracket,1),**row})
@@ -96,6 +118,7 @@ def run(args):
             proof=verify([case],data)[case['id']]
             (folder/'verified.json').write_text(json.dumps(proof,indent=2))
             all_rows[case['id']]={'actions':rows,'proof':proof}
+            if gap is not None:all_rows[case['id']].update(requested_gap_ms=args.followup_gap_ms,command_gap_ms=gap)
         except Exception as e:
             all_rows[case['id']]={'actions':rows,'error':str(e)}
             print(case['id'],str(e),flush=True)
@@ -111,4 +134,5 @@ def run(args):
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('fixtures',type=Path);p.add_argument('results',type=Path)
     p.add_argument('--tap-ms',type=int,default=55,help='Duration of a stationary touch, or zero to stress simultaneous down/up')
+    p.add_argument('--followup-gap-ms',type=int,help='Inject two midgame drags back-to-back, then verify both saved moves')
     p.add_argument('--serial',required=True);p.add_argument('--package',default='fun.buildplay.debug');p.add_argument('--profile',action='store_true');run(p.parse_args())

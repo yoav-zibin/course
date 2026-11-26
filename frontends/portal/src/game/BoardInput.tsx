@@ -13,6 +13,7 @@ export type BoardInputProps = {
   order:ReadonlyMap<string,number>;
   revision:number;
   presentedRevision:number;
+  moveCount?:number;
   active:boolean;
   selected:string|null;
   selectionRequired:boolean;
