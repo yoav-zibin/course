@@ -1,6 +1,7 @@
 import * as storage from '../platform/storage';
 import {requestId} from './random-id';
-export const VISITOR_KEY='game-platform.visitor.v1';
+import {VISITOR_KEY} from '../platform/request-storage-keys';
+export {VISITOR_KEY};
 const validVisitor=(value:string|null):value is string=>!!value&&/^[A-Za-z0-9_-]{1,128}$/.test(value);
 let memoryVisitor:string|null=null,pending:Promise<string>|null=null;
 

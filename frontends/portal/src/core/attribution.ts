@@ -1,8 +1,9 @@
 import * as deviceStorage from '../platform/storage';
 import type { Account } from './types';
 import {playerLink} from './links';
+import {CAMPAIGN_KEY} from '../platform/request-storage-keys';
 const LEGACY_INVITER_KEY='game-platform.invited-by.v1';
-export const CAMPAIGN_KEY='game-platform.experiment-campaign.v1';
+export {CAMPAIGN_KEY};
 export const INVITE_KEY='game-platform.invite-token.v1';
 export const MATCH_KEY='game-platform.invite-match.v1';
 type AttributionStorage=Pick<typeof deviceStorage,'getItem'|'setItem'|'removeItem'> & {exclusive?:typeof deviceStorage.exclusive};

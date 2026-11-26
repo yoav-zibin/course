@@ -12,6 +12,31 @@ test('native read atomically imports legacy value and leaves the old bytes intac
   const f=fixture(); f.oldValues.set('account','legacy JSON'); assert.equal(await f.adapter.getItem('account'),'legacy JSON'); assert.equal(f.values.get('account'),'legacy JSON'); assert.equal(f.oldValues.get('account'),'legacy JSON');
   f.values.set('account','newer native JSON'); assert.equal(await f.adapter.getItem('account'),'newer native JSON');
 });
+test('only request metadata skips repeated native reads and writes invalidate cached values',async()=>{
+  const f=fixture(),key='request-metadata',reads:string[]=[];
+  const read=f.native.getPersistentItem;
+  f.native.getPersistentItem=async item=>{reads.push(item);return read(item);};
+  const adapter=createPersistentStorage(f.legacy,f.native,new Set([key]));
+  assert.deepEqual(await Promise.all([adapter.getItem(key),adapter.getItem(key)]),[null,null]);
+  await adapter.setItem(key,'current');
+  assert.equal(await adapter.getItem(key),'current');
+  assert.equal(await adapter.getItem(key),'current');
+  await adapter.removeItem(key);
+  assert.equal(await adapter.getItem(key),null);
+  assert.equal(await adapter.getItem('match'),null);
+  assert.equal(await adapter.getItem('match'),null);
+  assert.deepEqual(reads,[key,key,key,'match','match']);
+});
+test('request metadata retries a legacy migration whose first copy failed',async()=>{
+  const f=fixture(),key='legacy-request-metadata';
+  f.oldValues.set(key,'old');
+  const adapter=createPersistentStorage(f.legacy,f.native,new Set([key]));
+  f.fail();
+  assert.equal(await adapter.getItem(key),'old');
+  f.recover();
+  assert.equal(await adapter.getItem(key),'old');
+  assert.equal(f.values.get(key),'old');
+});
 test('a full migration destination keeps original data readable and retries the copy later', async () => {
   const f=fixture(),key='private-retained-key',value='complete original pending moves';setDiagnosticScope('native-quota-copy');
   f.oldValues.set(key,value);f.fail(new DOMException('No space left on device','QuotaExceededError'));
