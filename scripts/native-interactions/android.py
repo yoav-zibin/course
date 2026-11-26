@@ -75,15 +75,21 @@ def roi(frame, box):
     return frame[y:bottom:2, x:right:2].astype(np.int16)
 
 
-def visible_latency(times, frames, box):
+def visible_latency(times, frames, box, settled=False):
     before, after = roi(frames[0], box), roi(frames[-1], box)
     # Restrict to pixels that visibly differ in the stable destination state.
     changed = np.max(np.abs(after-before), axis=2) > 35
     if changed.sum() < 60:
         raise RuntimeError('No substantial visible response')
     span = np.abs(after[changed]-before[changed]).mean()
-    return next(t for t, f in zip(times, frames) if t >= 0 and
-                np.abs(roi(f, box)[changed]-after[changed]).mean() < span*.5)
+    def reached(frame):
+        return np.abs(roi(frame, box)[changed]-after[changed]).mean() < span*.5
+    if settled:
+        index = len(frames)-1
+        while index>0 and reached(frames[index-1]):
+            index -= 1
+        return times[index]
+    return next(t for t, f in zip(times, frames) if t >= 0 and reached(f))
 
 
 def highlight_latency(times, frames, board, column, scale):
@@ -240,6 +246,13 @@ def benchmark(args):
         row.update(drag_metrics(times, frames, board, duration))
         match = saved_match(device, dest, pose)
         committed = expected_move(match, pose)
+        if committed and 'spentDie' in pose:
+            # Only an accepted move spends the die. Its stable appearance measures
+            # the player's visible confirmation independently of target snapping.
+            x, y = project(pose['spentDie'])
+            radius = max(6, round(24*scale))
+            row['drop_visible_after_release_ms'] = visible_latency(times-duration, frames,
+                (x-radius,y-radius,x+radius,y+radius), settled=True)
         row = {k:round(float(v), 1) for k,v in row.items()}
         row['legal_drop_committed'] = committed
         dropped += int(not committed)

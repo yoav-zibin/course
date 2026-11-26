@@ -45,7 +45,7 @@ scene.pieces=scene.pieces?.filter(piece=>piece.id!=='help');
 const bounds=contentBounds(spec,scene,spec.boards.filter(presentation.visibleBoard));
 const at=(item:Piece|Target)=>{const {x,y}=position(spec,item);return {x,y};};
 // Use one die, and prefer a long cross-board drag with a visible checker at both ends.
-const choices=state.legalMoves.flatMap((move:{from:number;to:number})=>{
+const choices=state.legalMoves.flatMap((move:{from:number;to:number;die:number})=>{
   const label='Player '+(seat()+1)+': Point '+(move.from+1);
   const piece=scene.pieces?.find(piece=>piece.aria_label===label&&piece.move_targets?.includes('to_'+move.to));
   const target=scene.targets?.find(target=>target.id==='to_'+move.to);
@@ -56,6 +56,8 @@ const choices=state.legalMoves.flatMap((move:{from:number;to:number})=>{
 });
 const chosen=choices.sort((a:any,b:any)=>b.distance-a.distance)[0];
 if(!chosen)throw Error('No visible checker for legal opening move');
+const usedDice=scene.pieces?.filter(piece=>piece.type==='die'&&piece.die_value===chosen.move.die);
+if(usedDice?.length!==1)throw Error('Expected a unique opening die for the legal move');
 const after=rules.applyMove(structuredClone(current.state),current.turn[0],{action:'move',from:chosen.move.from,to:chosen.move.to},ctx);
 const id='local-benchmark-backgammon';
 const match={id,game_id:game.id,game_version:game.version,owner_user_id:'visitor',players,status:'ongoing',end_reason:null,
@@ -68,5 +70,5 @@ const data={version:1,responses:{['/games/'+game.id+'/versions/'+game.version]:g
 mkdirSync(output,{recursive:true});
 const filename=createHash('sha256').update(key).digest('hex')+'.json';
 writeFileSync(path.join(output,filename),JSON.stringify({key,value:JSON.stringify(data)}));
-writeFileSync(path.join(output,'pose.json'),JSON.stringify({...chosen,bounds,id,filename,moveCount:ctx.move_count,
+writeFileSync(path.join(output,'pose.json'),JSON.stringify({...chosen,bounds,id,filename,moveCount:ctx.move_count,spentDie:at(usedDice[0]),
   expectedCounts:after.state.cnt,expectedOwners:after.state.owner},null,2));
