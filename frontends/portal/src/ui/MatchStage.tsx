@@ -1,11 +1,12 @@
 import {copyText} from '../platform/i18n';
 import React,{useEffect,useRef,useState,type ReactNode} from 'react';
-import {Image,Text,View,useWindowDimensions} from 'react-native';
+import {Image,Platform,Text,View,useWindowDimensions} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {shareInvite} from '../platform/share';
 import {matchInviteUrl} from '../core/links';
 import {performInviteShare,type InviteShareChannel} from '../core/invite-sharing';
 import {GameRenderer} from '../game/GameRenderer';
+import {preparePresentationRuntime} from '../game/preparePresentationResponse';
 import {BACKGAMMON_GAME_ID,backgammonMatchPresentation,fillsBackgammonLandscape} from '../game/backgammonMatchPresentation';
 import {Button,Card,Copy,Dialog,Empty,Notice,Row,Title,colors} from './components';
 import {text,useApp} from './context';
@@ -45,6 +46,12 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
   const [help,setHelp]=useState(false);
   const [frameHeight,setFrameHeight]=useState<number>();
   const fittedBoard=match.status!=='waiting_for_players'&&!match.awaitingHandoff;
+  useEffect(()=>{
+    if(Platform.OS!=='ios'||game||!fittedBoard)return;
+    // The match identifies a board while its versioned package is in flight.
+    const idle=requestIdleCallback(()=>{void Promise.resolve().then(preparePresentationRuntime).catch(()=>{});});
+    return ()=>cancelIdleCallback(idle);
+  },[game,fittedBoard]);
   const singlePlayer=isSinglePlayerMatch(match);
   const owner=Boolean(p.account&&[p.account.id,p.account.canonical_user_id,p.profile?.id].includes(match.owner_user_id)),local=Boolean(match.localMode),seat=match.players.find(player=>player.active!==false&&(match.localMode==='computer'?player.kind==='human':player.user_id===p.account?.id)),participant=local||Boolean(seat),waiting=match.status==='waiting_for_players',over=match.status==='over';
   const activePlayers=match.players.filter(player=>player.active!==false).length;
@@ -104,4 +111,4 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
     </Dialog>
   </View>;
 }
-export {preparePresentationRuntime} from '../game/preparePresentationResponse';
+export {preparePresentationRuntime};

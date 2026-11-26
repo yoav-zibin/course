@@ -178,6 +178,12 @@ test('restoring a migrated login avoids writing credentials again on launch',asy
   assert.deepEqual(await restoreAccounts(base,repository),first);
   assert.deepEqual(writes,[]);
 });
+test('a clean install completes legacy migration without creating an empty account index',async()=>{
+  const values=browserStorage(),base='https://local.test';
+  assert.deepEqual(await restoreAccounts(base,new AccountRepository(base)),[]);
+  assert.equal(values['game-platform.accounts.v1'],undefined);
+  assert.equal(values[`buildplay.native-import.v1.${encodeURIComponent(base)}`],'1');
+});
 test('cold launch restores the saved locale and catalog while server configuration is pending',async()=>{
   const saved=browserStorage();
   saved['game-platform.locale.v1']='ar';

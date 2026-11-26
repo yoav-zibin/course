@@ -658,10 +658,10 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const boardCanvas=<View ref={canvas} collapsable={false} focusable style={[styles.canvas,framed?{flex:1,minHeight:0}:{height},canvasWebStyle]} {...webProps} {...(!boardInput.wrapCanvas&&responders.panHandlers)}
       onLayout={event=>{setWidth(event.nativeEvent.layout.width);setCanvasHeight(event.nativeEvent.layout.height);measureOrigin();}}
       accessibilityLabel={copyText("Game board. Use pieces and highlighted destinations.")}>
-      <Svg {...svgFrame} style={{direction:'ltr'}}>
+      {(Platform.OS!=='ios'||ready)&&<Svg {...svgFrame} style={{direction:'ltr'}}>
         {templates.definitions.length>0&&<Defs>{templates.definitions}</Defs>}
         {Platform.OS==='android'?lowerArt:[...lowerArt,...upperArt]}
-      </Svg>
+      </Svg>}
       {Platform.OS==='android'&&<Svg {...svgFrame} style={[StyleSheet.absoluteFill,{direction:'ltr'}]}>{upperArt}</Svg>}
       {boardInput.feedback}
     </View>;

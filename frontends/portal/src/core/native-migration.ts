@@ -12,7 +12,7 @@ export async function restoreAccounts(baseUrl: string, repository: AccountReposi
   if (imported) return accounts;
   const merged = await importNativeLegacy(baseUrl, repository, accounts, marker);
   // Commit the marker only after legacy credentials and game data are durable.
-  await saveAccounts(merged, baseUrl);
+  if (merged.length) await saveAccounts(merged, baseUrl);
   await storage.setItem(marker, '1');
   return merged;
 }
@@ -22,7 +22,8 @@ async function importNativeLegacy(baseUrl: string, repository: AccountRepository
     await storage.setItem(`${marker}.archive`, redactedNativeArchive(raw));
     throw new Error(`Earlier app data could not yet be fully read: ${raw.errors.join('; ')}. Reopen after unlocking the device to retry migration`);
   }
-  if (!raw.android && !raw.ios) return accounts;
+  // Both native modules return a platform object even on a clean install.
+  if (!Object.keys(raw.android ?? {}).length && !Object.keys(raw.ios ?? {}).length) return accounts;
   // Keep game data before interpreting it. Credentials stay in encrypted native
   // storage; copying their decrypted export into AsyncStorage would weaken it.
   await storage.setItem(`${marker}.archive`, redactedNativeArchive(raw));
