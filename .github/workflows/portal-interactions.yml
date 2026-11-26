@@ -17,7 +17,7 @@ on:
       scenario:
         description: Interactions to measure
         type: choice
-        options: [board, landscape, startup, startup-video, startup-link, startup-profile]
+        options: [board, landscape, startup, startup-video, startup-link, startup-profile, responses, responses-profile]
         default: board
       video_pairs:
         description: Paired trials for recorded launches
@@ -69,6 +69,9 @@ jobs:
           (cd frontends/portal && npm ci)
           mkdir -p "$RUNNER_TEMP/interaction"
           frontends/portal/node_modules/.bin/tsx scripts/native-interactions/backgammon.ts "$RUNNER_TEMP/interaction/fixture"
+          if [[ "${{ inputs.scenario }}" == responses* ]]; then
+            frontends/portal/node_modules/.bin/tsx scripts/native-interactions/response-fixtures.ts "$RUNNER_TEMP/interaction/response-fixtures"
+          fi
           ditto -x -k release/BuildPlay-simulator.zip "$RUNNER_TEMP/interaction/release"
           if [[ -f baseline-release/BuildPlay-simulator.zip ]]; then
             ditto -x -k baseline-release/BuildPlay-simulator.zip "$RUNNER_TEMP/interaction/baseline-release"
@@ -139,6 +142,12 @@ jobs:
               ditto "$app" "$base/video-apps/$name/BuildPlay.app"
               continue
             fi
+            if [[ "$SCENARIO" == responses* ]]; then
+              flags=()
+              if [[ "$SCENARIO" == responses-profile ]]; then flags+=(--profile); fi
+              python3 scripts/native-interactions/ios_responses.py "$app" "$base/response-fixtures" "$base/results/$name" "$SIMULATOR_ID" "${flags[@]}"
+              continue
+            fi
             if ! bash "$benchmark" "$app" "$base/fixture" "$base/results/$name" "$SIMULATOR_ID"; then
               if [[ "$name" == current || "$SCENARIO" == startup ]]; then exit 1; fi
               echo "::warning::Baseline verification failed. Continuing with the independent candidate."
@@ -157,6 +166,7 @@ jobs:
           path: |
             ${{ runner.temp }}/interaction/results/*/*.xcresult
             ${{ runner.temp }}/interaction/results/*/*.json
+            ${{ runner.temp }}/interaction/results/*/*.jsonl
             ${{ runner.temp }}/interaction/results/*/*.sample.txt
             ${{ runner.temp }}/interaction/results/*/*.log
             ${{ runner.temp }}/interaction/results/*/*.mov
