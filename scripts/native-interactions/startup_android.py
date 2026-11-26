@@ -9,7 +9,8 @@ from xml.etree import ElementTree
 
 import numpy as np
 
-from android import BOARD, Device, center
+from android import BOARD, Device, center, roi
+from startup_frames import opening_bounds
 
 
 PACKAGE = 'fun.buildplay.debug'
@@ -18,21 +19,21 @@ MAIN = PACKAGE+'/.MainActivity'
 GAME_ID = '5f5293c3-2a3a-4eec-b631-9debf59be0ca'
 
 
-def first_paint(times, frames, bounds):
+def first_paint(times, frames, bounds, require_opening=False):
     # Match the high-contrast edges of the final label or board. A splash
     # matching the page's background color must not count as usable content.
-    left, top, right, bottom = bounds
-    def crop(frame):
-        return frame[top:bottom:2,left:right:2].astype(np.int16)
-    target = crop(frames[-1])
+    target = roi(frames[-1], bounds)
+    if require_opening and opening_bounds(target) is None:
+        raise RuntimeError('The recording ended before the opening checkers appeared')
     edges = np.max(abs(target[1:,1:]-target[:-1,1:]),axis=2)>26
     edges |= np.max(abs(target[1:,1:]-target[1:,:-1]),axis=2)>26
     if edges.sum()<18:
         raise RuntimeError('The final visual target has too few edges')
     expected = target[1:,1:][edges]
     def matches(frame):
-        difference = np.max(abs(crop(frame)[1:,1:][edges]-expected),axis=1)
-        return np.mean(difference<42)>.76
+        region = roi(frame, bounds)
+        difference = np.max(abs(region[1:,1:][edges]-expected),axis=1)
+        return np.mean(difference<42)>.76 and (not require_opening or opening_bounds(region) is not None)
     if matches(frames[0]):
         raise RuntimeError('The target was already on screen before input')
     return round(float(next(t for t,f in zip(times,frames) if t>=0 and matches(f))),1)
@@ -82,7 +83,7 @@ def run(device, scenario, dest):
             row['catalog_visible_ms'] = first_paint(times,frames,device.bounds('Play Backgammon'))
         else:
             board = device.bounds(BOARD)
-            row['board_visible_ms'] = first_paint(times,frames,board)
+            row['board_visible_ms'] = first_paint(times,frames,board,require_opening=True)
     else:
         device.adb('shell','am','start','-W','-n',MAIN)
         press(device,'Log in / continue as guest')

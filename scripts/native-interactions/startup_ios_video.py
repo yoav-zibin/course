@@ -13,6 +13,8 @@ from PIL import Image
 import av
 import numpy as np
 
+from startup_frames import opening_bounds
+
 
 def sim(*args, **kwargs):
     return subprocess.run(['xcrun','simctl',*map(str,args)],check=True,**kwargs)
@@ -33,22 +35,6 @@ def frames(path):
         for frame in capture.decode(video=0):
             small=frame.reformat(width=320,height=round(320*frame.height/frame.width),format='rgb24')
             yield float((frame.pts or 0)*frame.time_base)*1000,small.to_ndarray().astype(np.int16)
-
-
-def opening_bounds(image):
-    red,green,blue=image.transpose(2,0,1)
-    y,x=np.nonzero((red>95)&(red>green+34)&(green>blue+18))
-    if len(x)<red.size*.1:
-        return None
-    h,w=red.shape
-    left,right=np.percentile(x,[2,98]).astype(int)
-    top,bottom=np.percentile(y,[2,98]).astype(int)
-    r,g,b=image[top:bottom,left:right].transpose(2,0,1)
-    red_checkers=(r>150)&(g<95)&(r>g+95)&(b<100)
-    ivory_checkers=(r>190)&(g>180)&(b>160)&(abs(r-g)<45)&(abs(g-b)<55)
-    if red_checkers.mean()<.015 or ivory_checkers.mean()<.015:
-        return None
-    return left/w,top/h,right/w,bottom/h
 
 
 def measure(movie, before, after, bounds):
