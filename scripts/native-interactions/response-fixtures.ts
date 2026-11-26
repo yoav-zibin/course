@@ -55,7 +55,7 @@ function makeCase(slug:string,game:any,mode:string,level:number,setup=false){
     players,my_player_index:seat(),acting_for_player_index:seat(),turn_of_player_index:seat(),turn_of_player_indices:[seat()],locale:'en',direction:'ltr',strings:spec.strings||{}};
   let scene=ui.reduce(message,{}).scene;
   if(bg)scene=backgammonMatchPresentation.presentScene!(scene,message as any);
-  const bounds=contentBounds(spec,scene,bg?spec.boards.filter(backgammonMatchPresentation.visibleBoard):spec.boards);
+  const bounds=contentBounds(spec,scene,bg?spec.boards.filter(backgammonMatchPresentation.visibleBoard):undefined);
   const at=(v:any):Point=>{if(!v)throw Error('Missing control in '+id);const {x,y}=position(spec,v);return{x,y};};
   const piece=(name:string)=>scene.pieces?.find((p:any)=>p.id===name);
   const actions:Action[]=[];
