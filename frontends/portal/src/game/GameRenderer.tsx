@@ -161,7 +161,8 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     return()=>window.removeEventListener('keydown',cancel,true);
   },[]);
 
-  const apply = useCallback(async (input: unknown, atRevision: number, stateChange: boolean) => {
+  const apply = useCallback(async (input: unknown, atRevision: number, stateChange: boolean, queuedAt?:number) => {
+    const started=performance.now();
     const prepared = await runPreparedPresentation(spec,input,local.current,()=>
       alive.current && atRevision === revision.current);
     if (!prepared || !alive.current || atRevision !== revision.current) return;
@@ -241,7 +242,15 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     callbacks.current.onScene?.(raw,latest.current!);
     if (result.make_move !== undefined) {
       sent.current=true;setBusy(true);
-      try { recordDiagnosticEvent('game_move');await callbacks.current.onMove(copy(result.make_move));return true; }
+      try {
+        recordDiagnosticEvent('game_move',{
+          presentation_queue_ms:queuedAt===undefined?0:Math.round(started-queuedAt),
+          game_ui_round_trip_ms:Math.round(prepared.gameUiMs),
+          prepare_scene_ms:Math.round(prepared.prepareSceneMs),
+          apply_scene_ms:Math.max(0,Math.round(performance.now()-started-prepared.gameUiMs-prepared.prepareSceneMs)),
+        });
+        await callbacks.current.onMove(copy(result.make_move));return true;
+      }
       catch (reason) { if(atRevision===revision.current){sent.current=false;setBusy(false);} report(reason); }
     }
   },[spec,report,omitPieceId,boardPresentation]);
@@ -291,11 +300,11 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
 
   const dispatch = useCallback((event: UIEvent) => {
     if(!alive.current || Date.now()<motionUntil.current || !canMove(latest.current,sent.current) || renderedRevision.current!==revision.current || !validEvent(sceneRef.current,event))return;
-    const atRevision=revision.current;
+    const atRevision=revision.current,queuedAt=performance.now();
     const input={type:'ui_event',event:copy(event),state_changed:latest.current};
     const submitted=queue.current.catch(()=>{}).then(async()=>{
       if(atRevision!==revision.current||Date.now()<motionUntil.current||!canMove(latest.current,sent.current)||!validEvent(sceneRef.current,event))return;
-      return apply(input,atRevision,false);
+      return apply(input,atRevision,false,queuedAt);
     }).catch(report);
     queue.current=submitted.then(()=>{});
     return submitted;

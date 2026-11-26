@@ -8,9 +8,14 @@ export async function runPresentation(code: string, message: unknown, localState
 }
 
 export async function runPreparedPresentation(spec: GameSpec, message: unknown, localState: Json, isCurrent: () => boolean) {
+  const start=performance.now();
   const text = await evaluate(presentationSource(spec.ui_code, message, localState));
+  const evaluated=performance.now();
   if (!isCurrent()) return;
-  try { return await preparePresentationResponse(spec, text); }
+  try {
+    const prepared=await preparePresentationResponse(spec,text);
+    return {...prepared,gameUiMs:evaluated-start,prepareSceneMs:performance.now()-evaluated};
+  }
   catch (error) { if (isCurrent()) throw error; }
 }
 
