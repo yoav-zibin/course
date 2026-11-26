@@ -14,6 +14,7 @@ final class LinkAppDelegate: UIResponder, UIApplicationDelegate {
 final class LinkSceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     private var sent = false
+    private var markerTimes: [CFTimeInterval] = []
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
         guard let scene = scene as? UIWindowScene else { return }
@@ -30,11 +31,28 @@ final class LinkSceneDelegate: UIResponder, UIWindowSceneDelegate {
         sent = true
         let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // Leave a stable sender frame before asking iOS to open the real app.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            let sentAt = Date().timeIntervalSince1970
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.scheduleMarker() }
+    }
+
+    private func scheduleMarker() {
+        CADisplayLink(target: self, selector: #selector(mark(_:))).add(to: .main, forMode: .common)
+    }
+
+    @objc private func mark(_ link: CADisplayLink) {
+        let displayTime = link.targetTimestamp
+        link.invalidate()
+        markerTimes.append(displayTime)
+        window?.rootViewController?.view.backgroundColor = markerTimes.count == 1 ? .yellow : .magenta
+        CATransaction.flush()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            guard self.markerTimes.count == 2 else { self.scheduleMarker(); return }
+            let elapsed = (CACurrentMediaTime() - displayTime) * 1000
+            let sentAt = Date().timeIntervalSince1970 * 1000
             UIApplication.shared.open(URL(string: "buildplay:///#match=benchmark-opening")!)
-            try? String(sentAt).write(to: directory.appendingPathComponent("link-sent.txt"), atomically: true, encoding: .utf8)
+            let timing = ["sent_epoch_ms": sentAt, "after_marker_ms": elapsed,
+                          "marker_interval_ms": (displayTime - self.markerTimes[0]) * 1000]
+            let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            try? JSONEncoder().encode(timing).write(to: directory.appendingPathComponent("link-sent.json"), options: .atomic)
         }
     }
 }

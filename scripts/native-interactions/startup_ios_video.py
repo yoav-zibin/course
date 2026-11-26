@@ -137,17 +137,20 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
     if action=='match':
         # XCTest may leave the app after verifying the opening. Find its last
         # populated frame in the movie and retain that exact comparison image.
-        reference=sender_frame=None
-        for _,image in frames(movie):
+        reference=sender_frame=first_marker=last_marker=None
+        for stamp,image in frames(movie):
             if sender_stamp:
                 r,g,b=image[::8,::8].transpose(2,0,1)
-                if ((r<30)&(g>160)&(b>160)&(abs(g-b)<15)).mean()>.90:sender_frame=image
+                if first_marker is None and ((r>180)&(g>180)&(b<50)).mean()>.9:first_marker=stamp
+                if ((r>180)&(g<50)&(b>180)).mean()>.9:
+                    if last_marker is None:last_marker=stamp
+                    sender_frame=image
             box=opening_bounds(image)
             if box is not None:reference,bounds=image,box
         if reference is None:raise RuntimeError('No populated Backgammon opening in the verified recording')
         Image.fromarray(reference.astype(np.uint8)).save(after)
         if sender_stamp:
-            if sender_frame is None:raise RuntimeError('Missing the link sender in the recording')
+            if sender_frame is None or first_marker is None:raise RuntimeError('Missing the link sender markers in the recording')
             Image.fromarray(sender_frame.astype(np.uint8)).save(before)
     requests=api('/__requests')
     paths={item['path'] for item in requests}
@@ -155,12 +158,18 @@ def trial(app, bundle, device, directory, index, action, ocr, match_command, sen
     if not required<=paths:raise RuntimeError(f'Missing cold-start requests: {required-paths}')
     evidence={'bounds':list(bounds),'requests':requests}
     if sender_stamp:
-        evidence['link_sent_epoch_ms']=float(sender_stamp.read_text())*1000
+        timing=json.loads(sender_stamp.read_text())
+        evidence['link_sent_epoch_ms']=timing['sent_epoch_ms']
+        evidence['link_sent_pts_ms']=last_marker+timing['after_marker_ms']
+        evidence['marker_interval_error_ms']=round(last_marker-first_marker-timing['marker_interval_ms'],1)
     prefix.with_suffix('.json').write_text(json.dumps(evidence,indent=2)+'\n')
     output=measure(movie,next(frames(before))[1],next(frames(after))[1],bounds)
+    if sender_stamp:
+        output['open_url_to_board_ms']=round(output['landmark_pts_ms']-evidence['link_sent_pts_ms'],1)
+        if output['open_url_to_board_ms']<=0:raise ValueError('The opening board predates the sender request')
     prefix.with_suffix('.json').write_text(json.dumps({**output,**evidence},indent=2)+'\n')
     print(directory.name,index,action,output,flush=True)
-    return output['visible_ms']
+    return output.get('open_url_to_board_ms',output['visible_ms'])
 
 
 def match_launcher(scripts, results, device):
@@ -193,7 +202,7 @@ def install_sender(scripts, results, device):
     subprocess.run(['codesign','--force','--sign','-',app],check=True)
     sim('install',device,app)
     container=sim('get_app_container',device,SENDER,'data',capture_output=True,text=True).stdout.strip()
-    return Path(container)/'Library/Caches/link-sent.txt'
+    return Path(container)/'Library/Caches/link-sent.json'
 
 
 def run(apps, fixture, results, device, pairs, sender=False):
