@@ -153,21 +153,21 @@ contract for tests and local development. Existing feedback records and legacy
 feedback endpoints remain available for historical compatibility.
 
 Admin endpoints accept an authorized course Google session. Unattended API
-automation uses a separate private admin API credential through HTTP Basic;
-the former shared master password does not grant admin API access:
+automation uses the configured master password through HTTP Basic. The
+following endpoints are available to admins.
 
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /admin/bug-reports?status=open&limit=50&cursor=...` | Headers and `next_cursor`; maximum limit 100. Status defaults to `open`; use `all` for every status. |
 | `GET /admin/bug-reports/{id}` | Complete private report and evidence. |
-| `POST /admin/bug-reports/{id}/authorization` | Record Yoav's per-report decision from trusted automation. Requires the admin API credential and both optimistic guards. |
+| `POST /admin/bug-reports/{id}/authorization` | Record Yoav's per-report decision from trusted automation. Requires the master password through HTTP Basic and both optimistic guards. |
 | `POST /admin/bug-reports/{id}/assessment` | Save an investigated report's score and rationale without changing its status. |
 | `POST /admin/bug-reports/{id}/status` | Update review status, notes and fixing commit. |
 
 Admin HTML documents require Google sign-in only at
 `/admin/login`, including direct static admin pages and API documentation pages.
 The verified Google subject identifies the platform account, and its verified
-email must exactly match the fixed `admin_google_emails` list in the VM's private
+email must exactly match the fixed `admin_google_emails` list in the VM's
 server configuration. This list was extracted from the instructor, institutional
 and personal emails in the course roster. Authorization never fetches or
 refreshes the spreadsheet. Names never authorize access; an empty list denies
@@ -178,10 +178,7 @@ a Secure, HttpOnly, SameSite=Strict cookie, expires after eight hours and is
 invalidated by server restart. Signing out calls `DELETE /auth/admin-session`.
 The admin interface has no master-password prompt. Browser API requests require
 the course Google session as well; cached Basic credentials do not substitute
-for it. API automation does not need a browser Google session. Its credential is
-loaded from `GAME_PLATFORM_ADMIN_API_KEY` or a private mode-600 `admin-api-key`
-file next to the server configuration, and is never exposed by the UI or
-`--print-config`. The game-content master capability remains separate.
+for it. API automation uses `master_password` from the server configuration.
 
 Status updates accept `status`, `resolution`, optional `commit`, optional
 `expected_status` and optional `expected_updated_at`. Status is `open`,
@@ -226,13 +223,13 @@ internal databases or start a separate repair conversation. The existing Codex
 daemon, valid authentication, the user systemd manager and network access must
 remain available on this machine.
 
-Install after publishing the report API, using the separate private admin API
-credential file. Neither the credential nor private scheduler state belongs in Git:
+Install on the VM after publishing the report API. The scheduler reads the
+master password directly from the server config.
 
 ```sh
 python3 ops/bug-reports/install.py \
   --thread-id <this-conversation-uuid> \
-  --password-file <mode-600-admin-api-key-file>
+  --server-config /opt/game-platform/config.json
 ```
 
 Yoav's bugs and product suggestions have standing approval when submitted from

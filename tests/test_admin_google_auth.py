@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, Request, Response
 from fastapi.testclient import TestClient
 
 from game_platform import admin_auth, oauth
-from game_platform.api import _check_master_password, _check_master_write_origin, _get_platform, create_app
+from game_platform.api import _check_master_write_origin, _get_platform, create_app
 from game_platform.config import AuthConfig, GoogleAuthConfig, Config
 from game_platform.service import GamePlatform
 from game_platform.student_dashboard import CoursePerson
@@ -31,11 +31,10 @@ def client_for(platform=None):
     app = FastAPI()
     app.state.platform = platform or GamePlatform()
     app.state.master_password = MASTER[1]
-    app.state.admin_api_key = "separate-private-machine-fixture"
     app.state.admin_google_emails = frozenset(email for person in ROSTER for email in person.emails)
     app.state.public_base_url = "https://testserver"
     app.state.auth_config = AuthConfig(google=GoogleAuthConfig(client_id="fixture-google-client"))
-    admin_auth.install(app, platform_dependency=_get_platform, master_dependency=_check_master_password,
+    admin_auth.install(app, platform_dependency=_get_platform,
                        write_origin_check=_check_master_write_origin)
 
     @app.get("/admin/private")
@@ -146,21 +145,21 @@ def test_configured_emails_are_normalized_and_validated():
         Config(admin_google_emails=[f"member{index}@example.test" for index in range(65)])
 
 
-def test_shared_game_secret_cannot_authorize_admin_json_and_google_needs_no_password():
-    app = create_app(master_password="old-shared-game-fixture", admin_api_key="new-private-api-fixture",
+def test_master_password_authorizes_automation_and_browser_requires_google():
+    app = create_app(master_password="master-password-fixture",
                      admin_google_emails=["alice@example.test"],
                      auth_config=AuthConfig(google=GoogleAuthConfig(client_id="fixture-google-client")))
     client = TestClient(app, base_url="https://testserver", follow_redirects=False)
-    assert client.get("/admin/stats", auth=("machine", "old-shared-game-fixture")).status_code == 401
-    assert client.get("/admin/stats", auth=("machine", "new-private-api-fixture")).status_code == 200
-    browser = client.get("/admin/stats", auth=("machine", "new-private-api-fixture"),
+    assert client.get("/admin/stats", auth=("machine", "retired-api-key-fixture")).status_code == 401
+    assert client.get("/admin/stats", auth=("machine", "master-password-fixture")).status_code == 200
+    browser = client.get("/admin/stats", auth=("machine", "master-password-fixture"),
                          headers={"Sec-Fetch-Mode": "cors", "Accept": "application/json"})
     assert browser.status_code == 401
     assert "www-authenticate" not in browser.headers
     google_login(client)
     assert client.get("/admin/stats").status_code == 200
     assert client.get("/admin", follow_redirects=False).status_code == 200
-    assert app.state.master_password == "old-shared-game-fixture"
+    assert app.state.master_password == "master-password-fixture"
 
     # A cached, malformed Basic header must not bring back the browser's
     # password prompt, including the legacy feedback review action.

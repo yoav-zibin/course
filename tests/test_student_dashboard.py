@@ -237,7 +237,7 @@ def test_roster_uses_only_roster_cells_and_preserves_missing_emails():
 
 def test_routes_require_master_password_are_private_and_cache_the_snapshot():
     platform = GamePlatform()
-    client = TestClient(create_app(platform=platform, master_password="fixture-master", admin_api_key="fixture-master"))
+    client = TestClient(create_app(platform=platform, master_password="fixture-master"))
     with patch("game_platform.student_dashboard.fetch_roster", return_value=[PERSON]) as fetch:
         assert client.get("/admin/students", follow_redirects=False).status_code == 303
         assert client.get("/admin/students/data").status_code == 401
@@ -254,13 +254,13 @@ def test_routes_require_master_password_are_private_and_cache_the_snapshot():
         login_google_admin(client)
         assert client.get("/admin/students", follow_redirects=False).status_code == 200
     assert TestClient(create_app()).get("/admin/students/data").status_code == 503
-    disabled = TestClient(create_app(debug_tools=False, master_password="fixture-master", admin_api_key="fixture-master"))
+    disabled = TestClient(create_app(debug_tools=False, master_password="fixture-master"))
     assert disabled.get("/admin/students", auth=("admin", "fixture-master")).status_code == 404
     assert disabled.get("/admin/students/data", auth=("admin", "fixture-master")).status_code == 404
 
 
 def test_roster_failure_returns_explicit_error_without_partial_totals():
-    client = TestClient(create_app(master_password="fixture-master", admin_api_key="fixture-master"))
+    client = TestClient(create_app(master_password="fixture-master"))
     with patch("game_platform.student_dashboard.fetch_roster", side_effect=OSError("private response body")):
         response = client.get("/admin/students/data", auth=("", "fixture-master"))
     assert response.status_code == 503

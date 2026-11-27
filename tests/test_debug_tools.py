@@ -188,7 +188,7 @@ def test_without_machine_master_the_browser_still_requires_course_google() -> No
 
 
 def test_google_protects_html_while_machine_master_still_protects_api() -> None:
-    client = TestClient(create_app(master_password="s3cret", admin_api_key="s3cret"))
+    client = TestClient(create_app(master_password="s3cret"))
 
     def status(path: str, auth: tuple[str, str] | None = None) -> int:
         if auth is None:

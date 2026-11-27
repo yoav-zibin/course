@@ -144,14 +144,6 @@ jobs:
           scp -i ~/.ssh/id_deploy portal-web.tar.gz "$VM_USER@$VM_HOST:/tmp/buildplay-web-$GITHUB_SHA.tar.gz"
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" \
             "sudo mkdir -p /opt/game-platform/web-builds/$GITHUB_SHA && sudo tar -xzf /tmp/buildplay-web-$GITHUB_SHA.tar.gz -C /opt/game-platform/web-builds/$GITHUB_SHA && if [ -d /opt/game-platform/game_platform/static/app ] && [ ! -L /opt/game-platform/game_platform/static/app ]; then sudo mv /opt/game-platform/game_platform/static/app /opt/game-platform/web-builds/$GITHUB_SHA/previous-app; fi && sudo ln -sfnT /opt/game-platform/web-builds/$GITHUB_SHA/app /opt/game-platform/game_platform/static/app"
-          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" '
-            set -eu
-            key=/opt/game-platform/admin-api-key
-            if sudo test -e "$key"; then
-              test "$(sudo stat -c "%F:%u" -- "$key")" = "regular file:0"
-              sudo chmod 0600 -- "$key"
-            fi
-          '
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" "$VM_DEPLOY_COMMAND"
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" \
             "test \"\$(sudo git -C /opt/game-platform/game_platform rev-parse HEAD)\" = \"$GITHUB_SHA\""
@@ -186,6 +178,19 @@ jobs:
           # Narrow startup diagnostics: no config, credentials or user records.
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'sudo systemctl is-active game-platform.service; sudo journalctl -u game-platform.service --since "5 minutes ago" --no-pager | grep -E "missing required game_schemas|Backfill these versions|ModuleNotFoundError|ImportError|Address already in use" | tail -n 3' || true
           exit 1
+
+      - name: Keep production configuration readable on the VM
+        if: steps.revision.outputs.current == 'true'
+        env:
+          VM_HOST: ${{ secrets.GCP_VM_HOST }}
+          VM_USER: ${{ secrets.GCP_VM_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" '
+            set -eu
+            config=/opt/game-platform/config.json
+            test "$(sudo stat -c "%F:%u" -- "$config")" = "regular file:0"
+            sudo chmod 0644 -- "$config"
+          '
 
       - name: Report audited-game publication results
         if: steps.revision.outputs.current == 'true'

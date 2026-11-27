@@ -69,7 +69,7 @@ def test_every_history_admin_api_requires_admin_authorization(api, path):
     assert api.client.get(path, auth=("admin", "wrong")).status_code == 401
     # Browser requests require a pinned Google admin session even with API Basic.
     assert api.client.get(path, headers={"Sec-Fetch-Mode": "cors"},
-                          auth=("admin", api.client.app.state.admin_api_key)).status_code == 401
+                          auth=("admin", api.client.app.state.master_password)).status_code == 401
     response = api.request("GET", path)
     assert response.status_code == 200
     assert_no_profile_data(response.json())

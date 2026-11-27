@@ -54,7 +54,7 @@ def _capture_everything(caplog: pytest.LogCaptureFixture) -> None:
 def client_for(config: MonitoringConfig | None = None, **routes: Any) -> tuple[TestClient, Monitor]:
     """A test app with extra routes, e.g. `boom=lambda: 1 / 0`."""
     monitor = Monitor(config or MonitoringConfig())
-    app = create_app(GamePlatform(), monitor=monitor, master_password="monitor-test-master", admin_api_key="monitor-test-master")
+    app = create_app(GamePlatform(), monitor=monitor, master_password="monitor-test-master")
     for name, handler in routes.items():
         app.add_api_route(f"/__{name}", handler, methods=["GET", "POST"])
     return TestClient(app, raise_server_exceptions=False), monitor
@@ -542,7 +542,7 @@ def test_a_test_alert_can_be_sent_to_check_that_it_reaches_people(caplog: pytest
 
 
 def test_the_test_alert_and_snapshot_need_the_master_password() -> None:
-    app = create_app(GamePlatform(), master_password="s3cret", admin_api_key="s3cret", monitor=Monitor())
+    app = create_app(GamePlatform(), master_password="s3cret", monitor=Monitor())
     client = TestClient(app)
     assert client.post("/admin/alerts/test").status_code == 401
     assert client.get("/admin/monitoring").status_code == 401

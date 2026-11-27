@@ -6,7 +6,6 @@ this child replaces the external Google verification boundary only.
 """
 
 import runpy
-import os
 import sys
 from pathlib import Path
 
@@ -40,6 +39,5 @@ def fixture_google(id_token, client_id):
 # live in this isolated process, never in application configuration or HTTP input.
 admin_auth._google_client_id = lambda request: "loopback-admin-google-client"
 admin_auth.verify_google_admin_token = fixture_google
-os.environ["GAME_PLATFORM_ADMIN_API_KEY"] = "e2e-test-master"
 sys.argv = ["game_platform.main", "--config", str(config_path)]
 runpy.run_module("game_platform.main", run_name="__main__")

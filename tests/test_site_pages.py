@@ -79,7 +79,7 @@ def test_google_signin_and_unexpected_server_errors_have_the_icon_too():
 
 
 def test_google_html_gate_does_not_redirect_private_api_automation():
-    client = TestClient(create_app(master_password="old-game-master", admin_api_key="fixture-master"))
+    client = TestClient(create_app(master_password="fixture-master"))
     assert client.get("/admin/students", auth=("admin", "fixture-master"),
                       follow_redirects=False).status_code == 303
     queue = client.get("/game-server-bugs", auth=("admin", "fixture-master"),

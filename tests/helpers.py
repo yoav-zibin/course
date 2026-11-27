@@ -180,7 +180,6 @@ class Api:
                 email_sender=email_sender,
                 push_config=push_config,
                 master_password=master_password,
-                admin_api_key=master_password or "",
             )
         )
         self.platform = platform
@@ -231,8 +230,8 @@ class Api:
             )
             if method == "PATCH" and use_master and isinstance(json, dict):
                 json = {"game_addition_request_id_and_secret": master or TEST_GAME_SECRET, **json}
-        admin_api_key = self.client.app.state.admin_api_key
-        auth = ("test-admin", admin_api_key) if use_master and admin_api_key else None
+        master_password = self.client.app.state.master_password
+        auth = ("test-admin", master_password) if use_master and master_password else None
         response = self.client.request(
             method, path, headers=headers, json=json, params=params, auth=auth
         )

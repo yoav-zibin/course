@@ -1628,12 +1628,18 @@ async def _admin_api_basic(request: Request) -> HTTPBasicCredentials | None:
     return await _basic_auth(request)
 
 
+def _has_admin_master_password(request: Request, credentials: HTTPBasicCredentials | None) -> bool:
+    master = request.app.state.master_password
+    return bool(master) and credentials is not None and secrets.compare_digest(
+        credentials.password.encode(), master.encode()
+    )
+
+
 def _check_admin_automation(
     request: Request,
     credentials: Annotated[HTTPBasicCredentials | None, Depends(_admin_api_basic)],
 ) -> None:
-    key = request.app.state.admin_api_key
-    if not key or credentials is None or not secrets.compare_digest(credentials.password.encode(), key.encode()):
+    if not _has_admin_master_password(request, credentials):
         raise HTTPException(HTTPStatus.UNAUTHORIZED, "An admin API credential is required.")
     _check_master_write_origin(request)
 
@@ -1647,11 +1653,7 @@ def _check_master_password(
     Browser requests never use a remembered Basic credential as a substitute
     for the Google course allowlist, nor receive a native password prompt.
     """
-    admin_api_key: str = request.app.state.admin_api_key
-    browser = _admin_browser_request(request)
-    valid_machine = bool(admin_api_key) and credentials is not None and secrets.compare_digest(
-        credentials.password.encode(), admin_api_key.encode())
-    if valid_machine and not browser:
+    if _has_admin_master_password(request, credentials):
         _check_master_write_origin(request)
         return
     from game_platform.admin_auth import admin_session_user_id
@@ -1659,19 +1661,15 @@ def _check_master_password(
     if admin_session_user_id(request) is not None:
         _check_master_write_origin(request)
         return
-    if browser:
+    if _admin_browser_request(request):
         raise HTTPException(HTTPStatus.UNAUTHORIZED, "Google sign-in with a course admin account is required.")
-    if not admin_api_key:
+    if not request.app.state.master_password:
         raise HTTPException(HTTPStatus.SERVICE_UNAVAILABLE, "Admin API automation is not configured.")
-    if credentials is None or not secrets.compare_digest(
-        credentials.password.encode(), admin_api_key.encode()
-    ):
-        raise HTTPException(
-            status_code=HTTPStatus.UNAUTHORIZED,
-            detail="An admin API credential is required.",
-            headers={"WWW-Authenticate": f'Basic realm="{_MASTER_PASSWORD_REALM}"'},
-        )
-    _check_master_write_origin(request)
+    raise HTTPException(
+        status_code=HTTPStatus.UNAUTHORIZED,
+        detail="An admin API credential is required.",
+        headers={"WWW-Authenticate": f'Basic realm="{_MASTER_PASSWORD_REALM}"'},
+    )
 
 
 MasterPassword = Depends(_check_master_password)
@@ -2382,7 +2380,6 @@ def create_app(
     *,
     debug_tools: bool = True,
     master_password: str = "",
-    admin_api_key: str = "",
     admin_google_emails: Sequence[str] = (),
     auth_config: AuthConfig | None = None,
     bug_report_config: BugReportConfig | None = None,
@@ -2399,8 +2396,8 @@ def create_app(
     and the backoffice's /stats and /admin/* endpoints; the admin user pages
     expose private operational data. Admin HTML and browser API requests need
     a verified Google session from the fixed email allowlist. Non-browser
-    operational API clients use [admin_api_key]. The separate [master_password]
-    remains a game-content capability and cannot authorize admin operations.
+    operational API clients use [master_password], which also authorizes
+    game-content operations.
 
     [cors_allow_origins] are the origins whose pages may call the API from a browser;
     empty adds no CORS headers, for when a reverse proxy already adds them (two
@@ -2431,7 +2428,6 @@ def create_app(
     app.state.import_slots = threading.BoundedSemaphore(2)
     app.state.platform = platform if platform is not None else GamePlatform()
     app.state.master_password = master_password
-    app.state.admin_api_key = admin_api_key
     app.state.admin_google_emails = frozenset(email.strip().casefold() for email in admin_google_emails if email.strip())
     monitor = monitor if monitor is not None else observability.Monitor()
     app.state.monitor = monitor
@@ -2470,7 +2466,6 @@ def create_app(
     if debug_tools:
         from game_platform.admin_auth import install as install_admin_auth
         install_admin_auth(app, platform_dependency=_get_platform,
-                           master_dependency=_check_master_password,
                            write_origin_check=_check_master_write_origin)
         from game_platform.student_dashboard import make_router as make_student_dashboard_router
         app.include_router(make_student_dashboard_router(_get_platform, _check_master_password))

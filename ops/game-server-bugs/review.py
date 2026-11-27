@@ -56,12 +56,18 @@ class BugAPI:
                 parsed.password or parsed.query or parsed.fragment or parsed.path):
             raise ValueError("api_base must be an HTTPS origin")
         self.base = base
-        self.password_file = Path(config["password_file"])
+        self.server_config = Path(config["server_config"]) if "server_config" in config else None
+        self.password_file = None if self.server_config else Path(config["password_file"])
 
     def request(self, path, *, method="GET", body=None):
-        if self.password_file.stat().st_mode & 0o077:
-            raise RuntimeError("The master-password file must be private (mode 600)")
-        password = self.password_file.read_text().rstrip("\n")
+        if self.server_config is not None:
+            password = json.loads(self.server_config.read_text()).get("master_password")
+        else:
+            if self.password_file.stat().st_mode & 0o077:
+                raise RuntimeError("The master-password file must be private (mode 600)")
+            password = self.password_file.read_text().rstrip("\n")
+        if not isinstance(password, str) or not password:
+            raise RuntimeError("A master password is required for admin API requests")
         headers = {
             "Accept": "application/json",
             "Authorization": "Basic " + base64.b64encode(

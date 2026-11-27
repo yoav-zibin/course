@@ -58,7 +58,7 @@ def test_stats_of_an_empty_platform(api: Api) -> None:
 
 
 def test_admin_pages_use_course_google_and_machine_apis_keep_their_contract() -> None:
-    client = TestClient(create_app(master_password="s3cret", admin_api_key="s3cret"))
+    client = TestClient(create_app(master_password="s3cret"))
     assert client.get("/stats", follow_redirects=False).status_code == 303
     assert client.get("/admin", follow_redirects=False).status_code == 303
     assert client.get("/admin/stats").status_code == 401

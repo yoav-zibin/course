@@ -232,7 +232,7 @@ def test_deleting_a_user_preserves_their_original_historical_inviter_chain(api: 
 
 
 def test_the_referrals_page_and_data_need_the_master_password() -> None:
-    client = TestClient(create_app(master_password="s3cret", admin_api_key="s3cret"))
+    client = TestClient(create_app(master_password="s3cret"))
     name = "Private referral test user"
     assert client.post("/users", json={"display_name": name}).status_code == 201
     html = client.get("/admin/referrals", follow_redirects=False)

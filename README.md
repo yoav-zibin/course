@@ -973,10 +973,10 @@ filter (bulk).
   `python -m game_platform.main --config config.json --purge-example-data`: it deletes
   those users (passwords equal to ids; real users' are random) with their games and
   matches, and exits. At startup the server warns when such users exist or when the
-  debug tools lack both Google sign-in and a private admin API credential.
+  debug tools lack both Google sign-in and a master password.
 - **Configure admin access.** `/browse`, `/stats` and `/admin/*` expose private
-  data. Configure Google login and the fixed private `admin_google_emails` list;
-  provide a separate private admin API key if unattended tools need access.
+  data. Configure Google login and the fixed `admin_google_emails` list.
+  Configure `master_password` if unattended tools need access.
 - **CORS behind a proxy.** If Caddy adds `Access-Control-Allow-Origin`, set
   `"server": {"cors_allow_origins": []}`; otherwise remove the proxy's header. Check with
   `curl -si -H 'Origin: https://x.github.io' https://<host>/games | grep -i allow-origin`:
@@ -1012,23 +1012,20 @@ fake users in `tools/fake_users`) and investigate from the logs (`tools/log_dige
 ### Admin access
 
 Admin pages, including `/docs`, and their browser API requests require Google
-sign-in with an email in the VM's private `admin_google_emails` configuration.
+sign-in with an email in the VM's `admin_google_emails` configuration.
 The list is fixed at startup; authorization does not fetch the course sheet,
 and an empty list denies browser access. There is no shared-password prompt.
 The verified Google session lasts eight hours, ends on server restart, and can
 be ended with Use another Google account in the admin header.
 
-Unattended admin API clients use a separate private credential as the HTTP Basic
-password, with any username. It is loaded from `GAME_PLATFORM_ADMIN_API_KEY` or
-a mode-600 `admin-api-key` file beside the server configuration. It is independent
-of `master_password`, and is not exposed by the UI or `--print-config`. Browser
-Basic credentials do not substitute for Google sign-in. Without the private
-key, machine admin access is unavailable; player operations remain separate.
-
 ### Master password
 
-`master_password` is an optional shared capability for game-content operations.
-It does not grant admin access.
+Unattended admin API clients use the server config's `master_password` as the
+HTTP Basic password, with any username. Browser admin access requires the
+Google session. The production `/opt/game-platform/config.json` is readable by
+local users on the VM and stays outside the served web files and Git.
+
+The master password also authorizes platform-wide game-content changes.
 
 Changing game content uses `PATCH /games/{id}` with the JSON body field
 `game_addition_request_id_and_secret`, containing that game's secret or the
@@ -1045,8 +1042,8 @@ the server's own origin or the configured `public_base_url` origin. Cross-site f
 are rejected because HTTP Basic credentials can be sent automatically by a browser.
 Command-line requests without browser origin metadata remain supported.
 
-It defaults to empty, disabling this shared game-content capability while
-per-game secrets still work. Use HTTPS for credentials; HTTP Basic sends its
+An empty master password disables unattended admin access and the shared
+game-content capability. Per-game secrets still work. Use HTTPS for credentials; HTTP Basic sends its
 credential with each authenticated request.
 
 ## Game API

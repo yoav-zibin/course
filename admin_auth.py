@@ -2,8 +2,8 @@
 
 Opaque cookies are process-local, not signed with the shared master password.
 Restarting the server logs out admin browsers. The authorized emails are pinned
-in private server configuration, with no authorization-time network lookup.
-Unattended API clients use a separate private credential.
+in server configuration, with no authorization-time network lookup.
+Unattended API clients use the configured master password.
 """
 
 import hashlib
@@ -153,7 +153,7 @@ def _google_client_id(request):
     return request.app.state.auth_config.google.client_id
 
 
-def install(app, *, platform_dependency, master_dependency, write_origin_check):
+def install(app, *, platform_dependency, write_origin_check):
     sessions = AdminSessions()
     app.state.admin_google_sessions = sessions
     app.state.admin_google_emails = frozenset(email.strip().casefold() for email in getattr(app.state, "admin_google_emails", ()))

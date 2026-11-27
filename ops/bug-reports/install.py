@@ -79,7 +79,9 @@ def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--thread-id", required=True)
-    parser.add_argument("--password-file", type=Path, required=True)
+    credentials = parser.add_mutually_exclusive_group(required=True)
+    credentials.add_argument("--server-config", type=Path, help="Server JSON containing master_password")
+    credentials.add_argument("--password-file", type=Path, help="Private file containing the master password")
     parser.add_argument("--state-dir", type=Path,
                         default=Path.home() / ".local/share/buildplay-bug-reports")
     parser.add_argument("--api-base", default="https://buildplay.fun")
@@ -89,15 +91,18 @@ def main():
                         help="Private JSON array of at most 24 verified account UUIDs for the 12 students")
     args = parser.parse_args()
     uuid.UUID(args.thread_id)
-    password_file = args.password_file.resolve(strict=True)
-    if password_file.stat().st_mode & 0o077:
-        raise ValueError("The existing master-password file must be private (mode 600)")
+    if args.server_config is not None:
+        credential = {"server_config": str(args.server_config.resolve(strict=True))}
+    else:
+        password_file = args.password_file.resolve(strict=True)
+        if password_file.stat().st_mode & 0o077:
+            raise ValueError("The existing master-password file must be private (mode 600)")
+        credential = {"password_file": str(password_file)}
     state = args.state_dir.resolve()
     state.mkdir(parents=True, mode=0o700, exist_ok=True)
     state.chmod(0o700)
     config = {"repository": "yoav-zibin/course", "branch": "main", "thread_id": args.thread_id,
-              "api_base": args.api_base, "password_file": str(password_file),
-              "repository_path": str(REPOSITORY)}
+              "api_base": args.api_base, "repository_path": str(REPOSITORY), **credential}
     sys.path.insert(0, str(ROOT))
     from review import BugAPI, save_json, validate_owner_google_user_id, validate_student_user_ids
     previous = json.loads((state / "config.json").read_text()) if (state / "config.json").exists() else None

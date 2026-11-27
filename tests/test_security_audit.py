@@ -77,12 +77,11 @@ def test_game_lifecycle_payouts_are_applied_exactly_once(api, phase):
     assert api.platform.get_user(alice).token_balance == balance
 
 
-def test_non_loopback_google_only_admin_starts_without_shared_master_and_fails_closed(tmp_path, monkeypatch):
+def test_non_loopback_google_only_admin_starts_without_shared_master_and_fails_closed(tmp_path):
     import json
     from fastapi.testclient import TestClient
     from game_platform import main
 
-    monkeypatch.delenv("GAME_PLATFORM_ADMIN_API_KEY", raising=False)
     path = tmp_path / "config.json"
     path.write_text(json.dumps({
         "server": {"host": "0.0.0.0"},
