@@ -210,3 +210,40 @@ jobs:
             sudo bash -c "test -f release-state/game-alternative-names-v1 ||
               (.venv/bin/python -m game_platform.tools.game_alternative_names --config config.json &&
                touch release-state/game-alternative-names-v1)"'
+
+      - name: Verify the master password and delete the retired admin key
+        if: steps.revision.outputs.current == 'true'
+        env:
+          VM_HOST: ${{ secrets.GCP_VM_HOST }}
+          VM_USER: ${{ secrets.GCP_VM_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'sudo python3 -' <<'PY'
+          import base64
+          import http.client
+          import json
+          from pathlib import Path
+
+          key_file = Path("/opt/game-platform/admin-api-key")
+          if not key_file.exists():
+              raise SystemExit(0)
+
+          master = json.loads(Path("/opt/game-platform/config.json").read_text()).get("master_password")
+          if not master:
+              raise SystemExit("Production master password is missing")
+
+          def admin_status(password):
+              credential = base64.b64encode(("deployment:" + password).encode()).decode()
+              connection = http.client.HTTPSConnection("buildplay.fun", timeout=15)
+              try:
+                  connection.request("GET", "/admin/bug-reports?limit=1",
+                                     headers={"Authorization": "Basic " + credential})
+                  return connection.getresponse().status
+              finally:
+                  connection.close()
+
+          if admin_status(master) != 200:
+              raise SystemExit("Production admin API rejected the master password")
+          if admin_status(key_file.read_text().strip()) != 401:
+              raise SystemExit("Production admin API did not reject the retired key")
+          key_file.unlink()
+          PY

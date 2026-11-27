@@ -686,7 +686,7 @@ stop the server at startup with an error naming the field.
 | `firestore.allow_default_database_query` | `false`                             | Explicit opt-in to run the query schema in the `(default)` database |
 | `debug_tools`                     | `true`                                   | Serve `/console` and `/browse` (see [Pages](#pages)) |
 | `master_password`                 | `""`                                     | Optional shared game-content capability for PATCH, deletion and unpublishing; does not authorize admin access (see [Master password](#master-password)) |
-| `admin_google_emails`             | `[]`                                     | Fixed Google email allowlist in private VM configuration for browser admin access. An empty list denies access; authorization never refreshes it from the course spreadsheet |
+| `admin_google_emails`             | `[]`                                     | Fixed Google email allowlist in VM configuration for browser admin access. An empty list denies access; authorization never refreshes it from the course spreadsheet |
 | `log_level`                       | `"INFO"`                                 | `"DEBUG"`, `"INFO"`, `"WARNING"` or `"ERROR"` |
 | `translation.*`                   | `"provider": "off"`                      | Translate games' own texts with Google Translate, on first use (see [docs/game-translation.md](docs/game-translation.md)); `google_api_key`, `daily_character_limit` |
 | `monitoring.*`                    | see `config.example.json`                | JSON logs, a log file for the Ops Agent, and the thresholds for alerts (slow requests, sign-up floods, memory...); see [docs/monitoring.md](docs/monitoring.md) |

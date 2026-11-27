@@ -30,7 +30,7 @@ updates require the game secret or master password in the PATCH JSON body, as
 described below. User account credentials do not authorize game changes.
 
 This game-content capability is separate from administration. Admin pages use
-Google sign-in with the fixed `admin_google_emails` list in private VM config;
+Google sign-in with the fixed `admin_google_emails` list in VM config;
 unattended admin APIs use the configured master password through HTTP Basic.
 Neither admin sign-in nor that API key replaces the game secret or master
 password required for game-content writes.
