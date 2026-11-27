@@ -96,7 +96,7 @@ def test_hex_placement_pulse_is_stable_across_same_move_renders():
     assert refreshed_piece['animation']['key'] == piece['animation']['key']
 
 
-@pytest.mark.parametrize('kind', ['checkers', 'chess', 'four_player_chess'])
+@pytest.mark.parametrize('kind', ['checkers', 'four_player_chess'])
 def test_source_selection_keeps_every_legal_move_reachable_without_overlapping_targets(kind):
     ui, message = inputs(kind)
     first = ui.reduce(message)
@@ -117,11 +117,46 @@ def test_source_selection_keeps_every_legal_move_reachable_without_overlapping_t
         assert ui.reduce(next_message, selected['local_state'])['local_state']['selectedFrom'] is None
     view = message['view']
     legal = [{'from': move['from'], 'to': move['to']} for move in view['moves']] if kind == 'checkers' else [
-        ({'fr': move['fr'], 'fc': move['fc'], 'tr': move['tr'], 'tc': move['tc'],
-          **({'promo': move['promo']} if move.get('promo') else {})} if kind == 'chess' else
-         {'kind': 'move', 'fr': move['fr'], 'fc': move['fc'], 'tr': move['tr'], 'tc': move['tc']})
+        {'kind': 'move', 'fr': move['fr'], 'fc': move['fc'], 'tr': move['tr'], 'tc': move['tc']}
         for move in view['legalMoves']]
     assert set(map(lambda move: json.dumps(move, sort_keys=True), legal)) <= reached
+
+
+@pytest.mark.parametrize('promotion', [False, True])
+def test_chess_drops_offer_legal_moves_and_require_a_promotion_choice(promotion):
+    ui, message = inputs('chess')
+    if promotion:
+        view = copy.deepcopy(message['view'])
+        view['bd'] = [0] * 64
+        view['bd'][8] = 1
+        view['bd'][1] = -4
+        view['legalMoves'] = [{'fr': 1, 'fc': 0, 'tr': 0, 'tc': column, 'promo': kind}
+                              for column in (0, 1) for kind in ('Q', 'R', 'B', 'N')]
+        message = {**message, 'view': view, 'state': view}
+
+    def act(event, frame):
+        return ui.reduce({'type': 'ui_event', 'event': event, 'state_changed': message}, frame['local_state'])
+
+    first = ui.reduce(message)
+    assert not first['scene']['controls']
+    targets = first['scene']['targets']
+    assert len(targets) == len({target['position']['cell'] for target in targets})
+    reached = []
+    for event in offered_events(first['scene']):
+        if event['type'] != 'drop':
+            assert 'make_move' not in act(event, first)
+            continue
+        result = act(event, first)
+        if promotion:
+            assert 'make_move' not in result
+            assert len(result['scene']['controls']) == 4
+            for control in result['scene']['controls']:
+                reached.append(act({'type': 'tap', 'id': control['id']}, result)['make_move'])
+        else:
+            reached.append(result['make_move'])
+    assert sorted(json.dumps(move, sort_keys=True) for move in reached) == sorted(
+        json.dumps(move, sort_keys=True) for move in message['view']['legalMoves'])
+    assert not ui.reduce({**message, 'replay': True})['scene']['targets']
 
 
 @pytest.mark.parametrize('kind', ['battleship', 'crazy_eights', 'hearts', 'spades', 'guess_who'])

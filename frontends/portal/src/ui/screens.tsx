@@ -76,7 +76,7 @@ export function GameDetail() {
     <Card style={{borderTopWidth:3,borderTopColor:colors.purple}}><Title>{game.name}</Title><Copy muted>{game.description}</Copy><Copy small style={{color:colors.blue}}>{game.allowed_player_counts.join(', ')} {copyText("players")}</Copy></Card>
     <Title small>{t('ui.portal.choose_play_mode','How would you like to play?')}</Title>
     <View style={s.columns}>
-      {!solo&&<Card testID="play-computer" style={s.column}><Title small>{copyText('Play against the computer')}</Title><Copy muted>{copyText('A private match against computers, saved to your account. Keep playing offline; your progress syncs when you reconnect. Your seat is chosen randomly.')}</Copy>
+      {!solo&&<Card testID="play-computer" style={s.column}><Title small>{copyText('Play against the computer')}</Title><Copy muted>{copyText('A private match against computers, saved to your account. Your seat is chosen randomly.')}</Copy>
         {computerCounts.length>1&&<Choices label={t('ui.match.players','Players')} value={computerPlayers} options={computerCounts.map(value=>({value,label:String(value)}))} onChange={setComputerPlayers}/>}
         <Button onPress={()=>run(()=>start('computer'))}>{copyText('Play against the computer')}</Button>
         {!p.network&&!game.server_code&&<Copy small muted>{copyText('Connect once to download this game before playing offline.')}</Copy>}
@@ -86,7 +86,7 @@ export function GameDetail() {
         {stake>0&&<Copy small muted>{copyText("Paid matches use your existing wallet and human players. Tokens are collected when the match starts.")}</Copy>}
         <Button onPress={()=>run(()=>start('online'))}>{copyText('Invite your friends to play')}</Button>
       </Card>}
-      <Card testID="play-pass" style={s.column}><Title small>{solo?copyText('Single player'):t('ui.practice.pass','Pass and play')}</Title><Copy muted>{solo?copyText('A private game saved to your account. Play offline after downloading the game; progress syncs when you reconnect.'):copyText('Take turns with friends on one device. Only your account owns and can see this match. Keep playing offline; progress syncs to the cloud when you reconnect.')}</Copy>
+      <Card testID="play-pass" style={s.column}><Title small>{solo?copyText('Single player'):t('ui.practice.pass','Pass and play')}</Title><Copy muted>{solo?copyText('A private game saved to your account.'):copyText('Take turns with friends on one device. Only your account owns and can see this match.')}</Copy>
         {game.allowed_player_counts.length>1&&<Choices label={t('ui.match.players','Players')} value={passPlayers} options={game.allowed_player_counts.map(value=>({value,label:String(value)}))} onChange={setPassPlayers}/>}
         <Button onPress={()=>run(()=>start('pass'))}>{solo?copyText('Start game'):t('ui.practice.pass','Pass and play')}</Button>
         {!p.network&&!game.server_code&&<Copy small muted>{copyText("Connect once to download this game before playing offline.")}</Copy>}

@@ -164,18 +164,59 @@ function boardFor(kind) {
 
 function installChessPresentation() {
   const reduce = gameUI.reduce;
+  const destinationId = move => 'chess-drop-' + (move.tr * 8 + move.tc);
   gameUI.reduce = function (message, localState) {
-    const frame = reduce(message, localState);
     const state = message.type === 'ui_event' ? message.state_changed : message;
-    const board = (state.view || state.state)?.bd;
+    const view = state.view || state.state;
+    const active = state.status === 'ongoing' && !state.replay && state.acting_for_player_index != null;
+    const legal = active ? view?.legalMoves || [] : [];
+    const event = message.type === 'ui_event' ? message.event : null;
+    let frame = reduce(message, localState);
+    let promotion = active && localState && localState.move_count === state.move_count &&
+      localState.viewer === frame.local_state.viewer ? localState.chessPromotion : null;
+    if (event?.type === 'drop') {
+      const source = frame.scene.pieces.find(piece => piece.id === event.piece_id);
+      const moves = legal.filter(move => source?.position.cell === String(move.fr * 8 + move.fc) &&
+        destinationId(move) === event.target_id);
+      if (moves.length && moves[0].promo) {
+        const {fr, fc} = moves[0];
+        frame = reduce({...message,event:{type:'tap',id:`select_${fr}_${fc}`}},localState);
+        promotion = event.target_id;
+      } else if (moves.length === 1) {
+        const {fr, fc, tr, tc} = moves[0];
+        frame.make_move = {fr,fc,tr,tc};
+        promotion = null;
+      }
+    }
+    const offers = new Map(frame.local_state.intent_ids.map(intent => [intent.id,intent.move]));
+    if (frame.make_move?.resign || (frame.make_move?.promo && destinationId(frame.make_move) !== promotion))
+      delete frame.make_move;
+    frame.scene.controls = frame.scene.controls.filter(control => {
+      const move = offers.get(control.id);
+      return move?.promo && destinationId(move) === promotion;
+    });
+    frame.local_state.chessPromotion = promotion ?? null;
+    const destinations = new Map();
+    const text = (source, values) => String(state.strings?.[SOURCE_KEYS[source]] ?? source)
+      .replace(/\{(\w+)\}/g, (_,key) => String(values[key]));
     for (const piece of frame.scene.pieces) {
       if (piece.type !== 'white_piece' && piece.type !== 'black_piece') continue;
-      const value = board?.[Number(piece.position.cell)];
+      const value = view?.bd?.[Number(piece.position.cell)];
       if (!value) continue;
       piece.asset = (value > 0 ? 'white_' : 'black_') + Math.abs(value);
       piece.aria_label = piece.text;
       delete piece.text;
+      const moves = legal.filter(move => piece.position.cell === String(move.fr * 8 + move.fc));
+      if (!moves.length) continue;
+      piece.aria_label = text('Select piece at row {r}, column {c}', {r:moves[0].fr+1,c:moves[0].fc+1});
+      piece.actions = ['move'];
+      piece.move_targets = [...new Set(moves.map(destinationId))];
+      for (const move of moves) destinations.set(destinationId(move), {
+        id:destinationId(move),board:'main',position:{cell:String(move.tr * 8 + move.tc)},
+        label:'•',aria_label:text('Move to row {r}, column {c}',{r:move.tr+1,c:move.tc+1}),
+      });
     }
+    frame.scene.targets = [...destinations.values()];
     return frame;
   };
   gameUI.getLastMoveAnimations = function (view, scene) {

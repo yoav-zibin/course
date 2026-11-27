@@ -3602,14 +3602,14 @@
     "hi": "कंप्यूटर से खेलें, डिवाइस पास करें या दोस्तों को बुलाएँ। सभी मैच वेब, iPhone और Android पर आपके खाते में सहेजे जाते हैं।",
     "ar": "العب ضد الكمبيوتر أو مرّر الجهاز أو ادعُ أصدقاءك. تُحفظ جميع المباريات في حسابك عبر الويب وiPhone وAndroid."
   },
-  "A private match against computers, saved to your account. Keep playing offline; your progress syncs when you reconnect. Your seat is chosen randomly.": {
-    "es": "Una partida privada contra computadoras, guardada en tu cuenta. Sigue jugando sin conexión; el progreso se sincroniza al reconectarte. Tu asiento se elige al azar.",
-    "fr": "Une partie privée contre des ordinateurs, enregistrée dans votre compte. Continuez hors connexion ; la progression se synchronise à la reconnexion. Votre place est choisie au hasard.",
-    "de": "Eine private Partie gegen Computer, in deinem Konto gespeichert. Spiele offline weiter; dein Fortschritt wird bei erneuter Verbindung synchronisiert. Dein Platz wird zufällig gewählt.",
-    "pt": "Uma partida privada contra computadores, salva na sua conta. Continue offline; o progresso sincroniza ao reconectar. Seu lugar é escolhido aleatoriamente.",
-    "zh": "与你的账号关联的私人电脑对局。可继续离线游玩，重新联网后同步进度。你的位置随机分配。",
-    "hi": "कंप्यूटर के विरुद्ध निजी मैच आपके खाते में सहेजा जाता है। ऑफ़लाइन खेलते रहें; दोबारा जुड़ने पर प्रगति सिंक होगी। आपकी सीट यादृच्छिक रूप से चुनी जाती है।",
-    "ar": "مباراة خاصة ضد الكمبيوتر، محفوظة في حسابك. واصل اللعب دون اتصال؛ يُزامَن تقدمك عند إعادة الاتصال. يتم اختيار مقعدك عشوائيًا."
+  "A private match against computers, saved to your account. Your seat is chosen randomly.": {
+    "es": "Una partida privada contra computadoras, guardada en tu cuenta. Tu asiento se elige al azar.",
+    "fr": "Une partie privée contre des ordinateurs, enregistrée dans votre compte. Votre place est choisie au hasard.",
+    "de": "Eine private Partie gegen Computer, in deinem Konto gespeichert. Dein Platz wird zufällig gewählt.",
+    "pt": "Uma partida privada contra computadores, salva na sua conta. Seu lugar é escolhido aleatoriamente.",
+    "zh": "与你的账号关联的私人电脑对局。你的位置随机分配。",
+    "hi": "कंप्यूटर के विरुद्ध निजी मैच आपके खाते में सहेजा जाता है। आपकी सीट यादृच्छिक रूप से चुनी जाती है।",
+    "ar": "مباراة خاصة ضد الكمبيوتر، محفوظة في حسابك. يتم اختيار مقعدك عشوائيًا."
   },
   "Play with other people, with no computer opponents. Share the invite so friends can join. Turn notifications keep everyone up to date.": {
     "es": "Juega con otras personas, sin computadoras. Comparte la invitación para que tus amigos se unan. Las notificaciones de turno mantienen a todos al día.",
@@ -3620,23 +3620,23 @@
     "hi": "दूसरे लोगों के साथ खेलें, कंप्यूटर विरोधियों के बिना। दोस्तों को जोड़ने के लिए आमंत्रण साझा करें। बारी की सूचनाएँ सभी को जानकारी देती हैं।",
     "ar": "العب مع أشخاص آخرين دون خصوم من الكمبيوتر. شارك الدعوة لينضم الأصدقاء. تُبقي إشعارات الأدوار الجميع على اطلاع."
   },
-  "A private game saved to your account. Play offline after downloading the game; progress syncs when you reconnect.": {
-    "es": "Una partida privada guardada en tu cuenta. Juega sin conexión tras descargar el juego; el progreso se sincroniza al reconectarte.",
-    "fr": "Une partie privée enregistrée dans votre compte. Jouez hors connexion après avoir téléchargé le jeu ; la progression se synchronise à la reconnexion.",
-    "de": "Ein privates Spiel in deinem Konto. Spiele nach dem Herunterladen offline; der Fortschritt wird bei erneuter Verbindung synchronisiert.",
-    "pt": "Um jogo privado salvo na sua conta. Jogue offline após baixá-lo; o progresso sincroniza ao reconectar.",
-    "zh": "保存到你账号的私人游戏。下载游戏后可离线游玩，重新联网后同步进度。",
-    "hi": "आपके खाते में सहेजा गया निजी गेम। डाउनलोड के बाद ऑफ़लाइन खेलें; दोबारा जुड़ने पर प्रगति सिंक होगी।",
-    "ar": "لعبة خاصة محفوظة في حسابك. العب دون اتصال بعد تنزيل اللعبة؛ يُزامَن تقدمك عند إعادة الاتصال."
+  "A private game saved to your account.": {
+    "es": "Una partida privada guardada en tu cuenta.",
+    "fr": "Une partie privée enregistrée dans votre compte.",
+    "de": "Ein privates Spiel in deinem Konto.",
+    "pt": "Um jogo privado salvo na sua conta.",
+    "zh": "保存到你账号的私人游戏。",
+    "hi": "आपके खाते में सहेजा गया निजी गेम।",
+    "ar": "لعبة خاصة محفوظة في حسابك."
   },
-  "Take turns with friends on one device. Only your account owns and can see this match. Keep playing offline; progress syncs to the cloud when you reconnect.": {
-    "es": "Túrnate con amigos en un dispositivo. Solo tu cuenta posee y puede ver esta partida. Sigue sin conexión; el progreso se sincroniza con la nube al reconectarte.",
-    "fr": "Jouez à tour de rôle avec des amis sur un appareil. Seul votre compte possède et peut voir cette partie. Continuez hors connexion ; la progression se synchronise dans le cloud à la reconnexion.",
-    "de": "Spielt abwechselnd mit Freunden auf einem Gerät. Nur dein Konto besitzt diese Partie und kann sie sehen. Spiele offline weiter; der Fortschritt wird bei erneuter Verbindung mit der Cloud synchronisiert.",
-    "pt": "Reveze com amigos em um dispositivo. Só sua conta é dona e pode ver esta partida. Continue offline; o progresso sincroniza com a nuvem ao reconectar.",
-    "zh": "与好友轮流使用同一设备。只有你的账号拥有并能查看这场对局。可继续离线游玩，重新联网后将进度同步到云端。",
-    "hi": "एक डिवाइस पर दोस्तों के साथ बारी-बारी से खेलें। केवल आपका खाता इस मैच का मालिक है और इसे देख सकता है। ऑफ़लाइन खेलते रहें; दोबारा जुड़ने पर प्रगति क्लाउड से सिंक होगी।",
-    "ar": "تناوب اللعب مع الأصدقاء على جهاز واحد. حسابك وحده يملك هذه المباراة ويمكنه رؤيتها. واصل دون اتصال؛ يُزامَن تقدمك مع السحابة عند إعادة الاتصال."
+  "Take turns with friends on one device. Only your account owns and can see this match.": {
+    "es": "Túrnate con amigos en un dispositivo. Solo tu cuenta posee y puede ver esta partida.",
+    "fr": "Jouez à tour de rôle avec des amis sur un appareil. Seul votre compte possède et peut voir cette partie.",
+    "de": "Spielt abwechselnd mit Freunden auf einem Gerät. Nur dein Konto besitzt diese Partie und kann sie sehen.",
+    "pt": "Reveze com amigos em um dispositivo. Só sua conta é dona e pode ver esta partida.",
+    "zh": "与好友轮流使用同一设备。只有你的账号拥有并能查看这场对局。",
+    "hi": "एक डिवाइस पर दोस्तों के साथ बारी-बारी से खेलें। केवल आपका खाता इस मैच का मालिक है और इसे देख सकता है।",
+    "ar": "تناوب اللعب مع الأصدقاء على جهاز واحد. حسابك وحده يملك هذه المباراة ويمكنه رؤيتها."
   },
   "Every match is saved to your account. Single-player matches are private; multiplayer matches are shared with human players.": {
     "es": "Cada partida se guarda en tu cuenta. Las individuales son privadas; las multijugador se comparten con personas.",

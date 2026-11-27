@@ -24,13 +24,25 @@ test('Chess uses the landscape board area without a duplicate title and remains 
   await expect(canvas).toBeVisible();
   await expect(stage.getByText('Chess (Declarative)',{exact:true})).toHaveCount(0);
   await page.setViewportSize({width:750,height:336});
-  await expect(canvas).toHaveAttribute('preserveAspectRatio','none');
+  await expect(canvas).not.toHaveAttribute('preserveAspectRatio','none');
   await expect(canvas).toHaveAttribute('viewBox','20 96 560 560');
   expect((await canvas.boundingBox())!.width).toBe(750);
   expect((await canvas.boundingBox())!.height).toBeGreaterThan(260);
-  await stage.getByRole('button',{name:'Select piece at row 7, column 5',exact:true}).click();
+  await expect(stage.getByText('Resign',{exact:true})).toHaveCount(0);
+  await stage.getByRole('button',{name:/^Select piece at row 7, column 5:/}).click();
   await stage.getByRole('button',{name:'Move to row 5, column 5',exact:true}).click();
-  await expect(stage.getByRole('button',{name:'Select piece at row 2, column 5',exact:true})).toBeVisible();
+  const blackPawn=stage.getByRole('button',{name:/^Select piece at row 2, column 5:/});
+  await expect(blackPawn).toBeVisible();
+  const from=await blackPawn.boundingBox();
+  const to=await canvas.evaluate(svg=>{
+    const position=new DOMPoint(335,341).matrixTransform((svg as unknown as SVGSVGElement).getScreenCTM()!);
+    return {x:position.x,y:position.y};
+  });
+  await page.mouse.move(from!.x+from!.width/2,from!.y+from!.height/2);
+  await page.mouse.down();
+  await page.mouse.move(to.x,to.y,{steps:8});
+  await page.mouse.up();
+  await expect(stage.getByRole('button',{name:/^Select piece at row 8, column 6:/})).toBeVisible();
   await page.setViewportSize({width:390,height:750});
   await expect(canvas).not.toHaveAttribute('preserveAspectRatio','none');
 });
