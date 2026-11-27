@@ -263,6 +263,10 @@ class Store(Protocol):
 
     def list_popular_game_ids(self, limit: int) -> list[tuple[str, int]]: ...
 
+    def page_popularity(
+        self, limit: int, after: tuple[int, str] | None = None
+    ) -> list[tuple[str, int, str]]: ...
+
     def put_feedback(self, feedback: Feedback) -> None: ...
 
     def get_feedback(self, feedback_id: str) -> Feedback | None: ...
@@ -537,6 +541,14 @@ class InMemoryStore:
 
     def game_popularity_score(self, game_id: str) -> int:
         return self._game_popularity.get(game_id, (0, 0))[1]
+
+    def page_popularity(self, limit, after=None):
+        rows = [
+            (game_id, score, game_id)
+            for game_id, (_, score) in self._game_popularity.items()
+            if after is None or (score, game_id) < after
+        ]
+        return sorted(rows, key=lambda row: (row[1], row[2]), reverse=True)[:limit]
 
     def put_feedback(self, feedback: Feedback) -> None:
         self._feedback[feedback.id] = feedback

@@ -117,33 +117,30 @@ class Query:
         collection: "Collection",
         filters: tuple = (),
         limit_count: int | None = None,
-        after_id: str | None = None,
+        after: dict | None = None,
         ordering: tuple[tuple[str, str], ...] = (),
     ) -> None:
         self.collection = collection
         self.filters = filters
         self.limit_count = limit_count
-        self.after_id = after_id
+        self.after = after
         self.ordering = ordering
 
     def where(self, *, filter: Any) -> "Query":
         return Query(
-            self.collection, self.filters + (filter,), self.limit_count, self.after_id,
+            self.collection, self.filters + (filter,), self.limit_count, self.after,
             self.ordering,
         )
 
     def order_by(self, field: str, direction: str = "ASCENDING") -> "Query":
-        return Query(self.collection, self.filters, self.limit_count, self.after_id,
+        return Query(self.collection, self.filters, self.limit_count, self.after,
                      self.ordering + ((field, direction),))
 
     def limit(self, count: int) -> "Query":
-        return Query(self.collection, self.filters, count, self.after_id, self.ordering)
+        return Query(self.collection, self.filters, count, self.after, self.ordering)
 
     def start_after(self, snapshot: dict) -> "Query":
-        return Query(
-            self.collection, self.filters, self.limit_count, snapshot["__name__"].id,
-            self.ordering,
-        )
+        return Query(self.collection, self.filters, self.limit_count, snapshot, self.ordering)
 
     def stream(self, transaction: Any = None) -> list[Snapshot]:
         client = self.collection.client
@@ -155,12 +152,25 @@ class Query:
             if path.startswith(prefix) and "/" not in path[len(prefix) :]
             and all(_matches(data, f) for f in self.filters)
         ]
-        for field, direction in reversed(self.ordering):
+        ordering = self.ordering or (("__name__", "ASCENDING"),)
+
+        def value(row, field):
+            return row[0].rsplit("/", 1)[-1] if field == "__name__" else row[1][field]
+
+        for field, direction in reversed(ordering):
             if field != "__name__":
                 rows = [row for row in rows if field in row[1]]
-                rows.sort(key=lambda row: row[1][field], reverse=direction == "DESCENDING")
-        if self.after_id is not None:
-            rows = [row for row in rows if row[0].rsplit("/", 1)[-1] > self.after_id]
+            rows.sort(key=lambda row: value(row, field), reverse=direction == "DESCENDING")
+        if self.after is not None:
+            def is_after(row):
+                for field, direction in ordering:
+                    cursor = self.after[field].id if field == "__name__" else self.after[field]
+                    current = value(row, field)
+                    if current != cursor:
+                        return current < cursor if direction == "DESCENDING" else current > cursor
+                return False
+
+            rows = [row for row in rows if is_after(row)]
         if self.limit_count is not None:
             rows = rows[: self.limit_count]
         client.reads += len(rows)

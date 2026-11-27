@@ -3,6 +3,8 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from game_platform.json_file_store import JsonFileStore
 from game_platform.service import FEATURED_GAME_IDS
 from game_platform.tests.helpers import Api
@@ -135,3 +137,35 @@ def test_popular_summaries_skip_code_reads_and_respect_unpublishing(monkeypatch)
         assert api.ok("GET", "/games/popular") == []
     finally:
         store.close()
+
+
+@pytest.mark.parametrize("query_backend", [False, True])
+def test_popular_pages_include_featured_ranked_and_unplayed_games(query_backend):
+    from game_platform.tests.fake_firestore import query_store
+
+    api = Api(store=query_store() if query_backend else None)
+    store = api.platform._store
+    try:
+        owner = api.new_user("catalog owner")
+        unplayed = api.new_game(owner=owner)
+        template = store.get_game(unplayed)
+        for game_id in (*FEATURED_GAME_IDS, "rank-a", "rank-b", "rank-c", "hidden", "zero"):
+            store.add_game_version(replace(template, id=game_id, published=game_id != "hidden"))
+        for game_id, score in [("rank-b", 3), ("rank-c", 3), ("rank-a", 6),
+                               ("hidden", 8), (FEATURED_GAME_IDS[2], 2)]:
+            store.record_game_match_start(game_id, score)
+
+        ids, cursor = [], None
+        for _ in range(20):
+            params = {"limit": 2, **({"cursor": cursor} if cursor else {})}
+            result = api.ok("GET", "/v2/games/popular", params=params)
+            ids.extend(item["id"] for item in result["items"])
+            cursor = result["next_cursor"]
+            if cursor is None:
+                break
+        assert cursor is None
+        assert ids == [*FEATURED_GAME_IDS, "rank-a", "rank-c", "rank-b", *sorted([unplayed, "zero"])]
+    finally:
+        api.client.close()
+        if query_backend:
+            store.close()

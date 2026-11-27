@@ -1,9 +1,9 @@
 import {visibleErrorMessage} from '../core/account-scope';
 import {copyText,playerText} from '../platform/i18n';
 import React, {useEffect, useRef, useState} from 'react';
-import {Image, Platform, Pressable, ScrollView, StyleSheet, View} from 'react-native';
+import {FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, View} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import type {Game, Match} from '../core/types';
+import type {Game, GameCarousel, Match} from '../core/types';
 import {Button, Card, Choices, Copy, Dialog, Empty, Field, Notice, Row, Title, colors} from './components';
 import {text, useApp} from './context';
 import {MatchOutcome} from './MatchOutcome';
@@ -24,6 +24,22 @@ function GameCard({game}: {game: Game}) {
   </Pressable><Row><Button compact onPress={()=>run(()=>openGame(game.id))}>{copyText("Play")}</Button></Row></Card>;
 }
 
+function GameCarouselRow({kind, title}: {kind: GameCarousel; title: string}) {
+  const {p}=useApp();
+  if (!p[kind].length) return null;
+  return <>
+    <Title small>{title}</Title>
+    <FlatList testID={kind} horizontal keyboardShouldPersistTaps="handled"
+      data={p[kind]} keyExtractor={game=>game.id}
+      renderItem={({item})=><GameCard game={item}/>}
+      ItemSeparatorComponent={GameCardSeparator}
+      onEndReachedThreshold={0.35}
+      onEndReached={()=>{void p.actions.loadMoreGames(kind).catch(()=>{});}}/>
+  </>;
+}
+
+function GameCardSeparator() {return <View style={{width:14}}/>;}
+
 export function Catalog() {
   const {p,run,openAccount} = useApp(), t=useText();
   const [proposal,setProposal]=useState(false);
@@ -32,8 +48,8 @@ export function Catalog() {
     <View style={{gap:10}}><Copy small style={s.eyebrow}>{copyText("YOUR NEXT GOOD GAME")}</Copy><Title>{t('ui.games.title','Let’s play.')}</Title><Copy muted>{copyText('Play against computers, pass the device, or invite friends. All matches save to your account across web, iPhone, and Android.')}</Copy></View>
     {!p.account && <Card><Title small>{t('ui.auth.welcome','Make yourself at home')}</Title><Copy muted>{t('ui.portal.login_note','Log in or continue as a guest to create and join matches.')}</Copy><Row><Button onPress={openAccount}>{t('ui.auth.log_in','Log in / continue as guest')}</Button><Copy small muted>{copyText('Your account keeps every match saved in the cloud.')}</Copy></Row></Card>}
     <GameSearch/>
-    {p.recentGames.length>0 && <><Title small>{t('ui.games.recent','Recently played')}</Title><ScrollView horizontal keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:14}}>{p.recentGames.map(game=><GameCard key={game.id} game={game}/>)}</ScrollView></>}
-    {p.popularGames.length>0 && <><Title small>{t('ui.games.popular','Popular games')}</Title><ScrollView horizontal keyboardShouldPersistTaps="handled" contentContainerStyle={{gap:14}}>{p.popularGames.map(game=><GameCard key={game.id} game={game}/>)}</ScrollView></>}
+    <GameCarouselRow kind="recentGames" title={t('ui.games.recent','Recently played')}/>
+    <GameCarouselRow kind="popularGames" title={t('ui.games.popular','Popular games')}/>
     <Card><Title small>{t('ui.proposal.title','Missing a game? Propose it')}</Title><Copy muted>{t('ui.proposal.explainer','Tell us which game you would like to play here. Our AI agents will review your proposal and create the game within 24 hours.')}</Copy><Row><Button secondary onPress={()=>setProposal(true)}>{t('ui.proposal.submit','Propose a game')}</Button></Row></Card>
     <Dialog visible={proposal} title={t('ui.proposal.title','Propose a game')} onClose={()=>setProposal(false)}>
       <Field label={t('ui.proposal.name_label','Game name')} value={name} onChangeText={setName} maxLength={120}/><Field label={t('ui.proposal.description_label','Why this game?')} multiline value={description} onChangeText={setDescription} maxLength={2000}/><Field label={t('ui.proposal.rules_label','Link to the rules (optional)')} value={rules} onChangeText={setRules} autoCapitalize="none" keyboardType="url"/>

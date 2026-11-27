@@ -94,6 +94,37 @@ def test_recent_games_summary_uses_metadata_and_keeps_visibility_and_order():
     assert all('code' not in row and 'server_code' not in row for row in rows)
 
 
+def test_recent_game_pages_recover_match_history_and_keep_new_plays_past_the_legacy_cap():
+    store = query_store()
+    api = Api(store=store)
+    try:
+        owner = api.new_user('recent owner')
+        opponent = api.new_user('other account')
+        older = api.new_game(owner=owner, allowed_player_counts=[2])
+        played = api.new_match(owner=owner, game_id=older, joiners=[opponent])
+        lobby = api.new_game(owner=owner)
+        api.new_match(owner=owner, game_id=lobby)
+        head = tuple(f'current-{i}' for i in range(8))
+        template = store.get_game(older)
+        for game_id in (*head, 'new-play'):
+            store.add_game_version(replace(template, id=game_id))
+        store.put_user(replace(store.get_user(owner), recent_game_ids=head))
+        path = '/v2/users/me/recent-games'
+        first = api.ok('GET', path, as_user=owner)
+        assert [game['id'] for game in first['items']] == list(head)
+        assert api.request('GET', path, as_user=opponent, params={'cursor': first['next_cursor']}).status_code == 400
+        tail = api.ok('GET', path, as_user=owner, params={'cursor': first['next_cursor']})
+        assert [game['id'] for game in tail['items']] == [older]
+        assert tail['next_cursor'] is None
+        store.delete_match(played)
+        api.ok('POST', '/users/me/recent-games/new-play', as_user=owner)
+        all_games = api.ok('GET', path, as_user=owner, params={'limit': 100})
+        assert [game['id'] for game in all_games['items']] == ['new-play', *head, older]
+    finally:
+        api.client.close()
+        store.close()
+
+
 def test_translation_bundle_batches_only_the_game_tables_not_already_cached():
     platform = object.__new__(GamePlatform)
     prefetch = Mock()

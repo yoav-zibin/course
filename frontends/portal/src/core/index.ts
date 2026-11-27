@@ -24,12 +24,17 @@ import { configureI18n, setLocale, getLocale, getDirection, gameTexts, localizeG
 import bundled from './bundled-tictactoe.json';
 import { browserLogin } from '../platform/browser-login';
 import { rememberUrlAttribution, newAccountAttribution, forgetMatchAttribution, purgePersonalAttribution,type MatchAttribution } from './attribution';
-import type { Account, AccountData, Game, Match, LocalMatch, ListKind, PortalState, PracticeOptions, InAppNotification } from './types';
+import type { Account, AccountData, Game, GameCarousel, Match, LocalMatch, ListKind, PortalState, PracticeOptions, InAppNotification } from './types';
 export * from './types';
 export { t } from '../platform/i18n';
 
 const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, accounts: [], profile: null, deletionUpdating: false, profiles: {}, authConfig: {}, games: [], popularGames: [], recentGames: [], myMatches: [], matchGames: {}, savedGames: [], notifications: [], notificationCursor: null, unreadNotifications: 0, notificationPrompt: false, notificationPromptReady: false, localMatches: [], selectedMatch: null, selected: null, selectedGame: null, game: null, selectedGameId: null, history: null, replayIndex: null, pending: 0, conflicts: {}, archived: [], network: isOnline(), loading: false, error: null, storageError: null, locale: 'en', query: '', cursors: {} });
 const listPaths: Record<ListKind, string> = { games: '/games', myMatches: '/matches', savedGames: '/users/me/saved-games' };
+const carouselPaths: Record<GameCarousel, string> = {
+  popularGames: '/games/popular',
+  recentGames: '/users/me/recent-games',
+};
+const CAROUSEL_PAGE_SIZE = 8;
 const unique = <T extends { id?: string; token?: string }>(values: T[]): T[] => [...new Map(values.map(v => [v.id || v.token, v])).values()];
 const savedList = <T>(value: unknown): T[] => Array.isArray(value) ? value : [];
 const localHumanSeat = (match: Match) => match.players.find(player => player.kind === 'human' && player.active !== false)?.player_index ?? 0;
@@ -50,6 +55,9 @@ export class PortalStore {
   private localOnly = false;
   private accountSelectionWrites: Promise<void> = Promise.resolve();
   private paginated = false;
+  private paginatedCarousels = false;
+  private carouselRequests = new Map<string, Promise<void>>();
+  private expandedCarouselGeneration: Partial<Record<GameCarousel, number>> = {};
   private refreshPromise: Promise<void> | null = null;
   private pendingPackages = new Map<string,Promise<Game>>();
   private preparedPackage?: {generation:number; owner:string; game:Game};
@@ -214,6 +222,51 @@ export class PortalStore {
     // Stable aliases restore useful lists when the next launch is offline.
     await this.cache(listPaths[kind], kind === 'myMatches' ? this.matchSummaries(items) : items);
   }
+  private loadCarousel(kind: GameCarousel, more = false): Promise<void> {
+    if (more && (!this.state.cursors[kind] || !this.state.network)) return Promise.resolve();
+    const key = `${this.generation}:${kind}`;
+    const pending = this.carouselRequests.get(key);
+    if (pending) return pending;
+    const load = this.readCarousel(kind, more).finally(() => this.carouselRequests.delete(key));
+    this.carouselRequests.set(key, load);
+    return load;
+  }
+
+  private async readCarousel(kind: GameCarousel, more: boolean): Promise<void> {
+    const guard = this.capture();
+    const path = carouselPaths[kind];
+    const previous = this.state[kind];
+    let cursor = more ? this.state.cursors[kind] : null;
+    let items: Game[];
+    if (!this.paginatedCarousels) {
+      items = await this.read(path);
+    } else {
+      const visited = new Set<string | null | undefined>();
+      const existing = new Set(more ? previous.map(game => game.id) : []);
+      // A page can contain no visible titles. Follow its cursor until a
+      // card can be added or the server signals the end.
+      do {
+        visited.add(cursor);
+        const params = new URLSearchParams({limit: String(CAROUSEL_PAGE_SIZE)});
+        if (cursor) params.set('cursor', cursor);
+        const response = await this.read(`/v2${path}?${params}`);
+        guard();
+        items = response.items;
+        cursor = visited.has(response.next_cursor) ? null : response.next_cursor;
+      } while (cursor && Array.isArray(items) && items.every(game => existing.has(game.id)));
+    }
+    guard();
+    if (!Array.isArray(items)) throw new Error('Invalid game carousel response');
+    const keepTail = !more && this.paginatedCarousels && this.expandedCarouselGeneration[kind] === this.generation;
+    const refreshedIds = new Set(items.map(game => game.id));
+    const games = (more ? unique([...previous, ...items]) :
+      keepTail ? [...items, ...previous.filter(game => !refreshedIds.has(game.id))] : items).map(localizeGame);
+    if (more) this.expandedCarouselGeneration[kind] = this.generation;
+    this.patch({[kind]: games, cursors: {...this.state.cursors,
+      [kind]: keepTail ? this.state.cursors[kind] : cursor ?? null}});
+    if (this.paginatedCarousels) await this.cache(path, games);
+  }
+
   private async suggestGames(query: string): Promise<Game[]> {
     const guard=this.capture(),prefix=gameSearchPrefix(query);
     const games=[...this.state.recentGames,...this.state.popularGames,...this.state.games,...this.state.savedGames];
@@ -372,7 +425,9 @@ export class PortalStore {
       const initialMatchId=target?.kind==='match'?target.id:undefined;
       await Promise.all([this.reloadData(),incoming?this.rememberAttribution(incoming):purgePersonalAttribution()]);
       const snapshot = this.data, hidden = hiddenMatchIds(snapshot);
-      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']), authConfig:snapshot.responses['/auth/config']||{} });
+      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']), authConfig:snapshot.responses['/auth/config']||{},
+        popularGames: savedList<Game>(snapshot.responses[carouselPaths.popularGames]).map(localizeGame),
+        recentGames: account ? savedList<Game>(snapshot.responses[carouselPaths.recentGames]).map(localizeGame) : [] });
       if (!initialMatchId && snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) {
         const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`];
         if (match) {
@@ -395,6 +450,7 @@ export class PortalStore {
       this.paginated = Object.keys(snapshot.responses).some(key=>key.startsWith('/v2/'));
       const capabilities = localOnly ? Promise.resolve() : this.api.request('GET','/storage/capabilities').then(result=>{
         this.paginated=result.pagination===true;
+        this.paginatedCarousels=result.game_carousels===true;
       }).catch(()=>{});
       let showLocalData!:()=>void;
       const localReady=new Promise<void>(resolve=>{showLocalData=resolve;});
@@ -428,8 +484,8 @@ export class PortalStore {
       guard();
       const updateAuth=()=>this.read('/auth/config').then(authConfig=>{guard();this.patch({authConfig});});
       if (this.state.selectedMatch) { this.startOfflineDownloads();await Promise.all([this.state.selectedMatch.id===freshlyOpenedId?undefined:this.refreshMatch(),startup?updateAuth().catch(()=>{}):undefined]); return; }
-      const jobs: Promise<any>[] = [this.list('games'), updateAuth(), this.read('/games/popular').then(popularGames => { guard(); this.patch({ popularGames: popularGames.map(localizeGame) }); })];
-      if (this.state.account) jobs.push(this.refreshNotifications(), this.list('myMatches'), this.list('savedGames'), this.read('/users/me/recent-games').then(recentGames => { guard(); this.patch({ recentGames: recentGames.map(localizeGame) }); }), this.refreshProfile());
+      const jobs: Promise<any>[] = [this.list('games'), updateAuth(), this.loadCarousel('popularGames')];
+      if (this.state.account) jobs.push(this.refreshNotifications(), this.list('myMatches'), this.list('savedGames'), this.loadCarousel('recentGames'), this.refreshProfile());
       const results = await Promise.allSettled(jobs); guard();
       await this.claimDailyLogin().catch(() => {}); guard();
       const first = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
@@ -1185,6 +1241,7 @@ export class PortalStore {
     recordInviteShare:(id:string,channel:InviteShareChannel)=>this.request('POST',`/matches/${encodeURIComponent(id)}/share`,{channel}).catch(()=>{}),
     searchGames: (query: string) => this.perform(async () => { this.patch({ query, games: [], cursors: { ...this.state.cursors, games: null } }); await this.list('games'); }),
     suggestGames: (query: string) => this.suggestGames(query),
+    loadMoreGames: (kind: GameCarousel) => this.loadCarousel(kind, true),
     loadMore: (kind: ListKind) => this.perform(() => this.list(kind, true)),
     selectGame: (id: string) => this.perform(() => this.selectGame(id)), selectMatch: (id: string) => this.perform(() => this.selectMatch(id)), clearMatch: () => this.clearMatch(), clearGame: () => this.clearGame(), importLogin: (response: any) => this.perform(() => this.saveLogin(response)),
     guest: (name: string,intentGuard?:()=>void) => this.perform(() => this.guest(name,intentGuard)), requestCode: (method: 'email' | 'phone', value: string, delivery?: string) => this.perform(() => this.requestCode(method, value, delivery)),

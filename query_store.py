@@ -468,6 +468,47 @@ class QueryStore:
         data = self.raw_get(self.collection("game_popularity").document(key(game_id)))
         return int(data.get("score", 0)) if data else 0
 
+    def page_popularity(self, limit, after=None):
+        """Return a bounded score page with a document ID tie-breaker."""
+        collection = self.collection("game_popularity")
+
+        def fetch():
+            query = (collection.order_by("score", direction="DESCENDING")
+                     .order_by("__name__", direction="DESCENDING"))
+            if after is not None:
+                score, document_id = after
+                query = query.start_after({"score": score, "__name__": collection.document(document_id)})
+            with timed_external("firestore"):
+                return [(data["game_id"], data["score"], row.id)
+                        for row in query.limit(limit).stream() if (data := row.to_dict())]
+
+        return self._cache.get_or_fetch(("query", "game_popularity", "page", limit, after), fetch)
+
+    def iter_played_game_activity(self, user_id):
+        """Read one account's legacy match headers in bounded batches."""
+        for field in ("participants", "historical_participants"):
+            after = None
+            while True:
+                docs = self._query("matches", [(field, "array_contains", user_id)], limit=100, after=after)
+                for doc in docs:
+                    data = doc.to_dict()
+                    # Current participants were visited in the first pass.
+                    if not data or data.get("tombstone") or (
+                        field == "historical_participants" and user_id in data.get("participants", ())
+                    ):
+                        continue
+                    row = json.loads(data["json"])
+                    if row["status"] == "ongoing" or (
+                        row["status"] == "over" and (
+                            data.get("move_count", 0) or row.get("initial_turn_player_indices") is not None
+                            or row.get("end_reason") == "finished"
+                        )
+                    ):
+                        yield row["game_id"], dt.datetime.fromisoformat(row["updated_at"])
+                if len(docs) < 100:
+                    break
+                after = docs[-1].id
+
     def list_translations(self, locale=None):
         return sorted(
             self.translation_memory.list(locale),

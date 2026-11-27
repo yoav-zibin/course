@@ -312,6 +312,10 @@ Cursors bind to namespace, filters and caller; concurrent writes may shift pages
 
 - Catalog: `/v2/games`, optional one word-prefix `q` (2–24 characters). Source is
   omitted; fetch one game's detail/source when needed.
+- Game carousels: `/v2/games/popular` and `/v2/users/me/recent-games` return
+  game summaries with cursors. The capability response advertises `game_carousels`.
+  Popular starts with featured titles and ends with unplayed catalog titles.
+  Recent is account-scoped and uses retained started matches to recover older history.
 - Builder (deleted Nov 7, 2026): `/v2/builder/games` survives as a legacy path returning the caller's published games; `/v2/game-drafts` was removed.
 - Matches: `/v2/matches`, `/v2/matches/open`; history uses
   `/v2/matches/{id}/history?start=...&limit=...`, with `next_start` and `total`.

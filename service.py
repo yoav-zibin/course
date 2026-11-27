@@ -24,6 +24,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from pydantic import JsonValue
 
+from game_platform.paging import Page, decode_cursor, encode_cursor, page_size
+
 import logging
 
 from game_platform import game_messages, game_text, i18n, observability
@@ -1772,7 +1774,8 @@ class GamePlatform:
             saved_game_ids=_dedupe((*into.saved_game_ids, *source.saved_game_ids)),
             recent_game_ids=_dedupe(
                 (*into.recent_game_ids, *source.recent_game_ids)
-            )[: self.RECENT_GAME_LIMIT],
+            ),
+            recent_games_backfilled=into.recent_games_backfilled and source.recent_games_backfilled,
             invited_by_user_id=invited_by,
             invited_via_invite_token=attribution.invited_via_invite_token,
             invited_via_match_id=attribution.invited_via_match_id,
@@ -2457,6 +2460,70 @@ class GamePlatform:
         reader = getattr(self._store, "game_popularity_score", None)
         return self._plain_read(lambda: int(reader(game.id))) if reader is not None else 0
 
+    def page_popular_games(self, *, limit: int, cursor: str | None) -> Page[Game]:
+        """Featured games, scored games, then games with no recorded starts."""
+        page_size(limit)
+        store = self._store
+        scope = ["popular-games", getattr(store, "namespace", None)]
+        token = decode_cursor(scope, cursor) or "featured:0"
+        stage, value = token.split(":", 1)
+        games = []
+
+        def next_page(stage, value=""):
+            return Page(games, encode_cursor(scope, f"{stage}:{value}"))
+
+        def read():
+            nonlocal stage, value
+            get_game = getattr(store, "get_game_without_code", store.get_game)
+            if stage == "featured":
+                index = int(value)
+                if not 0 <= index < len(FEATURED_GAME_IDS):
+                    raise ValueError("invalid featured cursor")
+                for i, game_id in enumerate(FEATURED_GAME_IDS[index:], start=index):
+                    if self._is_carousel_game(game := get_game(game_id)):
+                        games.append(game)
+                    if len(games) == limit:
+                        return next_page("featured", i + 1) if i + 1 < len(FEATURED_GAME_IDS) else next_page("ranked")
+                stage, value = "ranked", ""
+            if stage == "ranked":
+                remaining = limit - len(games)
+                after = None
+                if value:
+                    score, separator, document_id = value.partition(":")
+                    if not separator or not document_id:
+                        raise ValueError("invalid popularity cursor")
+                    after = (int(score), document_id)
+                ranked = store.page_popularity(remaining + 1, after)
+                for game_id, score, _ in ranked[:remaining]:
+                    if score > 0 and game_id not in FEATURED_GAME_IDS and self._is_carousel_game(game := get_game(game_id)):
+                        games.append(game)
+                if len(ranked) > remaining:
+                    _, score, document_id = ranked[remaining - 1]
+                    return next_page("ranked", f"{score}:{document_id}")
+                if len(games) == limit:
+                    return next_page("catalog")
+                stage, value = "catalog", ""
+            if stage != "catalog":
+                raise ValueError("invalid popularity cursor")
+            remaining = limit - len(games)
+            if getattr(store, "scalable", False):
+                catalog = store.page("games", filters=[("deleted", "==", False), ("published", "==", True)],
+                                     limit=remaining, cursor=value or None, scope=scope)
+            else:
+                after = decode_cursor(scope, value or None) or ""
+                rows = sorted((game for game in store.list_games() if game.id > after), key=lambda game: game.id)
+                catalog = Page(rows[:remaining], encode_cursor(scope, rows[remaining - 1].id)
+                               if len(rows) > remaining else None)
+            games.extend(game for game in catalog.items if self._is_carousel_game(game)
+                         and game.id not in FEATURED_GAME_IDS and not store.game_popularity_score(game.id))
+            return next_page("catalog", catalog.next_cursor) if catalog.next_cursor else Page(games)
+
+        return self._plain_read(read)
+
+    @staticmethod
+    def _is_carousel_game(game: Game | None) -> bool:
+        return game is not None and game.is_declarative and game.published and not game.deleted
+
     def _record_game_match_start(self, match: Match) -> None:
         """Adds this start once, in the same storage unit of work as the match."""
         recorder = getattr(self._store, "record_game_match_start", None)
@@ -2468,12 +2535,12 @@ class GamePlatform:
     def _record_recent_game_for_user(
         self, user_id: str, game_id: str, *, occurred_at: dt.datetime | None = None
     ) -> None:
-        """Moves [game_id] to the front of a user's bounded recent-game list."""
+        """Moves [game_id] to the front of a user's played-game history."""
         user = self._store.get_user(user_id)
         if user is None:
             return
         user = self._resolve_replaced(user)
-        recent = _dedupe((game_id, *user.recent_game_ids))[: self.RECENT_GAME_LIMIT]
+        recent = _dedupe((game_id, *user.recent_game_ids))
         if recent != user.recent_game_ids:
             self._store.put_user(
                 replace(user, recent_game_ids=recent, updated_at=occurred_at or self._clock())
@@ -4701,6 +4768,69 @@ class GamePlatform:
             self._require_user(caller_id)
             self._record_recent_game_for_user(caller_id, game.id)
             return self.list_recent_games(caller_id=caller_id)
+
+    def page_recent_games(self, *, caller_id: str, limit: int, cursor: str | None) -> Page[Game]:
+        page_size(limit)
+        scope = ["recent-games", caller_id]
+        start = int(decode_cursor(scope, cursor) or 0)
+        if start < 0:
+            raise ValueError("invalid recent games cursor")
+        user = self._plain_read(lambda: self._resolve_replaced(self._require_user(caller_id)))
+        if not user.recent_games_backfilled:
+            user = self._backfill_recent_games(caller_id)
+        ids = user.recent_game_ids
+        get_game = getattr(self._store, "get_game_without_code", self._store.get_game)
+        end = min(start + limit, len(ids))
+        games = self._plain_read(lambda: [
+            game for game_id in ids[start:end] if self._is_carousel_game(game := get_game(game_id))
+        ])
+        return Page(games, encode_cursor(scope, str(end)) if end < len(ids) else None)
+
+    def _backfill_recent_games(self, caller_id: str) -> User:
+        store = self._store
+
+        def load_user():
+            return self._resolve_replaced(self._require_user(caller_id))
+
+        def game_activity(user_id):
+            iterate = getattr(store, "iter_played_game_activity", None)
+            if iterate is not None:
+                yield from iterate(user_id)
+                return
+            for match in store.list_matches_involving(user_id):
+                if match.status == "ongoing" or (
+                    match.status == "over" and (
+                        match.moves or match.initial_turn_player_indices is not None
+                        or match.end_reason == "finished"
+                    )
+                ):
+                    yield match.game_id, match.updated_at
+
+        while True:
+            user = self._plain_read(load_user)
+            if user.recent_games_backfilled:
+                return user
+            accounts = (user.id, *user.replaced_user_ids)
+
+            def read_history():
+                latest: dict[str, dt.datetime] = {}
+                for user_id in accounts:
+                    for game_id, played_at in game_activity(user_id):
+                        if game_id not in latest or latest[game_id] < played_at:
+                            latest[game_id] = played_at
+                return sorted(latest, key=lambda game_id: (latest[game_id], game_id), reverse=True)
+
+            historical_ids = self._plain_read(read_history)
+            with self._lock:
+                current = load_user()
+                if current.recent_games_backfilled:
+                    return current
+                if accounts != (current.id, *current.replaced_user_ids):
+                    continue
+                updated = replace(current, recent_games_backfilled=True,
+                                  recent_game_ids=_dedupe((*current.recent_game_ids, *historical_ids)))
+                store.put_user(updated)
+                return updated
 
     def _saved_games(self, user: User) -> list[Game]:
         """The user's saved games that can still be played, most recently saved

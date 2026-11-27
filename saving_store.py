@@ -201,6 +201,10 @@ class SavingStore:
         with self._lock:
             return self._inner.list_popular_game_ids(limit)
 
+    def page_popularity(self, limit, after=None):
+        with self._lock:
+            return self._inner.page_popularity(limit, after)
+
     def put_user(self, user: User) -> None:
         with self._lock:
             self._inner.put_user(user)

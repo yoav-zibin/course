@@ -87,3 +87,29 @@ test('late suggestions cannot replace newer typing and a real suggestion tap ope
     expect(observed.invalid).toEqual([]);
   }finally{release();}
 });
+
+test('both game carousels load additional pages at the horizontal edge',async({page,request})=>{
+  const user=await createUser(request,uniqueName('Carousel player'));await loginAs(page,user);
+  await catalog(page);
+  await page.route('**/storage/capabilities',route=>route.fulfill({json:{pagination:true,game_carousels:true}}));
+  const requests={recentGames:[] as string[],popularGames:[] as string[]};
+  for(const [kind,path] of [['recentGames','/v2/users/me/recent-games'],['popularGames','/v2/games/popular']] as const){
+    await page.route(url=>url.pathname===path,route=>{
+      const cursor=new URL(route.request().url()).searchParams.get('cursor')||'first';
+      requests[kind].push(cursor);
+      const items=(cursor==='first'?games.slice(0,8):cursor==='empty'?[]:games.slice(8))
+        .map(game=>({...game,name:`${kind} ${game.name}`}));
+      return route.fulfill({json:{items,next_cursor:cursor==='first'?'empty':cursor==='empty'?'last':null}});
+    });
+  }
+  await page.goto('/portal#games');
+  for(const kind of ['recentGames','popularGames'] as const){
+    const row=page.getByTestId(kind);
+    await expect(row.getByRole('link',{name:`Play ${kind} Cobalt Alpha`,exact:true})).toBeVisible();
+    expect(requests[kind]).toEqual(['first']);
+    await row.evaluate(element=>{element.scrollLeft=element.scrollWidth;});
+    await expect.poll(()=>requests[kind]).toEqual(['first','empty','last']);
+    await row.evaluate(element=>{element.scrollLeft=element.scrollWidth;});
+    await expect(row.getByRole('link',{name:`Play ${kind} Chess`,exact:true})).toBeVisible();
+  }
+});

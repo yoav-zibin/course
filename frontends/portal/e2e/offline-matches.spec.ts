@@ -20,7 +20,7 @@ test('match names and playable packages download without catalog entries and sur
 
   // None of the visible catalog/library lists can provide this match's title.
   let offline=false;
-  const catalogPaths=new Set(['/games','/v2/games','/games/popular','/users/me/recent-games','/users/me/saved-games','/v2/users/me/saved-games']);
+  const catalogPaths=new Set(['/games','/v2/games','/games/popular','/v2/games/popular','/users/me/recent-games','/v2/users/me/recent-games','/users/me/saved-games','/v2/users/me/saved-games']);
   await page.route(url=>catalogPaths.has(url.pathname),route=>{
     if(offline)return route.abort('internetdisconnected');
     const url=new URL(route.request().url());

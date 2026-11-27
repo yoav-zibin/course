@@ -208,6 +208,7 @@ test('the first play-mode tap works while an uncached game is downloading',async
     allowed_player_counts:rules.allowed_player_counts,renderer_type:rules.renderer_type};
   await restore(page,await account(request,'First game guest'));
   await page.route('**/games/popular',route=>route.fulfill({json:[card]}));
+  await page.route('**/v2/games/popular?*',route=>route.fulfill({json:{items:[card],next_cursor:null}}));
   let release!:()=>void,downloads=0;
   const downloading=new Promise<void>(resolve=>{release=resolve;});
   await page.route(url=>url.pathname==='/games/'+rules.id,async route=>{

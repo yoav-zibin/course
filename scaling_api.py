@@ -37,10 +37,31 @@ def install(app, *, debug_tools):
         enabled = getattr(platform._store, "scalable", False)
         return {
             "pagination": enabled,
+            "game_carousels": True,
             "page_size": 50,
             "max_page_size": 100,
             "search": "word-prefix" if enabled else "substring",
         }
+
+    @app.get("/v2/games/popular", response_model=CursorPageOut[GameSummaryOut])
+    def popular_games(platform: Platform, limit: int = Query(8, ge=1, le=100),
+                      cursor: str | None = None):
+        try:
+            result = platform.page_popular_games(limit=limit, cursor=cursor)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"items": [GameSummaryOut.of(game) for game in result.items],
+                "next_cursor": result.next_cursor}
+
+    @app.get("/v2/users/me/recent-games", response_model=CursorPageOut[GameSummaryOut])
+    def recent_games(platform: Platform, caller_id: CallerId,
+                     limit: int = Query(8, ge=1, le=100), cursor: str | None = None):
+        try:
+            result = platform.page_recent_games(caller_id=caller_id, limit=limit, cursor=cursor)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"items": [GameSummaryOut.of(game) for game in result.items],
+                "next_cursor": result.next_cursor}
 
     @app.get("/v2/games", response_model=CursorPageOut[GameSummaryOut])
     def games(
