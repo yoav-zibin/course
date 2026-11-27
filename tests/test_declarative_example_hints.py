@@ -44,6 +44,13 @@ def test_examples_declare_only_real_piece_actions(kind):
         elif kind=='domineering'and piece['id']=='domino':
             assert piece['actions']==['move']
             assert set(piece['move_targets'])=={target['id']for target in scene['targets']}
+        elif kind=='chess' and piece['type'] in ('white_piece', 'black_piece'):
+            cell = int(piece['position']['cell'])
+            targets = {f"chess-drop-{move['tr'] * 8 + move['tc']}"
+                       for move in message['view']['legalMoves']
+                       if cell == move['fr'] * 8 + move['fc']}
+            assert piece['actions'] == (['move'] if targets else [])
+            assert set(piece.get('move_targets', [])) == targets
         elif kind in ('crazy_eights','mau_mau','hearts','spades','guess_who') and piece['id'].startswith('intent_'):
             assert piece['actions']==['tap']
         else:

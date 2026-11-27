@@ -566,7 +566,8 @@ for(const kind of ['checkers','chess','four_player_chess'])test(`${kind} lets ph
   await mount(page,request,game.declarative_ui,state({view,state:view,strings:game.declarative_ui.strings}));
   for(const [index,choice]of pair.entries()){
     await send(page,state({view,state:view,strings:game.declarative_ui.strings,move_count:index+2}));
-    await page.getByRole('button',{name:`Select piece at row ${choice.from.r+1}, column ${choice.from.c+1}`,exact:true}).click();
+    const sourceName=`Select piece at row ${choice.from.r+1}, column ${choice.from.c+1}`;
+    await page.getByRole('button',{name:kind==='chess'?`${sourceName}: Move`:sourceName,exact:true}).click();
     await page.getByRole('button',{name:`Move to row ${choice.to.r+1}, column ${choice.to.c+1}`,exact:true}).click();
     await expect.poll(()=>moves(page)).toHaveLength(index+1);
     expect((await moves(page)).at(-1)).toEqual(choice.move);
