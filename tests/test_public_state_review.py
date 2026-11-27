@@ -17,7 +17,7 @@ HIDDEN_FIXTURES = {"battleship", "catan", "crazy_eights", "go_fish", "guess_who"
                    "sergeant_major", "mau_mau", "conquian", "snap", "slapjack",
                    "whist", "scopa", "cartographers",
                    "lanterntrails", "crownfields", "codenames", "love_letter",
-                   "mastermind", "scattergories"}
+                   "mastermind", "scattergories", "ticket_to_ride_europe"}
 
 
 def test_every_declarative_fixture_explicitly_classifies_its_gameplay_state():
