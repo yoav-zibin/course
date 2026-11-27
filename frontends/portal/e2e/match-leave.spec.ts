@@ -3,9 +3,9 @@ import {ensureMatchMenuOpen,createGame,createUser,loginAs,uniqueName} from './he
 
 const headers=(user:any)=>({'X-User-Id':user.id,'X-User-Password':user.password});
 
-async function sharedLobby(request:APIRequestContext) {
+async function sharedLobby(request:APIRequestContext, fixture?:string) {
   const host=await createUser(request,uniqueName('Leave host')),guest=await createUser(request,uniqueName('Leave guest'));
-  const name=uniqueName('Leave game'),gameId=await createGame(request,name);
+  const name=uniqueName('Leave game'),gameId=await createGame(request,name,fixture);
   const created=await request.post('/matches',{headers:headers(host),data:{game_id:gameId}});
   expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
   const invitation=await request.post(`/matches/${match.id}/invites`,{headers:headers(host),data:{}});
@@ -26,11 +26,9 @@ test.beforeEach(async({baseURL})=>{
 
 for(const ending of ['played','left'] as const)test(`a guest can leave a finished match after they ${ending} without hiding it from the host`,async({page,request})=>{
   const {host,guest,name,match}=await sharedLobby(request);
-  const started=await request.post(`/matches/${match.id}/start`,{headers:headers(host)});
-  expect(started.ok(),await started.text()).toBeTruthy();
   if(ending==='played'){
     for(const [index,cell] of [0,3,1,4,2].entries()){
-      const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(index%2?guest:host),data:{move:{cell},expected_move_count:index}});
+      const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(index%2?host:guest),data:{move:{cell},expected_move_count:index}});
       expect(moved.ok(),await moved.text()).toBeTruthy();
     }
   }else{
@@ -60,7 +58,7 @@ for(const ending of ['played','left'] as const)test(`a guest can leave a finishe
 });
 
 test('the host uses Leave match to close a waiting lobby',async({page,request})=>{
-  const {host,guest,name,match}=await sharedLobby(request);
+  const {host,guest,match}=await sharedLobby(request,'chutes_ladders');
   await loginAs(page,host);await page.goto(`/portal#match=${match.id}`);
   await expect(page.getByRole('button',{name:'Start match',exact:true})).toBeEnabled();
   await expect(page.getByRole('button',{name:'Delete match',exact:true})).toHaveCount(0);

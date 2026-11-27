@@ -15,9 +15,8 @@ test('match names and playable packages download without catalog entries and sur
   expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
   const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{}});
   expect(joined.ok(),await joined.text()).toBeTruthy();
-  const started=await request.post(`/matches/${match.id}/start`,{headers,data:{}});
-  expect(started.ok(),await started.text()).toBeTruthy();
-  expect(await started.json()).toMatchObject({status:'ongoing',move_count:0,turn_of_player_indices:[0]});
+
+  expect(await joined.json()).toMatchObject({status:'ongoing',move_count:0,turn_of_player_indices:[0]});
 
   // None of the visible catalog/library lists can provide this match's title.
   let offline=false;

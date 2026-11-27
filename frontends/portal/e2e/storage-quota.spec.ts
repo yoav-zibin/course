@@ -12,14 +12,13 @@ const storageErrors=/quota|storage|disk|permission|denied|Could not save downloa
 for(const fault of ['quota','cleanup-denied'] as const)test(`${fault}: cache failures do not block navigation or an authoritative move`,async({page,request,context,baseURL},info)=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Storage quota checks require a disposable loopback server.');
   const name=uniqueName('Quota navigation game'),gameId=await createGame(request,name),user=await createUser(request,'Quota navigation player');
-  const headers={'X-User-Id':user.id,'X-User-Password':user.password};
+  const opponent=await createUser(request,'Quota navigation opponent');
+  const headers={'X-User-Id':opponent.id,'X-User-Password':opponent.password};
   const created=await request.post('/matches',{headers,data:{game_id:gameId}});
   expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
-  const opponent=await createUser(request,'Quota navigation opponent');
-  const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{}});
+  const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':user.id,'X-User-Password':user.password},data:{}});
   expect(joined.ok(),await joined.text()).toBeTruthy();
-  const started=await request.post(`/matches/${match.id}/start`,{headers,data:{}});
-  expect(started.ok(),await started.text()).toBeTruthy();const startedMatch=await started.json();expect(startedMatch.status).toBe('ongoing');
+  const startedMatch=await joined.json();expect(startedMatch.status).toBe('ongoing');
   const ownerSeat=startedMatch.players.find((player:any)=>player.user_id===user.id).player_index;
   expect(startedMatch.turn_of_player_indices).toContain(ownerSeat);
   await loginAs(page,user);await page.goto('/portal#local');

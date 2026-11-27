@@ -18,9 +18,10 @@ def finished_match(
         "POST", "/matches", as_user=alice, json={"game_id": game_id}
     )
     token = api.ok("POST", f"/matches/{match['id']}/invites", as_user=alice)["token"]
-    api.ok("POST", f"/invites/{token}/accept", as_user=bob)
-    api.ok("POST", f"/matches/{match['id']}/start", as_user=alice)
-    assert api.move(match["id"], as_user=alice, next_turn=None).status_code == 201
+    joined = api.ok("POST", f"/invites/{token}/accept", as_user=bob)
+    if joined["status"] == "waiting_for_players":
+        joined = api.ok("POST", f"/matches/{match['id']}/start", as_user=alice)
+    assert api.move(match["id"], as_user=joined["players"][0]["user_id"], next_turn=None).status_code == 201
     return match["id"], game_id, alice, bob
 
 
@@ -49,7 +50,7 @@ def test_invite_seats_a_reserved_opponent_and_only_shows_strangers_the_rematch()
     spectator = api.ok("POST", f"/invites/{token}/accept", as_user=stranger)
     assert [player["user_id"] for player in spectator["players"]] == [alice]
     joined = api.ok("POST", f"/invites/{token}/accept", as_user=bob)
-    assert [player["user_id"] for player in joined["players"]] == [alice, bob]
+    assert [player["user_id"] for player in joined["players"]] == [bob, alice]
 
 
 def test_legacy_audience_option_does_not_change_rematch_access_or_reserved_rejoin():
@@ -67,7 +68,7 @@ def test_legacy_audience_option_does_not_change_rematch_access_or_reserved_rejoi
     assert api.request("POST", f"/matches/{rematch['id']}/join", as_user=stranger).status_code == 409
     joined = api.ok("POST", f"/matches/{match_id}/rematch", as_user=bob)
     assert "private" not in joined
-    assert [p["user_id"] for p in joined["players"]] == [alice, bob]
+    assert [p["user_id"] for p in joined["players"]] == [bob, alice]
 
 
 def test_seats_beyond_the_held_ones_stay_open_to_anyone() -> None:
@@ -80,7 +81,7 @@ def test_seats_beyond_the_held_ones_stay_open_to_anyone() -> None:
     response = api.request("POST", f"/matches/{rematch['id']}/join", as_user=second)
     assert response.status_code == 409  # the last seat is Bob's
     joined = api.ok("POST", f"/matches/{match_id}/rematch", as_user=bob)
-    assert [p["user_id"] for p in joined["players"]] == [alice, first, bob]
+    assert [p["user_id"] for p in joined["players"]] == [bob, alice, first]
 
 
 def test_a_rematch_does_not_carry_the_stake_over() -> None:
@@ -91,7 +92,6 @@ def test_a_rematch_does_not_carry_the_stake_over() -> None:
         "POST", "/matches", as_user=alice, json={"game_id": game_id, "bet_per_player": 5}
     )
     api.ok("POST", f"/matches/{match['id']}/join", as_user=bob)
-    api.ok("POST", f"/matches/{match['id']}/start", as_user=alice)
-    api.move(match["id"], as_user=alice, next_turn=None)  # refunds (bug 4)
+    assert api.move(match["id"], as_user=bob, next_turn=None).status_code == 201
     rematch = api.ok("POST", f"/matches/{match['id']}/rematch", as_user=alice)
     assert (rematch["bet_per_player"], rematch["token_pot"]) == (0, 0)

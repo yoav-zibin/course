@@ -61,13 +61,16 @@ def test_every_published_game_leaves_through_the_shared_api(api, entry, mode, mo
     if count > human_count:
         from game_platform.tests.helpers import legacy_computer_match
         legacy_computer_match(api.platform, api.platform._store.get_match(mid), count - human_count)
+    started = match
     for user in users[1:]:
-        api.ok("POST", f"/matches/{mid}/join", as_user=user)
-    started = api.ok("POST", f"/matches/{mid}/start", as_user=users[0], json={})
+        started = api.ok("POST", f"/matches/{mid}/join", as_user=user)
+    if started["status"] == "waiting_for_players":
+        started = api.ok("POST", f"/matches/{mid}/start", as_user=users[0], json={})
     assert started["status"] == "ongoing"
     original = api.platform._store.get_match(mid)
     total_tokens = original.token_pot + sum(api.platform._store.get_user(u).token_balance for u in users)
     leaver = users[-1]
+    leaver_index = original.seat_of(leaver).player_index
     if mode == "direct":
         ended = api.ok("POST", f"/matches/{mid}/leave", as_user=leaver)
     else:
@@ -81,12 +84,12 @@ def test_every_published_game_leaves_through_the_shared_api(api, entry, mode, mo
         api.ok("POST", f"/matches/{mid}/maybeLeave", as_user=leaver)
         assert api.platform._store.get_match(mid).pending_leave == pending.pending_leave
         ended = api.ok("POST", f"/matches/{mid}/playerLeft", as_user=leaver)
-        assert ended["token_payouts"][str(human_count - 1)] == quote["pending_leave_payout"]
+        assert ended["token_payouts"][str(leaver_index)] == quote["pending_leave_payout"]
     assert ended["status"] == "over" and ended["end_reason"] == "player_left"
     assert ended["token_pot"] == 0 and ended["turn_of_player_indices"] is None
     assert sum(ended["token_payouts"].values()) == original.token_pot
     saved = api.platform._store.get_match(mid)
-    assert saved.seats[human_count - 1].active is False
+    assert saved.seats[leaver_index].active is False
     assert [(s.player_index, s.kind, s.user_id) for s in saved.seats] == [
         (s.player_index, s.kind, s.user_id) for s in original.seats]
     assert len(saved.moves) == len(original.moves) + 1

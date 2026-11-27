@@ -16,8 +16,8 @@ export async function loginAdmin(page:Page){
 }
 export const uniqueName=(prefix:string)=>`${prefix} ${Date.now()}-${Math.random().toString(16).slice(2)}`;
 export async function createUser(request:APIRequestContext,name:string){const response=await request.post('/users',{data:{display_name:name}});expect(response.ok()).toBeTruthy();return response.json();}
-export async function createGame(request:APIRequestContext,name:string){
-  const payload=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../../games/declarative/tictactoe.json'),'utf8'));
+export async function createGame(request:APIRequestContext,name:string,fixture='tictactoe'){
+  const payload=JSON.parse(fs.readFileSync(path.resolve(__dirname,`../../../games/declarative/${fixture}.json`),'utf8'));
   payload.name=name;payload.game_addition_request_id_and_secret=uniqueName('shared-game-secret');
   return submitGameFixture(request,payload);
 }

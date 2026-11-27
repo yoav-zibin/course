@@ -125,7 +125,7 @@ async function leavingGame(request:APIRequestContext){
   expect(response.ok(),await response.text()).toBeTruthy();return(await response.json()).id;
 }
 
-test('a multiplayer lobby keeps join and start controls, then exposes names, navigation and leaving in a closable menu',async({page,browser,request,baseURL})=>{
+test('a multiplayer lobby starts on the final join and exposes names, navigation and leaving in a closable menu',async({page,browser,request,baseURL})=>{
   const gameId=await leavingGame(request);
   const host=await createUser(request,uniqueName('Menu lobby host')),guest=await createUser(request,uniqueName('Menu lobby guest'));
   const response=await request.post('/matches',{headers:{'X-User-Id':host.id,'X-User-Password':host.password},data:{game_id:gameId}});
@@ -137,7 +137,6 @@ test('a multiplayer lobby keeps join and start controls, then exposes names, nav
   try{
     const guestPage=await guestContext.newPage();await loginAs(guestPage,guest);await guestPage.goto(`/portal#match=${match.id}`);
     await expect(guestPage.getByTestId('portal-header')).toBeVisible();await guestPage.getByRole('button',{name:'Join match',exact:true}).click();
-    await expect(page.getByRole('button',{name:'Start match',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Start match',exact:true}).click();
     for(const playerPage of [page,guestPage]){
       await expect(playerPage.getByTestId('game-stage')).toBeVisible();await expect(playerPage.getByTestId('portal-header')).toHaveCount(0);
       await expect(playerPage.getByTestId('match-menu-button')).toHaveAttribute('aria-expanded','false');

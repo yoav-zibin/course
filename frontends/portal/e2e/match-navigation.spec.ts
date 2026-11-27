@@ -19,9 +19,8 @@ test('online matches use the shared navigation and retain their public game thro
   expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
   const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{}});
   expect(joined.ok(),await joined.text()).toBeTruthy();
-  const started=await request.post(`/matches/${match.id}/start`,{headers,data:{}});
-  expect(started.ok(),await started.text()).toBeTruthy();
-  const moved=await request.post(`/matches/${match.id}/moves`,{headers,data:{move:{cell:0},expected_move_count:0}});
+
+  const moved=await request.post(`/matches/${match.id}/moves`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{move:{cell:0},expected_move_count:0}});
   expect(moved.ok(),await moved.text()).toBeTruthy();
   const viewerHeaders={'X-User-Id':opponent.id,'X-User-Password':opponent.password};
   const initialResponse=await request.get(`/matches/${match.id}`,{headers:viewerHeaders});expect(initialResponse.ok()).toBeTruthy();

@@ -89,7 +89,7 @@ class FakeNotifier:
 class World:
     """A platform with a hand-set clock, a few users and a game."""
 
-    def __init__(self, *, leave: bool = True, counts: Sequence[int] = (2, 3), store=None) -> None:
+    def __init__(self, *, leave: bool = True, counts: Sequence[int] = (2, 3, 4), store=None) -> None:
         self.clock = ManualClock()
         self.notifier = FakeNotifier()
         self.platform = GamePlatform(store=store, clock=self.clock, push_notifier=self.notifier)

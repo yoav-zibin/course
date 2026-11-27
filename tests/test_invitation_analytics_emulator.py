@@ -36,7 +36,7 @@ def test_open_signup_join_start_and_delete_retain_full_funnel_after_restart(stor
                                    computer_move_delay_seconds=0)
     api.client.app.state.platform = api.platform
     owner = api.new_user("Owner")
-    match_id = api.new_match(owner=owner, game_id=api.new_game(owner=owner))
+    match_id = api.new_match(owner=owner, game_id=api.new_game(owner=owner, allowed_player_counts=(2,)))
     token = store.get_match(match_id).invite_code
     opened = api.client.get(f"/invites/{token}", headers={"X-Visitor-Id": "browser-unique-id"})
     assert opened.status_code == 200
@@ -45,8 +45,8 @@ def test_open_signup_join_start_and_delete_retain_full_funnel_after_restart(stor
     assert signup.status_code == 201
     user = signup.json()
     api.passwords_by_user_id[user["id"]] = user["password"]
-    api.ok("POST", f"/invites/{token}/accept", as_user=user["id"])
-    api.ok("POST", f"/matches/{match_id}/start", as_user=owner)
+    started = api.ok("POST", f"/invites/{token}/accept", as_user=user["id"])
+    assert started["status"] == "ongoing"
     assert store.get_invite(token) is None
     store.delete_match(match_id)
     store.delete_user(owner)

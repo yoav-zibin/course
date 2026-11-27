@@ -7,10 +7,9 @@ async function createMatch(request:APIRequestContext,user:any,gameId:string) {
   const response=await request.post('/matches',{headers:headers(user),data:{game_id:gameId}});
   expect(response.ok(),await response.text()).toBeTruthy();return response.json();
 }
-async function joinAndStart(request:APIRequestContext,alice:any,bob:any,matchId:string) {
-  const invite=await (await request.post(`/matches/${matchId}/invites`,{headers:headers(alice),data:{}})).json();
-  const accepted=await request.post(`/invites/${invite.token}/accept`,{headers:headers(bob)});expect(accepted.ok()).toBeTruthy();
-  const started=await request.post(`/matches/${matchId}/start`,{headers:headers(alice)});expect(started.ok()).toBeTruthy();
+async function acceptInvite(request:APIRequestContext,host:any,guest:any,matchId:string) {
+  const invite=await (await request.post(`/matches/${matchId}/invites`,{headers:headers(host),data:{}})).json();
+  const accepted=await request.post(`/invites/${invite.token}/accept`,{headers:headers(guest)});expect(accepted.ok()).toBeTruthy();
 }
 async function inbox(request:APIRequestContext,user:any) {
   const response=await request.get('/users/me/notifications',{headers:headers(user)});
@@ -94,8 +93,8 @@ test('a rejected enrollment from the previous account stays out of the next acco
 test('a turn update appears in-app with push disabled and opens its match',async({page,request})=>{
   const alice=await createUser(request,uniqueName('Match host')),bob=await createUser(request,uniqueName('Match opponent'));
   await request.patch(`/users/${bob.id}`,{headers:headers(bob),data:{notifications_enabled:false}});
-  const match=await createMatch(request,alice,await createGame(request,uniqueName('Turn notification game')));
-  await joinAndStart(request,alice,bob,match.id);
+  const match=await createMatch(request,bob,await createGame(request,uniqueName('Turn notification game')));
+  await acceptInvite(request,bob,alice,match.id);
   await loginAs(page,bob);await page.goto('/portal');
   await move(request,alice,match.id,0,0);
   const entry=(await inbox(request,bob)).items.find((item:any)=>item.event==='turn');expect(entry).toBeTruthy();
@@ -109,7 +108,7 @@ test('a turn update appears in-app with push disabled and opens its match',async
 
 test('a rematch request lets the reserved opponent join a rematch from the inbox',async({page,request})=>{
   const alice=await createUser(request,uniqueName('Rematch host')),bob=await createUser(request,uniqueName('Rematch recipient'));
-  const match=await createMatch(request,alice,await createGame(request,uniqueName('Rematch game')));await joinAndStart(request,alice,bob,match.id);
+  const match=await createMatch(request,bob,await createGame(request,uniqueName('Rematch game')));await acceptInvite(request,bob,alice,match.id);
   for(const [index,cell]of [0,3,1,4,2].entries()){
     const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(index%2?bob:alice),data:{move:{cell},expected_move_count:index}});expect(moved.ok(),await moved.text()).toBeTruthy();
   }
@@ -125,7 +124,7 @@ test('a rematch request lets the reserved opponent join a rematch from the inbox
   await loginAs(page,bob);await page.goto('/portal');await page.getByRole('button',{name:'Notifications',exact:true}).click();
   await page.getByTestId(`notification-${entry.id}`).click();
   await expect(page).toHaveURL(new RegExp(`#match=${next.id}$`));
-  await expect(page.getByRole('button',{name:'Share link',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Notifications',exact:true})).toHaveCount(0);
   expect((await inbox(request,bob)).items.some((item:any)=>item.id===entry.id)).toBe(false);
   const joined=await request.get(`/matches/${next.id}`,{headers:headers(bob)});expect((await joined.json()).players.some((player:any)=>player.user_id===bob.id)).toBe(true);
@@ -134,7 +133,7 @@ test('a rematch request lets the reserved opponent join a rematch from the inbox
 test('the inbox updates automatically, keeps one named opponent update per match, and clears it when opened',async({page,request})=>{
   test.setTimeout(90000);
   const alice=await createUser(request,uniqueName('Moving opponent')),bob=await createUser(request,uniqueName('Inbox player'));
-  const match=await createMatch(request,alice,await createGame(request,uniqueName('Live inbox game')));await joinAndStart(request,alice,bob,match.id);
+  const match=await createMatch(request,bob,await createGame(request,uniqueName('Live inbox game')));await acceptInvite(request,bob,alice,match.id);
   await loginAs(page,bob);await page.goto('/portal');await page.getByRole('button',{name:'Notifications',exact:true}).click();
   const dialog=page.getByRole('dialog'),rows=dialog.locator('[data-testid^="notification-"]');
   await expect(page.getByText('No notifications yet.',{exact:true})).toBeVisible();
@@ -177,7 +176,7 @@ test('the inbox updates automatically, keeps one named opponent update per match
 
 test('first confirmed turn handoff asks once and profile controls register and disable web push',async({page,request})=>{
   const alice=await createUser(request,uniqueName('Notification player')),bob=await createUser(request,uniqueName('Other player'));
-  const match=await createMatch(request,alice,await createGame(request,uniqueName('Consent game')));await joinAndStart(request,alice,bob,match.id);
+  const match=await createMatch(request,bob,await createGame(request,uniqueName('Consent game')));await acceptInvite(request,bob,alice,match.id);
   await fakeWebPush(page);await loginAs(page,alice);await page.goto(`/portal#match=${match.id}`);
   await page.getByRole('button',{name:'Cell 1',exact:true}).click();
   await ensureMatchMenuOpen(page);

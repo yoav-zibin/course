@@ -176,8 +176,7 @@ test('visitors can watch existing matches after the game leaves the catalog',asy
   const headers={'X-User-Id':host.id,'X-User-Password':host.password};
   const response=await request.post('/matches',{headers,data:{game_id:created.id}});expect(response.ok()).toBeTruthy();const match=await response.json();
   const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password}});expect(joined.ok()).toBeTruthy();
-  const started=await request.post(`/matches/${match.id}/start`,{headers});expect(started.ok()).toBeTruthy();
-  const moved=await request.post(`/matches/${match.id}/moves`,{headers,data:{move:{cell:0},expected_move_count:0}});expect(moved.ok()).toBeTruthy();
+  const moved=await request.post(`/matches/${match.id}/moves`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{move:{cell:0},expected_move_count:0}});expect(moved.ok()).toBeTruthy();
   const withdrawal=await request.post(`/games/${created.id}/unpublish`,{headers:E2E_ADMIN_HEADERS});expect(withdrawal.ok(),await withdrawal.text()).toBeTruthy();
   expect((await request.get(`/games/${created.id}/versions/${created.version}`)).status()).toBe(404);
   const packageResponse=page.waitForResponse(response=>new URL(response.url()).pathname===`/matches/${match.id}/game`);
@@ -451,15 +450,11 @@ test('a genuinely finished local draw stays translated offline in detail and mat
   await page.goto('/portal#local');await expect(page.getByTestId('match-outcome')).toHaveText('Empate');
 });
 
-test('short invitation autojoins after guest sign-in and offers code copying and system sharing',async({page,request})=>{
+test('short invitation starts the match after guest sign-in and lets the guest move first',async({page,request})=>{
   test.setTimeout(120000);
   const owner=await account(request,'Invite host'),created=await game(request,`Shared invite ${Date.now()}`),headers={'X-User-Id':owner.id,'X-User-Password':owner.password};
   const response=await request.post('/matches',{headers,data:{game_id:created.id}});expect(response.ok()).toBeTruthy();const match=await response.json();
   expect(match.invite_code).toMatch(/^[a-z]{4}$/);
-  await page.addInitScript(()=>{
-    Object.defineProperty(navigator,'share',{configurable:true,value:async(value:any)=>{(window as any).__sharedInvite=value;}});
-    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(value:string)=>{(window as any).__copiedInvite=value;}}});
-  });
   await page.goto(`/invite/${match.invite_code}`);await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
   await expect(page.getByRole('textbox',{name:/Invite link|Player code or ID|Open a match or invite link/})).toHaveCount(0);
   await page.getByRole('button',{name:'Log in to join',exact:true}).click();
@@ -468,21 +463,22 @@ test('short invitation autojoins after guest sign-in and offers code copying and
   await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));
   await expect(page.getByRole('button',{name:'Join match',exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Match invite QR code')).toHaveCount(0);
-  await page.getByRole('button',{name:'Copy code',exact:true}).click();
-  await expect.poll(()=>page.evaluate(()=>(window as any).__copiedInvite)).toBe(match.invite_code);
-  await page.getByRole('button',{name:'Share link',exact:true}).click();
-  await expect.poll(()=>page.evaluate(()=>(window as any).__sharedInvite?.url)).toBe(new URL(`/invite/${match.invite_code}`,page.url()).href);
-  const detail=await(await request.get(`/matches/${match.id}`,{headers})).json();expect(detail.players).toHaveLength(2);
-  await page.reload();await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Cell 1',exact:true}).click();
+  await expect.poll(async()=>(await(await request.get(`/matches/${match.id}`,{headers})).json()).move_count).toBe(1);
+  const detail=await(await request.get(`/matches/${match.id}`,{headers})).json();
+  expect(detail.players.map((player:any)=>player.user_id)).toEqual([expect.any(String),owner.id]);
+  expect(detail.last_move_player_index).toBe(0);
+  await page.reload();await expect(page.getByTestId('game-stage')).toBeVisible();
 });
 
-test('a signed-in player opening a full invitation watches without taking a seat',async({page,request})=>{
+test('a signed-in player opening a started match watches without taking a seat',async({page,request})=>{
   const host=await account(request,'Full invite host'),opponent=await account(request,'Full invite opponent'),viewer=await account(request,'Full invite spectator'),created=await game(request,uniqueName('Full invite'));
   const headers={'X-User-Id':host.id,'X-User-Password':host.password};
   const response=await request.post('/matches',{headers,data:{game_id:created.id}});expect(response.ok()).toBeTruthy();const match=await response.json();
   expect((await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password}})).ok()).toBeTruthy();
-  await restore(page,viewer);await page.goto(`/invite/${match.invite_code}`);
-  await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));await expect(page.getByRole('heading',{name:created.name,exact:true})).toBeVisible();
+  expect((await request.get(`/invites/${match.invite_code}`)).status()).toBe(404);
+  await restore(page,viewer);await page.goto(`/portal#match=${match.id}`);
+  await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));await expect(page.getByTestId('game-stage')).toBeVisible();
   await expect(page.getByRole('button',{name:'Join match',exact:true})).toHaveCount(0);
   const detail=await(await request.get(`/matches/${match.id}`,{headers})).json();expect(detail.players).toHaveLength(2);expect(detail.players.some((player:any)=>player.user_id===viewer.id)).toBe(false);
 });
@@ -490,12 +486,11 @@ test('a signed-in player opening a full invitation watches without taking a seat
 test('two browser players share turns, a lost reply cannot duplicate a move, and offline actions sync',async({page,browser,request,baseURL})=>{
   test.setTimeout(120000);
   const a=await account(request,'Shared Alice'),b=await account(request,'Shared Bob');
-  const created=await game(request,`Shared cross-device ${Date.now()}`),headers={'X-User-Id':a.id,'X-User-Password':a.password};
+  const created=await game(request,`Shared cross-device ${Date.now()}`),headers={'X-User-Id':b.id,'X-User-Password':b.password};
   const response=await request.post('/matches',{headers,data:{game_id:created.id}});expect(response.ok()).toBeTruthy();const match=await response.json();
   await restore(page,a);await page.goto(`/portal#match=${match.id}`);
   const partner=await browser.newContext({baseURL});const bob=await partner.newPage();await restore(bob,b);await bob.goto(`/portal#match=${match.id}`);
-  await bob.getByRole('button',{name:'Join match',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Start match',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Start match',exact:true}).click();
+  await page.getByRole('button',{name:'Join match',exact:true}).click();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   let lost=false;
   await page.route(`**/matches/${match.id}/moves`,async route=>{if(route.request().method()==='POST'&&!lost){lost=true;await route.fetch();await route.abort('failed');}else await route.continue();});

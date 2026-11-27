@@ -17,7 +17,6 @@ test('list Leave previews settlement before confirmation and finished Delete pre
   const name=uniqueName('List settlement'),gameId=await createGame(request,name);
   const created=await request.post('/matches',{headers:headers(host),data:{game_id:gameId,bet_per_player:1}});expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
   const joined=await request.post(`/matches/${match.id}/join`,{headers:headers(guest)});expect(joined.ok(),await joined.text()).toBeTruthy();
-  const started=await request.post(`/matches/${match.id}/start`,{headers:headers(host)});expect(started.ok(),await started.text()).toBeTruthy();
   const stakedHost=await profile(request,host),stakedGuest=await profile(request,guest);
   expect(stakedHost.token_balance).toBe(beforeHost.token_balance-1);expect(stakedGuest.token_balance).toBe(beforeGuest.token_balance-1);
   await loginAs(page,{...beforeGuest,...guest});await page.goto('/portal#matches');
@@ -53,7 +52,7 @@ test('list Leave previews settlement before confirmation and finished Delete pre
 });
 
 test('list Leave frees a waiting guest seat while preserving the host lobby',async({page,request})=>{
-  const host=await createUser(request,uniqueName('List lobby host')),guest=await createUser(request,uniqueName('List lobby guest')),gameId=await createGame(request,uniqueName('List lobby'));
+  const host=await createUser(request,uniqueName('List lobby host')),guest=await createUser(request,uniqueName('List lobby guest')),gameId=await createGame(request,uniqueName('List lobby'),'chutes_ladders');
   const created=await request.post('/matches',{headers:headers(host),data:{game_id:gameId}});expect(created.ok()).toBeTruthy();const match=await created.json();
   const joined=await request.post(`/matches/${match.id}/join`,{headers:headers(guest)});expect(joined.ok()).toBeTruthy();
   await loginAs(page,guest);await page.goto('/portal#matches');const row=card(page,match.id);await row.getByRole('button',{name:'Leave',exact:true}).click();
@@ -103,9 +102,8 @@ test('every multiplayer category scrolls horizontally and keeps its match state 
       const created=await request.post('/matches',{headers:headers(owner),data:{game_id:gameId}});expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
       if(group.status!=='waiting_for_players'){
         const joined=await request.post(`/matches/${match.id}/join`,{headers:headers(opponent)});expect(joined.ok(),await joined.text()).toBeTruthy();
-        const started=await request.post(`/matches/${match.id}/start`,{headers:headers(owner)});expect(started.ok(),await started.text()).toBeTruthy();
-        if(group.id==='ongoing'){
-          const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(owner),data:{move:{cell:0},expected_move_count:0}});expect(moved.ok(),await moved.text()).toBeTruthy();
+        if(group.id==='your-turn'){
+          const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(opponent),data:{move:{cell:0},expected_move_count:0}});expect(moved.ok(),await moved.text()).toBeTruthy();
         }else if(group.status==='over'){
           const left=await request.post(`/matches/${match.id}/leave`,{headers:headers(opponent)});expect(left.ok(),await left.text()).toBeTruthy();
         }

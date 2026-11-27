@@ -787,7 +787,6 @@ def test_speed_match_deadline_job_ends_the_match_without_a_read(store):
         json={"game_id": game_id, "bet_per_player": 2, "turn_seconds": 60},
     )
     api.ok("POST", f"/matches/{match['id']}/join", as_user=bob)
-    api.ok("POST", f"/matches/{match['id']}/start", as_user=alice, json={})
 
     # Starting the match armed one durable job, due at the turn deadline.
     ref = store.ref("jobs", match["id"])
@@ -813,8 +812,8 @@ def test_speed_match_deadline_job_ends_the_match_without_a_read(store):
         saved = store.get_match(match["id"])
         pending_job = store.raw_get(ref)
     assert (saved.status, saved.end_reason) == ("over", "timed_out")
-    assert [t.user_id for t in saved.timeouts] == [alice]
-    # Alice held the turn, so the whole 4-token pot went to Bob.
+    assert [t.user_id for t in saved.timeouts] == [bob]
+    # Bob held the turn, so the whole 4-token pot went to Alice.
     assert saved.token_pot == 0
     assert sorted(saved.token_payouts.values()) == [4]
     assert pending_job is None

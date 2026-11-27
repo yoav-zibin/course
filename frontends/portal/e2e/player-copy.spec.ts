@@ -50,7 +50,6 @@ test('legacy title tags stay hidden for cached pinned matches after the catalog 
   const created=await request.post('/matches',{headers,data:{game_id:gameId}});expect(created.ok(),await created.text()).toBeTruthy();
   const match=await created.json();
   const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{}});expect(joined.ok(),await joined.text()).toBeTruthy();
-  const started=await request.post(`/matches/${match.id}/start`,{headers,data:{}});expect(started.ok(),await started.text()).toBeTruthy();
   await loginAs(page,host);await page.goto(`/portal#match=${match.id}`);
   await expect(page.getByTestId('game-stage')).toBeVisible();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();

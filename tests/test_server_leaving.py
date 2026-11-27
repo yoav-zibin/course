@@ -77,7 +77,7 @@ const game = {
 def _create_game(api: Api, owner: str, server_code: str = LEAVE_GAME) -> str:
     return api.create_game({
         "name": "Counter race",
-        "allowed_player_counts": [2],
+        "allowed_player_counts": [2, 3],
         "allows_leave_mid_match": True,
         "code": "<div>counter</div>",
         "server_code": server_code,

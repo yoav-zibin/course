@@ -2910,6 +2910,9 @@ class GamePlatform:
             raise ConflictError("the match is over")
         if match.num_computer_opponents:
             raise ConflictError("this legacy computer match cannot accept human opponents")
+        game = self._store.get_game_version(match.game_id, match.game_version)
+        assert game is not None
+        auto_start = False
         clock_restart = None
         if match.status == "ongoing":
             seats = self._take_seat_mid_match(match, user_id=caller_id)
@@ -2918,13 +2921,15 @@ class GamePlatform:
             if match.turn_seconds and joined.player_index in (match.turn_of_player_indices or ()):
                 clock_restart = self._clock()
         else:
-            if len(match.seats) >= self._rules_of(match).max_players:
+            if len(match.seats) >= game.rules.max_players:
                 raise ConflictError("the match is full")
+            auto_start = len(match.seats) + 1 == game.rules.max_players
+            human_user_ids = match.human_user_ids
             seats = _waiting_seats(
-                human_user_ids=[*match.human_user_ids, caller_id],
-                num_computer_opponents=match.num_computer_opponents,
+                human_user_ids=([caller_id, *human_user_ids] if auto_start
+                                else [*human_user_ids, caller_id]),
+                num_computer_opponents=0,
             )
-        game = self._store.get_game_version(match.game_id, match.game_version)
         if match.status == "ongoing":
             # playerJoined may draw cards or dice as well. Upgrade legacy
             # public/32-bit streams before saving and invoking that callback.
@@ -2934,25 +2939,28 @@ class GamePlatform:
         # a seat in a paid match (and a share of its pot, or of its refund)
         # without having paid in.
         stake = match.bet_per_player
-        if stake:
-            # Raises (before anything is saved) when the joiner can't afford it.
-            self._deduct_stake(caller_id, stake, match_id=match.id)
-        saved = self._save(
-            replace(
-                match,
-                seats=seats,
-                turn_started_at=clock_restart or match.turn_started_at,
-                token_pot=match.token_pot + stake,
-                # A join changes the match any leave preview was computed
-                # on, so the preview no longer stands.
-                pending_leave=None,
-            )
+        joined_match = replace(
+            match,
+            seats=seats,
+            turn_started_at=clock_restart or match.turn_started_at,
+            # A join invalidates any pending leave preview.
+            pending_leave=None,
         )
+        invite_allocation_id = self._allocation_for_token(match.invite_code)
+        if auto_start:
+            if not game.server_code:
+                raise ConflictError("the match's game has no server code")
+            saved = self._begin_match(joined_match, game, joining_user_id=caller_id)
+            self.record_match_start(
+                user_id=caller_id, match_id=saved.id, occurred_at=saved.updated_at,
+            )
+        else:
+            if stake:
+                self._deduct_stake(caller_id, stake, match_id=match.id)
+            saved = self._save(replace(joined_match, token_pot=match.token_pot + stake))
         if match.status == "ongoing":
-            game = self._store.get_game_version(saved.game_id, saved.game_version)
             if (
-                game is not None
-                and game.server_code
+                game.server_code
                 and self._has_logic_function(game, match, "playerJoined")
             ):
                 # The game decides what a mid-match join does to its state
@@ -2988,7 +2996,7 @@ class GamePlatform:
         conversion_funnel.record_event(self._store, "match_joined", at=self._clock(),
             identity=f"join:{match.id}:{caller_id}", match_id=match.id,
             owner_user_id=match.owner_user_id, user_id=caller_id, visitor_id=visitor_id,
-            invite_allocation_id=self._allocation_for_token(match.invite_code))
+            invite_allocation_id=invite_allocation_id)
         return saved
 
     def request_rematch(self, *, caller_id: str, match_id: str) -> Match:
@@ -3621,18 +3629,24 @@ class GamePlatform:
                 tag_suffix="turn",
             )
 
-    def _begin_match(self, match: Match, game: Game) -> Match:
+    def _begin_match(
+        self, match: Match, game: Game, *, joining_user_id: str | None = None
+    ) -> Match:
         """Starts a match: runs newMatch, saves the result, and lets any
         computer with the first turn move. The pot is already staked —
         matches take each human's stake as they join (see [_new_match]
         and [_join]) — except matches created before that, which are
         funded here, all at once."""
         match = self._rekey_seed(match)
-        humans = [seat for seat in match.seats if seat.kind == "human"]
+        fund_legacy_pot = bool(match.bet_per_player and not match.token_pot)
+        joining_stake = match.bet_per_player if joining_user_id is not None else 0
+        if joining_user_id is not None and joining_stake:
+            self._check_can_stake(joining_user_id, joining_stake)
         pot = match.token_pot
-        if match.bet_per_player and not pot:
-            self._fund_match_tokens(match)
-            pot = match.bet_per_player * len(humans)
+        if fund_legacy_pot:
+            pot = match.bet_per_player * len(match.human_user_ids)
+        else:
+            pot += joining_stake
         funded_view = replace(match, token_pot=pot)
         invocation = {"ctx": self._game_ctx(funded_view),
                       "seed": self._logic_seed(match, "newMatch"), "now": self._clock()}
@@ -3642,6 +3656,12 @@ class GamePlatform:
                 # Initialization must not reveal/reuse the first move's RNG.
                 **invocation,
             )
+            # Initialize and validate the game before charging anyone. Stores
+            # backed by a local file do not roll back a failed operation.
+            if fund_legacy_pot:
+                self._fund_match_tokens(match)
+            elif joining_user_id is not None and joining_stake:
+                self._deduct_stake(joining_user_id, joining_stake, match_id=match.id)
             pot, payouts = self._pay_logic_result(funded_view, result)
         except GameLogicError as error:
             self._record_logic_error(game, "newMatch", error, match=funded_view, args=(), invocation=invocation)
@@ -4510,7 +4530,10 @@ class GamePlatform:
                            and user.invited_via_invite_token == token),
             )
             accepted = replace(invite, acceptances=(*invite.acceptances, acceptance))
-            self._store.put_invite(accepted)
+            # Starting the match releases its code. Keep the acceptance in
+            # history without restoring the released reservation.
+            if match.invite_code != token or joined.invite_code == token:
+                self._store.put_invite(accepted)
             conversion_funnel.archive_invite(self._store, accepted)
             return joined
 

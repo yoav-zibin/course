@@ -75,6 +75,11 @@ the preserved-data export.
 `client_match_id` lets a durable local creation outbox retry without creating a
 second lobby. Save that intent before the network call. An offline-created lobby
 has no usable invitation until the server acknowledges it and returns its code.
+The join that fills the lobby to the pinned game's maximum player count starts
+the match and returns its initial position. The final joiner takes seat zero,
+and the remaining players keep their relative order. The game's `newMatch`
+still determines the opening turn. Owners can start with a smaller roster
+when the game allows that player count.
 
 `POST /matches/single-player-sync` accepts an authenticated body
 `{match: snapshot, expected_revision: number}`. New snapshots use revision zero;

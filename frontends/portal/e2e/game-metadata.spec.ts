@@ -35,8 +35,7 @@ test('player screens hide game revisions while saved matches retain their exact 
   expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();expect(match.game_version).toBe(1);
   const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{}});
   expect(joined.ok(),await joined.text()).toBeTruthy();
-  const started=await request.post(`/matches/${match.id}/start`,{headers,data:{}});
-  expect(started.ok(),await started.text()).toBeTruthy();expect((await started.json()).game_version).toBe(1);
+  expect((await joined.json()).game_version).toBe(1);
   await loginAs(page,host);
   const detailDownload=page.waitForResponse(response=>new URL(response.url()).pathname===`/games/${gameId}`&&response.status()===200);
   await page.goto(`/portal#game=${gameId}`);

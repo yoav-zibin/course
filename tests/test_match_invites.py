@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from game_platform.api import create_app
 from game_platform.json_file_store import JsonFileStore
-from game_platform.models import GameRules
+from game_platform.models import GameRules, Seat
 from game_platform.schemas import GameOut
 from game_platform.service import GamePlatform
 from game_platform.tests.helpers import Api, ECHO_SERVER_CODE, TEST_GAME_SCHEMAS, error
@@ -94,7 +94,12 @@ def test_links_use_the_configured_public_address() -> None:
 
 def test_full_match_invite_opens_as_a_viewer_without_adding_a_seat(api: Api) -> None:
     alice, bob, carol = [api.new_user(name) for name in ("alice", "bob", "carol")]
-    match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice, allowed_player_counts=(2,)), joiners=[bob])
+    match_id = api.new_match(owner=alice, game_id=api.new_game(owner=alice, allowed_player_counts=(2,)))
+    # Simulate a lobby that filled before automatic starts were introduced.
+    stored = api.platform._store.get_match(match_id)
+    api.platform._store.put_match(replace(stored, seats=(
+        *stored.seats, Seat(player_index=1, kind="human", user_id=bob),
+    )))
     token = api.ok("GET", f"/matches/{match_id}")["invite_code"]
     view = api.ok("GET", f"/invites/{token}")
     assert not view["usable"]
@@ -102,6 +107,43 @@ def test_full_match_invite_opens_as_a_viewer_without_adding_a_seat(api: Api) -> 
     assert spectator["id"] == match_id
     assert [player["user_id"] for player in spectator["players"]] == [alice, bob]
     assert api.platform._store.get_invite(token).acceptances == ()
+
+
+@pytest.mark.parametrize("query", [False, True])
+def test_accepting_the_last_seat_starts_the_match(api: Api, query: bool) -> None:
+    from game_platform.scaling_service import ScalablePlatform
+    from game_platform.tests.fake_firestore import query_store
+
+    if query:
+        api = Api(store=query_store())
+        api.platform = ScalablePlatform(store=api.platform._store, clock=api.platform._clock,
+                                       computer_move_delay_seconds=0)
+        api.client.app.state.platform = api.platform
+    owner = api.new_user("Owner", tokens=10)
+    erez = api.new_user("Erez", tokens=10)
+    game_id = api.new_game(owner=owner, allowed_player_counts=(2,))
+    lobby = api.ok("POST", "/matches", as_user=owner, json={
+        "game_id": game_id, "bet_per_player": 3, "turn_seconds": 60,
+    })
+    token = lobby["invite_code"]
+    store = api.platform._store
+    invite = store.get_invite(token)
+
+    now = api.platform._clock()
+    api.platform._clock = lambda: now
+    started = api.ok("POST", f"/invites/{token}/accept", as_user=erez)
+    assert api.summary(started) == {
+        "status": "ongoing", "players": ["Erez", "Owner"], "turn": [0],
+        "state": {"pot": 0},
+    }
+    assert started["owner_user_id"] == owner
+    assert started["token_pot"] == 6
+    assert started["turn_deadline"] == (now + dt.timedelta(seconds=60)).isoformat().replace("+00:00", "Z")
+    assert started["invite_code"] is None and store.get_invite(token) is None
+    history = store.get_analytics("invite_history", invite.allocation_id)
+    assert history["released_at"] and [a["user_id"] for a in history["acceptances"]] == [erez]
+    assert api.ok("GET", f"/matches/{lobby['id']}", as_user=owner)["status"] == "ongoing"
+    assert api.move(lobby["id"], as_user=erez, next_turn=1).status_code == 201
 
 
 def test_week_old_codes_are_unusable_even_before_daily_cleanup(api: Api) -> None:

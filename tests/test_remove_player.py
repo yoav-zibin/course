@@ -17,7 +17,7 @@ def balance(api: Api, user_id: str) -> int:
 
 def waiting_match(api: Api, *, bet: int = 0) -> tuple[str, str, str]:
     alice, bob = api.new_user("alice", tokens=10 if bet else 0), api.new_user("bob", tokens=10 if bet else 0)
-    game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
+    game_id = api.new_game(owner=alice, allowed_player_counts=(2, 3))
     match = api.ok(
         "POST", "/matches", as_user=alice, json={"game_id": game_id, "bet_per_player": bet}
     )
@@ -91,7 +91,7 @@ def test_removing_a_player_from_a_waiting_room_refunds_their_stake() -> None:
     game = api.create_game(
         {
             "name": "V2",
-            "allowed_player_counts": [2],
+            "allowed_player_counts": [2, 3],
             "allows_leave_mid_match": False,
             "allows_join_mid_match": False,
             "code": "<div></div>",

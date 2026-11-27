@@ -146,7 +146,7 @@ def test_legacy_random_stream_is_rekeyed_before_lifecycle_callbacks(api, seed_ve
 
 def test_partial_payout_cannot_be_replaced_by_a_player_refund(api):
     alice, bob = api.new_user("alice", tokens=10), api.new_user("bob", tokens=10)
-    game_id = api.new_game(owner=alice, allowed_player_counts=(2,))
+    game_id = api.new_game(owner=alice, allowed_player_counts=(2, 3))
     match_id = _start(api, alice, game_id, joiner=bob, max_loss=5)
     store = api.platform._store
     payload = {"move": {"turn_indices": [1], "payouts": {alice: 4}}, "expected_move_count": 0}

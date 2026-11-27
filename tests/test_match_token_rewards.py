@@ -11,7 +11,7 @@ from game_platform.tests.helpers import Api, error
 @pytest.mark.parametrize("against_computer", [False, True])
 def test_playing_a_free_match_does_not_reward_guests(api: Api, against_computer: bool):
     alice, bob = api.new_user("alice"), api.new_user("bob")
-    game = api.new_game(owner=alice, allowed_player_counts=(2,))
+    game = api.new_game(owner=alice, allowed_player_counts=(2, 3))
     match = api.new_match(
         owner=alice, game_id=game,
         joiners=[] if against_computer else [bob],
