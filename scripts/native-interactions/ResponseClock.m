@@ -66,6 +66,7 @@ static int logfd = -1;
   if(logfd>=0 && event.type==UIEventTypeTouches){
     for(UITouch *t in event.allTouches){
       if(t.phase==UITouchPhaseStationary) continue;
+      const double deliveryMS=CACurrentMediaTime()*1000;
       if(getenv("BUILDPLAY_CHECKER_SIGNPOSTS") && (t.phase==UITouchPhaseBegan||t.phase==UITouchPhaseEnded)) {
         static os_log_t log;static dispatch_once_t once;
         dispatch_once(&once,^{log=os_log_create("fun.buildplay.benchmark",OS_LOG_CATEGORY_POINTS_OF_INTEREST);});
@@ -74,8 +75,8 @@ static int logfd = -1;
       }
       if(t.phase==UITouchPhaseBegan||t.phase==UITouchPhaseEnded)recordResponseStacks();
       CGPoint p=[t locationInView:nil];
-      dprintf(logfd,"{\"phase\":%ld,\"t\":%.3f,\"x\":%.2f,\"y\":%.2f,\"wall\":%.3f,\"pid\":%d}\n",
-        (long)t.phase,t.timestamp*1000,p.x,p.y,NSDate.date.timeIntervalSince1970*1000,getpid());
+      dprintf(logfd,"{\"phase\":%ld,\"t\":%.3f,\"delivered_t\":%.3f,\"x\":%.2f,\"y\":%.2f,\"wall\":%.3f,\"pid\":%d}\n",
+        (long)t.phase,t.timestamp*1000,deliveryMS,p.x,p.y,NSDate.date.timeIntervalSince1970*1000,getpid());
     }
   }
   [self response_sendEvent:event];

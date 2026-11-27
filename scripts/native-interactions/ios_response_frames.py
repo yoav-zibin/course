@@ -24,6 +24,11 @@ def measure(directory):
     screen=next((s['width'],s['height']) for s in states if 'width' in s)
     touches=[s for s in states if s.get('phase')==0]
     if not touches:raise ValueError('UIKit recorded no touch-downs')
+    fastest={}
+    for event in states:
+        if 't' in event:
+            pid=event['pid'];offset=event['wall']-event['t']
+            fastest[pid]=min(fastest.get(pid,offset),offset)
     w,h=[round(n) for n in screen]
     last=None;anchors=[];reference=touches[0]['t']
     for pts,im in frames(movie,w,h):
@@ -52,8 +57,22 @@ def measure(directory):
         index=bounds.get('contact',0)
         touch=contacts[index] if index<len(contacts) else None
         row={'action':name};result[case]['actions'].append(row)
+        if not touch and 'contact' not in bounds:
+            # A busy main thread can receive the only tap after XCTest returns.
+            # Match it only if the next action in this same test has yet to start.
+            next_begin=min((b['begin'] for (c,_),b in actions.items() if c==case and b['begin']>end),default=end)
+            late=[s for s in touches if end<s['wall']<next_begin]
+            if len(late)==1:
+                touch=late[0]
+                row['delivered_after_xctest_end_ms']=round(touch['wall']-end,1)
         if not touch:
             row['error']='No UIKit down event in the XCTest action';continue
+        if 'delivered_t' in touch:
+            row['touch_to_app_delivery_ms']=round(touch['delivered_t']-touch['t'],1)
+        else:
+            # Older captures have a wall timestamp at dispatch. Compare its
+            # uptime offset only to events from this same app process.
+            row['delivery_relative_to_fastest_ms']=round(touch['wall']-touch['t']-fastest[touch['pid']],1)
         near=abs(anchors[:,1]-touch['t'])<4000
         offsets_used=offsets[near] if near.sum()>=4 else offsets
         median=float(np.median(offsets_used));residual=float(np.percentile(abs(offsets_used-median),95))
