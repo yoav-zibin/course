@@ -15,40 +15,55 @@ test.beforeEach(async ({page, baseURL}) => {
 });
 
 test('input works while the Google tag is loading and while it occupies its worker', async ({page, context, baseURL}) => {
-  const stages: string[] = [];
   const tagRequests: string[] = [];
   let commands: any[] = [];
-  await context.route('**/analytics-probe-*', async route => {
-    stages.push(new URL(route.request().url()).pathname);
-    if (route.request().method() === 'POST') commands = JSON.parse(route.request().postData()!);
+  let busy: {start: number, end: number} | undefined;
+  await context.route('**/analytics-probe-end', async route => {
+    const result = route.request().postDataJSON();
+    commands = result.commands;
+    busy = {start: result.start, end: result.end};
     await route.fulfill({status:200, body:'ok'});
   });
   let release!: () => void;
   const hold = new Promise<void>(resolve => { release = resolve; });
   await context.route(tag, async route => {
-    stages.push('download');
     tagRequests.push(route.request().resourceType());
     await hold;
     await route.fulfill({contentType:'text/javascript', headers:{'Access-Control-Allow-Origin':'*'}, body:`
-      fetch(${JSON.stringify(baseURL + '/analytics-probe-start')}, {method:'POST',body:JSON.stringify(window.dataLayer.map(a=>Array.from(a)))});
-      const start=Date.now(); while(Date.now()-start<1500){}
-      fetch(${JSON.stringify(baseURL + '/analytics-probe-end')});
+      const commands = window.dataLayer.map(a => Array.from(a));
+      const start = Date.now();
+      while (Date.now() - start < 1500) {}
+      fetch(${JSON.stringify(baseURL + '/analytics-probe-end')}, {
+        method:'POST', body:JSON.stringify({start, end:Date.now(), commands})
+      });
     `});
   });
   await page.goto('/analytics-fixture');
   const button = page.getByRole('button');
   await page.evaluate(() => (window as any).BuildPlayAnalytics.setUser('fixture-account'));
-  await expect.poll(() => stages).toContain('download');
+  await expect.poll(() => tagRequests).toEqual(['fetch']);
   await button.click();
   await expect(button).toHaveText('Moved');
-  await page.evaluate(() => document.querySelector('button')!.textContent = 'Again');
+  const moved = await page.evaluateHandle(() => {
+    const times: number[] = [];
+    const target = document.querySelector('button')!;
+    target.textContent = 'Again';
+    target.addEventListener('click', () => {
+      if (target.textContent === 'Moved') times.push(Date.now());
+    });
+    return times;
+  });
+  const box = (await button.boundingBox())!;
   release();
-  await expect.poll(() => stages, {intervals:[10,25]}).toContain('/analytics-probe-start');
-  await button.click();
+  // Use the clocks of the click handler and the running tag. CI can deliver
+  // network notifications to Playwright after the worker has already finished.
+  await expect.poll(async () => {
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    return busy;
+  }, {intervals: [25, 50, 50], timeout: 10000}).toBeDefined();
+  const clickTimes = await moved.jsonValue();
+  expect(clickTimes.some(time => time >= busy!.start && time < busy!.end)).toBe(true);
   await expect(button).toHaveText('Moved');
-  expect(stages).not.toContain('/analytics-probe-end');
-  await expect.poll(() => stages).toContain('/analytics-probe-end');
-  expect(tagRequests).toEqual(['fetch']);
   expect(await page.evaluate(() => typeof (window as any).gtag)).toBe('undefined');
   expect(commands).toContainEqual(['config','G-6CCXZQYVE7',{user_id:'fixture-account',page_location:baseURL+'/analytics-fixture'}]);
   await page.evaluate(() => (window as any).BuildPlayAnalytics.setUser(null));
