@@ -1,19 +1,14 @@
-export interface StorageFallback {
+export interface StorageBackend {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   removeItem(key: string): Promise<void>;
   getAllKeys(): Promise<readonly string[]>;
 }
-export interface PersistentBackend {
-  getPersistentItem(key: string): Promise<string | null>;
-  setPersistentItem(key: string, value: string): Promise<void>;
-  removePersistentItem(key: string): Promise<void>;
-  getPersistentKeys(): Promise<string[]>;
-}
 export const DELETED_VALUE = '\u0000buildplay.deleted.v1';
 
 /** Serialize operations on each key and share reads of installation metadata. */
-export function createPersistentStorage(fallback: StorageFallback, native: PersistentBackend | null, cachedKeys:ReadonlySet<string>=new Set()) {
+export function createPersistentStorage(fallback: StorageBackend, native: StorageBackend | null, cachedKeys:ReadonlySet<string>=new Set()) {
+  const backend = native ?? fallback;
   const pending = new Map<string, Promise<void>>();
   const cached = new Map<string, Promise<string|null>>();
   function serial<T>(key: string, run: () => Promise<T>): Promise<T> {
@@ -23,7 +18,7 @@ export function createPersistentStorage(fallback: StorageFallback, native: Persi
     return result;
   }
   const read = (key: string): Promise<string | null> => serial(key, async () => {
-    const value = native ? await native.getPersistentItem(key) : await fallback.getItem(key);
+    const value = await backend.getItem(key);
     if (value === null || value === DELETED_VALUE) return null;
     if (typeof value !== 'string') throw new Error('Saved native data has an invalid format');
     return value;
@@ -44,13 +39,13 @@ export function createPersistentStorage(fallback: StorageFallback, native: Persi
   };
   const setItem = (key: string, value: string): Promise<void> => {
     cached.delete(key);
-    return serial(key, () => native ? native.setPersistentItem(key, value) : fallback.setItem(key, value));
+    return serial(key, () => backend.setItem(key, value));
   };
   const removeItem = (key: string): Promise<void> => {
     cached.delete(key);
-    return serial(key, () => native ? native.removePersistentItem(key) : fallback.removeItem(key));
+    return serial(key, () => backend.removeItem(key));
   };
   const keys = async (): Promise<string[]> =>
-    native ? native.getPersistentKeys() : [...await fallback.getAllKeys()];
+    [...await backend.getAllKeys()];
   return { getItem, setItem, removeItem, keys };
 }

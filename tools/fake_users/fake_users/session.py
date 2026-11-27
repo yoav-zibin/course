@@ -139,8 +139,9 @@ class FakeUser:
 
     async def record_new_account(self) -> None:
         account = await self.page.evaluate(
-            f"() => JSON.parse(localStorage.getItem('{ACCOUNTS_KEY}') || '[]')"
-            f".find(a => a.id === localStorage.getItem('{CURRENT_KEY}')) || null"
+            f"async () => {{const id = await BuildPlayStorage.getItem('{CURRENT_KEY}'); "
+            f"return JSON.parse(await BuildPlayStorage.getItem('{ACCOUNTS_KEY}') || '[]')"
+            ".find(a => a.id === id) || null}"
         )
         if not account:
             raise RuntimeError("signed up, but the portal saved no account")

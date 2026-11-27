@@ -27,7 +27,13 @@ async def run_case(browser,origin,fixtures,case,folder,profile):
     await ctx.request.post(origin+'/__seed',data={'game':game,'match':match})
     key='buildplay.shared.v1.'+quote(origin,safe='')+'.'+owner
     entries={key:json.dumps(payload),'game-platform.accounts.v1':json.dumps([account]),'game-platform.current-account.v1':owner}
-    await ctx.add_init_script(script="if(window===top&&!localStorage.getItem('response-seeded')){for(const [k,v] of Object.entries("+json.dumps(entries)+"))localStorage.setItem(k,v);localStorage.setItem('response-seeded','1')}")
+    storage_source = (Path(__file__).resolve().parents[2] / 'static/shared/device-storage.js').read_text()
+    seed = """(async entries => {
+      if (window !== top || await BuildPlayStorage.getItem('response-seeded')) return;
+      for (const [key, value] of Object.entries(entries)) await BuildPlayStorage.setItem(key, value);
+      await BuildPlayStorage.setItem('response-seeded', '1');
+    })"""
+    await ctx.add_init_script(script=storage_source + '\n;' + seed + '(' + json.dumps(entries) + ');')
     page=await ctx.new_page()
     page.set_default_timeout(9000)
     session=await ctx.new_cdp_session(page)
@@ -115,7 +121,7 @@ async def run_case(browser,origin,fixtures,case,folder,profile):
             output['actions'].append(row);print(case['id'],action['id'],row['first_ms'],flush=True)
         await page.wait_for_timeout(1400)
         await session.send('Page.stopScreencast');await asyncio.gather(*acks)
-        persisted=await page.evaluate('k=>JSON.parse(localStorage.getItem(k))',key)
+        persisted=await page.evaluate('async k=>JSON.parse(await BuildPlayStorage.getItem(k))',key)
         output['proof']=verify([case],persisted)[case['id']]
         output['eventTimings']=await page.evaluate('responseEntries')
     except Exception as error:

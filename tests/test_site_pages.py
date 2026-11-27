@@ -6,7 +6,8 @@ from fastapi.testclient import TestClient
 from game_platform.api import create_app
 
 
-MARKER = '/static/site-bug-report.js?v=3'
+STORAGE = '/static/shared/device-storage.js?v=1'
+MARKER = '/static/site-bug-report.js?v=4'
 
 
 def test_public_pages_and_not_found_have_one_early_reporter():
@@ -15,7 +16,8 @@ def test_public_pages_and_not_found_have_one_early_reporter():
                  "/admin/login", "/not-a-page"):
         response = client.get(path, headers={"Accept": "text/html"})
         assert response.status_code in (200, 404), path
-        assert response.text.count(MARKER) == 1, path
+        assert response.text.count(STORAGE) == response.text.count(MARKER) == 1, path
+        assert response.text.index(STORAGE) < response.text.index(MARKER), path
         assert response.text.index(MARKER) < response.text.index("</head>"), path
     login = client.get("/admin/login")
     assert 'data-admin="true"' in login.text

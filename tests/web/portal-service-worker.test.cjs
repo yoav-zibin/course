@@ -11,6 +11,8 @@ test('the web artifact carries capture code and revises its cache when any repor
   try{
     const output=path.join(directory,'export'),staticDirectory=path.join(directory,'static');
     mkdirSync(output);mkdirSync(path.join(staticDirectory,'app'),{recursive:true});
+    mkdirSync(path.join(staticDirectory,'shared'));
+    writeFileSync(path.join(staticDirectory,'shared/device-storage.js'),'storage-v1');
     writeFileSync(path.join(output,'index.html'),'<html><body>Public app shell</body></html>');
     writeFileSync(path.join(output,'index-abcd1234.js'),'console.log("public bundle");');
     writeFileSync(path.join(staticDirectory,'app/site-bug-capture.js'),'capture-v1');
@@ -20,10 +22,11 @@ test('the web artifact carries capture code and revises its cache when any repor
     let manifest=prepare();
     assert.equal(readFileSync(path.join(output,'site-bug-capture.js'),'utf8'),'capture-v1');
     assert.ok(manifest.versionedAssets.includes('/static/app/site-bug-capture.js?v=1'));
-    assert.ok(manifest.versionedAssets.includes('/static/site-bug-report.js?v=3'));
-    assert.ok(manifest.versionedAssets.includes('/static/site-bug-report.css?v=3'));
+    assert.ok(manifest.versionedAssets.includes('/static/site-bug-report.js?v=4'));
+    assert.ok(manifest.versionedAssets.includes('/static/site-bug-report.css?v=4'));
+    assert.ok(manifest.versionedAssets.includes('/static/shared/device-storage.js?v=1'));
     assert.ok(manifest.assets.includes('/static/app/index-abcd1234.js'));
-    for(const file of ['app/site-bug-capture.js','site-bug-report.js','site-bug-report.css']){
+    for(const file of ['shared/device-storage.js','app/site-bug-capture.js','site-bug-report.js','site-bug-report.css']){
       writeFileSync(path.join(staticDirectory,file),`changed-${file}`);
       const next=prepare();assert.notEqual(next.cache,manifest.cache,file);manifest=next;
     }
@@ -35,7 +38,7 @@ test('offline reporter assets match exact versions while admin documents and API
   const {renderPortalServiceWorker}=await import('../../tools/portal-web-assets.mjs');
   const listeners={},saved=new Map(),precache=[];
   const assets=['/static/app/index.html','/static/app/_expo/static/js/web/index-abcd1234.js'];
-  const versionedAssets=['/static/site-bug-report.js?v=3','/static/site-bug-report.css?v=3','/static/app/site-bug-capture.js?v=1'];
+  const versionedAssets=['/static/shared/device-storage.js?v=1','/static/site-bug-report.js?v=4','/static/site-bug-report.css?v=4','/static/app/site-bug-capture.js?v=1'];
   const cache={async addAll(urls){for(const url of urls){precache.push(url);saved.set(url,{body:`cached:${url}`});}},async match(key){return saved.get(key);}};
   vm.runInNewContext(renderPortalServiceWorker({cache:'buildplay-shared-fixture',assets,versionedAssets}),{
     URL,location:{origin:'https://buildplay.test'},caches:{async open(){return cache;}},
@@ -60,5 +63,5 @@ test('offline reporter assets match exact versions while admin documents and API
   for(const url of ['/admin','/admin/students','/static/admin.html','/admin/students/data','/admin/bug-reports','/auth/admin-session'])
     assert.equal(await request(url,{mode:'navigate'}),null,url);
   assert.equal(await request('/bug-reports',{method:'POST'}),null);
-  assert.equal(await request('https://other.test/static/site-bug-report.js?v=3'),null);
+  assert.equal(await request('https://other.test/static/site-bug-report.js?v=4'),null);
 });

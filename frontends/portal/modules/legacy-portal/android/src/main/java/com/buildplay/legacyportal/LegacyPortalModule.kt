@@ -4,6 +4,8 @@ import android.graphics.Rect
 import android.os.Build
 import android.util.Log
 import android.view.View
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.common.annotations.FrameworkAPI
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -13,6 +15,7 @@ class LegacyPortalModule : Module() {
   private fun storage() = PortalPersistentStorage(appContext.reactContext
     ?: throw IllegalStateException("The application context is unavailable"))
 
+  @OptIn(FrameworkAPI::class)
   override fun definition() = ModuleDefinition {
     Name("LegacyPortal")
 
@@ -20,10 +23,11 @@ class LegacyPortalModule : Module() {
       appContext.currentActivity?.intent?.getBooleanExtra("buildplayLocalUiTest", false) ?: false
     }
 
-    AsyncFunction("getPersistentItem") { key: String -> storage().get(key) }
-    AsyncFunction("setPersistentItem") { key: String, value: String -> storage().set(key, value) }
-    AsyncFunction("removePersistentItem") { key: String -> storage().remove(key) }
-    AsyncFunction("getPersistentKeys") { storage().keys() }
+    Function("installStorageWorklet") {
+      val pointer = (appContext.reactContext as? ReactApplicationContext)?.javaScriptContextHolder?.get() ?: 0L
+      check(pointer != 0L) { "The JavaScript runtime is unavailable" }
+      StorageWorklet(storage()).install(pointer)
+    }
 
     AsyncFunction("protectBugControlGesture") { viewTag: Int ->
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@AsyncFunction false

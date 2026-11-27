@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
-const source=fs.readFileSync(path.join(__dirname,'../../static/auth.js'),'utf8');
+const source=require('./device-storage-fixture.cjs').source+'\n'+fs.readFileSync(path.join(__dirname,'../../static/auth.js'),'utf8');
 function account(id,verified=true){return {id,password:id+'-synthetic-secret',display_name:id,linked:verified?[{kind:'email'}]:[],is_verified:verified,token_balance:verified?10:0,free_tokens_granted:verified?10:0,last_token_grant_day:'2026-11-01'};}
 function load(accounts,onRequest,{online=true,storage=null}={}){
   const clock={now:Date.parse('2026-11-20T12:00:00Z')},events=new Map(),calls=[];

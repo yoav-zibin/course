@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Enforce the shared device storage API
+        run: python3 scripts/check-device-storage.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

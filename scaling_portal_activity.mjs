@@ -63,7 +63,7 @@ try {
           await page.getByRole('dialog').getByLabel('Guest name').fill(`Portal ${config.runId} ${index} ${p}`);
           await click(page.getByRole('dialog').getByRole('button',{name:'Continue as guest',exact:true}));
           await expect(page.getByRole('dialog')).toBeHidden();
-          users.push(await page.evaluate(()=>JSON.parse(localStorage.getItem('game-platform.accounts.v1'))[0]));
+          users.push(await page.evaluate(async()=>JSON.parse(await BuildPlayStorage.getItem('game-platform.accounts.v1'))[0]));
           previousGuest=users.at(-1).id;
           if(config.benchmarkHeadersFile && index===0 && p===0) {
             fs.writeFileSync(config.benchmarkHeadersFile,JSON.stringify({'X-User-Id':users[0].id,'X-User-Password':users[0].password}),{mode:0o600});

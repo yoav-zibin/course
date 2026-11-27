@@ -34,17 +34,17 @@ function renderFreshness() {
 
 let autoRefreshTimer = null;
 function setAutoRefresh(enabled) {
-  localStorage.setItem(AUTO_REFRESH_KEY, enabled ? "1" : "");
+  void BuildPlayStorage.setItem(AUTO_REFRESH_KEY, enabled ? "1" : "").catch(() => {});
   clearInterval(autoRefreshTimer);
   autoRefreshTimer = enabled ? setInterval(refresh, AUTO_REFRESH_MS) : null;
 }
 
-function main() {
+async function main() {
   let filterTimer;
   $("filter").addEventListener("input",()=>{clearTimeout(filterTimer);filterTimer=setTimeout(refresh,250);});
   $("refresh").addEventListener("click", refresh);
   const autoRefresh = $("auto-refresh");
-  autoRefresh.checked = Boolean(localStorage.getItem(AUTO_REFRESH_KEY));
+  autoRefresh.checked = Boolean(await BuildPlayStorage.getItem(AUTO_REFRESH_KEY).catch(() => null));
   autoRefresh.addEventListener("change", () => setAutoRefresh(autoRefresh.checked));
   setAutoRefresh(autoRefresh.checked);
   renderFreshness();

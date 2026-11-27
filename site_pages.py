@@ -25,7 +25,8 @@ ADMIN_FILES = frozenset({
     "feedback.html", "bug-reports.html", "console.html",
 })
 PUBLIC_PAGES = frozenset({"/", "/portal", "/admin/login"})
-REPORTING_VERSION = "3"
+REPORTING_VERSION = "4"
+STORAGE_SCRIPT = b'<script src="/static/shared/device-storage.js?v=1"></script>'
 _HEAD = re.compile(br"<head(?:\s[^>]*)?>", re.I)
 _DOCTYPE = re.compile(br"<!doctype[^>]*>", re.I)
 
@@ -44,7 +45,7 @@ def _html_candidate(scope, headers):
 
 
 def reporting_markup(admin=False):
-    return (
+    return STORAGE_SCRIPT + (
         f'<link rel="stylesheet" href="/static/site-bug-report.css?v={REPORTING_VERSION}">'
         f'<script src="/static/site-bug-report.js?v={REPORTING_VERSION}"'
         f' data-admin="{"true" if admin else "false"}"></script>'
@@ -161,7 +162,9 @@ class SitePagesMiddleware:
             else:
                 doctype = _DOCTYPE.search(prefix) if head is None else None
                 position = head.end() if head else doctype.end() if doctype else 0
-                body = bytes(prefix[:position]) + snippet + bytes(prefix[position:])
+                # Standalone HTML includes the same dependency as its first script.
+                suffix = bytes(prefix[position:]).replace(STORAGE_SCRIPT, b"", 1)
+                body = bytes(prefix[:position]) + snippet + suffix
             prefix.clear()
             await send(pending_start)
             started = True

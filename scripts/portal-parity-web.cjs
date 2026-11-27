@@ -11,6 +11,7 @@ const output=path.resolve(process.argv[3]||'/tmp/buildplay-parity-600/web');
 const base=new URL(process.argv[4]||'http://127.0.0.1:8128').origin;
 if(!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Error('Parity audit requires a disposable loopback server');
 const fixture=JSON.parse(fs.readFileSync(fixturePath,'utf8'));
+const storageSource=fs.readFileSync(path.join(__dirname,'../static/shared/device-storage.js'),'utf8');
 const requestedViewport=process.env.PORTAL_PARITY_VIEWPORT;
 if(requestedViewport&&!/^\d{3,4}x\d{3,4}$/.test(requestedViewport))throw Error('PORTAL_PARITY_VIEWPORT must be WIDTHxHEIGHT');
 const viewport=requestedViewport?Object.fromEntries(requestedViewport.split('x').map((value,index)=>[index?'height':'width',Number(value)])):fixture.viewport;
@@ -45,12 +46,12 @@ async function main(){
       }
       return route.continue();
     });
-    await page.addInitScript(({storage,data,key})=>{
+    const preparePage=async ({storage,data,key})=>{
       if(window!==window.top)return;
-      if(localStorage.getItem(key)===null){
-        localStorage.clear();
-        for(const [name,value]of Object.entries(storage))if(name!=='buildplay.shared.v1.visitor')localStorage.setItem(name,value);
-        localStorage.setItem(key,JSON.stringify(data));localStorage.setItem('game-platform.accounts.v1','[]');localStorage.setItem('game-platform.current-account.v1','visitor');localStorage.setItem('game-platform.locale.v1','en');localStorage.setItem('buildplay.navigation.v2','top');
+      if(await BuildPlayStorage.getItem(key)===null){
+        await Promise.all((await BuildPlayStorage.keys()).map(name=>BuildPlayStorage.removeItem(name)));
+        for(const [name,value]of Object.entries(storage))if(name!=='buildplay.shared.v1.visitor')await BuildPlayStorage.setItem(name,value);
+        await BuildPlayStorage.setItem(key,JSON.stringify(data));await BuildPlayStorage.setItem('game-platform.accounts.v1','[]');await BuildPlayStorage.setItem('game-platform.current-account.v1','visitor');await BuildPlayStorage.setItem('game-platform.locale.v1','en');await BuildPlayStorage.setItem('buildplay.navigation.v2','top');
       }
       Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});
       window.__portalParity={scenes:[],painted:[],paintSequence:0};
@@ -62,7 +63,9 @@ async function main(){
         let pending=false;
         new MutationObserver(()=>{if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;const svg=document.querySelector('[data-testid="game-stage"] svg');if(svg){const signature=[...svg.querySelectorAll('[aria-label]')].map(node=>node.getAttribute('aria-label')+':'+node.getAttribute('aria-disabled')).join('|')+'~'+svg.textContent;const all=window.__portalParity.painted;if(all.at(-1)?.signature!==signature)all.push({at:performance.now(),sequence:++window.__portalParity.paintSequence,signature,svg:svg.outerHTML});if(all.length>120)all.shift();}});}).observe(document.body,{subtree:true,childList:true,attributes:true,characterData:true});
       });
-    },{storage:fixture.storage,data:fixture.accountData,key});
+    };
+    const seed={storage:fixture.storage,data:fixture.accountData,key};
+    await page.addInitScript({content:storageSource+'\n;('+preparePage.toString()+')('+JSON.stringify(seed)+');'});
     await page.goto(base+'/portal',{waitUntil:'domcontentloaded'});
     const version=await (await page.request.get(base+'/static/app/version.json')).json();assert.equal(version.commit,fixture.sourceSha,'The web export must match the audited source');
     await expect(page.getByRole('button',{name:'Log in',exact:true}).first()).toBeEnabled({timeout:20000});
@@ -123,7 +126,7 @@ async function main(){
     for(const name of ['page-refresh-failure.json','page-refresh-failure.png'])fs.rmSync(path.join(output,name),{force:true});
     return record;
   }
-  async function storedMatch(page,id){return page.evaluate(({key,id})=>JSON.parse(localStorage.getItem(key)).local[id],{key,id});}
+  async function storedMatch(page,id){return page.evaluate(async ({key,id})=>JSON.parse(await BuildPlayStorage.getItem(key)).local[id],{key,id});}
   async function settled(page,game,expected,scene,name){
     await expect.poll(async()=>canonical(await storedMatch(page,game.matchId)),{timeout:30000,message:`${name} durable state`}).toBe(canonical(expected));
     await expect.poll(async()=>{const last=await page.evaluate(()=>window.__portalParity.scenes.at(-1)?.scene);return last?digest(last):null;},{timeout:30000,message:`${name} final presentation scene`}).toBe(digest(scene));
@@ -179,13 +182,13 @@ async function main(){
     const actual=await session();await actual.page.getByRole('link',{name:`Play ${fixture.games[0].name}`,exact:true}).click();
     await actual.page.getByRole('button',{name:'Your seat against computers: Player 2',exact:true}).click();
     await actual.page.getByRole('button',{name:'Practice with computers',exact:true}).click();
-    const fresh=()=>actual.page.evaluate(key=>Object.values(JSON.parse(localStorage.getItem(key)).local).find(match=>!match.id.startsWith('local-parity-')),key);
+    const fresh=()=>actual.page.evaluate(async key=>Object.values(JSON.parse(await BuildPlayStorage.getItem(key)).local).find(match=>!match.id.startsWith('local-parity-')),key);
     await expect.poll(async()=>(await fresh())?.move_count,{timeout:30000}).toBe(1);
     const cells=actual.page.getByTestId('game-stage').locator('[role="button"][aria-label^="Cell "][aria-disabled="false"]');
     await expect(cells.first()).toBeVisible({timeout:20000});await capture(actual.page,'created-practice-opening');save('created-practice-opening-match.json',await fresh());
     if(touch)await cells.first().tap();else await cells.first().click();await expect.poll(async()=>(await fresh())?.move_count,{timeout:30000}).toBe(3);
     await delay(2000);await capture(actual.page,'created-practice');
-    summary.createdPractice=await actual.page.evaluate(key=>Object.values(JSON.parse(localStorage.getItem(key)).local).find(match=>!match.id.startsWith('local-parity-')),key);
+    summary.createdPractice=await actual.page.evaluate(async key=>Object.values(JSON.parse(await BuildPlayStorage.getItem(key)).local).find(match=>!match.id.startsWith('local-parity-')),key);
     assert.equal(summary.createdPractice.players.filter(p=>p.kind==='human').length,1);assert.equal(summary.createdPractice.players.filter(p=>p.kind==='computer').length,1);assert.equal(summary.createdPractice.players[1].kind,'human');assert.equal(summary.createdPractice.last_move_player_index,0);assert.deepEqual(summary.createdPractice.turn_of_player_indices,[1]);assert.deepEqual(actual.errors,[]);save('created-practice-match.json',summary.createdPractice);await actual.context.close();
     const findings=[];
     const serif=summary.games.filter(game=>game.initial.svgFonts.some(font=>font.includes('Times'))).map(game=>game.slug);

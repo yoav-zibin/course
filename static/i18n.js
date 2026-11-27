@@ -14,7 +14,7 @@
 // request that answers 304 while nothing changed. If the bundle can't be had, the separate
 // requests (catalog, game names, one request per game version) are used as before.
 //
-// The choice is saved in this browser (localStorage) and, for a logged-in account, on
+// The choice is saved in this browser and, for a logged-in account, on
 // the account (PATCH /users/{id}), so it follows the person to other devices.
 
 "use strict";
@@ -48,10 +48,10 @@ const I18n = (() => {
     [CATALOG_KEY, GAMES_KEY, BUNDLE_KEY].some(prefix => key.startsWith(prefix));
   // Shared with the Portal's origin-wide quota recovery. A failed timestamp
   // must never turn a successful cache read or write into an application error.
-  function touchCache(key) {
+  async function updateRecency(key) {
     if (!recoverableCacheKey(key)) return;
     try {
-      const saved = JSON.parse(localStorage.getItem(RECENCY_KEY));
+      const saved = JSON.parse(await BuildPlayStorage.getItem(RECENCY_KEY));
       const entries = new Map();
       for (const entry of Array.isArray(saved?.entries) ? saved.entries : []) {
         if (typeof entry?.key === "string" && recoverableCacheKey(entry.key) &&
@@ -62,7 +62,7 @@ const I18n = (() => {
         (Number.isSafeInteger(saved?.clock) ? saved.clock : 0) + 1,
         ...[...entries.values()].map(at => at + 1));
       entries.set(key, clock);
-      localStorage.setItem(RECENCY_KEY, JSON.stringify({clock,
+      await BuildPlayStorage.setItem(RECENCY_KEY, JSON.stringify({clock,
         entries: [...entries].sort((a, b) => a[1] - b[1]).slice(-RECENCY_CAP)
           .map(([key, at]) => ({key, at})),
       }));
@@ -70,30 +70,36 @@ const I18n = (() => {
       // Translation caches remain optional when storage is denied or full.
     }
   }
-  const read = (key) => {
+  let recencyUpdates = Promise.resolve();
+  function touchCache(key) {
+    if (!recoverableCacheKey(key)) return;
+    recencyUpdates = recencyUpdates.then(() => updateRecency(key));
+    return recencyUpdates;
+  }
+  const read = async (key) => {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = await BuildPlayStorage.getItem(key);
       if (raw === null) return null;
       const value = JSON.parse(raw);
-      touchCache(key);
+      await touchCache(key);
       return value;
     } catch {
       return null;
     }
   };
-  const write = (key, value) => {
+  const write = async (key, value) => {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
-      touchCache(key);
+      await BuildPlayStorage.setItem(key, JSON.stringify(value));
+      await touchCache(key);
       return true;
     } catch {
       // Private mode or a full disk: the choice just doesn't persist.
       return false;
     }
   };
-  const remove = (key) => {
+  const remove = async (key) => {
     try {
-      localStorage.removeItem(key);
+      await BuildPlayStorage.removeItem(key);
     } catch {
       // nothing to remove from
     }
@@ -103,8 +109,7 @@ const I18n = (() => {
     value.every(locale => locale && typeof locale.code === "string" && locale.code &&
       typeof locale.name === "string" && locale.name &&
       (locale.direction === "ltr" || locale.direction === "rtl"));
-  const cachedLocales = read(LOCALES_KEY);
-  let locales = validLocales(cachedLocales) ? cachedLocales : BUILT_IN;
+  let locales = BUILT_IN;
   let code = DEFAULT;
   let messages = {}; // of [code]; empty for English, whose texts are in the HTML
   let picker = null;
@@ -127,8 +132,8 @@ const I18n = (() => {
     return locales.some((locale) => locale.code === language) ? language : null;
   }
 
-  function startingLanguage() {
-    const chosen = normalize(read(CHOICE_KEY));
+  function startingLanguage(savedChoice) {
+    const chosen = normalize(savedChoice);
     if (chosen) return chosen;
     for (const tag of navigator.languages ?? [navigator.language]) {
       const found = normalize(tag);
@@ -225,7 +230,7 @@ const I18n = (() => {
     const fromBundle = await loadBundle(language);
     if (fromBundle) return fromBundle;
     if (language === code) bundle = null;
-    const saved = read(CATALOG_KEY + language);
+    const saved = await read(CATALOG_KEY + language);
     const fetched = fetchCatalog(language, saved?.version);
     if (saved) {
       fetched.then((fresh) => {
@@ -244,7 +249,7 @@ const I18n = (() => {
   // almost nothing). Resolves to the messages, or null when there is no bundle to be had
   // (the server doesn't have the endpoint, or is down and nothing is saved).
   async function loadBundle(language) {
-    const saved = read(BUNDLE_KEY + language);
+    const saved = await read(BUNDLE_KEY + language);
     const usable = saved?.data?.catalog?.messages ? saved : null;
     const fetched = fetchBundle(language, usable);
     if (usable) {
@@ -274,7 +279,7 @@ const I18n = (() => {
       if (!data?.catalog?.messages || !data.games) return null;
       // Nothing could be translated just now: keep the games' texts saved earlier.
       if (data.status === "unavailable" && saved?.data?.games) data.games = saved.data.games;
-      saveBundle(language, response.headers?.get?.("ETag") ?? null, data);
+      await saveBundle(language, response.headers?.get?.("ETag") ?? null, data);
       return data;
     } catch {
       return null; // offline: whatever is saved (or English) stays
@@ -293,7 +298,7 @@ const I18n = (() => {
 
   /** Keeps the bundle for the next visit, small: without the string tables if it is big,
    * and in place of the older separate copies of the catalog and the game names. */
-  function saveBundle(language, etag, data) {
+  async function saveBundle(language, etag, data) {
     const entry = {
       etag,
       data: {
@@ -312,10 +317,9 @@ const I18n = (() => {
     };
     const big = JSON.stringify(entry).length > MAX_STORED_CHARS;
     // The older separate copies are not needed any more, and free space for this one.
-    remove(CATALOG_KEY + language);
-    remove(GAMES_KEY + language);
-    if (!write(BUNDLE_KEY + language, big ? withoutStrings() : entry) && !big) {
-      write(BUNDLE_KEY + language, withoutStrings());
+    await Promise.all([remove(CATALOG_KEY + language), remove(GAMES_KEY + language)]);
+    if (!await write(BUNDLE_KEY + language, big ? withoutStrings() : entry) && !big) {
+      await write(BUNDLE_KEY + language, withoutStrings());
     }
   }
 
@@ -325,7 +329,7 @@ const I18n = (() => {
       if (!response.ok) return null;
       const catalog = await response.json();
       if (catalog.version === knownVersion) return null;
-      write(CATALOG_KEY + language, { version: catalog.version, messages: catalog.messages });
+      await write(CATALOG_KEY + language, { version: catalog.version, messages: catalog.messages });
       return catalog;
     } catch {
       return null; // offline: whatever is saved (or English) stays
@@ -339,7 +343,7 @@ const I18n = (() => {
       const next = (await response.json()).locales;
       if (!validLocales(next)) return;
       locales = next;
-      write(LOCALES_KEY, locales);
+      await write(LOCALES_KEY, locales);
       renderPicker();
       setDocument();
     } catch {
@@ -358,7 +362,7 @@ const I18n = (() => {
   async function loadGamesText() {
     const asked = code;
     if (asked === DEFAULT || bundle?.locale === asked) return; // the bundle has them
-    const saved = read(GAMES_KEY + asked);
+    const saved = await read(GAMES_KEY + asked);
     if (saved && code === asked && !Object.keys(gamesText).length) {
       gamesText = saved;
       apply();
@@ -370,7 +374,7 @@ const I18n = (() => {
       const data = await response.json();
       if (code !== asked || data.status === "unavailable") return; // choice may change while the body arrives
       gamesText = data.games ?? {};
-      write(GAMES_KEY + asked, gamesText);
+      await write(GAMES_KEY + asked, gamesText);
       apply();
       announce();
     } catch {
@@ -425,7 +429,7 @@ const I18n = (() => {
   /** Switches the page to [language]. [remember] saves it as the person's choice. */
   async function setLanguage(language, { remember = false } = {}) {
     const next = normalize(language) ?? DEFAULT;
-    if (remember) write(CHOICE_KEY, next);
+    if (remember) void write(CHOICE_KEY, next);
     if (next === code && picker?.value === next) return;
     code = next;
     gamesText = {};
@@ -486,7 +490,7 @@ const I18n = (() => {
       if (account()?.id !== who.id || choice !== choiceRevision || sync !== accountSyncRevision) return;
       if (user.locale) {
         if (user.locale !== code) await setLanguage(user.locale, { remember: true });
-      } else if (normalize(read(CHOICE_KEY))) {
+      } else if (normalize(await read(CHOICE_KEY))) {
         await saveOnAccount();
       }
     } catch {
@@ -553,15 +557,14 @@ const I18n = (() => {
   };
 
   // Start: the saved choice, else the browser's language, else English.
-  code = startingLanguage();
-  const savedBundle = code === DEFAULT ? null : read(BUNDLE_KEY + code);
-  const saved = code === DEFAULT || savedBundle ? null : read(CATALOG_KEY + code);
-  if (savedBundle?.data?.catalog?.messages) messages = savedBundle.data.catalog.messages;
-  else if (saved) messages = saved.messages;
-  setDocument();
-  addPicker();
-  apply();
   const ready = (async () => {
+    const revisionAtStart = choiceRevision;
+    const [cachedLocales, savedChoice] = await Promise.all([read(LOCALES_KEY), read(CHOICE_KEY)]);
+    if (validLocales(cachedLocales)) locales = cachedLocales;
+    if (choiceRevision === revisionAtStart) code = startingLanguage(savedChoice);
+    setDocument();
+    addPicker();
+    apply();
     const initial = code;
     const choice = choiceRevision;
     if (initial !== DEFAULT) {

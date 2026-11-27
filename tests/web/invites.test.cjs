@@ -5,6 +5,7 @@ const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
 
+const storageSource=require('./device-storage-fixture.cjs').source;
 const AUTH_JS=fs.readFileSync(path.join(__dirname,'../../static/auth.js'),'utf8');
 
 /** Loads auth.js as if the page were opened at [hash] (and [search]), with [storage] as localStorage. */
@@ -14,7 +15,7 @@ function loadAuth(hash, storage=new Map(), search='', storageImpl=null) {
     location:{hash,search,origin:'https://buildplay.fun'},
     window:{addEventListener(){}},document:{dispatchEvent(){}},
     apiRequest:async()=>{},el:()=>({})});
-  vm.runInContext(AUTH_JS+'\nthis.Auth=Auth;',ctx);
+  vm.runInContext(storageSource+'\n'+AUTH_JS+'\nthis.Auth=Auth;',ctx);
   return {Auth:ctx.Auth,storage};
 }
 
@@ -94,7 +95,7 @@ for (const [where,hash,search,pathname,expected] of [
     location:{hash,search,pathname,origin:'https://buildplay.fun'},
     window:{addEventListener(){}},document:{dispatchEvent(){}},el:()=>({}),I18n:{t:(key,params,fallback)=>fallback},
     apiRequest:async(method,pathname,{body})=>{sent={method,pathname,body};return {id:'u',display_name:'Bob',password:'pw'};}});
-  vm.runInContext(AUTH_JS+'\nthis.Auth=Auth;',ctx);
+  vm.runInContext(storageSource+'\n'+AUTH_JS+'\nthis.Auth=Auth;',ctx);
   for (const body of [{id_token:'fake-google-token'}, {verification_id:'local-code',code:'123456'}])
     assert.deepEqual({...ctx.Auth.newAccountBody(body)},{...body,...expected});
   await ctx.Auth.createGuest('Bob');
@@ -111,7 +112,7 @@ test('static anonymous invite, signup and joined requests retain one visitor hea
     location:{hash:'#invite=abcd',search:'',pathname:'/portal',origin:'https://buildplay.fun'},
     window:{addEventListener(){}},document:{dispatchEvent(){}},el:()=>({}),experimentCampaignCode:()=>null,
     fetch:async(path,init)=>{calls.push({path,...init});return {ok:true,status:200,text:async()=>JSON.stringify({id:'player',display_name:'Player',password:'synthetic-credential'})};}});
-  vm.runInContext(transport+'\n'+AUTH_JS+'\nthis.Auth=Auth;',ctx);
+  vm.runInContext(storageSource+'\n'+transport+'\n'+AUTH_JS+'\nthis.Auth=Auth;',ctx);
   await ctx.apiRequest('GET','/invites/abcd');
   const response=await ctx.Auth.createGuest('Player');ctx.Auth.upsert(response);
   await ctx.apiRequest('POST','/invites/abcd/accept',{user:ctx.Auth.current()});

@@ -1,6 +1,6 @@
 // Accounts and login, shared by the site's pages.
 //
-// The browser remembers every logged-in account in localStorage:
+// The browser remembers every logged-in account on this device:
 // [{id, display_name, password, linked: [{kind, identifier, linked_at}]}].
 // The password is the API credential (X-User-Password); it never leaves the browser
 // except in API request headers.
@@ -19,32 +19,25 @@ const Auth = (() => {
   const ACCOUNTS_KEY = "game-platform.accounts.v1";
   const CURRENT_KEY = "game-platform.current-account.v1";
 
-  // When this browser denies storage entirely (private mode, blocked
-  // cookies), accounts live in memory for this page load instead: login
-  // still works and online play is unaffected; only persistence is lost.
-  let memoryAccounts = null;
-  let memoryCurrentId = undefined;
+  const accountSnapshot = BuildPlayStorage.watchItem(ACCOUNTS_KEY);
+  const currentSnapshot = BuildPlayStorage.watchItem(CURRENT_KEY);
   let selectionRevision = 0;
   const dailyLoginDays = new Map(), dailyLoginPending = new Map(), dailyLoginRetryAfter = new Map();
 
   function load() {
     try {
-      const stored = JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) ?? [];
+      const stored = JSON.parse(accountSnapshot()) ?? [];
       const accounts = stored.map(({referral_code: _retiredCode, ...account}) => account);
       if (stored.some(account => Object.hasOwn(account, "referral_code"))) save(accounts);
       return accounts;
     } catch {
-      return memoryAccounts ?? [];
+      return [];
     }
   }
 
   function save(accounts) {
-    try {
-      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-      memoryAccounts = null;
-    } catch {
-      memoryAccounts = accounts;
-    }
+    // Denied storage still permits a login for the lifetime of this page.
+    void BuildPlayStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts)).catch(() => {});
   }
 
   function changed() {
@@ -59,23 +52,13 @@ const Auth = (() => {
   /** The current account, or null when logged out. Never throws: denied
    * storage reads as logged out (or the in-memory current account). */
   function current() {
-    let id;
-    try {
-      id = localStorage.getItem(CURRENT_KEY);
-    } catch {
-      id = memoryCurrentId ?? null;
-    }
+    const id = currentSnapshot();
     return load().find((account) => account.id === id) ?? null;
   }
 
   function setCurrent(id) {
-    try {
-      if (id) localStorage.setItem(CURRENT_KEY, id);
-      else localStorage.removeItem(CURRENT_KEY);
-      memoryCurrentId = undefined;
-    } catch {
-      memoryCurrentId = id ?? null;
-    }
+    const write = id ? BuildPlayStorage.setItem(CURRENT_KEY, id) : BuildPlayStorage.removeItem(CURRENT_KEY);
+    void write.catch(() => {});
     selectionRevision++;
     closeDialog();
     changed();
@@ -178,6 +161,8 @@ const Auth = (() => {
   const INVITE_KEY = "game-platform.invite-token.v1";
   const MATCH_KEY = "game-platform.invite-match.v1";
   const LEGACY_INVITER_KEY = "game-platform.invited-by.v1";
+  const inviteSnapshot = BuildPlayStorage.watchItem(INVITE_KEY);
+  const matchSnapshot = BuildPlayStorage.watchItem(MATCH_KEY);
   const validTarget = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 
   function matchTargetInUrl(raw) {
@@ -202,25 +187,25 @@ const Auth = (() => {
 
   function rememberMatchAttribution() {
     try {
-      localStorage.removeItem(LEGACY_INVITER_KEY);
+      void BuildPlayStorage.removeItem(LEGACY_INVITER_KEY).catch(() => {});
       const raw = location.href || `${location.origin}${location.pathname || "/portal"}${location.search || ""}${location.hash || ""}`;
       const target = matchTargetInUrl(raw);
       if (!target || load().some(account => account.password === target.value)) return;
-      localStorage.removeItem(target.key === INVITE_KEY ? MATCH_KEY : INVITE_KEY);
-      localStorage.setItem(target.key, target.value);
+      void BuildPlayStorage.removeItem(target.key === INVITE_KEY ? MATCH_KEY : INVITE_KEY).catch(() => {});
+      void BuildPlayStorage.setItem(target.key, target.value).catch(() => {});
     } catch {}
   }
 
   function forgetMatchAttribution() {
     for (const key of [LEGACY_INVITER_KEY, INVITE_KEY, MATCH_KEY]) {
-      try { localStorage.removeItem(key); } catch {}
+      void BuildPlayStorage.removeItem(key).catch(() => {});
     }
   }
 
   function newAccountBody(body) {
     const {invited_by_user_id: _retiredInviter, referral_code: _retiredCode, invite_token: _oldInvite, invite_match_id: _oldMatch, ...clean} = body;
     try {
-      const token = localStorage.getItem(INVITE_KEY), match = localStorage.getItem(MATCH_KEY);
+      const token = inviteSnapshot(), match = matchSnapshot();
       const safe = value => validTarget(value) && !load().some(account => account.password === value);
       if (safe(token)) return {...clean, invite_token: token};
       if (safe(match)) return {...clean, invite_match_id: match};

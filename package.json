@@ -2,6 +2,7 @@
   "name": "game-platform-ui-tests",
   "private": true,
   "scripts": {
+    "lint:storage": "python3 scripts/check-device-storage.py",
     "build:portal": "node tools/build-portal.mjs",
     "test:portal": "npm --prefix frontends/portal test",
     "typecheck:portal": "npm --prefix frontends/portal run typecheck",

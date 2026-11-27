@@ -1,5 +1,5 @@
 {
   "platforms": ["apple", "android"],
-  "apple": { "modules": ["LegacyPortalModule"] },
+  "apple": { "modules": ["LegacyPortalModule"], "podspecPath": "LegacyPortal.podspec" },
   "android": { "modules": ["com.buildplay.legacyportal.LegacyPortalModule"] }
 }

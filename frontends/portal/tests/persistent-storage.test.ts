@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPersistentStorage, type StorageFallback, type PersistentBackend } from '../src/platform/persistent-storage';
+import { createPersistentStorage, type StorageBackend } from '../src/platform/persistent-storage';
 function fixture() {
   const oldValues = new Map<string,string>(), values = new Map<string,string>(); let legacyWrites = 0;
-  const legacy: StorageFallback = { async getItem(key) { return oldValues.get(key) ?? null; }, async setItem(key,value) { legacyWrites++; oldValues.set(key,value); }, async removeItem(key) { oldValues.delete(key); }, async getAllKeys() { return [...oldValues.keys()]; } };
-  const native: PersistentBackend = { async getPersistentItem(key) { return values.get(key) ?? null; }, async setPersistentItem(key,value) { values.set(key,value); }, async removePersistentItem(key) { values.delete(key); }, async getPersistentKeys() { return [...values.keys()]; } };
+  const legacy: StorageBackend = { async getItem(key) { return oldValues.get(key) ?? null; }, async setItem(key,value) { legacyWrites++; oldValues.set(key,value); }, async removeItem(key) { oldValues.delete(key); }, async getAllKeys() { return [...oldValues.keys()]; } };
+  const native: StorageBackend = { async getItem(key) { return values.get(key) ?? null; }, async setItem(key,value) { values.set(key,value); }, async removeItem(key) { values.delete(key); }, async getAllKeys() { return [...values.keys()]; } };
   return { oldValues, values, legacy, native, adapter: createPersistentStorage(legacy,native), legacyWrites:()=>legacyWrites };
 }
 test('a native miss reads only the current store',async()=>{
@@ -21,8 +21,8 @@ test('a native miss reads only the current store',async()=>{
 });
 test('only request metadata skips repeated native reads and writes invalidate cached values',async()=>{
   const f=fixture(),key='request-metadata',reads:string[]=[];
-  const read=f.native.getPersistentItem;
-  f.native.getPersistentItem=async item=>{reads.push(item);return read(item);};
+  const read=f.native.getItem;
+  f.native.getItem=async item=>{reads.push(item);return read(item);};
   const adapter=createPersistentStorage(f.legacy,f.native,new Set([key]));
   assert.deepEqual(await Promise.all([adapter.getItem(key),adapter.getItem(key)]),[null,null]);
   await adapter.setItem(key,'current');
@@ -36,14 +36,14 @@ test('only request metadata skips repeated native reads and writes invalidate ca
 });
 test('a failed request metadata read can be retried',async()=>{
   const f=fixture(),key='request-metadata',adapter=createPersistentStorage(f.legacy,f.native,new Set([key]));
-  const read=f.native.getPersistentItem;
-  f.native.getPersistentItem=async()=>{ throw new Error('Read failed'); };
+  const read=f.native.getItem;
+  f.native.getItem=async()=>{ throw new Error('Read failed'); };
   await assert.rejects(adapter.getItem(key),/Read failed/);
-  f.native.getPersistentItem=read;f.values.set(key,'current');
+  f.native.getItem=read;f.values.set(key,'current');
   assert.equal(await adapter.getItem(key),'current');
 });
 test('an unreadable native record never falls back to a potentially retired legacy copy', async () => {
-  const f=fixture();f.oldValues.set('current','retired legacy value');f.native.getPersistentItem=async()=>{throw new Error('native read unavailable');};
+  const f=fixture();f.oldValues.set('current','retired legacy value');f.native.getItem=async()=>{throw new Error('native read unavailable');};
   await assert.rejects(f.adapter.getItem('current'),/native read unavailable/);assert.equal(f.values.has('current'),false);assert.equal(f.oldValues.get('current'),'retired legacy value');
 });
 test('large native account/archive writes bypass AsyncStorage entirely', async () => {
@@ -63,7 +63,7 @@ test('a write queued behind an active native read owns the final value',async()=
   const f=fixture();let resume!:()=>void,started!:()=>void;
   const blocked=new Promise<void>(resolve=>{resume=resolve;});
   const reading=new Promise<void>(resolve=>{started=resolve;});
-  f.native.getPersistentItem=async()=>{started();await blocked;return 'first';};
+  f.native.getItem=async()=>{started();await blocked;return 'first';};
   const read=f.adapter.getItem('current');await reading;
   const write=f.adapter.setItem('current','latest');resume();
   assert.equal(await read,'first');await write;
@@ -72,7 +72,7 @@ test('a write queued behind an active native read owns the final value',async()=
 test('concurrent account reads share a snapshot until a write or read completion',async()=>{
   const f=fixture(),key='account';f.values.set(key,'first');
   let calls=0;
-  f.native.getPersistentItem=async item=>{calls++;return f.values.get(item)??null;};
+  f.native.getItem=async item=>{calls++;return f.values.get(item)??null;};
   const first=f.adapter.getItem(key),same=f.adapter.getItem(key);
   const write=f.adapter.setItem(key,'second'),after=f.adapter.getItem(key);
   assert.deepEqual(await Promise.all([first,same,write,after]),['first','first',undefined,'second']);

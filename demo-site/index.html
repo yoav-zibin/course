@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script src="/static/shared/device-storage.js?v=1"></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#123c32">
@@ -59,7 +60,7 @@
   const ready=Promise.all([fetch('/demo/accounts'),fetch('/demo/overview')]).then(async responses=>{for(const response of responses)if(!response.ok)throw new Error('Please refresh or check the demo allowance.');const [accounts,overview]=await Promise.all(responses.map(r=>r.json()));fixture=accounts;const counts=overview.counts||accounts.counts;for(const [id,key] of [['users-total','users_total'],['matches-total','matches_total'],['games-total','games_total'],['moves-total','moves_total']])document.getElementById(id).textContent=format(counts[key]);renderMonth(overview.snapshot);return fixture;});
   ready.catch(showError);
   function renderMonth(snapshot){if(!snapshot)return;const chart=document.getElementById('month-chart');const days=Array.from({length:30},(_,i)=>{const date=`2026-09-${String(i+1).padStart(2,'0')}`;return {date,count:Number(snapshot.days?.[date]?.matches)||0};});const maximum=Math.max(1,...days.map(d=>d.count));document.getElementById('month-total').textContent=format(days.reduce((sum,d)=>sum+d.count,0));function select(button,day){chart.querySelector('.selected')?.classList.remove('selected');button.classList.add('selected');document.getElementById('day-readout').textContent=`Sep ${Number(day.date.slice(-2))} · ${format(day.count)} matches`;}for(const day of days){const button=document.createElement('button');button.className='day';button.style.setProperty('--bar-height',`${Math.max(4,day.count/maximum*100)}%`);button.setAttribute('aria-label',`September ${Number(day.date.slice(-2))}: ${day.count} matches`);button.title=button.getAttribute('aria-label');button.addEventListener('focus',()=>select(button,day));button.addEventListener('pointerenter',()=>select(button,day));button.addEventListener('click',()=>select(button,day));chart.append(button);}select(chart.lastElementChild,days.at(-1));if(snapshot.generated_at){const date=new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',timeZone:'America/New_York'}).format(new Date(snapshot.generated_at));document.getElementById('snapshot-date').textContent=`· Snapshot ${date}`;}}
-  async function login(who,target){await ready;const user={...fixture[who],linked:[]};localStorage.setItem('game-platform.accounts.v1',JSON.stringify([user]));localStorage.setItem('game-platform.current-account.v1',user.id);location.assign(target);}
+  async function login(who,target){await ready;const user={...fixture[who],linked:[]};await BuildPlayStorage.setItem('game-platform.accounts.v1',JSON.stringify([user]));await BuildPlayStorage.setItem('game-platform.current-account.v1',user.id);location.assign(target);}
   document.querySelectorAll('[data-login]').forEach(button=>button.addEventListener('click',()=>login(button.dataset.login,button.dataset.target).catch(showError)));
   document.getElementById('history-link').addEventListener('click',async()=>{try{await ready;await login('alice','/static/portal.html#match='+fixture.history_match);}catch(error){showError(error);}});
 </script>

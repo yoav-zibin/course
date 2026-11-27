@@ -1,6 +1,6 @@
 // API console: lists the operations from /openapi.json, builds a form for the selected
 // one, sends it with the chosen X-User-Id and X-User-Password headers and shows the
-// response. Passwords returned by POST /users are remembered in localStorage.
+// response. Passwords returned by POST /users are remembered on this device.
 
 "use strict";
 
@@ -165,9 +165,10 @@ function currentPassword() {
   return $("user-password").value.trim();
 }
 
+const passwordSnapshot = BuildPlayStorage.watchItem(PASSWORDS_STORAGE_KEY);
 function savedPasswords() {
   try {
-    return JSON.parse(localStorage.getItem(PASSWORDS_STORAGE_KEY) ?? "{}");
+    return JSON.parse(passwordSnapshot() ?? "{}");
   } catch {
     return {};
   }
@@ -177,7 +178,7 @@ function savePassword(userId, password) {
   const passwords = savedPasswords();
   if (password) passwords[userId] = password;
   else delete passwords[userId];
-  localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(passwords));
+  void BuildPlayStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(passwords)).catch(error => toast(String(error)));
 }
 
 /** The password of [userId] from the admin user pages or else this browser's memory. */
@@ -190,7 +191,7 @@ function knownPassword(userId) {
 function setUserId(userId, password = undefined) {
   $("user-id").value = userId;
   $("user-password").value = password ?? knownPassword(userId);
-  localStorage.setItem(USER_STORAGE_KEY, userId);
+  void BuildPlayStorage.setItem(USER_STORAGE_KEY, userId).catch(error => toast(String(error)));
   renderUserSelect();
   renderAuthNote();
 }
@@ -654,7 +655,7 @@ function applyHash() {
 }
 
 async function main() {
-  setUserId(localStorage.getItem(USER_STORAGE_KEY) ?? "");
+  setUserId(await BuildPlayStorage.getItem(USER_STORAGE_KEY) ?? "");
   $("user-id").addEventListener("input", () => setUserId(currentUserId()));
   $("user-password").addEventListener("input", () => {
     if (currentUserId()) savePassword(currentUserId(), currentPassword());

@@ -43,7 +43,7 @@ function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalog
     if(url==='/i18n/locales')return {ok:true,json:async()=>({locales:LOCALES})};
     if(/^\/i18n\/bundle\/\w+$/.test(url)){
       bundleRequests.push({url,headers:new Headers(init.headers??{})});
-      const answer=typeof bundle==='function'?bundle(url):bundle;
+      const answer=typeof bundle==='function'?await bundle(url):bundle;
       if(!answer)return {ok:false,status:404,json:async()=>({})};
       if(new Headers(init.headers??{}).get('if-none-match')===answer.etag)return {ok:false,status:304,json:async()=>({})};
       return {ok:true,status:200,headers:{get:name=>name==='ETag'?answer.etag:null},json:async()=>JSON.parse(JSON.stringify(answer.body))};
@@ -70,6 +70,7 @@ function setup({stored={},languages=['en-US'],user=null,accountLocale='',catalog
   sandbox.window=sandbox;
   sandbox.window.addEventListener=()=>{};
   vm.createContext(sandbox);
+  vm.runInContext(require('./device-storage-fixture.cjs').source,sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../static/i18n.js'),'utf8'),sandbox);
   const run=code=>vm.runInContext(code,sandbox);
   const settle=async()=>{await run('I18n.ready');await new Promise(resolve=>setImmediate(resolve));};
@@ -311,8 +312,12 @@ test('the bundle is saved with its ETag instead of the older separate copies',as
 
 test('on the next visit the saved bundle is used at once and revalidated with its ETag',async()=>{
   const first=setup({stored:spanish,bundle:bundleOf()});await first.settle();
-  const t=setup({stored:{...spanish,[BUNDLE_KEY]:JSON.parse(first.storage.get(BUNDLE_KEY))},bundle:bundleOf()});
-  assert.equal(t.run('I18n.t("ui.action.save")'),'Guardar'); // before any answer
+  let respond;
+  const revalidation=new Promise(resolve=>{respond=resolve;});
+  const t=setup({stored:{...spanish,[BUNDLE_KEY]:JSON.parse(first.storage.get(BUNDLE_KEY))},bundle:()=>revalidation});
+  await t.run('I18n.ready');
+  assert.equal(t.run('I18n.t("ui.action.save")'),'Guardar'); // durable data before the HTTP response
+  respond(bundleOf());
   await t.settle();
   assert.equal(t.bundleRequests.length,1);
   assert.equal(t.bundleRequests[0].headers.get('if-none-match'),'"b1"');

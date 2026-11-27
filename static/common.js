@@ -219,17 +219,13 @@ class ApiError extends Error {
 }
 
 const VISITOR_KEY = "game-platform.visitor.v1";
-let memoryVisitorId;
+const visitorSnapshot = BuildPlayStorage.watchItem(VISITOR_KEY);
 function visitorId() {
-  try {
-    const existing = localStorage.getItem(VISITOR_KEY);
-    if (existing && /^[A-Za-z0-9_-]{1,128}$/.test(existing)) return existing;
-    const value = globalThis.crypto?.randomUUID?.() || `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(VISITOR_KEY, value);
-    return value;
-  } catch {
-    return memoryVisitorId ||= globalThis.crypto?.randomUUID?.() || `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-  }
+  const existing = visitorSnapshot();
+  if (existing && /^[A-Za-z0-9_-]{1,128}$/.test(existing)) return existing;
+  const value = globalThis.crypto?.randomUUID?.() || `portal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  void BuildPlayStorage.setItem(VISITOR_KEY, value).catch(() => {});
+  return value;
 }
 
 /** Calls the API as [user] ({id, password} or null); throws ApiError on failure. */
@@ -264,24 +260,16 @@ async function apiRequest(method, path, { body, user, signal } = {}) {
 
 const EXPERIMENT_CAMPAIGN_KEY = "game-platform.experiment-campaign.v1";
 
+const campaignSnapshot = BuildPlayStorage.watchItem(EXPERIMENT_CAMPAIGN_KEY);
 function experimentCampaignCode() {
-  try {
-    const code = localStorage.getItem(EXPERIMENT_CAMPAIGN_KEY);
-    return code && /^[a-z0-9][a-z0-9-]{0,49}$/.test(code) ? code : null;
-  } catch (error) {
-    console.warn("Campaign attribution is unavailable in this browser.", error);
-    return null;
-  }
+  const code = campaignSnapshot();
+  return code && /^[a-z0-9][a-z0-9-]{0,49}$/.test(code) ? code : null;
 }
-
 function rememberExperimentCampaign() {
   const code = new URLSearchParams(location.search).get("campaign");
-  if (!code || !/^[a-z0-9][a-z0-9-]{0,49}$/.test(code)) return;
-  try {
-    if (!localStorage.getItem(EXPERIMENT_CAMPAIGN_KEY))
-      localStorage.setItem(EXPERIMENT_CAMPAIGN_KEY, code);
-  } catch (error) {
-    console.warn("Campaign attribution could not be saved in this browser.", error);
+  if (code && /^[a-z0-9][a-z0-9-]{0,49}$/.test(code) && !campaignSnapshot()) {
+    void BuildPlayStorage.setItem(EXPERIMENT_CAMPAIGN_KEY, code)
+      .catch(error => console.warn("Campaign attribution could not be saved.", error));
   }
 }
 
@@ -293,10 +281,10 @@ rememberExperimentCampaign();
 const ACTING_USER_KEY = "game-platform.user-id";
 
 /** Fills [select] with [users] and calls [onChange] when the choice changes. */
-function setUpActAs(select, users, onChange) {
+async function setUpActAs(select, users, onChange) {
   let current = select.value || "";
   try {
-    current = select.value || localStorage.getItem(ACTING_USER_KEY) || "";
+    current = select.value || await BuildPlayStorage.getItem(ACTING_USER_KEY) || "";
   } catch {
     // Denied storage: the choice just isn't remembered across pages.
   }
@@ -305,9 +293,9 @@ function setUpActAs(select, users, onChange) {
     ...users.map((user) => el("option", { value: user.id, textContent: user.display_name })),
   );
   select.value = users.some((user) => user.id === current) ? current : "";
-  select.onchange = () => {
+  select.onchange = async () => {
     try {
-      localStorage.setItem(ACTING_USER_KEY, select.value);
+      await BuildPlayStorage.setItem(ACTING_USER_KEY, select.value);
     } catch {}
     onChange();
   };

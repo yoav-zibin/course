@@ -62,6 +62,7 @@ function setup(respond) {
     window:{addEventListener(){}},location:{hash:'',search:''},history:{replaceState(){}},
     localStorage,Node:class {},fetch,I18n:require('./i18n-stub.cjs'),
     el:(tag,attrs={},...children)=>({...attrs,tag,children}),toast:()=>{},showPageError:()=>{},reportClientError:()=>{}});
+  vm.runInContext(require('./device-storage-fixture.cjs').source,ctx);
   vm.runInContext(COMMON_DEFS,ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../static/console.js'),'utf8'),ctx);
   const run=code=>vm.runInContext(code,ctx);

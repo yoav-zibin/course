@@ -23,14 +23,16 @@
     ? window.I18n.t(key, params, fallback)
     : fallback.replace(/\{(\w+)\}/g, (part, name) => name in params ? String(params[name]) : part);
 
+  const accountSnapshot = BuildPlayStorage.watchItem("game-platform.accounts.v1");
+  const currentSnapshot = BuildPlayStorage.watchItem("game-platform.current-account.v1");
   function identity() {
     try {for (const input of document.querySelectorAll('input[type="password"]')) if (input.value) secrets.add(input.value);} catch { /* Storage restrictions must not stop input redaction. */ }
     try {
-      const stored = window.Auth?.accounts?.() || JSON.parse(localStorage.getItem("game-platform.accounts.v1") || "[]");
+      const stored = window.Auth?.accounts?.() || JSON.parse(accountSnapshot() || "[]");
       const remembered = Array.isArray(stored) ? stored : [];
       for (const account of remembered) if (account?.password) secrets.add(account.password);
       if (adminPage) return null;
-      return window.Auth?.current?.() || remembered.find(account => account.id === localStorage.getItem("game-platform.current-account.v1")) || null;
+      return window.Auth?.current?.() || remembered.find(account => account.id === currentSnapshot()) || null;
     } catch {return null;}
   }
   function syncScope() {
