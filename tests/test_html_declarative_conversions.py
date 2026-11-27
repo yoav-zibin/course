@@ -49,6 +49,29 @@ def test_chess_and_checkers_preserve_the_piece_id_across_a_move(kind):
     after_piece = next(piece for piece in next_frame['scene']['pieces']
                        if piece['position'].get('cell') == str(destination))
     assert after_piece['id'] == before_piece['id']
+    if kind == 'chess':
+        assert first['last_move_animations'] == []
+        assert after_piece['asset'] == before_piece['asset']
+        assert after_piece['asset'] in body.declarative_ui['assets']
+        assert body.declarative_ui['piece_types'][after_piece['type']]['width'] == 58
+        assert next_frame['last_move_animations'][0]['path'] == [
+            {'board': 'main', 'position': {'cell': str(source)}},
+            {'board': 'main', 'position': {'cell': str(destination)}},
+        ]
+
+
+def test_chess_castling_animates_both_pieces_to_their_final_squares():
+    body = GameImport.model_validate(package('chess'))
+    ui = DeclarativeLogic(body.declarative_ui)
+    view = copy.deepcopy(body.unit_tests['cases'][0]['view_of_mover'])
+    view['bd'] = [0] * 64
+    view['bd'][62] = 6
+    view['bd'][61] = 4
+    view['lastMove'] = {'fr': 7, 'fc': 4, 'tr': 7, 'tc': 6}
+    frame = ui.reduce({'type': 'state_changed', 'view': view, 'state': view, 'move_count': 1,
+                       'status': 'ongoing', 'my_player_index': 1, 'acting_for_player_index': None})
+    assert [[stop['position']['cell'] for stop in entry['path']]
+            for entry in frame['last_move_animations']] == [['60', '62'], ['63', '61']]
 
 
 def test_hex_placement_pulse_is_stable_across_same_move_renders():

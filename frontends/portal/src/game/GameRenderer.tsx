@@ -35,6 +35,7 @@ export type GameRendererProps = {
   boardPresentation?: {
     visibleBoard: (board: Board) => boolean;
     presentScene: (scene: Scene, message: StateMessage) => Scene;
+    showActionBadges?: (piece: Piece) => boolean;
     motion?: Partial<Motion>;
   };
   frameHeight?: number;
@@ -628,12 +629,12 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       const graphic=<PieceGraphic key={`${item.ghost?'ghost':'piece'}:${item.piece.id}`} piece={item.piece} previous={item.previous}
         spec={spec} {...item.options} serial={display.serial} enabled={active&&!item.ghost} selected={item.piece.selected||rootId===selected}
         started={display.started} concealed={rootId===draggedId} onPress={pressPiece}
-        artworkRef={templates.ids.get(item.piece)}/>;
+        artworkRef={templates.ids.get(item.piece)} showActionBadges={boardPresentation?.showActionBadges?.(item.piece)}/>;
       (item.z<=STATIC_PIECE_Z_MAX?lower:upper).push(!item.ghost&&pieceActions(item.piece).length&&boardInput.wrapPiece?
         boardInput.wrapPiece(graphic,rootId):graphic);
     }
     return {lower,upper};
-  },[painting,spec,display.serial,display.started,active,selected,draggedId,boardInput.wrapPiece,pressPiece,templates]);
+  },[painting,spec,display.serial,display.started,active,selected,draggedId,boardInput.wrapPiece,pressPiece,templates,boardPresentation]);
   function draggedPosition(piece:Piece): Point {
     const root=display.scene.pieces!.find(p=>p.id===drag!.id)!;
     const center=position(spec,root), at=position(spec,piece);
@@ -770,7 +771,7 @@ const BoardGraphic=memo(function BoardGraphic({board,spec}:{board:Board;spec:Gam
   </G>;
 });
 
-const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false,concealed=false,dragged=false,artworkRef}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:(piece:Piece)=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean;concealed?:boolean;dragged?:boolean;artworkRef?:string}) {
+const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false,concealed=false,dragged=false,artworkRef,showActionBadges=true}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:(piece:Piece)=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean;concealed?:boolean;dragged?:boolean;artworkRef?:string;showActionBadges?:boolean}) {
   const [frameState,setFrameState]=useState({serial:-1,phase:1});
   const {newEffect,next,before,popAnimation,needsAnimation,duration,delay}=pieceAnimation(spec,piece,previous,
     {animate,effect,inferMovement,moveTrack,sceneTrack,pulseEnabled});
@@ -809,7 +810,7 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
     {!shared && (artworkRef?<Use href={`#${artworkRef}`}/>:<Asset spec={spec} id={piece.asset??type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>)}
     {!shared&&piece.text!==undefined&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{playerText(piece.text||'')}</SvgText>}
     {type.action_outline!=='none'&&(type.action_outline==='ellipse'?<Ellipse rx={size.width/2+4} ry={size.height/2+4} fill="none" stroke={outline} strokeWidth={selected?4:2}/>:<Rect x={-size.width/2-4} y={-size.height/2-4} width={size.width+8} height={size.height+8} rx={8} fill="none" stroke={outline} strokeWidth={selected?4:2}/>)}
-    {enabled&&actions.length>0&&<G transform={`translate(${-size.width/2} ${-size.height/2-13})`} pointerEvents="none">{actions.map((action,index)=><G key={action} transform={`translate(${index*22} 0)`}><Rect x={0} y={-9} width={20} height={18} rx={5} fill="#122b3a" stroke="#75ceee"/><SvgText x={10} y={0} textAnchor="middle" alignmentBaseline="central" fill="#ffffff" fontSize={14}>{signs[action]}</SvgText></G>)}</G>}
+    {showActionBadges&&enabled&&actions.length>0&&<G transform={`translate(${-size.width/2} ${-size.height/2-13})`} pointerEvents="none">{actions.map((action,index)=><G key={action} transform={`translate(${index*22} 0)`}><Rect x={0} y={-9} width={20} height={18} rx={5} fill="#122b3a" stroke="#75ceee"/><SvgText x={10} y={0} textAnchor="middle" alignmentBaseline="central" fill="#ffffff" fontSize={14}>{signs[action]}</SvgText></G>)}</G>}
   </G>;
 });
 

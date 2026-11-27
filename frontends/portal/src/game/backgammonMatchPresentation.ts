@@ -6,11 +6,10 @@ export const BACKGAMMON_GAME_ID='5f5293c3-2a3a-4eec-b631-9debf59be0ca';
 export const fillsBackgammonLandscape=(width:number,height:number)=>width>height&&height<600;
 
 const hiddenLabels = new Set([
-  'title', 'bar_label', 'off_label', 'white_label', 'black_label', 'moves_remaining',
+  'title', 'bar_label', 'off_label', 'white_label', 'black_label', 'moves_remaining', 'hint_move',
   ...[0, 1].flatMap(seat => ['name', 'pip', 'off', 'score'].map(label => `${label}_${seat}`)),
 ]);
-const hiddenPieces = new Set(['status_0', 'status_1', 'swatch_0', 'swatch_1']);
-const boardTools = new Set(['help', 'hint', 'undo']);
+const hiddenPieces = new Set(['status_0', 'status_1', 'swatch_0', 'swatch_1', 'hint', 'undo']);
 
 function presentScene(scene: Scene, message: StateMessage): Scene {
   const view = (message.view ?? message.state) as {
@@ -23,12 +22,11 @@ function presentScene(scene: Scene, message: StateMessage): Scene {
     // Keep instructions for special game states near the controls, inside the wood frame.
     if (label.id === 'turn') return [{...label, x: 118, y: 260}];
     if (label.id === 'opening_status') return [{...label, x: 118, y: 279}];
-    if (label.id === 'hint_move') return [{...label, x: 66, y: 350}];
     return [label];
   });
   const pieces = scene.pieces?.flatMap(piece => {
     if (hiddenPieces.has(piece.id) || (piece.id === 'double' && canTapCube)) return [];
-    if (boardTools.has(piece.id) && 'y' in piece.position && piece.position.y < -18) {
+    if (piece.id === 'help' && 'y' in piece.position && piece.position.y < -18) {
       return [{...piece, position: {...piece.position, y: -18}}];
     }
     return [piece];
@@ -39,5 +37,6 @@ function presentScene(scene: Scene, message: StateMessage): Scene {
 export const backgammonMatchPresentation: GameRendererProps['boardPresentation'] = {
   visibleBoard: board => board.id !== 'felt',
   presentScene,
+  showActionBadges: piece => !piece.id.startsWith('checker_'),
   motion: {roll_settle_ms: 0, turn_pause_ms: 0},
 };

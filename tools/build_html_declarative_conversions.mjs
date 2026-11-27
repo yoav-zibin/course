@@ -161,6 +161,80 @@ function boardFor(kind) {
   return {viewport:{width:600,height:680},boards:[{id:'table',kind:'free',x:0,y:0,width:600,height:680,color:'#145b4e',line_color:'#6ee7b7'}]};
 }
 
+function installChessPresentation() {
+  const reduce = gameUI.reduce;
+  gameUI.reduce = function (message, localState) {
+    const frame = reduce(message, localState);
+    const state = message.type === 'ui_event' ? message.state_changed : message;
+    const board = (state.view || state.state)?.bd;
+    for (const piece of frame.scene.pieces) {
+      if (piece.type !== 'white_piece' && piece.type !== 'black_piece') continue;
+      const value = board?.[Number(piece.position.cell)];
+      if (!value) continue;
+      piece.asset = (value > 0 ? 'white_' : 'black_') + Math.abs(value);
+      piece.aria_label = piece.text;
+      delete piece.text;
+    }
+    return frame;
+  };
+  gameUI.getLastMoveAnimations = function (view, scene) {
+    const move = view?.lastMove;
+    if (!move) return [];
+    const {fr, fc, tr, tc} = move;
+    const paths = [];
+    function add(fromRow, fromColumn, toRow, toColumn) {
+      const destination = String(toRow * 8 + toColumn);
+      const piece = scene.pieces.find(item => item.board === 'main' && item.position.cell === destination &&
+        (item.type === 'white_piece' || item.type === 'black_piece'));
+      if (!piece) return;
+      paths.push({piece_id:piece.id, duration_ms:260, path:[
+        {board:'main', position:{cell:String(fromRow * 8 + fromColumn)}},
+        {board:'main', position:{cell:destination}},
+      ]});
+    }
+    add(fr, fc, tr, tc);
+    if (fr === tr && Math.abs(tc - fc) === 2 && Math.abs(view.bd[tr * 8 + tc]) === 6)
+      add(tr, tc > fc ? 7 : 0, tr, tc > fc ? 5 : 3);
+    return paths;
+  };
+}
+
+// Six original silhouettes, shared by the pieces and the catalog cover.
+const chessShapes = [
+  'M32 8a8 8 0 0 1 4 15c1 8 5 13 10 16v7H18v-7c5-3 9-8 10-16a8 8 0 0 1 4-15Z',
+  'M20 48v-8c0-8 4-14 12-20l-6 2-7 7-8-4 7-12 11-5 2-5 8 6c11 6 15 19 13 39Z',
+  'M32 5c5 3 10 8 11 15 1 7-3 11-8 14l9 10H20l9-10c-7-3-9-7-8-14 1-7 6-12 11-15Z',
+  'M15 8h8v7h5V8h8v7h5V8h8v15l-7 6v12l7 7H15l7-7V29l-7-6Z',
+  'M11 13l12 9 9-15 9 15 12-9-8 27 5 8H14l5-8Z',
+  'M29 4h6v7h8v5h-8v8c8-8 19-4 17 5-1 6-7 11-8 14l5 5H15l5-5c-1-3-7-8-8-14-2-9 9-13 17-5v-8h-8v-5h8Z',
+];
+
+function chessPiece(index, dark) {
+  const fill = dark ? '#182337' : '#fcf2d9';
+  const edge = dark ? '#788ba8' : '#57462f';
+  return `<g fill="${fill}" stroke="${edge}" stroke-width="2" stroke-linejoin="round"><path d="${chessShapes[index]}"/><rect x="12" y="46" width="40" height="13" rx="4"/></g>` +
+    (index === 1 ? `<circle cx="30" cy="15" r="1.8" fill="${edge}"/>` :
+      index === 2 ? `<path d="m34 14-7 9" stroke="${edge}" stroke-width="2" stroke-linecap="round"/>` : '');
+}
+
+function chessArtwork() {
+  const assets = {};
+  for (const dark of [false, true]) for (let index = 0; index < chessShapes.length; index++) {
+    const name = (dark ? 'black_' : 'white_') + (index + 1);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="3 2 58 58" width="58" height="58">${chessPiece(index, dark)}</svg>`;
+    assets[name] = {media_type:'image/svg+xml',width:58,height:58,uri:'data:image/svg+xml;base64,'+Buffer.from(svg).toString('base64')};
+  }
+  return assets;
+}
+
+function chessCover() {
+  const squares = Array.from({length:18}, (_, i) =>
+    `<rect x="${(i % 6) * 160}" y="${Math.floor(i / 6) * 160}" width="160" height="160" fill="${(i + Math.floor(i / 6)) % 2 ? '#638078' : '#e6cfaa'}"/>`).join('');
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><rect width="1600" height="900" fill="#202f39"/>' +
+    `<rect x="140" y="135" width="1320" height="630" rx="42" fill="#304b56" stroke="#d1aa70" stroke-width="5"/><g transform="translate(320 270) skewX(-18)" opacity=".8">${squares}</g>` +
+    `<g transform="translate(477 230) scale(7.5)">${chessPiece(1, true)}</g><g transform="translate(815 170) scale(8.5)">${chessPiece(5, false)}</g></svg>`;
+}
+
 function makeSpec(entry) {
   const layout = boardFor(entry.kind);
   const typeNames = entry.kind === 'checkers' ? ['p0','p1','king_p0','king_p1'] :
@@ -176,14 +250,16 @@ function makeSpec(entry) {
     for (const name of ['king_p0','king_p1']) typeValues[name] = {...TYPES[name],width:58,height:58,font_size:44};
   }
   if (entry.kind === 'chess') {
-    typeValues.white_piece = {shape:'card',width:64,height:64,color:'#fff9e8',text_color:'#283044',border_color:'#a77b42',font_size:54};
-    typeValues.black_piece = {shape:'card',width:64,height:64,color:'#263348',text_color:'#fff5dc',border_color:'#e1bd72',font_size:54};
+    typeValues.white_piece = {shape:'image',width:58,height:58};
+    typeValues.black_piece = {shape:'image',width:58,height:58};
   }
   if (['go_fish','crazy_eights'].includes(entry.kind)) typeValues.stock = {shape:'card_pile',width:48,height:64};
   if (entry.kind === 'quoridor') { typeValues.p0 = TYPES.pawn; typeValues.p1 = TYPES.pawn_red; }
   return {format:'buildplay-ui',version:1,viewport:layout.viewport,boards:layout.boards,
     piece_types:typeValues,strings:{...ENGLISH,...sourceStrings(entry)},
-    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title:entry.source + ' (Declarative)'})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n` + SOURCE_UI};
+    ...(entry.kind === 'chess' ? {assets:chessArtwork()} : {}),
+    ui_code:`const KIND=${JSON.stringify(entry.kind)};\nconst SOURCE_STRINGS=${JSON.stringify({title:entry.source + ' (Declarative)'})};\nconst SOURCE_KEYS=${JSON.stringify(STRING_KEYS)};\n` + SOURCE_UI +
+      (entry.kind === 'chess' ? `\n(${installChessPresentation.toString()})();\n` : '')};
 }
 
 
@@ -195,7 +271,7 @@ function safeDeckArt(kind, index) {
 
 function image(caption, svg) { return {caption,svg}; }
 function allImages(kind) {
-  return [image('Cover',safeDeckArt(kind,0)),image('Initial board',safeDeckArt(kind,1)),
+  return [image('Cover',kind === 'chess' ? chessCover() : safeDeckArt(kind,0)),image('Initial board',safeDeckArt(kind,1)),
     image('Playable choices',safeDeckArt(kind,2)),image('Game in progress',safeDeckArt(kind,3))];
 }
 
