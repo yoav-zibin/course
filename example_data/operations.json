@@ -69,13 +69,8 @@
     "match": "ttt-ongoing"
   },
   {
-    "op": "start",
-    "as": "user1",
-    "match": "ttt-ongoing"
-  },
-  {
     "op": "move",
-    "as": "user1",
+    "as": "user2",
     "match": "ttt-ongoing",
     "move": {
       "cell": 0
@@ -93,13 +88,8 @@
     "match": "ttt-x-won"
   },
   {
-    "op": "start",
-    "as": "user2",
-    "match": "ttt-x-won"
-  },
-  {
     "op": "move",
-    "as": "user2",
+    "as": "user4",
     "match": "ttt-x-won",
     "move": {
       "cell": 0
@@ -107,7 +97,7 @@
   },
   {
     "op": "move",
-    "as": "user4",
+    "as": "user2",
     "match": "ttt-x-won",
     "move": {
       "cell": 3
@@ -115,7 +105,7 @@
   },
   {
     "op": "move",
-    "as": "user2",
+    "as": "user4",
     "match": "ttt-x-won",
     "move": {
       "cell": 1
@@ -123,7 +113,7 @@
   },
   {
     "op": "move",
-    "as": "user4",
+    "as": "user2",
     "match": "ttt-x-won",
     "move": {
       "cell": 4
@@ -131,7 +121,7 @@
   },
   {
     "op": "move",
-    "as": "user2",
+    "as": "user4",
     "match": "ttt-x-won",
     "move": {
       "cell": 2
@@ -149,13 +139,8 @@
     "match": "ttt-draw"
   },
   {
-    "op": "start",
-    "as": "user5",
-    "match": "ttt-draw"
-  },
-  {
     "op": "move",
-    "as": "user5",
+    "as": "user6",
     "match": "ttt-draw",
     "move": {
       "cell": 0
@@ -163,7 +148,7 @@
   },
   {
     "op": "move",
-    "as": "user6",
+    "as": "user5",
     "match": "ttt-draw",
     "move": {
       "cell": 1
@@ -171,7 +156,7 @@
   },
   {
     "op": "move",
-    "as": "user5",
+    "as": "user6",
     "match": "ttt-draw",
     "move": {
       "cell": 2
@@ -179,7 +164,7 @@
   },
   {
     "op": "move",
-    "as": "user6",
+    "as": "user5",
     "match": "ttt-draw",
     "move": {
       "cell": 4
@@ -187,7 +172,7 @@
   },
   {
     "op": "move",
-    "as": "user5",
+    "as": "user6",
     "match": "ttt-draw",
     "move": {
       "cell": 3
@@ -195,7 +180,7 @@
   },
   {
     "op": "move",
-    "as": "user6",
+    "as": "user5",
     "match": "ttt-draw",
     "move": {
       "cell": 5
@@ -203,7 +188,7 @@
   },
   {
     "op": "move",
-    "as": "user5",
+    "as": "user6",
     "match": "ttt-draw",
     "move": {
       "cell": 7
@@ -211,7 +196,7 @@
   },
   {
     "op": "move",
-    "as": "user6",
+    "as": "user5",
     "match": "ttt-draw",
     "move": {
       "cell": 6
@@ -219,7 +204,7 @@
   },
   {
     "op": "move",
-    "as": "user5",
+    "as": "user6",
     "match": "ttt-draw",
     "move": {
       "cell": 8
@@ -237,13 +222,8 @@
     "match": "nim-ongoing"
   },
   {
-    "op": "start",
-    "as": "user3",
-    "match": "nim-ongoing"
-  },
-  {
     "op": "move",
-    "as": "user3",
+    "as": "user7",
     "match": "nim-ongoing",
     "move": {
       "take": 1
@@ -251,7 +231,7 @@
   },
   {
     "op": "move",
-    "as": "user7",
+    "as": "user3",
     "match": "nim-ongoing",
     "move": {
       "take": 2

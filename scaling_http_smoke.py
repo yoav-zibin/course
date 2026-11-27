@@ -61,10 +61,10 @@ def run(*, restart=False):
         match_id = ok(
             0, "POST", "/matches", user=alice, body={"game_id": game_id, "max_loss": 10}
         )["id"]
-        ok(1, "POST", f"/matches/{match_id}/join", user=bob)
-        ok(0, "POST", f"/matches/{match_id}/start", user=alice, body={})
+        started = ok(1, "POST", f"/matches/{match_id}/join", user=bob)
+        assert started["status"] == "ongoing" and started["players"][0]["user_id"] == bob["id"]
         path = f"/matches/{match_id}/moves"
-        for i, (user, add) in enumerate(((alice, 3), (bob, 3), (alice, 1), (bob, 1))):
+        for i, (user, add) in enumerate(((bob, 3), (alice, 3), (bob, 1), (alice, 1))):
             ok(
                 i % 2,
                 "POST",
@@ -81,7 +81,7 @@ def run(*, restart=False):
                     p,
                     "POST",
                     path,
-                    user=alice,
+                    user=bob,
                     body=winning,
                     request_id="http-winning-retry",
                 )
@@ -89,13 +89,13 @@ def run(*, restart=False):
             ]
             for future in futures:
                 assert future.result()["move_count"] == 5
-        assert ok(0, "GET", f"/users/{alice['id']}", user=alice)["token_balance"] == 20
-        assert ok(1, "GET", f"/users/{bob['id']}", user=bob)["token_balance"] == 0
+        assert ok(0, "GET", f"/users/{alice['id']}", user=alice)["token_balance"] == 0
+        assert ok(1, "GET", f"/users/{bob['id']}", user=bob)["token_balance"] == 20
         bad = call(
             1,
             "POST",
             path,
-            user=alice,
+            user=bob,
             body={"move": {"add": 1}, "expected_move_count": 4},
             request_id="http-winning-retry",
         )
@@ -124,7 +124,7 @@ def run(*, restart=False):
                     0,
                     "POST",
                     path,
-                    user=alice,
+                    user=bob,
                     body=winning,
                     request_id="http-winning-retry",
                 )["move_count"]

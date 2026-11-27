@@ -126,10 +126,8 @@ def generate(store, *, run_id, users, games, matches, max_writes):
             for person in people[1:]:
                 match = platform.join_match(caller_id=uid(person), match_id=mid)
             if rng.random() >= 0.15:
-                match = platform.start_match(
-                    caller_id=uid(people[0]),
-                    match_id=mid,
-                )
+                if match.status == "waiting_for_players":
+                    match = platform.start_match(caller_id=uid(people[0]), match_id=mid)
                 steps = rng.randint(1, 4) if rng.random() < 0.2 else 20
                 for _ in range(steps):
                     match = store.get_match(mid)

@@ -380,7 +380,7 @@ without). On iOS, push works only when the portal is installed to the home scree
 | `GET /matches?status=&game_id=` | yes | List the caller's matches (owned or seated, minus hidden ones) |
 | `GET /matches/{id}` | owner for single player | Get a match with `match_kind` and `cloud_revision`. Multiplayer may be viewed through shared links; private computer/pass-and-play details require owner authentication. Speed matches include `turn_deadline` and `server_time` |
 | `POST /matches/single-player-sync` | yes | Save a private computer/pass-and-play snapshot `{match, expected_revision}`; idempotent retry, 409 on a competing cloud revision; returns owner-only `single_player_state` |
-| `POST /matches/{id}/join` | yes | Take a human multiplayer seat; private single-player matches reject joining |
+| `POST /matches/{id}/join` | yes | Take a multiplayer seat. Filling the lobby starts the match with the joiner in seat zero. |
 | `POST /matches/{id}/start` | yes | Start the match (owner only); the server calls the game's `newMatch` |
 | `POST /matches/{id}/leave` | yes | Leave the match |
 | `POST /matches/{id}/moves` | yes | Make a move `{move, expected_move_count?}`; the server runs the game's `applyMove` |

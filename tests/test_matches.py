@@ -147,14 +147,14 @@ def test_cannot_join_twice_or_join_a_full_match(api: Api) -> None:
         api.new_user("bob"),
         api.new_user("carol"),
     )
-    game_id = api.new_game(owner=alice, allowed_player_counts=[2])
+    game_id = api.new_game(owner=alice, allowed_player_counts=[2], allows_join_mid_match=True)
     match_id = api.new_match(owner=alice, game_id=game_id)
     api.ok("POST", f"/matches/{match_id}/join", as_user=bob)
 
     again = api.request("POST", f"/matches/{match_id}/join", as_user=bob)
     full = api.request("POST", f"/matches/{match_id}/join", as_user=carol)
     assert error(again) == (409, "you are already a player in this match")
-    assert full.status_code == 409
+    assert error(full) == (409, "the match is full")
 
 
 

@@ -26,8 +26,8 @@ def test_generated_waiting_lobby_invites_are_deterministic_and_resolve_their_mat
     assert _build() == snapshot
     waiting = {match.id: match for match in snapshot.matches if match.status == "waiting_for_players"}
     assert {invite.match_id for invite in snapshot.invites} == set(waiting)
-    assert len(snapshot.invites) == len(waiting) == 2
-    assert len({invite.token for invite in snapshot.invites}) == 2
+    assert len(snapshot.invites) == len(waiting) == 1
+    assert len({invite.token for invite in snapshot.invites}) == 1
     for invite in snapshot.invites:
         match = waiting[invite.match_id]
         assert invite.token == match.invite_code
@@ -93,12 +93,12 @@ def test_the_example_data_covers_many_match_states() -> None:
         for match in snapshot.matches
     ]
     assert overview == [
-        ("ttt-ongoing", "ongoing", None, [1], "user1 user2"),
-        ("ttt-x-won", "over", "finished", None, "user2 user4"),
-        ("ttt-draw", "over", "finished", None, "user5 user6"),
-        ("nim-ongoing", "ongoing", None, [0], "user3 user7"),
+        ("ttt-ongoing", "ongoing", None, [1], "user2 user1"),
+        ("ttt-x-won", "over", "finished", None, "user4 user2"),
+        ("ttt-draw", "over", "finished", None, "user6 user5"),
+        ("nim-ongoing", "ongoing", None, [0], "user7 user3"),
         ("ttt-waiting", "waiting_for_players", None, None, "user4"),
-        ("ttt-ready", "waiting_for_players", None, None, "user8 user6"),
+        ("ttt-ready", "ongoing", None, [0], "user6 user8"),
     ]
     assert all(game.is_declarative for game in snapshot.game_versions)
     assert all(game.all_state_public for game in snapshot.game_versions)
@@ -113,14 +113,14 @@ def test_the_server_can_use_the_example_data(tmp_path: Path) -> None:
     shutil.copy(example_data.DEFAULT_OUTPUT, path)
     store = JsonFileStore(path)
     api = Api(store=store)
-    api.passwords_by_user_id["user2"] = "user2"
-    # user2 (O) has the move in ttt-ongoing, and cell 1 is free. The game
+    api.passwords_by_user_id["user1"] = "user1"
+    # user1 (O) has the move in ttt-ongoing, and cell 1 is free. The game
     # is server-side now: the move is just the cell, the server computes
     # the new board.
     response = api.request(
         "POST",
         "/matches/ttt-ongoing/moves",
-        as_user="user2",
+        as_user="user1",
         json={"move": {"cell": 1}},
     )
     store.close()
