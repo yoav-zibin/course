@@ -48,12 +48,24 @@ def assert_no_games(api):
     assert api.ok('GET', '/games') == []
 
 
+@pytest.mark.parametrize('route', ['/games', '/games/declarative'])
+def test_new_game_requires_alternative_names(api, route):
+    body = payload()
+    del body['alternative_names']
+    response = api.client.post(route, json=body)
+    assert response.status_code == 422
+    assert ['body', 'alternative_names'] in [error['loc'] for error in response.json()['detail']]
+
+
 def test_authenticated_complete_import_is_published_and_translated(api):
     owner, other = api.new_user('Owner'), api.new_user('Other')
     body = payload()
+    body['alternative_names'] = ['First to Three', 'Compte à trois']
     result = api.request('POST', '/games', as_user=owner, json=body)
     assert result.status_code == 201, result.text
     g = result.json()
+    assert g['alternative_names'] == body['alternative_names']
+    assert api.ok('GET', '/games?q=compte')[0]['id'] == g['id']
     assert 'owner_user_id' not in g
     assert g['version'] == 1 and g['published'] is True
     assert g['code'] == body['client_code']

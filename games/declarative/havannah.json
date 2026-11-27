@@ -1,5 +1,8 @@
 {
   "name": "Havannah (Declarative)",
+  "alternative_names": [
+    "哈瓦纳"
+  ],
   "description": "Take turns placing stones on the hexagonal board. Connect two corners for a bridge, three board edges for a fork, or surround an enclosed region for a ring. The first player to make any one of these shapes wins.",
   "game_addition_request_id_and_secret": "example-only-hex-family-havannah-replace-before-publishing",
   "allowed_player_counts": [

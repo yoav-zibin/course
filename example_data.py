@@ -110,6 +110,7 @@ def _apply(
         )
         platform.create_game(
             name=body.name, description=body.description,
+            alternative_names=tuple(body.alternative_names),
             all_state_public=body.all_state_public,
             rules=body.game_rules(), code=body.client_code,
             server_code=body.server_code, game_schemas=body.game_schemas(),

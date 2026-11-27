@@ -1,5 +1,11 @@
 {
   "name": "Ticket to Ride: Europe",
+  "alternative_names": [
+    "Ticket to Ride Europe",
+    "Zug um Zug Europa",
+    "Les Aventuriers du Rail Europe",
+    "Aventureros al Tren Europa"
+  ],
   "description": "Collect train cards and claim routes across Europe, including tunnels and ferries. Most points from routes and tickets wins.",
   "allowed_player_counts": [
     2,

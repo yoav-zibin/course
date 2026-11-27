@@ -1,5 +1,6 @@
 {
   "name": "Escape Circuit",
+  "alternative_names": [],
   "description": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
   "rules": "Two players start with identical trays. Take turns sliding one block exactly one square into available space. Blocks cannot rotate, jump, or leave the tray. Get your orange core into the two marked squares at the bottom to escape. Both players get a slide in every round. If both escape in the same round, or neither escapes within 60 rounds, it is a draw.",
   "ui_instructions": "Drag a highlighted block, or tap it and choose a highlighted destination. The gate is at the bottom of each tray. Use the zoom controls for more room.",

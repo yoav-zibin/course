@@ -1,6 +1,10 @@
 {
  "all_state_public": false,
  "name": "Codenames (Declarative)",
+ "alternative_names": [
+  "Code Names",
+  "Código Secreto"
+ ],
  "description": "Two teams race to find their secret words from one-word clues — but one word is the assassin.",
  "game_addition_request_id_and_secret": "example-only-declarative-codenames-replace-before-publishing",
  "allowed_player_counts": [

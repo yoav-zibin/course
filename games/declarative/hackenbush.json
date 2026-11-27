@@ -1,6 +1,7 @@
 {
   "all_state_public": true,
   "name": "Hackenbush (Declarative)",
+  "alternative_names": [],
   "description": "Blue and Red take turns cutting one branch of their own colour from the picture. Any branches no longer connected to the ground fall away. A player who has no branch of their colour left to cut loses.",
   "game_addition_request_id_and_secret": "example-only-declarative-hackenbush-replace-before-publishing",
   "allowed_player_counts": [

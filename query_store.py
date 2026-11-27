@@ -920,14 +920,16 @@ class QueryStore:
             if kind == "games":
                 import re
 
-                words = set(
-                    re.findall(
-                        r"\w+", (record.name + " " + record.description).casefold()
-                    )
-                )
-                data["search_tokens"] = sorted(
-                    {w[:n] for w in words for n in range(2, min(len(w), 24) + 1)}
-                )[:1000]
+                def prefixes(text):
+                    return {
+                        word[:length]
+                        for word in re.findall(r"\w+", text.casefold())
+                        for length in range(2, min(len(word), 24) + 1)
+                    }
+
+                name_tokens = prefixes(" ".join((record.name, *record.alternative_names)))
+                description_tokens = sorted(prefixes(record.description) - name_tokens)[:1000]
+                data["search_tokens"] = sorted(name_tokens.union(description_tokens))
             self._update_counts(kind, identity, old, data)
             self.raw_put(ref, data)
 

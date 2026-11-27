@@ -1,5 +1,8 @@
 {
   "name": "Whist (Declarative)",
+  "alternative_names": [
+    "Classic Whist"
+  ],
   "description": "Four players form partnerships across the table. Deal thirteen cards each and use the dealer’s last card to choose trump. Follow the led suit if possible; otherwise play any card. The highest trump wins, or the highest card of the led suit if no trump was played. The winner leads the next trick. After thirteen tricks, the partnership with more tricks wins this single hand.",
   "allowed_player_counts": [
     4

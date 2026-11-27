@@ -1,6 +1,13 @@
 {
   "all_state_public": false,
   "name": "Battleship (Declarative)",
+  "alternative_names": [
+    "Sea Battle",
+    "Schiffe versenken",
+    "Hundir la flota",
+    "Bataille navale",
+    "Морской бой"
+  ],
   "description": "Place a fleet of five ships, then take turns firing at hidden waters. A hit earns another shot; sink the opposing fleet to win.",
   "allowed_player_counts": [
     2

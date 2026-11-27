@@ -1,5 +1,6 @@
 {
   "name": "Twist Five",
+  "alternative_names": [],
   "description": "Based on Pentago. The 6×6 board is made of four 3×3 plates. On your turn, place one marble in any empty hole, then turn any one plate a quarter turn, clockwise or counterclockwise. Get five of your marbles in a row (across, down or diagonally) to win. Five in a row right after placing wins at once, without a turn. If a turn gives both players five, or the board fills up with no five, the game is a draw. Turning a symmetric plate changes nothing, which matches the official optional turn early in the game.",
   "allowed_player_counts": [
     2

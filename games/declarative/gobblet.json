@@ -1,6 +1,7 @@
 {
   "all_state_public": true,
   "name": "Gobblet (Declarative)",
+  "alternative_names": [],
   "description": "A two-player strategy game of stacking goblets: nest bigger goblets over smaller ones and line up four of your colour to win.",
   "allowed_player_counts": [
     2

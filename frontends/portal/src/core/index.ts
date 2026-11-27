@@ -203,7 +203,7 @@ export class PortalStore {
     const result = await this.read(path); guard(); if (kind === 'games' && search !== this.state.query) return;
     let items = this.paginated ? result.items : result;
     if (!Array.isArray(items)) throw new Error('Invalid list response');
-    if (!this.paginated && kind === 'games' && this.state.query) items = items.filter((g: Game) => `${g.name} ${g.description}`.toLowerCase().includes(this.state.query.toLowerCase()));
+    if (!this.paginated && kind === 'games' && this.state.query) items = items.filter((g: Game) => [g.name,g.description,...(g.alternative_names??[])].join(' ').toLowerCase().includes(this.state.query.toLowerCase()));
     const preserveTail = !more && this.paginated && this.state[kind].length > 50;
     if (more || kind === 'myMatches') items = unique([...(this.state[kind] as any[]), ...items]);
     else if (preserveTail) items = unique([...items, ...(this.state[kind] as any[]).slice(50)]);

@@ -994,7 +994,7 @@ def list_games(
     platform: Platform,
     q: str = "",
 ) -> list[GameSummaryOut]:
-    """Published games, oldest first. `q` searches names and descriptions (every word
+    """Published games, oldest first. `q` searches names, alternative names and descriptions (every word
     must match, ignoring case). The list never includes code: with every game's
     client and server code included, it was over a megabyte, and nobody reads
     code from a list. Load one game in full from /games/{id}/versions/{version}."""
@@ -1004,7 +1004,7 @@ def list_games(
 
 @router.get("/games/popular", include_in_schema=False)
 def list_popular_games(platform: Platform, limit: int = 8) -> list[GameSummaryOut]:
-    """The bounded top games by cumulative players in started matches."""
+    """Featured games followed by the most-played games, up to the requested limit."""
     return [GameSummaryOut.of(game) for game in platform.list_popular_games(limit=limit)]
 
 

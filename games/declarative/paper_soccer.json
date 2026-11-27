@@ -1,6 +1,10 @@
 {
   "all_state_public": true,
   "name": "Paper Soccer (Declarative)",
+  "alternative_names": [
+    "Paper Football",
+    "Piłkarzyki"
+  ],
   "description": "Move the ball one step along any of eight directions on the pitch, drawing a line that cannot be reused or run along the touchline. Landing on a point that already has a line, or the edge of the pitch, gives you another move. Enter the opponent's goal to win; a player who cannot move loses. After 120 moves the game is a draw.",
   "game_addition_request_id_and_secret": "example-only-declarative-paper_soccer-replace-before-publishing",
   "allowed_player_counts": [

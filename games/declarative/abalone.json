@@ -1,5 +1,8 @@
 {
   "name": "Abalone (Declarative)",
+  "alternative_names": [
+    "阿巴隆"
+  ],
   "description": "Move a line of one, two or three marbles one space. A line may move sideways into empty spaces, or push a shorter opposing line forward. Eject six opposing marbles to win. This version ends after 500 moves and scores remaining marbles.",
   "game_addition_request_id_and_secret": "example-only-hex-family-abalone-replace-before-publishing",
   "allowed_player_counts": [

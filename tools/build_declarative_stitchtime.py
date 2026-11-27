@@ -16,6 +16,7 @@ import re
 from pathlib import Path
 
 from game_platform.game_logic import GameLogic
+from game_platform.tools.game_alternative_names import reviewed_names
 
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / 'games' / 'declarative'
@@ -328,6 +329,7 @@ def package():
              f'<g transform="translate(0 5) scale(2)">{final}</g></svg>')
     return {'name': TITLES[0], 'description': RULES[0], 'allowed_player_counts': [2], 'all_state_public': True,
             'server_code': code, 'declarative_ui': specification(),
+            'alternative_names': reviewed_names(TITLES[0]),
             'game_addition_request_id_and_secret': f'example-only-declarative-{KIND}-replace-before-publishing',
             'rules': RULES[0], 'ui_instructions': UI_RULES[0],
             'tutorial': {'text': RULES[0], 'html': '<meta name="viewport" content="width=device-width,initial-scale=1"><p>' + html.escape(RULES[0]) + '</p>'},

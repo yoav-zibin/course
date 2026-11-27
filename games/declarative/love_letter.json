@@ -1,6 +1,9 @@
 {
  "all_state_public": false,
  "name": "Love Letter (Declarative)",
+ "alternative_names": [
+  "ラブレター"
+ ],
  "description": "Love Letter, the 16-card game of deduction and risk: draw one card, play one card, knock rivals out of the round and be first to the token target - 7 tokens with 2 players, 5 with 3, 4 with 4.",
  "game_addition_request_id_and_secret": "example-only-declarative-love_letter-replace-before-publishing",
  "allowed_player_counts": [

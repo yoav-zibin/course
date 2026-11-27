@@ -1,6 +1,11 @@
 {
   "all_state_public": false,
   "name": "Mastermind (Declarative)",
+  "alternative_names": [
+    "Master Mind",
+    "Codebreaker",
+    "Code Breaker"
+  ],
   "description": "Two players, one round: the codemaker sets a secret code of 4 pegs from 6 colors (repeats allowed) and the codebreaker has 10 guesses to crack it, guided only by black and white feedback pegs.",
   "game_addition_request_id_and_secret": "example-only-declarative-mastermind-replace-before-publishing",
   "allowed_player_counts": [

@@ -1,6 +1,12 @@
 {
   "all_state_public": true,
   "name": "Take-away Nim (Declarative)",
+  "alternative_names": [
+    "Takeaway Nim",
+    "Single-Pile Nim",
+    "One-Pile Nim",
+    "Subtraction Game"
+  ],
   "description": "Start with 15 stones. Take one, two or three per turn. Whoever takes the last stone wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-nim-replace-before-publishing",
   "allowed_player_counts": [

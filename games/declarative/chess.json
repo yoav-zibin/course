@@ -1,6 +1,22 @@
 {
   "all_state_public": true,
   "name": "Chess (Declarative)",
+  "alternative_names": [
+    "Ajedrez",
+    "Aljadrez",
+    "Schach",
+    "Échecs",
+    "Echecs",
+    "Scacchi",
+    "Xadrez",
+    "שחמט",
+    "شطرنج",
+    "Шахматы",
+    "शतरंज",
+    "国际象棋",
+    "國際象棋",
+    "チェス"
+  ],
   "description": "Move by standard chess rules. Checkmate wins; stalemate, threefold repetition, the 50-move rule, and insufficient material draw.",
   "allowed_player_counts": [
     2

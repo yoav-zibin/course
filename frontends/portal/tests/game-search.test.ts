@@ -32,6 +32,15 @@ test('suggestions rank exact and starting names, match full typed words, dedupli
   assert.deepEqual(gameSuggestions(games,'unmatched'),[]);assert.deepEqual(gameSuggestions(games,'?!'),[]);
 });
 
+test('suggestions match alternate titles and display the catalog name',()=>{
+  const chess={...game('chess','Chess'),alternative_names:['Ajedrez','Échecs']};
+  const connect={...game('connect','Connect Four'),alternative_names:['4 in a Row','Puissance 4']};
+  assert.deepEqual(gameSuggestions([chess,connect],'ajed'),[chess]);
+  assert.deepEqual(gameSuggestions([chess,connect],'e\u0301checs'),[chess]);
+  assert.deepEqual(gameSuggestions([chess,connect],'4 in a ro'),[connect]);
+  assert.deepEqual(gameSuggestions([chess,connect],'puissance row'),[]);
+});
+
 function fixture(){
   const storageDescriptor=Object.getOwnPropertyDescriptor(globalThis,'localStorage'),previousFetch=globalThis.fetch;
   const saved:Record<string,string>={};

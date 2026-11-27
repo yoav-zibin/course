@@ -1,6 +1,16 @@
 {
   "all_state_public": true,
   "name": "Tic-tac-toe (Declarative)",
+  "alternative_names": [
+    "Noughts and Crosses",
+    "Naughts and Crosses",
+    "Xs and Os",
+    "Tic Tac Toe",
+    "Tictactoe",
+    "Tres en raya",
+    "Morpion",
+    "三目並べ"
+  ],
   "description": "Place X or O in an empty square. Make a line of three to win. A full board without a line is a draw.",
   "game_addition_request_id_and_secret": "example-only-declarative-tictactoe-replace-before-publishing",
   "allowed_player_counts": [

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from game_platform.game_logic import GameLogic
+from game_platform.tools.game_alternative_names import reviewed_names
 
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / 'games' / 'declarative'
@@ -133,6 +134,7 @@ def build():
                   'short_description':RULES[i+1],'game_logic_rules':RULES[i+1],'game_ui_rules':UI[i+1],
                   'tutorial_strings':{RULES[0]:RULES[i+1]},'client_strings':STRINGS[i+1]}
                   for i,locale in enumerate(LOCALES)},
+               'alternative_names': reviewed_names('Scopa'),
                'game_addition_request_id_and_secret':'example-only-scopa-replace-before-publishing'}
     (DEST/'scopa.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     print('Built Scopa with three recorded examples.')

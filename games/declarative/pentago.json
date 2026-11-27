@@ -1,6 +1,7 @@
 {
  "all_state_public": true,
  "name": "Pentago (Declarative)",
+ "alternative_names": [],
  "description": "Two players place marbles on a 6 by 6 board of four quadrants and rotate a quadrant each turn. First to five in a row wins.",
  "game_addition_request_id_and_secret": "example-only-declarative-pentago-replace-before-publishing",
  "allowed_player_counts": [

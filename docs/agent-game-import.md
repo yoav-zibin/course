@@ -47,6 +47,11 @@ an unauthenticated `GET /games/schema`.
 Required fields:
 
 - `name`, `description`, `allowed_player_counts` (unique integers 1–10).
+- `alternative_names` is a required array of up to 16 distinct names, each
+  1–80 characters. Include established alternate titles, spellings and
+  names in other languages for the same game. For example, Chess can include
+  `["Ajedrez", "Échecs", "Schach"]`. Supply `[]` when there are no known
+  alternatives. Portal search uses these names alongside the display title.
 - `declarative_ui`: a portable package following
   `schemas/declarative-ui.schema.json`. Omit `client_code`; the platform generates
   its compatibility host. HTML game submissions are rejected.
@@ -163,6 +168,9 @@ PATCH accepted owner credentials. Migrate existing update clients to PATCH,
 retain the published game ID, and include the game secret or master password
 in every update.
 
+To edit search names, send `alternative_names` with the complete replacement
+array. Send `[]` to clear it or omit the field to keep the current names.
+
 ## What creation validates
 
 Every check below runs before any write: a failure returns 422 and nothing
@@ -179,7 +187,7 @@ is inserted. The checks, in order:
 2a. **Recorded test flow.** The game must have completed the five-step test
    REST flow under this secret: the endpoint looks up
    the traces recorded for `game_addition_request_id_and_secret`, takes the
-   last step 1 submission, requires this payload to be identical to it, and
+   last step 1 submission, matches the payload with search names excluded, and
    requires steps 2–5 complete for it (server code tests passed; one verified
    pass-and-play match and one verified multiplayer match per allowed player
    count; every screen size and both orientations covered at least once

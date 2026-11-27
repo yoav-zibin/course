@@ -1,6 +1,7 @@
 {
  "all_state_public": true,
  "name": "Trivial Pursuit (Declarative)",
+ "alternative_names": [],
  "description": "Race around a 24-square track, answer trivia questions in six categories and collect all six wedges. A simplified Trivial Pursuit for 2 to 4 players (the full game allows up to 6; this package caps at 4).",
  "game_addition_request_id_and_secret": "example-only-declarative-trivial_pursuit-replace-before-publishing",
  "allowed_player_counts": [

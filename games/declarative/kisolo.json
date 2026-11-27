@@ -1,6 +1,9 @@
 {
   "all_state_public": true,
   "name": "Kisolo (Declarative)",
+  "alternative_names": [
+    "Kisolo Mancala"
+  ],
   "description": "A traditional four-row mancala from the Congo: sow seeds around your two rows, capture across the front line, and empty the opponent's front row to win.",
   "allowed_player_counts": [
     2

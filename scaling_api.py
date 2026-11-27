@@ -52,7 +52,9 @@ def install(app, *, debug_tools):
         store = store_of(platform)
         filters = [("deleted", "==", False), ("published", "==", True)]
         if q:
-            token = q.strip().casefold()
+            from unicodedata import normalize
+
+            token = normalize("NFC", q.strip()).casefold()
             if not re.fullmatch(r"\w{2,24}", token):
                 raise HTTPException(
                     400, "search requires one word prefix of 2 to 24 characters"

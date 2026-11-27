@@ -1,6 +1,11 @@
 {
   "all_state_public": true,
   "name": "Connect6 (Declarative)",
+  "alternative_names": [
+    "Connect Six",
+    "Connect 6",
+    "六子棋"
+  ],
   "description": "Black places one stone on the empty 19 by 19 board to start. Then players alternate, placing exactly two stones on empty intersections per turn. The two stones may be anywhere. Six or more in a row horizontally, vertically or diagonally wins; a full board is a draw.",
   "game_addition_request_id_and_secret": "example-only-declarative-connect6-replace-before-publishing",
   "allowed_player_counts": [

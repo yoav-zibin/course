@@ -303,6 +303,11 @@ PILOT_CAMPAIGNS: Final = (
 # Sentinel for "argument not passed" in update_game: server_code/game_schemas
 # may be explicitly set to None (removing them), so None cannot mean "unchanged".
 UNSET: Final = object()
+FEATURED_GAME_IDS = (
+    "5ceeb4a4-da2f-4218-884e-d485968d9c78",  # Chess
+    "5f5293c3-2a3a-4eec-b631-9debf59be0ca",  # Backgammon
+    "e299b14e-480d-44f3-8132-74282a46cebc",  # Connect Four
+)
 
 
 # Login codes sent by text/email live this long, survive this many wrong guesses, and
@@ -1833,6 +1838,7 @@ class GamePlatform:
         name: str,
         description: str,
         rules: GameRules,
+        alternative_names: tuple[str, ...] = (),
         all_state_public: bool = False,
         code: str,
         server_code: str | None = None,
@@ -1860,6 +1866,7 @@ class GamePlatform:
                 version=1,
                 name=name,
                 description=description,
+                alternative_names=alternative_names,
                 rules=rules,
                 all_state_public=all_state_public,
                 code=code,
@@ -1878,6 +1885,7 @@ class GamePlatform:
         name: str,
         description: str,
         rules: GameRules,
+        alternative_names: tuple[str, ...] | None = None,
         all_state_public: bool = False,
         code: str,
         server_code: str | None = None,
@@ -1933,6 +1941,7 @@ class GamePlatform:
                     game_id=existing.id,
                     name=name,
                     description=description,
+                    alternative_names=alternative_names,
                     allowed_player_counts=rules.allowed_player_counts,
                     allows_leave_mid_match=rules.allows_leave_mid_match,
                     allows_join_mid_match=rules.allows_join_mid_match,
@@ -1950,6 +1959,7 @@ class GamePlatform:
                 game = self.create_game(
                     name=name,
                     description=description,
+                    alternative_names=alternative_names or (),
                     rules=rules,
                     all_state_public=all_state_public,
                     code=code,
@@ -2398,17 +2408,19 @@ class GamePlatform:
         self, *, query: str = '', include_code: bool = True,
     ) -> list[Game]:
         """Published platform games. A [query] keeps the games whose
-        name or description contains every one of its words, ignoring case."""
+        name, alternative names and description contain its words, ignoring case."""
         words = query.casefold().split()
         reader = self._store.list_games
         if not include_code:
             reader = getattr(self._store, 'list_games_without_code', reader)
         games = self._plain_read(lambda: reader())
         return [game for game in games
-                if game.is_declarative and all(word in f'{game.name} {game.description}'.casefold() for word in words)]
+                if game.is_declarative and all(
+                    word in ' '.join((game.name, game.description, *game.alternative_names)).casefold()
+                    for word in words)]
 
     def list_popular_games(self, *, limit: int = 8) -> list[Game]:
-        """Returns the highest player-match totals from the persistent ranking."""
+        """Returns three featured catalog titles, followed by the persistent ranking."""
         if type(limit) is not int or not 1 <= limit <= 20:
             raise InvalidRequestError("limit must be between 1 and 20")
         from contextlib import nullcontext
@@ -2417,16 +2429,24 @@ class GamePlatform:
         # QueryStore serves these read-only summaries through its read cache;
         # opening a write transaction would bypass it and fetch every row again.
         with nullcontext() if read_game is not None else self._lock:
-            list_rankings = getattr(self._store, "list_popular_game_ids", None)
-            if list_rankings is None:
-                return []
-            rankings = list_rankings(limit)
             read_game = read_game or self._store.get_game
             games = []
-            for game_id, _score in rankings:
+
+            def append_visible(game_id):
                 game = read_game(game_id)
                 if game is not None and game.is_declarative and game.published and not game.deleted:
                     games.append(game)
+            for game_id in FEATURED_GAME_IDS:
+                append_visible(game_id)
+                if len(games) == limit:
+                    return games
+            list_rankings = getattr(self._store, "list_popular_game_ids", None)
+            rankings = list_rankings(limit) if list_rankings is not None else ()
+            for game_id, _score in rankings:
+                if game_id not in FEATURED_GAME_IDS:
+                    append_visible(game_id)
+                if len(games) == limit:
+                    break
             return games
 
     def game_popularity_score(
@@ -2465,6 +2485,7 @@ class GamePlatform:
         game_id: str,
         name: str | None = None,
         description: str | None = None,
+        alternative_names: tuple[str, ...] | None = None,
         allowed_player_counts: tuple[int, ...] | None = None,
         allows_leave_mid_match: bool | None = None,
         allows_join_mid_match: bool | None = None,
@@ -2499,6 +2520,7 @@ class GamePlatform:
             updated = replace(
                 game,
                 name=name if name is not None else game.name,
+                alternative_names=game.alternative_names if alternative_names is None else alternative_names,
                 description=description
                 if description is not None
                 else game.description,

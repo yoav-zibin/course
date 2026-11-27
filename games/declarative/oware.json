@@ -1,6 +1,14 @@
 {
  "all_state_public": true,
  "name": "Oware (Declarative)",
+ "alternative_names": [
+  "Awalé",
+  "Awale",
+  "Awari",
+  "Wari",
+  "Warri",
+  "Awele"
+ ],
  "description": "Oware in the Abapa rules for two players: sow seeds counterclockwise around a ring of 12 pits and capture an opponent pit your last seed makes hold exactly two or three seeds, chaining backwards. Unlike the Kalah game listed as Mancala, there are no board stores and no extra turn, captures are not from an opposite pit, a capture that would take every opponent seed is forbidden, and an empty opponent side must be fed if it can be.",
  "game_addition_request_id_and_secret": "example-only-declarative-oware-replace-before-publishing",
  "allowed_player_counts": [

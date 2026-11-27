@@ -8,6 +8,7 @@ import vm from 'node:vm';
 import {fileURLToPath} from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ALTERNATIVE_NAMES = JSON.parse(fs.readFileSync(path.join(ROOT, 'games', 'alternative-names.json'), 'utf8'));
 const OUT = path.join(ROOT, 'games', 'declarative');
 const SOURCE_UI = fs.readFileSync(path.join(ROOT, 'games/declarative/html_conversions_ui.js'), 'utf8');
 const COPY = JSON.parse(fs.readFileSync(path.join(OUT,'locales/html_conversions.json'),'utf8'));
@@ -394,6 +395,7 @@ function packageFor(entry) {
   }
   const payload = {all_state_public:['checkers','chess','four_player_chess','quoridor'].includes(entry.kind),
     name:title,description:entry.rules,allowed_player_counts:entry.players,
+    alternative_names:ALTERNATIVE_NAMES[title.replace(/ \(Declarative\)$/, '').replace(/[!?]+$/, '').toLowerCase()],
     allows_leave_mid_match:source.allows_leave_mid_match,allows_join_mid_match:source.allows_join_mid_match,
     server_code:code,rules:entry.rules,ui_instructions:entry.ui,
     tutorial:{text:entry.rules,html:tutorials},images:allImages(entry.kind),

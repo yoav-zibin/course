@@ -1,6 +1,9 @@
 {
   "all_state_public": false,
   "name": "Dos (Declarative)",
+  "alternative_names": [
+    "DOS Card Game"
+  ],
   "description": "A bright two-player matching card game: match cards by number or colour to the Center Row and be the first to shed your whole hand.",
   "allowed_player_counts": [
     2

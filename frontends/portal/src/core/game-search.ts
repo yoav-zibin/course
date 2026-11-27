@@ -23,7 +23,8 @@ export function gameSuggestions(games: Game[], query: string, limit = 6): Game[]
   const unique=new Map<string,{game:Game;score:number}>();
   for(const game of games){
     if(!game||typeof game.id!=='string'||typeof game.name!=='string')continue;
-    const rank=Math.min(score(game.name),typeof game._sourceText?.name==='string'?score(game._sourceText.name):Infinity);
+    const names=[game.name,game._sourceText?.name,...(game.alternative_names??[])];
+    const rank=Math.min(...names.filter((name):name is string=>typeof name==='string').map(score));
     if(Number.isFinite(rank)&&(!unique.has(game.id)||rank<unique.get(game.id)!.score))unique.set(game.id,{game,score:rank});
   }
   return [...unique.values()].sort((a,b)=>a.score-b.score||a.game.name.localeCompare(b.game.name)).slice(0,limit).map(item=>item.game);

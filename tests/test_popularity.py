@@ -1,8 +1,10 @@
 import json
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from game_platform.json_file_store import JsonFileStore
+from game_platform.service import FEATURED_GAME_IDS
 from game_platform.tests.helpers import Api
 
 
@@ -49,6 +51,19 @@ def exercise_popularity(api: Api) -> tuple[str, str]:
 
 def test_started_player_totals_reorder_games_and_never_count_lobbies_or_retries(api):
     exercise_popularity(api)
+
+
+def test_featured_games_lead_the_popular_list_even_before_they_are_played(api):
+    owner = api.new_user("popularity owner")
+    ranked_id = api.new_game(owner=owner, allowed_player_counts=[2])
+    store = api.platform._store
+    ranked = store.get_game(ranked_id)
+    for game_id, name in zip(FEATURED_GAME_IDS, ("Chess", "Backgammon", "Connect Four")):
+        store.add_game_version(replace(ranked, id=game_id, name=name))
+    store.record_game_match_start(ranked_id, 2)
+    store.record_game_match_start(FEATURED_GAME_IDS[1], 3)
+    _await_popular(api, [*FEATURED_GAME_IDS, ranked_id])
+    _await_popular(api, list(FEATURED_GAME_IDS[:2]), path="/games/popular?limit=2")
 
 
 def test_popularity_survives_a_snapshot_restart_and_match_deletion(tmp_path):
@@ -114,7 +129,7 @@ def test_popular_summaries_skip_code_reads_and_respect_unpublishing(monkeypatch)
             assert store.client.queries == cold_queries
         assert [game["id"] for game in games] == [game_id]
         assert "code" not in games[0]
-        assert read_paths == [store.ref("games", game_id).path]
+        assert read_paths == [store.ref("games", game).path for game in (*FEATURED_GAME_IDS, game_id)]
 
         store.set_game_published(game_id, False)
         assert api.ok("GET", "/games/popular") == []

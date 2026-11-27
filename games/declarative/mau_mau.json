@@ -1,6 +1,10 @@
 {
   "all_state_public": false,
   "name": "Mau-Mau (Declarative)",
+  "alternative_names": [
+    "Mau Mau",
+    "Maumau"
+  ],
   "description": "A German shedding card game for two players: match rank or suit to discard, use 7s, 8s, 9s and Jacks, and be first to empty your hand.",
   "allowed_player_counts": [
     2

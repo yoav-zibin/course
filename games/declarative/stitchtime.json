@@ -1,5 +1,9 @@
 {
   "name": "Stitch & Time",
+  "alternative_names": [
+    "Stitch and Time",
+    "Stitchtime"
+  ],
   "description": "Based on Patchwork. Two players sew patches onto a 9×9 quilt. Whoever is behind on the time track takes the next turn (so a player may move several times in a row). On your turn either advance your token just past your rival and take 1 button per space, or buy one of the next three patches in the circle: pay its buttons, place it anywhere it fits (turned or mirrored), and move ahead by its time. Passing an income space pays you the buttons shown on your patches; passing a leather space gives you a 1×1 patch to place at once. The first to fill a 7×7 square earns 7 bonus points. When both reach the end, score buttons plus bonus minus 2 per empty square; on a tie the player who reached the end first wins.",
   "allowed_player_counts": [
     2

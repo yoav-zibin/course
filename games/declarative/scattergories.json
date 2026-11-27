@@ -1,6 +1,7 @@
 {
  "all_state_public": false,
  "name": "Scattergories (Declarative)",
+ "alternative_names": [],
  "description": "Turn-based Scattergories for 2 to 6 players: three rounds, each with one letter and six categories. On your turn, submit one answer per category. A unique answer that starts with the round letter scores 1 point; duplicates cancel. Most points after three rounds wins.",
  "game_addition_request_id_and_secret": "example-only-declarative-scattergories-replace-before-publishing",
  "allowed_player_counts": [

@@ -1,5 +1,12 @@
 {
   "name": "Chinese Checkers (Declarative)",
+  "alternative_names": [
+    "Chinese Chequers",
+    "Sternhalma",
+    "Damas chinas",
+    "Dames chinoises",
+    "跳棋"
+  ],
   "description": "Move one marble to a neighboring hole or make a chain of hops over occupied holes. Reach all ten holes in the opposite camp to win. A turn moves one marble; other marbles may be jumped. A blocked player passes. After 400 moves, the player whose marbles are closest to their target camp wins; a tie is a draw.",
   "game_addition_request_id_and_secret": "example-only-hex-family-chinese_checkers-replace-before-publishing",
   "allowed_player_counts": [

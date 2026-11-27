@@ -1,6 +1,13 @@
 {
   "all_state_public": false,
   "name": "Memory pairs (Declarative)",
+  "alternative_names": [
+    "Memory",
+    "Concentration",
+    "Matching Pairs",
+    "Pelmanism",
+    "Pairs"
+  ],
   "description": "Reveal two cards. A matching pair scores one and grants another turn. A mismatch passes the turn; the next reveal hides it. Most of eight pairs wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-memory-replace-before-publishing",
   "allowed_player_counts": [

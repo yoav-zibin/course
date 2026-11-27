@@ -1,6 +1,9 @@
 {
  "all_state_public": true,
  "name": "Onitama (Declarative)",
+ "alternative_names": [
+  "オニタマ"
+ ],
  "description": "Onitama: a two-player duel of masters and students on a 5x5 shrine board. Five movement cards decide every step; capture the rival master or reach their temple to win.",
  "game_addition_request_id_and_secret": "example-only-declarative-onitama-replace-before-publishing",
  "allowed_player_counts": [

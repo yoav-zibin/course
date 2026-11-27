@@ -1,6 +1,7 @@
 {
   "all_state_public": true,
   "name": "Quoridor (Declarative)",
+  "alternative_names": [],
   "description": "Race your pawn to the opposite edge. Move one square or place a wall each turn; walls may slow a rival but may never block every route.",
   "allowed_player_counts": [
     2

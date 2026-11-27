@@ -1,6 +1,20 @@
 {
   "all_state_public": true,
   "name": "Connect Four (Declarative)",
+  "alternative_names": [
+    "Connect 4",
+    "Connect4",
+    "Four in a Row",
+    "4 in a Row",
+    "Captain's Mistress",
+    "Four Up",
+    "Puissance 4",
+    "Vier gewinnt",
+    "Conecta 4",
+    "Forza 4",
+    "ארבע בשורה",
+    "四子棋"
+  ],
   "description": "Choose a column to drop a disc. Connect four horizontally, vertically or diagonally. A full board is a draw.",
   "game_addition_request_id_and_secret": "example-only-declarative-connect4-replace-before-publishing",
   "allowed_player_counts": [

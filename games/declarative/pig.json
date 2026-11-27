@@ -1,6 +1,10 @@
 {
   "all_state_public": true,
   "name": "Pig (30 points) (Declarative)",
+  "alternative_names": [
+    "Pig Dice 30",
+    "30-Point Pig"
+  ],
   "description": "Roll or hold. A one loses the turn total. Other rolls add to it. Hold banks it and passes. First to 30 wins. After 300 actions, the higher banked score wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-pig-replace-before-publishing",
   "allowed_player_counts": [

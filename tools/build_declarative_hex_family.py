@@ -12,6 +12,8 @@ import json
 import math
 from pathlib import Path
 
+from game_platform.tools.game_alternative_names import reviewed_names
+
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / "games" / "declarative"
 LOCALES = ("en", "es", "fr", "de", "pt", "zh", "hi", "ar")
@@ -282,6 +284,7 @@ def main():
         cover = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><rect width="160" height="90" rx="10" fill="#142238"/><path d="M30 45h100M50 25l60 40M50 65l60-40" stroke="#94a3b8" stroke-width="3"/><circle cx="50" cy="45" r="13" fill="#38bdf8"/><circle cx="110" cy="45" r="13" fill="#fb7185"/></svg>'
         payload = {
             "name": title + " (Declarative)", "description": source_rules,
+            "alternative_names": reviewed_names(title),
             "game_addition_request_id_and_secret": "example-only-hex-family-" + kind + "-replace-before-publishing",
             "allowed_player_counts": [3, 4] if kind == "catan" else [2] if kind != "chinese_checkers" else [2, 3, 4, 5, 6],
             "all_state_public": kind != "catan",

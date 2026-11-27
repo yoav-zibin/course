@@ -1,5 +1,6 @@
 {
   "name": "Lantern Trails",
+  "alternative_names": [],
   "description": "Based on Tsuro. 2 to 8 players each float a paper lantern on a 6×6 river. First, each player puts a lantern on a free gate at the edge. Then, on your turn, lay one of your 3 tiles on the square in front of your lantern, turned any way you like; every lantern next to the new tile follows its channel to the end, and you draw a tile. A lantern that reaches the edge of the board is out, and two lanterns that meet are both out. You may not send your own lantern off the edge unless every tile and turn would. The last lantern on the river wins; lanterns that go out together, or that remain when all 35 tiles are played, share the win. With 3 or more players the Dragon decides who draws first when tiles come back.",
   "allowed_player_counts": [
     2,

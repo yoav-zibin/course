@@ -1,6 +1,14 @@
 {
   "all_state_public": false,
   "name": "Thirty-one (Declarative)",
+  "alternative_names": [
+    "31",
+    "Scat",
+    "Blitz",
+    "Schwimmen",
+    "Schnauz",
+    "Knack"
+  ],
   "description": "A classic draw-and-discard card game for two players: build the best hand of one suit, knock when it is strong, and chase the blitz of 31.",
   "allowed_player_counts": [
     2

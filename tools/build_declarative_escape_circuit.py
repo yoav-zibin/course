@@ -8,6 +8,7 @@ from collections import deque
 from pathlib import Path
 
 from game_platform.game_logic import GameLogic
+from game_platform.tools.game_alternative_names import reviewed_names
 from game_platform.tools.escape_circuit_text import INSTRUCTIONS, LOCALES, RULES, STRINGS, TITLES
 
 DEST = Path(__file__).resolve().parents[1] / 'games' / 'declarative'
@@ -285,6 +286,7 @@ def main():
                                               f'<p>{html.escape(RULES[0])}</p>'},
         'images': images,
         'unit_tests': {**{f'{key}_schema': value for key, value in game_schemas.items()}, 'cases': cases},
+        'alternative_names': reviewed_names(TITLES[0]),
         'game_addition_request_id_and_secret': 'example-only-escape-circuit-replace-before-publishing',
         'translations': {locale: {
             'display_name': TITLES[i], 'short_description': RULES[i], 'game_logic_rules': RULES[i],

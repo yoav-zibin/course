@@ -89,8 +89,10 @@ def inputs_hash(body_dict) -> str:
     # master-password update applies to), never part of the game's
     # identity: it is excluded, so a payload hashes the same with and
     # without it — including payloads stored before the field existed.
-    if isinstance(body_dict, dict) and "game_id" in body_dict:
-        body_dict = {k: v for k, v in body_dict.items() if k != "game_id"}
+    # Search aliases are catalog metadata and have no effect on the evidence.
+    if isinstance(body_dict, dict):
+        body_dict = {k: v for k, v in body_dict.items()
+                     if k not in {"game_id", "alternative_names"}}
     return hashlib.sha256(canonical_json(body_dict).encode("utf-8")).hexdigest()
 
 
@@ -1051,7 +1053,9 @@ def make_router(platform_dependency):
 
     def stored_body(store, row, secret):
         try:
-            return GameImport.model_validate(load_submission_body(store, row, secret=secret))
+            body = load_submission_body(store, row, secret=secret)
+            body.setdefault("alternative_names", [])
+            return GameImport.model_validate(body)
         except Exception:
             raise HTTPException(422, "the stored step 1 inputs are invalid; upload corrected inputs") from None
 

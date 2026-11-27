@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ALTERNATIVE_NAMES = JSON.parse(fs.readFileSync(path.join(ROOT, 'games', 'alternative-names.json'), 'utf8'));
 const OUT = path.join(ROOT, 'games', 'declarative');
 const UI = fs.readFileSync(path.join(OUT, 'archive_conversions_ui.js'), 'utf8').replace(/\r\n?/g, '\n');
 const require = createRequire(import.meta.url);
@@ -623,6 +624,7 @@ function build(entry) {
   const payload={
     all_state_public:['kisolo','gobblet','chutes_ladders','dots_boxes','six_mens_morris'].includes(entry.kind),
     name:title,description,allowed_player_counts:source.allowed_player_counts,
+    alternative_names:ALTERNATIVE_NAMES[title.replace(/ \(Declarative\)$/, '').replace(/[!?]+$/, '').toLowerCase()],
     allows_leave_mid_match:source.allows_leave_mid_match,allows_join_mid_match:source.allows_join_mid_match,
     server_code:code,rules,ui_instructions:ui,tutorial,
     images:!custom && source.images?.length>=4?source.images:fallbackImages(entry.kind),

@@ -1,6 +1,15 @@
 {
   "all_state_public": true,
   "name": "Dots and Boxes (Declarative)",
+  "alternative_names": [
+    "Dots & Boxes",
+    "Boxes",
+    "Dots and Dashes",
+    "The Dot Game",
+    "Pipopipette",
+    "Timbiriche",
+    "Käsekästchen"
+  ],
   "description": "A grid of five by five dots makes sixteen boxes. Players take turns drawing one line between two neighbouring dots. Drawing the fourth side of a box claims it in your colour and gives you another turn. When every box is claimed, the player with more boxes wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-dots_boxes-replace-before-publishing",
   "allowed_player_counts": [

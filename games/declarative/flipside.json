@@ -1,5 +1,8 @@
 {
   "name": "Flipside Lords",
+  "alternative_names": [
+    "Flip Side Lords"
+  ],
   "description": "Based on The Duke. Two lords fight on a 6×6 board with troop tiles. Each tile shows a movement grid, and after it acts it flips to its other side, which has a different grid. On your turn either move one tile using its grid (move, jump, slide, strike from afar, or command a nearby troop), or draw a random troop from your bag and place it beside your Lord. You may never leave your Lord where it could be taken next turn. If your rival cannot make a safe move, you win. Setup: each Lord starts in the middle of its home row with two Footmen beside it.",
   "allowed_player_counts": [
     2

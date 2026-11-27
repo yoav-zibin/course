@@ -1,6 +1,10 @@
 {
   "all_state_public": true,
   "name": "Sim (Declarative)",
+  "alternative_names": [
+    "Sim Game",
+    "Sim Pencil Game"
+  ],
   "description": "Six dots form a hexagon with fifteen possible lines. Players take turns claiming one unclaimed line in their colour. The first player to complete a triangle entirely in their own colour loses.",
   "game_addition_request_id_and_secret": "example-only-declarative-sim-replace-before-publishing",
   "allowed_player_counts": [

@@ -489,6 +489,7 @@ class GameSummaryOut(BaseModel):
     id: str
     version: int
     name: str
+    alternative_names: list[str] = Field(default_factory=list)
     description: str
     allowed_player_counts: list[int]
     allows_leave_mid_match: bool
@@ -511,6 +512,7 @@ class GameSummaryOut(BaseModel):
             id=game.id,
             version=game.version,
             name=game.name,
+            alternative_names=list(game.alternative_names),
             description=game.description,
             allowed_player_counts=list(game.rules.allowed_player_counts),
             allows_leave_mid_match=game.rules.allows_leave_mid_match,

@@ -1,6 +1,7 @@
 {
   "all_state_public": true,
   "name": "Quarto (Declarative)",
+  "alternative_names": [],
   "description": "Quarto on a 4x4 board: you never choose your own piece - you place the piece your opponent handed you, then choose which piece to hand them next. Complete a line of four pieces sharing one attribute to win.",
   "game_addition_request_id_and_secret": "example-only-declarative-quarto-replace-before-publishing",
   "allowed_player_counts": [

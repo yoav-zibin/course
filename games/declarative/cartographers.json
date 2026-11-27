@@ -1,6 +1,10 @@
 {
   "all_state_public": false,
   "name": "Cartographers (Declarative)",
+  "alternative_names": [
+    "Cartographers: A Roll Player Tale",
+    "Der Kartograph"
+  ],
   "description": "A two-player adaptation. Each of twelve cards names a terrain and a shape. You and your opponent place that shape on your own 7 by 7 map, then the next card is drawn. Rotate or flip a shape before placing it; mountains and filled squares block it. After every third card a season is scored, and the player with the most stars after four seasons wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-cartographers-replace-before-publishing",
   "allowed_player_counts": [

@@ -186,3 +186,14 @@ jobs:
           VM_USER: ${{ secrets.GCP_VM_USER }}
         run: |
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'sudo journalctl -u game-platform.service --since "5 minutes ago" --no-pager | grep -E "audit-batch6:|legacy-schema-recovery:|catalog-deduplication:" | tail -n 105; if sudo test -f /var/log/game-platform/server.log; then sudo grep -E "audit-batch6:|legacy-schema-recovery:|catalog-deduplication:" /var/log/game-platform/server.log | tail -n 105; fi'
+
+      - name: Apply the reviewed game catalog update
+        if: steps.revision.outputs.current == 'true'
+        env:
+          VM_HOST: ${{ secrets.GCP_VM_HOST }}
+          VM_USER: ${{ secrets.GCP_VM_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" 'cd /opt/game-platform &&
+            sudo bash -c "test -f release-state/game-alternative-names-v1 ||
+              (.venv/bin/python -m game_platform.tools.game_alternative_names --config config.json &&
+               touch release-state/game-alternative-names-v1)"'

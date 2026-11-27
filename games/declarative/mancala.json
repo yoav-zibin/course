@@ -1,6 +1,11 @@
 {
   "all_state_public": true,
   "name": "Mancala (Kalah) (Declarative)",
+  "alternative_names": [
+    "Kalah",
+    "Kalaha",
+    "Kalah Mancala"
+  ],
   "description": "Sow from your six pits counterclockwise, skipping the opponent’s store. Finish in your store for another turn. Capture from the opposite pit when ending in your empty pit. Sweep remaining seeds when one side empties. Most seeds wins; at 300 turns sweep and score.",
   "game_addition_request_id_and_secret": "example-only-declarative-mancala-replace-before-publishing",
   "allowed_player_counts": [

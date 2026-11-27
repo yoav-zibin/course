@@ -214,6 +214,7 @@ class Game:
     name: str
     description: str
     rules: GameRules
+    alternative_names: tuple[str, ...] = ()
     # True only when every player's game state is public. Older games keep the
     # private-state handoff until their author explicitly classifies them.
     all_state_public: bool = False

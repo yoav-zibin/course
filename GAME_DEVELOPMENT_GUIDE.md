@@ -39,8 +39,11 @@ game, follow the partial-update instructions below.
    the server to place it. Your own board should show every placed ship; a sunk
    opponent ship should appear as a complete hull on the target board. If a
    placement is rejected, undo it or choose a different highlighted square.
-5. Include rules, UI instructions, tutorial, supporting SVG illustrations and all
-   translations. Record the complete REST test flow described in the
+5. Include rules, UI instructions, tutorial, supporting SVG illustrations, all
+   translations and an `alternative_names` array. Research established names,
+   regional spellings and names in other languages for the same game. Portal
+   search uses these names regardless of the player's selected language. Use
+   an empty array when you cannot confirm an alternative. Record the complete REST test flow described in the
    [import guide](docs/agent-game-import.md). The trace endpoints retain their
    `/game-test/*` names; the old HTML submission page is removed.
 6. Submit the complete tested package to `POST /games/declarative`. Keep its

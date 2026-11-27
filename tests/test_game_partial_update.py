@@ -56,13 +56,15 @@ def fail_test_page(*args, **kwargs):
 
 
 @pytest.mark.parametrize("field", [
-    "name", "description", "rules", "ui_instructions", "tutorial", "images", "translations",
+    "name", "description", "rules", "ui_instructions", "tutorial", "images", "translations", "alternative_names",
 ])
 def test_metadata_changes_skip_test_page_and_logic_checks(api, imported_game, monkeypatch, field):
     _owner, game, raw, checks = imported_game
     monkeypatch.setattr(game_traces, "assert_complete", fail_test_page)
     if field in {"name", "description", "rules", "ui_instructions"}:
         value = "Updated " + raw[field]
+    elif field == "alternative_names":
+        value = ["First to Three"]
     else:
         value = copy.deepcopy(raw[field])
         if field == "tutorial":

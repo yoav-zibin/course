@@ -1,6 +1,11 @@
 {
   "all_state_public": true,
   "name": "Chutes & Ladders (Declarative)",
+  "alternative_names": [
+    "Chutes and Ladders",
+    "Snakes & Ladders",
+    "Snakes and Ladders"
+  ],
   "description": "A turn-based race for 2 to 4 players. Spin to move along the numbered board, climb ladders, and slide down chutes.",
   "allowed_player_counts": [
     2,

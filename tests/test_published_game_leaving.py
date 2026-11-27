@@ -35,6 +35,7 @@ def test_every_published_game_leaves_through_the_shared_api(api, entry, mode, mo
     # legitimately finishes at once when dealt a blitz; this seed avoids it.
     monkeypatch.setattr(api.platform, "_new_seed", lambda: 0x5EED)
     body = GameImport.model_validate({
+        "alternative_names": [],
         "game_addition_request_id_and_secret": "test-only-published-leave-fixture",
         **entry,
     })

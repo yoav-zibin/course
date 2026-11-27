@@ -1,6 +1,7 @@
 {
   "all_state_public": false,
   "name": "Spades (Declarative)",
+  "alternative_names": [],
   "description": "Play one card to each trick. Spades are trump; the highest trump or led-suit card wins. Collect completed tricks to score.",
   "allowed_player_counts": [
     4

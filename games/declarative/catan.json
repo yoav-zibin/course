@@ -1,6 +1,12 @@
 {
  "all_state_public": false,
  "name": "Catan (Declarative)",
+ "alternative_names": [
+  "The Settlers of Catan",
+  "Die Siedler von Catan",
+  "Los Colonos de Catán",
+  "Catán"
+ ],
  "description": "Settle the island of Catan: roll dice, collect wood, sheep, wheat, brick and ore, trade and build settlements, cities and roads. First to 10 points wins by default; the first player may set the target (3 to 15) before placing settlements.",
  "game_addition_request_id_and_secret": "example-only-declarative-catan-replace-before-publishing",
  "allowed_player_counts": [

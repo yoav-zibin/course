@@ -1,6 +1,11 @@
 {
   "all_state_public": true,
   "name": "Six Men's Morris (Declarative)",
+  "alternative_names": [
+    "Six Mens Morris",
+    "Six Man Morris",
+    "Sixpenny Morris"
+  ],
   "description": "Make a line. Take a stone.",
   "allowed_player_counts": [
     2

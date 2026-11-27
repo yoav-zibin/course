@@ -1,6 +1,13 @@
 {
   "all_state_public": true,
   "name": "Checkers (Declarative)",
+  "alternative_names": [
+    "English Draughts",
+    "American Checkers",
+    "Draughts",
+    "Damas",
+    "Jeu de dames"
+  ],
   "description": "Move diagonally, capture opposing pieces by jumping, and reach the far side to crown a king. Captures are mandatory and a capture chain must be completed.",
   "allowed_player_counts": [
     2

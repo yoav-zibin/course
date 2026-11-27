@@ -1,5 +1,8 @@
 {
   "name": "Crownfields",
+  "alternative_names": [
+    "Crown Fields"
+  ],
   "description": "Based on Kingdomino. 2 to 4 players each build a realm of two-square tiles around their keep. Each round, in the order of the \"Now\" row, you lay the tile your king stands on, then move your king to a tile in the \"Next\" row: the lower its number, the earlier you act next round. A tile must touch your keep or the same terrain with at least one half (side by side), and the realm, keep included, must fit in a 5×5 square. A tile that fits nowhere is discarded. With 2 players each has two kings and 24 tiles are used; with 3, 36; with 4, all 48. At the end, every group of joined squares of one terrain scores its size times its crowns. Highest total wins; ties go to the largest group, then the most crowns, then are shared.",
   "allowed_player_counts": [
     2,

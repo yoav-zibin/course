@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 from game_platform.game_logic import GameLogic
+from game_platform.tools.game_alternative_names import reviewed_names
 
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / 'games' / 'declarative'
@@ -225,6 +226,7 @@ def package(kind):
     source=strings(kind)
     return {'all_state_public':kind!='memory',
             'name':TITLES[kind][0]+' (Declarative)','description':RULES[kind][0],
+            'alternative_names': reviewed_names(TITLES[kind][0]),
             'game_addition_request_id_and_secret':'example-only-declarative-'+kind+'-replace-before-publishing',
             'allowed_player_counts':[2],
             'server_code':code,'declarative_ui':specification(kind),

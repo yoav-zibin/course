@@ -5,9 +5,11 @@ import json
 import secrets
 import subprocess
 import sys
+import unicodedata
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, ValidationError, create_model, model_validator
 from starlette.concurrency import run_in_threadpool
 
 from game_platform.game_artifacts import text, validate_artifact, validate_test_rosters
@@ -21,6 +23,22 @@ MAX_CODE_BYTES = 200_000
 MAX_IMAGE_BYTES = 120_000
 MAX_PACKAGE_BYTES = 400_000
 UPLOAD_TIMEOUT_SECONDS = 15
+
+
+def validate_alternative_names(names: list[str]) -> list[str]:
+    names = [unicodedata.normalize('NFC', name) for name in names]
+    if any(not any(char.isalnum() for char in name) for name in names):
+        raise ValueError('each alternative name needs a letter or number')
+    if len({name.casefold() for name in names}) != len(names):
+        raise ValueError('alternative names must be distinct')
+    return names
+
+
+AlternativeNames = Annotated[
+    list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]],
+    AfterValidator(validate_alternative_names),
+]
+
 
 class GameTranslation(BaseModel):
     """One language's translation of a game's player-facing texts, in the shape the
@@ -37,6 +55,8 @@ class GameTranslation(BaseModel):
 class GameImport(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     name: Name
+    alternative_names: AlternativeNames = Field(
+        max_length=16, description='Other established names or spellings. Supply [] if there are none.')
     description: str = Field(min_length=1, max_length=2000)
     allowed_player_counts: PlayerCounts
     allows_leave_mid_match: bool = False
@@ -158,6 +178,7 @@ def merge_update(game, patch):
                          and item.get('game_logic_rules') == package.get('rules_text')), 'en')
     values = dict(
         name=game.name, description=game.description,
+        alternative_names=list(game.alternative_names),
         allowed_player_counts=list(game.rules.allowed_player_counts),
         allows_leave_mid_match=game.rules.allows_leave_mid_match,
         allows_join_mid_match=game.rules.allows_join_mid_match,
@@ -480,6 +501,7 @@ def make_router(platform_dependency):
         package = await run_in_threadpool(verify_submission, body)
         game = await run_in_threadpool(platform.import_agent_game,
             name=body.name, description=body.description, rules=body.game_rules(),
+            alternative_names=tuple(body.alternative_names),
             all_state_public=body.all_state_public,
             code=body.client_code, server_code=body.server_code,
             game_schemas=body.game_schemas(), import_package=package,
@@ -509,35 +531,42 @@ def make_router(platform_dependency):
                 return GameOut.of(target)
             if changed & PRESENTATION_FIELDS:
                 await run_in_threadpool(game_traces.assert_complete, platform, body)
-            verified = await run_in_threadpool(verify_submission, body, changed_fields=changed)
+            # Search aliases are fully validated by GameUpdate and do not modify
+            # any previously verified artifacts.
+            verified = None
+            if changed != {'alternative_names'}:
+                verified = await run_in_threadpool(verify_submission, body, changed_fields=changed)
         except (InvalidRequestError, ValueError) as exc:
             raise HTTPException(422, str(exc)) from exc
         # Preserve package extensions and the original secret, including when an
         # administrator supplies the master password. Never persist that password.
         package = copy.deepcopy(target.import_package or {})
-        for key, field in {
-            'language': 'language', 'translations': 'translations', 'rules_text': 'rules',
-            'ui_text': 'ui_instructions', 'tutorial': 'tutorial', 'images': 'images',
-            'unit_tests': 'unit_tests', 'declarative_ui': 'declarative_ui',
-        }.items():
-            if key in package or field in changed:
-                package[key] = verified[key]
-        # Older complete imports did not store their source language explicitly.
-        if package.get('translations'):
-            package['language'] = body.language
         schemas = body.game_schemas() if changed & LOGIC_FIELDS else target.game_schemas
-        persisted_package = with_package_secret_hash(package, package_secret_hash(target.import_package))
-        if len(json.dumps(persisted_package).encode()) > MAX_PACKAGE_BYTES:
-            raise HTTPException(422, 'Combined metadata and images exceed 400000 bytes')
-        stored_content = {'import_package': persisted_package, 'game_schemas': schemas,
-                          'code': body.client_code, 'server_code': body.server_code,
-                          'name': body.name, 'description': body.description}
-        if len(json.dumps(stored_content).encode()) > MAX_BODY_BYTES:
-            raise HTTPException(422, 'Stored game package exceeds 900000 bytes; reduce code or schemas')
+        if verified is not None:
+            for key, field in {
+                'language': 'language', 'translations': 'translations', 'rules_text': 'rules',
+                'ui_text': 'ui_instructions', 'tutorial': 'tutorial', 'images': 'images',
+                'unit_tests': 'unit_tests', 'declarative_ui': 'declarative_ui',
+            }.items():
+                if key in package or field in changed:
+                    package[key] = verified[key]
+            # Older complete imports did not store their source language explicitly.
+            if package.get('translations'):
+                package['language'] = body.language
+            persisted_package = with_package_secret_hash(package, package_secret_hash(target.import_package))
+            if len(json.dumps(persisted_package).encode()) > MAX_PACKAGE_BYTES:
+                raise HTTPException(422, 'Combined metadata and images exceed 400000 bytes')
+            stored_content = {'import_package': persisted_package, 'game_schemas': schemas,
+                              'code': body.client_code, 'server_code': body.server_code,
+                              'name': body.name, 'description': body.description,
+                              'alternative_names': body.alternative_names}
+            if len(json.dumps(stored_content).encode()) > MAX_BODY_BYTES:
+                raise HTTPException(422, 'Stored game package exceeds 900000 bytes; reduce code or schemas')
         # Authored translations stay inside the capability-protected package.
         # Global reviewed translation memory belongs to administrators.
         game = await run_in_threadpool(platform.import_agent_game,
             name=body.name, description=body.description,
+            alternative_names=tuple(body.alternative_names),
             all_state_public=body.all_state_public,
             rules=body.game_rules(), code=body.client_code, server_code=body.server_code,
             game_schemas=schemas, import_package=package, existing_game_id=game_id,

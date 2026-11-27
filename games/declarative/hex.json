@@ -1,6 +1,10 @@
 {
   "all_state_public": true,
   "name": "Hex (Declarative)",
+  "alternative_names": [
+    "Polygon",
+    "Nash"
+  ],
   "description": "On a 7 by 7 hex board, player one connects top to bottom; player two connects left to right. Adjacent stones join a path. The first connection wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-hex-replace-before-publishing",
   "allowed_player_counts": [

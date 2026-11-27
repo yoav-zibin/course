@@ -1,6 +1,10 @@
 {
   "all_state_public": true,
   "name": "Ataxx (Declarative)",
+  "alternative_names": [
+    "Infection",
+    "SlimeWars"
+  ],
   "description": "On a 7 by 7 board, players start with two pieces in opposite corners. Move to an empty square one step away to clone a piece, or two steps away to jump and leave the starting square empty. After landing, convert all opposing pieces next to the destination, including diagonals. A player with no legal move passes. The game ends when the board is full, a player has no pieces, neither player can move, or 300 moves have been made. Most pieces wins.",
   "game_addition_request_id_and_secret": "example-only-declarative-ataxx-replace-before-publishing",
   "allowed_player_counts": [

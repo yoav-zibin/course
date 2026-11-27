@@ -1,5 +1,6 @@
 {
   "name": "Scopa (Declarative)",
+  "alternative_names": [],
   "description": "Play one deal of two-player Scopa with 40 cards. Aces count 1, Jacks 8, Queens 9 and Kings 10. Deal three cards each and four face up; deal three more each whenever hands run out. Play one card: if a table card has the same value, capture exactly one such card. Otherwise capture any group adding to your card, or leave it on the table if no capture is possible. Clearing the table earns a sweep, except on the last play. After the last play, the last capturer takes remaining table cards. Score one point each for most cards, most diamonds, the 7 of diamonds and best primiera, plus one per sweep. Ties in a category score no point. Primiera requires all four suits and values 7, 6, A, 5, 4, 3, 2, then face cards in that order. The higher score wins this deal.",
   "allowed_player_counts": [
     2
