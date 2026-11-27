@@ -8,12 +8,12 @@ test.beforeEach(async({baseURL})=>{
 test('match names and playable packages download without catalog entries and survive an offline restart',async({page,request,context},info)=>{
   test.setTimeout(90000);
   const name=uniqueName('Offline library game'),gameId=await createGame(request,name);
-  const host=await createUser(request,uniqueName('Offline library host'));
+  const player=await createUser(request,uniqueName('Offline library player'));
   const opponent=await createUser(request,uniqueName('Offline library opponent'));
-  const headers={'X-User-Id':host.id,'X-User-Password':host.password};
+  const headers={'X-User-Id':opponent.id,'X-User-Password':opponent.password};
   const created=await request.post('/matches',{headers,data:{game_id:gameId}});
   expect(created.ok(),await created.text()).toBeTruthy();const match=await created.json();
-  const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{}});
+  const joined=await request.post(`/matches/${match.id}/join`,{headers:{'X-User-Id':player.id,'X-User-Password':player.password},data:{}});
   expect(joined.ok(),await joined.text()).toBeTruthy();
 
   expect(await joined.json()).toMatchObject({status:'ongoing',move_count:0,turn_of_player_indices:[0]});
@@ -26,7 +26,7 @@ test('match names and playable packages download without catalog entries and sur
     const url=new URL(route.request().url());
     return route.fulfill({json:url.pathname.startsWith('/v2/')?{items:[],next_cursor:null}:[]});
   });
-  await loginAs(page,host);await page.goto('/portal#matches');
+  await loginAs(page,player);await page.goto('/portal#matches');
   await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
   const cardTitle=page.getByTestId(`match-card-${match.id}`).getByRole('heading',{name:`${name} against ${opponent.display_name}`,exact:true});
   await expect(cardTitle).toBeVisible({timeout:30000});
@@ -42,7 +42,7 @@ test('match names and playable packages download without catalog entries and sur
       name:responses['/portal/match-games']?.[`${gameId}@${version}`]?.name,
       catalogHasGame:(responses['/games']||[]).some((item:any)=>item.id===gameId),
     };
-  },{userId:host.id,matchId:match.id,gameId,version:match.game_version});
+  },{userId:player.id,matchId:match.id,gameId,version:match.game_version});
   await expect.poll(downloaded,{timeout:30000}).toEqual({indexed:true,snapshot:true,package:true,name,catalogHasGame:false});
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
   await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true);
@@ -60,7 +60,7 @@ test('match names and playable packages download without catalog entries and sur
     const key=Object.keys(localStorage).find(key=>key.startsWith('buildplay.shared.v1.')&&key.endsWith(`.${userId}`));
     const data=key?JSON.parse(localStorage.getItem(key)!):null;
     return {moves:data?.queues?.[matchId]?.map((item:any)=>item.body),packageSaved:!!data?.responses?.[`/games/${gameId}/versions/${version}`]?.server_code};
-  },{userId:host.id,matchId:match.id,gameId,version:match.game_version});
+  },{userId:player.id,matchId:match.id,gameId,version:match.game_version});
   await expect.poll(queued).toEqual({moves:[{move:{cell:0},expected_move_count:0}],packageSaved:true});
   await page.reload();await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();

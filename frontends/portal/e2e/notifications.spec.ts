@@ -134,6 +134,10 @@ test('the inbox updates automatically, keeps one named opponent update per match
   test.setTimeout(90000);
   const alice=await createUser(request,uniqueName('Moving opponent')),bob=await createUser(request,uniqueName('Inbox player'));
   const match=await createMatch(request,bob,await createGame(request,uniqueName('Live inbox game')));await acceptInvite(request,bob,alice,match.id);
+  // This fixture starts with the host's join notification already read.
+  const joined=(await inbox(request,bob)).items.find((item:any)=>item.event==='player_joined');
+  const read=await request.post(`/users/me/notifications/${joined.id}/read`,{headers:headers(bob)});
+  expect(read.ok()).toBeTruthy();
   await loginAs(page,bob);await page.goto('/portal');await page.getByRole('button',{name:'Notifications',exact:true}).click();
   const dialog=page.getByRole('dialog'),rows=dialog.locator('[data-testid^="notification-"]');
   await expect(page.getByText('No notifications yet.',{exact:true})).toBeVisible();

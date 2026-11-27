@@ -22,10 +22,10 @@ test('online matches use the shared navigation and retain their public game thro
 
   const moved=await request.post(`/matches/${match.id}/moves`,{headers:{'X-User-Id':opponent.id,'X-User-Password':opponent.password},data:{move:{cell:0},expected_move_count:0}});
   expect(moved.ok(),await moved.text()).toBeTruthy();
-  const viewerHeaders={'X-User-Id':opponent.id,'X-User-Password':opponent.password};
+  const viewerHeaders=headers;
   const initialResponse=await request.get(`/matches/${match.id}`,{headers:viewerHeaders});expect(initialResponse.ok()).toBeTruthy();
   const initial=await initialResponse.json();expect(initial.status).toBe('ongoing');expect(initial.move_count).toBe(1);expect(initial.state).toBeDefined();expect(initial).not.toHaveProperty('private');
-  await loginAs(page,opponent);
+  await loginAs(page,host);
   const mutations:string[]=[];
   page.on('request',request=>{const path=new URL(request.url()).pathname;if(/^\/matches(?:\/|$)/.test(path)&&!['GET','HEAD'].includes(request.method()))mutations.push(`${request.method()} ${path}`);});
   await page.goto(`/portal#match=${match.id}`);
@@ -50,7 +50,7 @@ test('online matches use the shared navigation and retain their public game thro
     await expect(page.getByRole('dialog',{name:'Match menu',exact:true})).toHaveCount(0);
     await expect(page).toHaveURL(/#matches$/);
     await expect(page.getByRole('heading',{name:'Matches',exact:true})).toBeVisible();
-    await expect(page.getByTestId(`match-card-${match.id}`).getByRole('heading',{name:`${name} against ${host.display_name}`,exact:true})).toBeVisible();
+    await expect(page.getByTestId(`match-card-${match.id}`).getByRole('heading',{name:`${name} against ${opponent.display_name}`,exact:true})).toBeVisible();
     const reopen=page.getByRole('button',{name:'Open match',exact:true});
     await expect(reopen).toHaveCount(1);await activate(reopen,isMobile);
     await expect(page).toHaveURL(new RegExp(`#match=${match.id}$`));
