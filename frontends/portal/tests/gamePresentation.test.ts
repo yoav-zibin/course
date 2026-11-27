@@ -30,18 +30,21 @@ test('the Backgammon match has one doubling control when the cube is tappable',(
   }
 });
 
-test('Backgammon keeps checker actions and Help without redundant badges or tools',()=>{
+test('Backgammon keeps checker, die, and cube actions without redundant badges or tools',()=>{
   const presentation=backgammonMatchPresentation!;
   const checker:Piece={id:'checker_0_1',type:'checker',board:'main',
     position:{x:30,y:30},actions:['move'],move_targets:['point_5']};
   const tools:Piece[]=['help','hint','undo'].map(id=>({id,type:'tool_button',
     board:'main',position:{x:30,y:-80},actions:['tap']}));
-  const scene=presentation.presentScene({pieces:[checker,...tools],
+  const die:Piece={id:'die_0',type:'die',board:'main',position:{x:30,y:60},actions:['tap']};
+  const cube:Piece={id:'cube',type:'cube',board:'off',position:{x:30,y:90},actions:['tap']};
+  const scene=presentation.presentScene({pieces:[checker,die,cube,...tools],
     labels:[{id:'hint_move',text:'Try a move',x:30,y:30}]},{view:{}} as StateMessage);
-  assert.deepEqual(scene.pieces,[checker,{...tools[0],position:{x:30,y:-18}}]);
+  assert.deepEqual(scene.pieces,[checker,die,cube,{...tools[0],position:{x:30,y:-18}}]);
   assert.deepEqual(scene.labels,[]);
-  assert.equal(presentation.showActionBadges?.(checker),false);
+  for(const piece of [checker,die,cube])assert.equal(presentation.showActionBadges?.(piece),false);
   assert.equal(presentation.showActionBadges?.(tools[0]),true);
+  assert.equal(presentation.showSelectionFooter,false);
 });
 
 test('exact reviewed historical Backgammon UIs receive bundled repair while rules and version remain pinned',async()=>{

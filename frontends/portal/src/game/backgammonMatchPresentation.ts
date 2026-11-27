@@ -36,6 +36,7 @@ function presentScene(scene: Scene, message: StateMessage): Scene {
 export const backgammonMatchPresentation: GameRendererProps['boardPresentation'] = {
   visibleBoard: board => board.id !== 'felt',
   presentScene,
-  showActionBadges: piece => !piece.id.startsWith('checker_'),
+  showActionBadges: piece => !piece.id.startsWith('checker_') && piece.type !== 'die' && piece.id !== 'cube',
+  showSelectionFooter: false,
   motion: {roll_settle_ms: 0, turn_pause_ms: 0},
 };

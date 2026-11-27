@@ -107,8 +107,18 @@ test('saved Backgammon opening ties remain clear after computer rerolls and the 
   // Target artwork can overlap a checker. Real board gestures resolve the
   // source geometrically, rather than requiring that SVG node to be on top.
   const sourceBox=(await checker.boundingBox())!;
-  if(isMobile)await page.touchscreen.tap(sourceBox.x+sourceBox.width/2,sourceBox.y+sourceBox.height/2);
-  else await page.mouse.click(sourceBox.x+sourceBox.width/2,sourceBox.y+sourceBox.height/2);
+  const tapChecker=()=>isMobile
+    ? page.touchscreen.tap(sourceBox.x+sourceBox.width/2,sourceBox.y+sourceBox.height/2)
+    : page.mouse.click(sourceBox.x+sourceBox.width/2,sourceBox.y+sourceBox.height/2);
+  const boardHeight=(await canvas.boundingBox())!.height;
+  await tapChecker();
+  await expect(destinations.first()).toBeVisible();
+  await expect(board.getByRole('button',{name:'Cancel selection',exact:true})).toHaveCount(0);
+  await expect(board.getByText(/choose a highlighted destination/i)).toHaveCount(0);
+  expect((await canvas.boundingBox())!.height).toBe(boardHeight);
+  await tapChecker();
+  await expect(destinations).toHaveCount(0);
+  await tapChecker();
   const legalLabels=[...new Set<number>([...ready.state.legalMoves,...(ready.state.combinedMoves||[])].filter((option:{from:number})=>option.from===move.from)
     .map((option:{to:number})=>option.to))].map(point=>`Point ${point+1}`).sort();
   await expect.poll(async()=>(await destinations.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('aria-label')))).sort())

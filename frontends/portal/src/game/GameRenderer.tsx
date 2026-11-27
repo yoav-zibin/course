@@ -36,6 +36,7 @@ export type GameRendererProps = {
     visibleBoard?: (board: Board) => boolean;
     presentScene: (scene: Scene, message: StateMessage) => Scene;
     showActionBadges?: (piece: Piece) => boolean;
+    showSelectionFooter?: boolean;
     motion?: Partial<Motion>;
   };
   frameHeight?: number;
@@ -117,9 +118,10 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   // the player can intentionally zoom in for larger pieces and destinations.
   const framed=frameHeight!==undefined&&frameHeight>0;
   const fill=framed&&fillFrame;
+  const showSelectionFooter=boardPresentation?.showSelectionFooter!==false;
   // In portrait a fitted board often has enough empty space beneath the art to
   // show the selection tools without moving the board out from under the finger.
-  const floatSelection=Platform.OS!=='web'&&framed&&!fill&&!showToolbar&&showDestinationsAfterSelection&&
+  const floatSelection=showSelectionFooter&&Platform.OS!=='web'&&framed&&!fill&&!showToolbar&&showDestinationsAfterSelection&&
     !display.scene.controls?.length&&(frameHeight-widthFittedHeight)/2>=Math.max(90*dimensions.fontScale,selectionHeight);
   const height=framed?canvasHeight:Math.max(1,Math.min(widthFittedHeight,dimensions.height));
   const limits = cameraLimits(bounds,camera.zoom);
@@ -357,11 +359,14 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   }
   function transform(event: UIEvent) { const piece=sceneRef.current.pieces?.find(p=>p.id===selectedRef.current);if(piece)dispatch({...event,id:piece.id}); }
 
-  function activatePiece(piece: Piece) {
+  function activatePiece(piece: Piece, previousSelection=selectedRef.current) {
     piece = sceneRef.current.pieces?.find(p=>p.id===piece.parent) ?? piece;
-    if(!canMove(latest.current,sent.current)||!pieceActions(piece).length)return;
-    select(piece.id);showPreview(null);
-    if(pieceActions(piece).includes('tap'))dispatch({type:'tap',id:piece.id});
+    const pieceInputs=pieceActions(piece);
+    if(!canMove(latest.current,sent.current)||!pieceInputs.length)return;
+    const taps=pieceInputs.includes('tap');
+    select(!showSelectionFooter&&!taps&&piece.id===previousSelection?null:piece.id);
+    showPreview(null);
+    if(taps)dispatch({type:'tap',id:piece.id});
   }
   function activateTarget(target: Target,touch=false) {
     if(!canMove(latest.current,sent.current))return;
@@ -502,7 +507,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       // A placement's declared artwork can itself be clicked, and selected
       // pieces always use the matching legal destination.
       if(target&&target.id===g.target&&(!piece||chosen?.move_targets?.includes(target.id)))actions.current.activateTarget(target,g.touch);
-      else if(piece&&hitPiece(spec,scene,point,paintOrder.current)?.id===piece.id)actions.current.activatePiece(piece);
+      else if(piece&&hitPiece(spec,scene,point,paintOrder.current)?.id===piece.id)actions.current.activatePiece(piece,g.toolbarPiece);
       else if(target&&target.id===g.target)actions.current.activateTarget(target,g.touch);
     },
     onPanResponderTerminate:()=>{endGesture();setDrag(null);actions.current.select(null);actions.current.showPreview(null);},
@@ -560,7 +565,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     const choice=result.choice;
     if(choice?.kind==='piece'){
       const piece=scene.pieces?.find(item=>item.id===choice.id);
-      if(piece)activatePiece(piece);
+      if(piece)activatePiece(piece,result.selected);
     }else if(choice?.kind==='target'){
       const target=scene.targets?.find(item=>item.id===choice.id);
       if(target)activateTarget(target,result.touch);
@@ -707,7 +712,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     {!!error&&<Text accessibilityRole="alert" style={styles.error}>{playerText(error)}</Text>}
     {!!display.scene.controls?.length&&<View style={styles.controls}>{display.scene.controls.map(control=><SceneControl key={control.id} control={control} enabled={active&&!control.disabled} dispatch={dispatch}/>)}</View>}
     {boardInput.wrapCanvas?boardInput.wrapCanvas(boardCanvas):boardCanvas}
-    {Boolean(toolsPiece||toolsPreview?.preview?.length)&&<View style={[styles.tools,floatSelection&&styles.floatingTools]}
+    {showSelectionFooter&&Boolean(toolsPiece||toolsPreview?.preview?.length)&&<View style={[styles.tools,floatSelection&&styles.floatingTools]}
       onLayout={Platform.OS!=='web'&&showDestinationsAfterSelection?event=>setSelectionHeight(event.nativeEvent.layout.height):undefined}>
       {toolsPiece&&<Text style={styles.selectedLabel} accessibilityLiveRegion="polite">{playerText(pieceName(toolsPiece))}{toolsPiece.move_targets?.length?copyText(" · choose a highlighted destination"):''}</Text>}
       <View style={styles.row}>
