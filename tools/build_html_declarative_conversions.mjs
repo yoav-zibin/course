@@ -394,8 +394,9 @@ function packageFor(entry) {
       tutorial_strings:{[entry.rules]:metadata.rules[i],[entry.ui]:metadata.ui[i],[title]:translatedTitle},client_strings:{...strings,title:translatedTitle}};
   }
   const payload = {all_state_public:['checkers','chess','four_player_chess','quoridor'].includes(entry.kind),
-    name:title,description:entry.rules,allowed_player_counts:entry.players,
+    name:title,
     alternative_names:ALTERNATIVE_NAMES[title.replace(/ \(Declarative\)$/, '').replace(/[!?]+$/, '').toLowerCase()],
+    description:entry.rules,allowed_player_counts:entry.players,
     allows_leave_mid_match:source.allows_leave_mid_match,allows_join_mid_match:source.allows_join_mid_match,
     server_code:code,rules:entry.rules,ui_instructions:entry.ui,
     tutorial:{text:entry.rules,html:tutorials},images:allImages(entry.kind),

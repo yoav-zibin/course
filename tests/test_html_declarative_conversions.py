@@ -253,6 +253,7 @@ def test_generator_rebuilds_from_tracked_inputs_only_and_is_repeatable(tmp_path)
     destination = tmp_path / 'games/declarative'
     destination.mkdir(parents=True)
     (destination / 'locales').mkdir()
+    shutil.copy(ROOT / 'games/alternative-names.json', destination.parent)
     shutil.copy(ROOT / 'tools/build_html_declarative_conversions.mjs', tmp_path / 'tools')
     for name in ['html_conversions_ui.js', 'locales/html_conversions.json', *(kind+'.json' for kind in KINDS)]:
         shutil.copy(DIRECTORY / name, destination / name)

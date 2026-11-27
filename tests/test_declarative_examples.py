@@ -537,6 +537,7 @@ def test_morris_package_and_single_game_generator_are_consistent(tmp_path):
     (tmp_path / 'tools').mkdir()
     destination = tmp_path / 'games' / 'declarative'
     (destination / 'locales').mkdir(parents=True)
+    shutil.copy(EXAMPLES.parent / 'alternative-names.json', destination.parent)
     shutil.copy(root / 'tools' / 'build_archive_html_declarative_conversions.mjs', tmp_path / 'tools')
     for name in (Path('archive_conversions_ui.js'), Path('six_mens_morris.json'), Path('thirty_one.json'),
                  Path('locales') / 'html_conversions.json', Path('locales') / 'archive_server_strings.json'):

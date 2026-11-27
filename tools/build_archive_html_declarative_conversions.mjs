@@ -623,8 +623,9 @@ function build(entry) {
   }
   const payload={
     all_state_public:['kisolo','gobblet','chutes_ladders','dots_boxes','six_mens_morris'].includes(entry.kind),
-    name:title,description,allowed_player_counts:source.allowed_player_counts,
+    name:title,
     alternative_names:ALTERNATIVE_NAMES[title.replace(/ \(Declarative\)$/, '').replace(/[!?]+$/, '').toLowerCase()],
+    description,allowed_player_counts:source.allowed_player_counts,
     allows_leave_mid_match:source.allows_leave_mid_match,allows_join_mid_match:source.allows_join_mid_match,
     server_code:code,rules,ui_instructions:ui,tutorial,
     images:!custom && source.images?.length>=4?source.images:fallbackImages(entry.kind),
