@@ -64,22 +64,25 @@ for(const fault of ['quota','cleanup-denied'] as const)test(`${fault}: cache fai
     return {shared,credentials};
   },fault);
   expect(Object.values(original.shared).some(value=>Object.values(JSON.parse(value!).local).some((saved:any)=>saved.move_count===1&&saved.cloud_pending===true&&saved.moves?.length===1))).toBe(true);
-  await context.setOffline(false);
+  const matchPath=`/matches/${match.id}`,versionPath=`/games/${gameId}/versions/${match.game_version}`;
+  const matchPackagePath=matchPath+'/game';
   const prefetchedPackage=Object.values(original.shared).some(value=>{
-    const game=JSON.parse(value!).responses?.[`/games/${gameId}/versions/${match.game_version}`];
+    const game=JSON.parse(value!).responses?.[versionPath];
     return game?.id===gameId&&game.version===match.game_version&&!!game.server_code&&!!game.declarative_ui;
   });
   const downloads:{path:string;status:number}[]=[];
-  page.on('response',response=>{const path=new URL(response.url()).pathname;if(path===`/matches/${match.id}`||path===`/games/${gameId}`||path===`/games/${gameId}/versions/${match.game_version}`)downloads.push({path,status:response.status()});});
+  page.on('response',response=>{const path=new URL(response.url()).pathname;if([matchPath,matchPackagePath,versionPath,`/games/${gameId}`].includes(path))downloads.push({path,status:response.status()});});
+  await context.setOffline(false);
   // Fragment navigation stays in the same document, preserving the quota
   // fault and exercising the app's normal browser navigation handler.
   await page.goto(`/portal#match=${match.id}`);
   await expect(page.getByTestId('game-stage')).toBeVisible();
   await expect(page.getByRole('button',{name:'Cell 1',exact:true})).toBeVisible();
   expect(downloads).toContainEqual({path:`/matches/${match.id}`,status:200});
-  // Automatic match downloads can already have saved the exact package before
-  // quota pressure begins. Opening still works when either source supplies it.
-  expect(prefetchedPackage||downloads.some(item=>item.path===`/games/${gameId}/versions/${match.game_version}`&&item.status===200)).toBe(true);
+  // A cold match can load its pinned rules in parallel from the match's /game
+  // endpoint. Previously downloaded versions also satisfy this same open.
+  await expect.poll(()=>prefetchedPackage||downloads.some(item=>
+    [versionPath,matchPackagePath].includes(item.path)&&item.status===200)).toBe(true);
   await expect(page.getByText('Loading the match’s saved game version…',{exact:true})).toHaveCount(0);
   await expect(page.getByRole('alert').filter({hasText:storageErrors})).toHaveCount(0);
   expect(await sharedSaves(page)).toEqual(original.shared);expect(await credentialSaves(page)).toEqual(original.credentials);
