@@ -1,56 +1,37 @@
 import {portal} from '../core';
 
-const measurementId = 'G-6CCXZQYVE7';
-const disableKey = `ga-disable-${measurementId}` as const;
-type AnalyticsWindow = Window & {
-  dataLayer?: IArguments[];
-  gtag?: (...args: unknown[]) => void;
-  [disableKey]?: boolean;
-};
+type AnalyticsWindow = Window & {BuildPlayAnalytics?: {setUser(id: string | null): void}};
 
 let installed = false;
 let prompt:any=null;
 
 function observeAnalyticsUser() {
-  const analytics = window as AnalyticsWindow;
-  let currentUserId: string | null = null;
-  let pausedForSignOut = false;
-
-  const sync = () => {
+  const browser = window as AnalyticsWindow;
+  let requested = false;
+  let current: string | null = null;
+  function requestController() {
+    if (!current) { requested = false; return; }
+    const script = document.createElement('script');
+    script.async = true;
+    script.fetchPriority = 'low';
+    script.src = '/static/analytics.js?v=3';
+    script.onload = () => browser.BuildPlayAnalytics?.setUser(current);
+    script.onerror = () => { requested = false; };
+    document.head.appendChild(script);
+  }
+  function sync() {
     const {account} = portal.getSnapshot();
-    const userId = account?.canonical_user_id || account?.id || null;
-    if (userId === currentUserId) return;
-    currentUserId = userId;
-
-    if (analytics.gtag) {
-      if (!userId && analytics[disableKey] !== true) {
-        analytics[disableKey] = true;
-        pausedForSignOut = true;
-      }
-      analytics.gtag('config', measurementId, {user_id: userId, update: true});
-      if (userId && pausedForSignOut) {
-        analytics[disableKey] = false;
-        pausedForSignOut = false;
-      }
-      return;
+    const id = account?.canonical_user_id || account?.id || null;
+    if (id === current) return;
+    current = id;
+    if (browser.BuildPlayAnalytics) {
+      browser.BuildPlayAnalytics.setUser(current);
+    } else if (id && !requested) {
+      requested = true;
+      if (window.requestIdleCallback) window.requestIdleCallback(requestController);
+      else window.setTimeout(requestController, 0);
     }
-    if (!userId) return;
-
-    analytics.dataLayer = analytics.dataLayer || [];
-    analytics.gtag = function () {
-      analytics.dataLayer!.push(arguments);
-    };
-    analytics.gtag('js', new Date());
-    analytics.gtag('config', measurementId, {
-      user_id: userId,
-      page_location: location.origin + location.pathname,
-    });
-    const tag = document.createElement('script');
-    tag.async = true;
-    tag.src = 'https://www.googletagmanager.com/gtag/js?id=' + measurementId;
-    document.head.appendChild(tag);
-  };
-
+  }
   portal.subscribe(sync);
   sync();
 }

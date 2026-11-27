@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import {spawnSync} from 'node:child_process';
-import {readFileSync,writeFileSync,readdirSync,mkdirSync,renameSync,rmSync} from 'node:fs';
+import {readFileSync,writeFileSync,readdirSync,mkdirSync,renameSync,rmSync,copyFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
 import {preparePortalWebAssets,renderPortalServiceWorker} from './portal-web-assets.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -26,6 +27,14 @@ const walk=(directory)=>readdirSync(directory,{withFileTypes:true}).flatMap(item
 const {cache,assets,versionedAssets}=preparePortalWebAssets({output:out,staticDirectory:path.join(root,'static')});
 writeFileSync(path.join(out,'worker.js'),renderPortalServiceWorker({cache,assets,versionedAssets}));
 console.log(`Shared portal exported: ${assets.length+versionedAssets.length} files, cache ${cache}`);
+// Optional analytics assets are fetched only after sign-in, outside the portal precache.
+const appRequire=createRequire(path.join(app,'package.json'));
+const library=path.join(path.dirname(appRequire.resolve('@qwik.dev/partytown/package.json')),'lib');
+const workerDirectory=path.join(out,'analytics-worker');
+mkdirSync(workerDirectory);
+for(const file of readdirSync(library,{withFileTypes:true})){
+  if(file.isFile())copyFileSync(path.join(library,file.name),path.join(workerDirectory,file.name));
+}
 // Publish entry files only after every hashed asset exists. Existing pages and
 // tests can finish loading an earlier bundle while a local rebuild is running.
 mkdirSync(destination,{recursive:true});

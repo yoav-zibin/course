@@ -58,7 +58,7 @@ class SitePagesMiddleware:
         self.debug_tools = debug_tools
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] != "http" or scope["path"] == "/static/app/analytics-worker/partytown-sandbox-sw.html":
             await self.app(scope, receive, send)
             return
         original_headers = Headers(scope=scope)
