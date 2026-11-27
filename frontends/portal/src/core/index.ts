@@ -617,7 +617,8 @@ export class PortalStore {
     await this.rememberMatchGame(game);
     const exactPath=`/games/${game.id}/versions/${game.version}`;
     if (!cached && path !== exactPath) await this.cache(exactPath, game);
-    return prepared;
+    // The player can switch languages while these storage writes are pending.
+    return localizeGame(await prepared);
   }
   private async prepareGamePresentation(game:Game):Promise<Game> {
     let presentation = game.declarative_ui;
@@ -626,7 +627,7 @@ export class PortalStore {
       catch { recordDiagnosticLog('warn','reviewed_presentation_fallback',{gameId:game.id,gameVersion:game.version}); }
     }
     // Display repair never mutates the persisted package or its version/rules.
-    return localizeGame({ ...game, declarative_ui: presentation });
+    return { ...game, declarative_ui: presentation };
   }
   async selectGame(id: string) {
     const token = ++this.selection; const guard = this.capture(); const owner = this.identity();
