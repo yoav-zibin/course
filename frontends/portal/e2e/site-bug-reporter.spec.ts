@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 const label='Report a bug or request a feature';
-const fixture=(admin=true,extra='')=>`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/site-bug-report.css"><script src="/static/site-bug-report.js" data-admin="${admin}"></script>${extra}</head><body style="margin:0;background:#10141f;color:white;font:16px sans-serif"><main style="padding:28px"><h1>Standalone page</h1><p>Page diagnostics and reporting fixture</p><div style="height:160px;background:rgb(255,0,255)"></div><input type="password" value="private-input-secret" aria-label="Fixture password"></main></body></html>`;
+const fixture=(admin=true,extra='')=>`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><script src="/static/shared/device-storage.js?v=1"></script><link rel="stylesheet" href="/static/site-bug-report.css"><script src="/static/site-bug-report.js" data-admin="${admin}"></script>${extra}</head><body style="margin:0;background:#10141f;color:white;font:16px sans-serif"><main style="padding:28px"><h1>Standalone page</h1><p>Page diagnostics and reporting fixture</p><div style="height:160px;background:rgb(255,0,255)"></div><input type="password" value="private-input-secret" aria-label="Fixture password"></main></body></html>`;
 
 test.beforeEach(async({page,baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Requires a disposable loopback server.');

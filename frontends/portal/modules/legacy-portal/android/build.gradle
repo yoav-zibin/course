@@ -7,6 +7,8 @@ version = '1.0.0'
 android {
   namespace 'com.buildplay.legacyportal'
   buildFeatures { prefab true }
+  // React Native supplies these shared libraries to both the app and its test APK.
+  packaging.jniLibs.excludes += ['**/libc++_shared.so', '**/libfbjni.so', '**/libjsi.so']
   externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt' } }
   defaultConfig {
     externalNativeBuild { cmake { arguments '-DANDROID_STL=c++_shared' } }

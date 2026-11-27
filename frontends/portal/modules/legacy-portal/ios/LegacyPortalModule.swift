@@ -27,7 +27,7 @@ public final class LegacyPortalModule: Module {
             }
             return nil
           } catch let failure {
-            error.pointee = failure as NSError
+            error?.pointee = failure as NSError
             return nil
           }
         }

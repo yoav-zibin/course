@@ -269,7 +269,9 @@ function rememberExperimentCampaign() {
   const code = new URLSearchParams(location.search).get("campaign");
   if (code && /^[a-z0-9][a-z0-9-]{0,49}$/.test(code) && !campaignSnapshot()) {
     void BuildPlayStorage.setItem(EXPERIMENT_CAMPAIGN_KEY, code)
-      .catch(error => console.warn("Campaign attribution could not be saved.", error));
+      .catch(error => {
+        console.warn("Campaign attribution could not be saved in this browser.", error);
+      });
   }
 }
 
