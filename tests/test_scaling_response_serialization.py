@@ -114,6 +114,18 @@ def test_catalog_alias_preserves_public_visibility_and_shared_cursors(paginated_
     assert [item["id"] for item in api.ok("GET", "/v2/builder/games", as_user=owner)["items"]] == [games[1]]
 
 
+def test_catalog_indexes_alternative_name_prefixes(paginated_api):
+    api, store, _, _, games, _ = paginated_api
+    game = store.get_game(games[0])
+    store.add_game_version(replace(game, version=game.version + 1,
+                                   alternative_names=("Ajedrez", "Échecs")))
+
+    for query in ("AJED", "e\u0301ch"):
+        results = api.ok("GET", "/v2/games", params={"q": query})["items"]
+        assert [result["id"] for result in results] == [game.id]
+        assert results[0]["alternative_names"] == ["Ajedrez", "Échecs"]
+
+
 def test_match_pages_preserve_membership_and_player_state_views(paginated_api):
     api, store, owner, other, _, _ = paginated_api
     outsider = api.new_user("outsider")

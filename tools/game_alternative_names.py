@@ -12,6 +12,7 @@ REVIEW = json.loads(
     (Path(__file__).resolve().parents[1] / "games" / "alternative-names.json").read_text()
 )
 RETIRED_CONNECT_FOUR = "f243d9c6-f79e-40f3-b868-2d304bd79a22"
+KEPT_CONNECT_FOUR = "e299b14e-480d-44f3-8132-74282a46cebc"
 
 
 def title_key(title):
@@ -65,13 +66,17 @@ def retire_duplicate_connect_four(base, secret):
 
 
 def publish(base, secret):
-    retire_duplicate_connect_four(base, secret)
     games = list(catalog(base))
-    if any(game["id"] == RETIRED_CONNECT_FOUR for game in games):
-        raise RuntimeError("The deleted Connect Four listing still appears in the catalog.")
+    if not any(game["id"] == KEPT_CONNECT_FOUR and game["name"] == "Connect Four" for game in games):
+        raise RuntimeError("The Connect Four listing to keep is unavailable.")
+    if any("alternative_names" not in game for game in games):
+        raise RuntimeError("Deploy the alternative-names API before applying the review.")
+    retire_duplicate_connect_four(base, secret)
     updated = 0
     unreviewed = set()
     for game in games:
+        if game["id"] == RETIRED_CONNECT_FOUR:
+            continue
         key = title_key(game["name"])
         if key not in REVIEW:
             unreviewed.add(game["name"])

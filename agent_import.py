@@ -25,7 +25,10 @@ MAX_PACKAGE_BYTES = 400_000
 UPLOAD_TIMEOUT_SECONDS = 15
 
 
-def validate_alternative_names(names: list[str]) -> list[str]:
+def validate_alternative_names(names: list[str] | None) -> list[str] | None:
+    # The partial-update model reports nulls in its shared field validation.
+    if names is None:
+        return None
     names = [unicodedata.normalize('NFC', name) for name in names]
     if any(not any(char.isalnum() for char in name) for name in names):
         raise ValueError('each alternative name needs a letter or number')

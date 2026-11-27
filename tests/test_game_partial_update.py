@@ -55,6 +55,13 @@ def fail_test_page(*args, **kwargs):
     raise AssertionError("This change must not require the test game page")
 
 
+def test_alternative_name_patch_rejects_invalid_arrays(api, imported_game):
+    _owner, game, _raw, _checks = imported_game
+    for value in (None, ["  "], ["???!!!"], ["Ajedrez", "ajedrez"]):
+        response = patch_game(api, game, alternative_names=value)
+        assert response.status_code == 422, response.text
+
+
 @pytest.mark.parametrize("field", [
     "name", "description", "rules", "ui_instructions", "tutorial", "images", "translations", "alternative_names",
 ])
