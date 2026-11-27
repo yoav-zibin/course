@@ -11,7 +11,7 @@ import pytest
 
 from game_platform.agent_import import GameImport, prepare
 from game_platform.declarative_ui import DeclarativeLogic
-from game_platform.game_logic import GameLogic
+from game_platform.game_logic import GameLogic, InvalidMoveError
 from game_platform.game_testing import test_server_code as run_random_walks
 from game_platform.models import GameRules
 from game_platform.tests.test_declarative_example_hints import inputs
@@ -167,6 +167,34 @@ def test_spades_rules_pass_seeded_schema_and_token_conservation_walks():
                               contract=body.unit_tests)
     assert report.passed, report.failures
     assert report.walks_completed == 8
+
+
+def test_quoridor_wall_hints_on_a_crowded_board_preserve_both_routes():
+    body = GameImport.model_validate(package('quoridor'))
+    logic = GameLogic(body.server_code, game_schemas=body.game_schemas())
+    ctx = body.unit_tests['cases'][0]['ctx']
+    first, second = [player['id'] for player in ctx['players']]
+    state = logic.call('newMatch', ctx=ctx)['state']
+    # The horizontal barrier leaves just column 8 open across rows 7 and 8.
+    state['walls'] = [
+        {'r': r, 'c': c, 'o': 'H'} for r in [1, 3, 5, 7] for c in [0, 2, 4, 6]
+    ]
+    state['wallsLeft'] = [2, 2]
+    blocks_only_route = {'r': 7, 'c': 7, 'o': 'V'}
+    crosses_wall = {'r': 7, 'c': 6, 'o': 'V'}
+    overlaps_wall = {'r': 7, 'c': 5, 'o': 'H'}
+    keeps_routes = {'r': 0, 'c': 0, 'o': 'V'}
+
+    view = logic.call('viewFor', state, first, ctx=ctx, seed=73)
+    assert logic.call('viewFor', state, first, ctx=ctx, seed=73) == view
+    assert keeps_routes in view['legalWalls']
+    for wall in [blocks_only_route, crosses_wall, overlaps_wall]:
+        assert wall not in view['legalWalls']
+        with pytest.raises(InvalidMoveError, match='illegal wall'):
+            logic.call('applyMove', state, first, {'type': 'wall', **wall}, ctx=ctx)
+    assert logic.call('applyMove', state, first, {'type': 'wall', **keeps_routes}, ctx=ctx)['turn'] == [second]
+    for viewer in [second, None]:
+        assert logic.call('viewFor', state, viewer, ctx=ctx)['legalWalls'] == []
 
 
 def test_quoridor_leaving_records_a_terminal_settlement_and_keeps_it_on_later_leaves():

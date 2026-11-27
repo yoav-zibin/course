@@ -4,7 +4,67 @@ idxOf(state,playerId,ctx){for(let i=0;i<ctx.players.length;i++)if(ctx.players[i]
 blocked(walls,r1,c1,r2,c2){for(const w of walls){if(r2===r1-1&&c2===c1){if(w.o==='H'&&w.r===r2&&(w.c===c1||w.c===c1-1))return true;}else if(r2===r1+1&&c2===c1){if(w.o==='H'&&w.r===r1&&(w.c===c1||w.c===c1-1))return true;}else if(c2===c1-1&&r2===r1){if(w.o==='V'&&w.c===c2&&(w.r===r1||w.r===r1-1))return true;}else if(c2===c1+1&&r2===r1){if(w.o==='V'&&w.c===c1&&(w.r===r1||w.r===r1-1))return true;}}return false;},
 legalMoves(state,pi){const p=state.pawns[pi],o=state.pawns[1-pi],res=[];const dirs=[[-1,0],[1,0],[0,-1],[0,1]];for(const dd of dirs){const dr=dd[0],dc=dd[1];let nr=p.r+dr,nc=p.c+dc;if(nr<0||nr>8||nc<0||nc>8)continue;if(this.blocked(state.walls,p.r,p.c,nr,nc))continue;if(nr===o.r&&nc===o.c){let jr=o.r+dr,jc=o.c+dc;if(jr>=0&&jr<=8&&jc>=0&&jc<=8&&!this.blocked(state.walls,o.r,o.c,jr,jc)){res.push([jr,jc]);}else{const perps=dr!==0?[[0,-1],[0,1]]:[[-1,0],[1,0]];for(const pp of perps){let sr=o.r+pp[0],sc=o.c+pp[1];if(sr<0||sr>8||sc<0||sc>8)continue;if(this.blocked(state.walls,o.r,o.c,sr,sc))continue;res.push([sr,sc]);}}}else res.push([nr,nc]);}return res;},
 bfsDist(walls,sr,sc,goal){const vis=[];for(let i=0;i<9;i++)vis.push([false,false,false,false,false,false,false,false,false]);const q=[[sr,sc,0]];vis[sr][sc]=true;let h=0;while(h<q.length){const cur=q[h++];const r=cur[0],c=cur[1],d=cur[2];if(r===goal)return d;const dirs=[[-1,0],[1,0],[0,-1],[0,1]];for(const dd of dirs){let nr=r+dd[0],nc=c+dd[1];if(nr<0||nr>8||nc<0||nc>8)continue;if(vis[nr][nc])continue;if(this.blocked(walls,r,c,nr,nc))continue;vis[nr][nc]=true;q.push([nr,nc,d+1]);}}return Infinity;},
-wallFits(state,wr,wc,o){if(wr<0||wr>7||wc<0||wc>7)return false;for(const w of state.walls){if(w.r===wr&&w.c===wc)return false;if(o==='H'){if(w.o==='H'&&w.r===wr&&(w.c===wc-1||w.c===wc+1))return false;}else{if(w.o==='V'&&w.c===wc&&(w.r===wr-1||w.r===wr+1))return false;}}const sim=state.walls.concat([{r:wr,c:wc,o:o}]);if(this.bfsDist(sim,state.pawns[0].r,state.pawns[0].c,0)===Infinity)return false;if(this.bfsDist(sim,state.pawns[1].r,state.pawns[1].c,8)===Infinity)return false;return true;},
+// Index a square as r * 9 + c and each edge by its right or lower square.
+wallEdges(walls) {
+  const horizontal = new Uint8Array(81);
+  const vertical = new Uint8Array(81);
+  for (const wall of walls) {
+    const edge = wall.r * 9 + wall.c;
+    if (wall.o === 'H') horizontal[edge + 9] = horizontal[edge + 10] = 1;
+    else vertical[edge + 1] = vertical[edge + 10] = 1;
+  }
+  return {horizontal, vertical};
+},
+hasRoute(edges, pawn, goalRow) {
+  const {horizontal, vertical} = edges;
+  const visited = new Uint8Array(81);
+  const queue = new Uint8Array(81);
+  const start = pawn.r * 9 + pawn.c;
+  let tail = 1;
+  queue[0] = start;
+  visited[start] = 1;
+  const goalStart = goalRow * 9;
+  for (let head = 0; head < tail; head++) {
+    const square = queue[head];
+    if (square >= goalStart && square < goalStart + 9) return true;
+    if (square >= 9 && !horizontal[square] && !visited[square - 9]) {
+      visited[square - 9] = 1;
+      queue[tail++] = square - 9;
+    }
+    if (square < 72 && !horizontal[square + 9] && !visited[square + 9]) {
+      visited[square + 9] = 1;
+      queue[tail++] = square + 9;
+    }
+    if (square % 9 !== 0 && !vertical[square] && !visited[square - 1]) {
+      visited[square - 1] = 1;
+      queue[tail++] = square - 1;
+    }
+    if (square % 9 !== 8 && !vertical[square + 1] && !visited[square + 1]) {
+      visited[square + 1] = 1;
+      queue[tail++] = square + 1;
+    }
+  }
+  return false;
+},
+wallFits(state, wr, wc, o, edges) {
+  if (wr < 0 || wr > 7 || wc < 0 || wc > 7) return false;
+  if (state.walls.some(wall => wall.r === wr && wall.c === wc)) return false;
+
+  // Test the candidate in place, then restore the board for the next candidate.
+  const board = edges || this.wallEdges(state.walls);
+  const horizontal = o === 'H';
+  const blocked = horizontal ? board.horizontal : board.vertical;
+  const first = wr * 9 + wc + (horizontal ? 9 : 1);
+  const second = first + (horizontal ? 1 : 9);
+  if (blocked[first] || blocked[second]) return false;
+  blocked[first] = blocked[second] = 1;
+  try {
+    return this.hasRoute(board, state.pawns[0], 0) &&
+      this.hasRoute(board, state.pawns[1], 8);
+  } finally {
+    blocked[first] = blocked[second] = 0;
+  }
+},
 payoutsFor(winnerIdx,ctx){const pot=ctx.pot||0;const humans=ctx.players.filter(p=>p.kind==='human');const out={};if(humans.length===0)return out;if(pot<=0){for(const h of humans)out[h.id]=0;return out;}const wPlayer=ctx.players[winnerIdx];if(wPlayer&&wPlayer.kind==='human'){for(const h of humans)out[h.id]=0;out[wPlayer.id]=pot;}else{const each=Math.floor(pot/humans.length);let rem=pot-each*humans.length;for(const h of humans)out[h.id]=each;for(const h of humans){if(rem<=0)break;out[h.id]++;rem--;}}return out;},
 turnFor(state,ctx){if(state.winner!=null)return null;const p=ctx.players[state.turnIdx];return p?[p.id]:null;},
 applyMove(state,playerId,move,ctx){if(state.winner!=null)throw new InvalidMove('game over');const pi=this.idxOf(state,playerId,ctx);if(pi<0)throw new InvalidMove('not seated');if(pi!==state.turnIdx)throw new InvalidMove('not your turn');if(!move||typeof move!=='object')throw new InvalidMove('bad move');
@@ -29,8 +89,9 @@ let payout=0;try{payout=Math.floor((ctx.pot||0)*ctx.estimateWinChance(state,play
     const seat = playerId == null ? -1 : this.idxOf(state,playerId,ctx);
     view.legalWalls = [];
     if (seat >= 0 && seat === state.turnIdx && state.winner == null && (state.wallsLeft[seat] || 0) > 0) {
+      const edges = this.wallEdges(state.walls);
       for (let r=0;r<8;r++) for (let c=0;c<8;c++) for (const o of ['H','V'])
-        if (this.wallFits(state,r,c,o)) view.legalWalls.push({r,c,o});
+        if (this.wallFits(state,r,c,o,edges)) view.legalWalls.push({r,c,o});
     }
     return view;
   };
