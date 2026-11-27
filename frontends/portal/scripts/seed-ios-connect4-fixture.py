@@ -122,12 +122,14 @@ def fixture_snapshot(package_path=PUBLIC_PACKAGE):
             or not isinstance(game.get("server_code"), str) or not game.get("game_schemas")):
         raise ValueError("Expected the exact public Connect Four local-practice package")
     try:
+        # Starting Node can stall briefly while a fresh simulator settles.
+        # DERIVE_POSE still limits each execution of game code separately.
         output = subprocess.run(["node", "-e", DERIVE_POSE], input=json.dumps(game),
-                                capture_output=True, text=True, timeout=10, check=True)
+                                capture_output=True, text=True, timeout=45, check=True)
     except subprocess.CalledProcessError as error:
         raise ValueError(f"Public Connect Four rules could not derive the fixture: {error.stderr[:500]}") from error
     except subprocess.TimeoutExpired as error:
-        raise ValueError("Public Connect Four fixture derivation exceeded ten seconds") from error
+        raise ValueError("Public Connect Four fixture derivation exceeded 45 seconds") from error
     if len(output.stdout) > 512_000:
         raise ValueError("Derived fixture exceeds its byte limit")
     pose = json.loads(output.stdout)

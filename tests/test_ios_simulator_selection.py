@@ -333,7 +333,7 @@ else:
         assert (results / "screenshots" / "portal-launch.png").exists()
         expected = {"list-devices":60,"boot":600,"install":300,"launch":360,"screenshot":120,"processes":90}
         if fixture_enabled:
-            expected['fixture']=60
+            expected['fixture']=120
             seed = next(index for index,call in enumerate(recorded) if call['args'][0]=='fixture')
             install = next(index for index,call in enumerate(recorded) if call['args'][:2]==['simctl','install'])
             started = next(index for index,call in enumerate(recorded) if call['args'][:2]==['simctl','launch'])

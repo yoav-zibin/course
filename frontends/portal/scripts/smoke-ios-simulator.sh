@@ -75,7 +75,7 @@ run_phase install 300 "$results_path/install.log" xcrun simctl install "$simulat
 if [[ ${GITHUB_ACTIONS:-false} == true ]]; then
   # A fresh CI sandbox renders the exact public SVG-disc package so the native
   # screenshot covers artwork alignment, with no account or server activity.
-  run_phase fixture 60 "$results_path/fixture.log" python3 "$scripts_path/seed-ios-connect4-fixture.py" \
+  run_phase fixture 120 "$results_path/fixture.log" python3 "$scripts_path/seed-ios-connect4-fixture.py" \
     --local-only "$simulator_id" "$bundle_id" "$results_path/connect4-fixture.json"
 fi
 # Apple documents 3–5 minute launch stalls while GateKeeper scans dyld caches:
