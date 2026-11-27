@@ -97,6 +97,7 @@ jobs:
             adb shell svc wifi disable
             adb shell svc data disable
             python3 scripts/native-smoke.py fun.buildplay.debug "$GITHUB_WORKSPACE/android-test-results"
+            if [[ -n "${BUILDPLAY_GOOGLE_SERVICES_FILE:-}" ]]; then bash scripts/verify-native-analytics.sh android "$GITHUB_WORKSPACE/BuildPlay.apk" "${ANDROID_SERIAL:-emulator-5554}" "$GITHUB_WORKSPACE/android-test-results/analytics.json"; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -256,6 +257,16 @@ jobs:
           bash scripts/smoke-ios-simulator.sh \
             "$GITHUB_WORKSPACE/ios-smoke-app/BuildPlay.app" \
             "$GITHUB_WORKSPACE/ios-smoke-results"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontends/portal/package-lock.json
+      - run: npm ci
+      - name: Verify Firebase sign-in, screen change and sign-out on the simulator
+        run: |
+          bash scripts/verify-native-analytics.sh ios "$GITHUB_WORKSPACE/ios-smoke-app/BuildPlay.app" \
+            "$(cat "$GITHUB_WORKSPACE/ios-smoke-results/simulator.udid")" "$GITHUB_WORKSPACE/ios-smoke-results/analytics.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

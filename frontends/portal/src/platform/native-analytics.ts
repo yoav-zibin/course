@@ -3,12 +3,12 @@ import {createWorkletRuntime, runOnRuntimeAsync} from 'react-native-worklets';
 import type {AnalyticsScreen} from './analytics-session';
 
 interface AnalyticsBinding {
-  access(operation: string, id: string, screen: string): void;
+  access(operation: string, id: string, screen: string): 'enabled' | 'disabled' | null;
 }
 
 function update(binding: AnalyticsBinding, id: string, screen: string) {
   'worklet';
-  binding.access('view', id, screen);
+  return binding.access('view', id, screen);
 }
 
 function initialize() {
@@ -28,5 +28,5 @@ export function publishNativeView(id: string | null, screen: AnalyticsScreen) {
   // The Worklet owns the SDK calls. Identity and a fixed screen name are the
   // only values handed off from React. Games and storage use separate runtimes.
   if (worker === undefined) worker = initialize();
-  if (worker) void runOnRuntimeAsync(worker.runtime, update, worker.binding, id ?? '', screen).catch(() => {});
+  if (worker) return runOnRuntimeAsync(worker.runtime, update, worker.binding, id ?? '', screen);
 }

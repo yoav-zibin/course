@@ -18,8 +18,7 @@ public final class LegacyPortalModule: Module {
       let analytics = PortalAnalytics()
       runtime.withUnsafePointee { pointer in
         BPInstallAnalyticsWorklet(pointer) { _, id, screen, _ in
-          analytics.view(id: id, name: screen)
-          return nil
+          return analytics.view(id: id, name: screen)
         }
       }
     }

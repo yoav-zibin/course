@@ -9,7 +9,7 @@ final class PortalAnalytics {
   private var user: String?
   private var screen: String?
 
-  func view(id: String, name: String) {
+  func view(id: String, name: String) -> String? {
     guard !id.isEmpty else {
       if user != nil {
         Analytics.setUserID(nil)
@@ -17,12 +17,12 @@ final class PortalAnalytics {
       }
       user = nil
       screen = nil
-      return
+      return "disabled"
     }
     if !configured {
       guard let path = Bundle.main.path(forResource: "BuildPlayFirebase", ofType: "plist"),
             let options = FirebaseOptions(contentsOfFile: path),
-            options.bundleID == Bundle.main.bundleIdentifier else { return }
+            options.bundleID == Bundle.main.bundleIdentifier else { return nil }
       let configure = {
         if FirebaseApp.app() == nil { FirebaseApp.configure(options: options) }
       }
@@ -41,5 +41,6 @@ final class PortalAnalytics {
       ])
       screen = name
     }
+    return "enabled"
   }
 }

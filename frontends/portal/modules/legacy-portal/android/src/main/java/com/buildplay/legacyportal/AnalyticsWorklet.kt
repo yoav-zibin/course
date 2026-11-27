@@ -23,7 +23,7 @@ internal class AnalyticsWorklet(private val context: Context) {
       }
       user = null
       screen = null
-      return null
+      return "disabled"
     }
     // Development builds can omit the Firebase client configuration.
     val analytics = sdk ?: run {
@@ -43,7 +43,7 @@ internal class AnalyticsWorklet(private val context: Context) {
       })
       screen = name
     }
-    return null
+    return "enabled"
   }
 
   companion object { init { System.loadLibrary("buildplay-storage") } }
