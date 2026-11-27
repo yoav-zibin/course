@@ -10,7 +10,7 @@ on:
         options: [macos-26-intel]
   push:
     branches: [main]
-    paths: ['frontends/portal/**', '.github/workflows/portal-apps.yml', 'tests/fixtures/declarative/connect4-native-package.json']
+    paths: ['frontends/portal/**', '.github/workflows/portal-apps.yml', 'tests/fixtures/declarative/connect4-native-package.json', 'tests/performance/**']
 
 jobs:
   shared-client:
@@ -70,9 +70,17 @@ jobs:
             -Pandroid.enableMinifyInReleaseBuilds=false :app:assembleRelease \
             2>&1 | tee "$GITHUB_WORKSPACE/buildplay-build.log"
           cp android/app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/BuildPlay.apk"
+      - name: Check Android release size
+        env:
+          BUILDPLAY_PERF_PLATFORM: android
+          BUILDPLAY_PERF_INPUT: ${{ github.workspace }}/BuildPlay.apk
+        run: node --test "$GITHUB_WORKSPACE/tests/performance/release-size.test.mjs"
       - name: Enable emulator acceleration
         run: sudo chmod a+rw /dev/kvm
       - name: Test native file storage and launch standalone app
+        env:
+          BUILDPLAY_PERF_PLATFORM: android
+          BUILDPLAY_PERF_INPUT: ${{ github.workspace }}/android-test-results/first-draw.json
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
@@ -84,6 +92,8 @@ jobs:
           script: |
             bash android/gradlew --project-dir android --no-daemon --max-workers=2 -PreactNativeArchitectures=x86_64 :legacy-portal:connectedDebugAndroidTest
             bash scripts/smoke-android.sh "$GITHUB_WORKSPACE/BuildPlay.apk" "$GITHUB_WORKSPACE/android-test-results"
+            python3 "$GITHUB_WORKSPACE/tests/performance/measure-android-first-draw.py" --serial "${ANDROID_SERIAL:-emulator-5554}" "$BUILDPLAY_PERF_INPUT"
+            node --test "$GITHUB_WORKSPACE/tests/performance/cold-startup.test.mjs"
             adb shell svc wifi disable
             adb shell svc data disable
             python3 scripts/native-smoke.py fun.buildplay.debug "$GITHUB_WORKSPACE/android-test-results"
@@ -185,6 +195,11 @@ jobs:
           test -f "$app/main.jsbundle"
           python3 scripts/sign-ios-simulator.py "$app"
           ditto -c -k --sequesterRsrc --keepParent "$app" "$GITHUB_WORKSPACE/BuildPlay-simulator.zip"
+      - name: Check iOS release size
+        env:
+          BUILDPLAY_PERF_PLATFORM: ios
+          BUILDPLAY_PERF_INPUT: ${{ github.workspace }}/BuildPlay-simulator.zip
+        run: node --test "$GITHUB_WORKSPACE/tests/performance/release-size.test.mjs"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

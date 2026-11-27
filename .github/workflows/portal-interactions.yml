@@ -185,6 +185,10 @@ jobs:
             if [[ "$SCENARIO" == startup-link || "$SCENARIO" == startup-profile ]]; then flags+=(--sender); fi
             if [[ "$SCENARIO" == startup-profile ]]; then flags+=(--profile); fi
             python3 scripts/native-interactions/startup_ios_video.py "$base/video-apps" "$base/fixture" "$base/results" "$SIMULATOR_ID" "${flags[@]}"
+            if [[ "$SCENARIO" == startup-video && "$VIDEO_PAIRS" -ge 3 && "$(uname -m)" == x86_64 ]]; then
+              BUILDPLAY_PERF_PLATFORM=ios BUILDPLAY_PERF_INPUT="$base/results/current/startup-video.json" \
+                node --test tests/performance/cold-startup.test.mjs
+            fi
           fi
       - uses: actions/upload-artifact@v4
         if: always()

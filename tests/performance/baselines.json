@@ -1,0 +1,11 @@
+{
+  "archiveBytes": {
+    "android": 99183283,
+    "ios": 22026653
+  },
+  "firstDrawMs": {
+    "android": 797.4,
+    "ios": 5325,
+    "web": 130.4
+  }
+}
