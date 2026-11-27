@@ -56,7 +56,10 @@ test('list Leave frees a waiting guest seat while preserving the host lobby',asy
   const created=await request.post('/matches',{headers:headers(host),data:{game_id:gameId}});expect(created.ok()).toBeTruthy();const match=await created.json();
   const joined=await request.post(`/matches/${match.id}/join`,{headers:headers(guest)});expect(joined.ok()).toBeTruthy();
   await loginAs(page,guest);await page.goto('/portal#matches');const row=card(page,match.id);await row.getByRole('button',{name:'Leave',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Preview leaving',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Confirm leaving',exact:true}).click();await expect(row).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Preview leaving',exact:true})).toHaveCount(0);
+  const left=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${match.id}/leave`);
+  await page.getByRole('button',{name:'Confirm leaving',exact:true}).click();
+  expect((await left).ok()).toBeTruthy();await expect(row).toHaveCount(0,{timeout:15000});
   const remaining=await matchDetail(request,match.id,host);expect(remaining.status).toBe('waiting_for_players');expect(remaining.players.some((player:any)=>player.user_id===guest.id&&player.active!==false)).toBe(false);
   expect((await listed(request,host)).some((item:any)=>item.id===match.id)).toBe(true);expect((await listed(request,guest)).some((item:any)=>item.id===match.id)).toBe(false);
 });

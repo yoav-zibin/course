@@ -31,7 +31,11 @@ for(const kind of ['match','invite'] as const)test(`a saved existing account rec
   const {host,match}=await lobby(request),existing=await createUser(request,uniqueName('Existing recruit'));
   let release!:()=>void,started!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;}),anonymousStarted=new Promise<void>(resolve=>{started=resolve;});
   const source=kind==='invite'?`/invites/${match.invite_code}`:`/matches/${match.id}`;
-  await page.route(`**${source}`,async route=>{if(!route.request().headers()['x-user-id']){started();await gate;}await route.continue();});
+  await page.route(`**${source}`,async route=>{
+    if(route.request().headers()['x-user-id'])return route.continue();
+    const response=await route.fetch();
+    started();await gate;await route.fulfill({response});
+  });
   await page.addInitScript(account=>{localStorage.setItem('game-platform.accounts.v1',JSON.stringify([account]));localStorage.setItem('game-platform.current-account.v1','visitor');},existing);
   try{
     await page.goto(kind==='invite'?`/invite/${match.invite_code}`:`/portal#match=${match.id}`);await anonymousStarted;
