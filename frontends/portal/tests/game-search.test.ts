@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {PortalStore,type Game} from '../src/core';
 import {AccountRepository} from '../src/core/repository';
-import {gameSearchPrefix,gameSearchWords,gameSuggestions} from '../src/core/game-search';
+import {gameSearchPrefix,gameSearchWords,gameSuggestionMatches,gameSuggestions} from '../src/core/game-search';
 import {diagnosticSnapshot} from '../src/core/diagnostics';
 
 const game=(id:string,name:string):Game=>({id,name,version:1,description:'A shared game.',allowed_player_counts:[2]});
@@ -32,13 +32,18 @@ test('suggestions rank exact and starting names, match full typed words, dedupli
   assert.deepEqual(gameSuggestions(games,'unmatched'),[]);assert.deepEqual(gameSuggestions(games,'?!'),[]);
 });
 
-test('suggestions match alternate titles and display the catalog name',()=>{
-  const chess={...game('chess','Chess'),alternative_names:['Ajedrez','Échecs']};
+test('suggestions identify the best matching alternative name',()=>{
+  const chess={...game('chess','Chess'),alternative_names:['Ajedrez clásico','Ajedrez','Échecs','Chess Board']};
   const connect={...game('connect','Connect Four'),alternative_names:['4 in a Row','Puissance 4']};
   assert.deepEqual(gameSuggestions([chess,connect],'ajed'),[chess]);
   assert.deepEqual(gameSuggestions([chess,connect],'e\u0301checs'),[chess]);
   assert.deepEqual(gameSuggestions([chess,connect],'4 in a ro'),[connect]);
   assert.deepEqual(gameSuggestions([chess,connect],'puissance row'),[]);
+  assert.equal(gameSuggestionMatches([chess],'ajedrez')[0].alternativeName,'Ajedrez');
+  assert.equal(gameSuggestionMatches([chess],'e\u0301checs')[0].alternativeName,'Échecs');
+  assert.equal(gameSuggestionMatches([chess],'chess')[0].alternativeName,undefined);
+  const localized={...chess,name:'Échecs',_sourceText:{name:'Chess'}};
+  assert.equal(gameSuggestionMatches([localized],'échecs')[0].alternativeName,undefined);
 });
 
 function fixture(){

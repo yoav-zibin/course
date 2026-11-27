@@ -11,7 +11,7 @@ export function gameSearchPrefix(value: string): string | null {
   return word ? Array.from(word).slice(0,24).join('') : null;
 }
 
-export function gameSuggestions(games: Game[], query: string, limit = 6): Game[] {
+export function gameSuggestionMatches(games: Game[], query: string, limit = 6) {
   const words=gameSearchWords(query);
   if(!words.length)return [];
   const phrase=words.join(' ');
@@ -20,12 +20,28 @@ export function gameSuggestions(games: Game[], query: string, limit = 6): Game[]
     if(!words.every(word=>title.some(part=>part.startsWith(word))))return Infinity;
     return joined===phrase?0:joined.startsWith(phrase)?1:2;
   };
-  const unique=new Map<string,{game:Game;score:number}>();
+  const unique=new Map<string,{game:Game;score:number;alternativeName?:string}>();
   for(const game of games){
     if(!game||typeof game.id!=='string'||typeof game.name!=='string')continue;
-    const names=[game.name,game._sourceText?.name,...(game.alternative_names??[])];
-    const rank=Math.min(...names.filter((name):name is string=>typeof name==='string').map(score));
-    if(Number.isFinite(rank)&&(!unique.has(game.id)||rank<unique.get(game.id)!.score))unique.set(game.id,{game,score:rank});
+    const sourceName=game._sourceText?.name;
+    let rank=Math.min(score(game.name),typeof sourceName==='string'?score(sourceName):Infinity);
+    let alternativeName:string|undefined;
+    for(const name of game.alternative_names??[]){
+      if(typeof name!=='string')continue;
+      const alternativeRank=score(name);
+      if(alternativeRank<rank){
+        rank=alternativeRank;
+        alternativeName=name;
+      }
+    }
+    const existing=unique.get(game.id);
+    if(Number.isFinite(rank)&&(!existing||rank<existing.score||(rank===existing.score&&existing.alternativeName&&!alternativeName))){
+      unique.set(game.id,{game,score:rank,alternativeName});
+    }
   }
-  return [...unique.values()].sort((a,b)=>a.score-b.score||a.game.name.localeCompare(b.game.name)).slice(0,limit).map(item=>item.game);
+  return [...unique.values()].sort((a,b)=>a.score-b.score||a.game.name.localeCompare(b.game.name)).slice(0,limit);
+}
+
+export function gameSuggestions(games: Game[], query: string, limit = 6): Game[] {
+  return gameSuggestionMatches(games,query,limit).map(({game})=>game);
 }

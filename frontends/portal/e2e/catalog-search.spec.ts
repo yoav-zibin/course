@@ -5,7 +5,8 @@ import {createUser,loginAs,uniqueName} from './helpers';
 
 const packageFixture=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../src/core/bundled-tictactoe.json'),'utf8'));
 const names=['Cobalt Alpha','Cobalt Bravo','Cobalt Charlie','Cobalt Delta','Cobalt Echo','Cobalt Foxtrot','Cobalt Golf','Cobalt Hotel','Chess'];
-const games=names.map((name,index)=>({...packageFixture,id:`search-fixture-${index}`,name,description:'A disposable search fixture.',cover_url:null}));
+const games=names.map((name,index)=>({...packageFixture,id:`search-fixture-${index}`,name,description:'A disposable search fixture.',cover_url:null,
+  alternative_names:name==='Cobalt Foxtrot'?['Arctic Fox']:[]}));
 
 test.beforeEach(async({baseURL})=>{
   if(!baseURL||!['127.0.0.1','localhost'].includes(new URL(baseURL).hostname))throw new Error('Catalog checks require a disposable loopback server.');
@@ -21,7 +22,7 @@ async function catalog(page:Page,searchReply?:(prefix:string)=>Promise<void>){
     queries.push(prefix);
     if(!/^[\p{L}\p{N}_]+$/u.test(prefix)||Array.from(prefix).length<2||Array.from(prefix).length>24){invalid.push(prefix);return route.fulfill({status:400,json:{detail:'search requires one word prefix of 2 to 24 characters'}});}
     if(searchReply)await searchReply(prefix);
-    const items=games.filter(game=>game.name.toLowerCase().split(/\W+/).some(word=>word.startsWith(prefix)));
+    const items=games.filter(game=>[game.name,...game.alternative_names].some(name=>name.toLowerCase().split(/\W+/).some(word=>word.startsWith(prefix))));
     return route.fulfill({json:{items,next_cursor:null}});
   });
   await page.route('**/games/popular',route=>route.fulfill({json:[games[0],games[8]]}));
@@ -56,6 +57,9 @@ test('catalog keeps recent/popular discovery and offers bounded name suggestions
   await search.fill('x'.repeat(80));await expect.poll(()=>observed.queries.some(query=>query.length===24)).toBe(true);
   await expect(page.getByRole('option')).toHaveCount(0);
   await search.fill('Cobalt fo');await expect(page.getByRole('option',{name:'Cobalt Foxtrot',exact:true})).toBeVisible();
+  await search.fill('arctic f');
+  const alternate=page.getByRole('option',{name:'Cobalt Foxtrot (Arctic Fox)',exact:true});
+  await expect(alternate).toHaveText('Cobalt Foxtrot (Arctic Fox)');
   await expect(page.getByRole('option')).toHaveCount(1);await search.press('ArrowDown');await search.press('Enter');
   await expect(page.getByRole('heading',{name:'Cobalt Foxtrot',exact:true})).toBeVisible();
   expect(observed.opens).toEqual(['search-fixture-5']);
