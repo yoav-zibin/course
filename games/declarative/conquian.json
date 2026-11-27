@@ -1,5 +1,11 @@
 {
   "name": "Conquian",
+  "alternative_names": [
+    "Conquián",
+    "Coon Can",
+    "Cooncan",
+    "Colonel"
+  ],
   "description": "Make melds using the exposed card immediately or pass it. Extend your melds or make a new group, then discard. First to expose eleven cards wins.",
   "allowed_player_counts": [
     2

@@ -1,5 +1,10 @@
 {
   "name": "Sergeant Major",
+  "alternative_names": [
+    "Sergeant-Major",
+    "3-5-8",
+    "8-5-3"
+  ],
   "description": "The dealer chooses trump, takes the kitty, and discards four cards. Follow suit. The three seats aim for eight, five, and three tricks. Most tricks above your target after one deal wins.",
   "allowed_player_counts": [
     3

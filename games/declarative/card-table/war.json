@@ -1,5 +1,10 @@
 {
   "name": "War",
+  "alternative_names": [
+    "War Card Game",
+    "Bataille",
+    "Battle"
+  ],
   "description": "A 2–4 player card battle. Flip cards; the highest rank takes the pile. Ties trigger a war.",
   "game_addition_request_id_and_secret": "example-only-war-replace-before-publishing",
   "allowed_player_counts": [

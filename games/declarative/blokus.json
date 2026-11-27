@@ -1,5 +1,8 @@
 {
   "name": "Blokus",
+  "alternative_names": [
+    "Blokus Classic"
+  ],
   "description": "A classic strategy board game for 2–4 players. Place geometric pieces on a 20×20 board, connecting your own pieces only at corners. The player with the best score wins.",
   "allowed_player_counts": [
     2,

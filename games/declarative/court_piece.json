@@ -1,5 +1,13 @@
 {
   "name": "Court Piece",
+  "alternative_names": [
+    "Coat Piece",
+    "Rang",
+    "Hokm",
+    "Hukum",
+    "حکم",
+    "Rung"
+  ],
   "description": "Opposite seats are partners. The first player chooses trump from their first five cards. Follow the led suit if possible. Highest trump wins the trick, or highest card of the led suit if there is no trump. First team to seven tricks wins.",
   "allowed_player_counts": [
     4

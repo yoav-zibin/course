@@ -1,5 +1,10 @@
 {
   "name": "Michigan",
+  "alternative_names": [
+    "Michigan Rummy",
+    "Boodle",
+    "Newmarket"
+  ],
   "description": "Build four suit sequences outward from 7. On your turn, play a card one rank above or below its suit sequence; if you cannot play, pass. First to empty their hand wins.",
   "game_addition_request_id_and_secret": "example-only-michigan-replace-before-publishing",
   "allowed_player_counts": [

@@ -1,5 +1,9 @@
 {
   "name": "Slapjack",
+  "alternative_names": [
+    "Slap Jack",
+    "Slaps"
+  ],
   "description": "On your turn flip a card onto the shared pile or slap the top jack to collect the pile. A wrong slap gives a card to another player. Last player with cards wins. After 140 flips, the most cards wins.",
   "allowed_player_counts": [
     2,

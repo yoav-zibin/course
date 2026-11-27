@@ -1,5 +1,6 @@
 {
   "name": "Last Floe",
+  "alternative_names": [],
   "description": "A strategic penguin board game for 2–4 players. Move across hexagonal ice floes, collect fish, and avoid getting trapped. The player with the most fish wins.",
   "allowed_player_counts": [
     4

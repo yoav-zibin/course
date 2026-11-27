@@ -1,5 +1,10 @@
 {
   "name": "Six-Card Golf",
+  "alternative_names": [
+    "Six Card Golf",
+    "6-Card Golf",
+    "Hara Kiri"
+  ],
   "description": "A relaxed card game: reveal, replace, and match columns to make the lowest score.",
   "game_addition_request_id_and_secret": "example-only-six-card-golf-replace-before-publishing",
   "allowed_player_counts": [

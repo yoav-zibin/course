@@ -1,5 +1,9 @@
 {
   "name": "Pedro",
+  "alternative_names": [
+    "Cinch",
+    "High Five"
+  ],
   "description": "Partners sit opposite. Bid 7 to 14 points, then the high bidder chooses trump. Both fives of the trump color count five points each. Follow the led suit or play trump. A failed bid loses its value. Reach 62 points to win, or lead after 24 deals.",
   "allowed_player_counts": [
     4

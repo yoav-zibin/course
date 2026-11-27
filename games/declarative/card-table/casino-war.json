@@ -1,5 +1,6 @@
 {
   "name": "Casino War",
+  "alternative_names": [],
   "description": "Ten high-card hands against the dealer. Aces are high, ties count as ties, and most hand wins takes the match.",
   "game_addition_request_id_and_secret": "example-only-casino-war-replace-before-publishing",
   "allowed_player_counts": [

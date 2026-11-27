@@ -1,5 +1,14 @@
 {
   "name": "Big Two",
+  "alternative_names": [
+    "Big Deuce",
+    "Deuces",
+    "Dai Di",
+    "Choh Dai Di",
+    "Pusoy Dos",
+    "鋤大地",
+    "鋤大D"
+  ],
   "description": "Open with a combination containing the three of diamonds. Beat the last play with the same number of cards or pass. Legal plays are singles, pairs, triples and five-card hands. After three passes, the last player leads again. The first player to empty their hand wins.",
   "allowed_player_counts": [
     4

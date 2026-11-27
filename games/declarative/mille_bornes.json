@@ -1,5 +1,10 @@
 {
   "name": "Mille Bornes",
+  "alternative_names": [
+    "Mille Bornes: 1000 Miles",
+    "1000 Miles",
+    "A Thousand Milestones"
+  ],
   "description": "Draw and play distance, hazard, remedy or safety cards, or discard. Reach exactly 1000 miles to win, or travel farthest before the deck runs out.",
   "allowed_player_counts": [
     2,

@@ -1,5 +1,9 @@
 {
   "name": "Old Maid",
+  "alternative_names": [
+    "Old Maid Card Game",
+    "Vieux Garçon"
+  ],
   "description": "Take one hidden card from the next player, then discard any matching rank pair. Shed all your cards; the player left holding the unmatched queen loses.",
   "game_addition_request_id_and_secret": "example-only-old-maid-replace-before-publishing",
   "allowed_player_counts": [

@@ -1,5 +1,11 @@
 {
   "name": "Concentration",
+  "alternative_names": [
+    "Memory",
+    "Matching Pairs",
+    "Pelmanism",
+    "Pairs"
+  ],
   "description": "A matching-pairs game. Turn over two cards to find pairs; the player with the most pairs wins.",
   "game_addition_request_id_and_secret": "example-only-concentration-replace-before-publishing",
   "allowed_player_counts": [

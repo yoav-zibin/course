@@ -1,5 +1,11 @@
 {
   "name": "Nim",
+  "alternative_names": [
+    "Takeaway Nim",
+    "Single-Pile Nim",
+    "One-Pile Nim",
+    "Subtraction Game"
+  ],
   "description": "Classic three-pile Nim: remove stones from one pile each turn. Take the last stone to win.",
   "allowed_player_counts": [
     2

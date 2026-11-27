@@ -1,5 +1,8 @@
 {
   "name": "Snap",
+  "alternative_names": [
+    "Snap Card Game"
+  ],
   "description": "On your turn flip a card onto the shared pile. If the top two ranks match, you may take the pile instead. Last player with cards wins. After 160 flips, the most cards wins.",
   "allowed_player_counts": [
     2,

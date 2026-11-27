@@ -1,5 +1,11 @@
 {
   "name": "Blackjack",
+  "alternative_names": [
+    "Black Jack",
+    "Twenty-One",
+    "21",
+    "Vingt-et-Un"
+  ],
   "description": "Players place a bet, then choose Hit or Stand to get as close to 21 as possible without going over. The dealer draws to 17; the best hand wins the round.",
   "game_addition_request_id_and_secret": "example-only-blackjack-replace-before-publishing",
   "allowed_player_counts": [

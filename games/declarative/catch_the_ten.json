@@ -1,5 +1,9 @@
 {
   "name": "Catch the Ten",
+  "alternative_names": [
+    "Scotch Whist",
+    "Catch the 10"
+  ],
   "description": "Opposite seats are partners. The last dealt card sets trump. Follow suit if possible. The trump jack is strongest and scores eleven. Trump ten scores ten, ace four, king three, and queen two. First team to 41 wins.",
   "allowed_player_counts": [
     4
