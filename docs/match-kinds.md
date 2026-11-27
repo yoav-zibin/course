@@ -23,6 +23,14 @@ number of turns, computer replies, device handoffs and restarts without internet
 provided its pinned rules were downloaded. Offline state is pending cloud data,
 not a separate permanent device-only match category.
 
+On native, single-player input updates the in-memory match as soon as the rules
+accept it. While the device writes the new turn to a compact local journal, the
+save status is **Saving on this device…**. Once that write succeeds, the turn
+can survive a restart. A background transaction folds journaled turns into the
+account snapshot. Startup replays any journal left by an interrupted transaction.
+If the journal write fails, the app keeps the moves in memory, shows a storage
+error and retries. Quitting before the device confirms a save can lose those moves.
+
 On reconnect and later app starts, automatically upload pending single-player
 snapshots, including finished matches and pre-existing local saves. The snapshot
 contains the pinned game version, initial position, full rules state, random seed,

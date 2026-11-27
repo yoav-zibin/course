@@ -149,7 +149,10 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
   },[p.ready,launchLink]);
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({url}) => {void run(()=>receiveLink(url));});
-    const resume = AppState.addEventListener('change', state => {if (state === 'active') void run(() => p.actions.refresh());});
+    const resume = AppState.addEventListener('change', state => {
+      if(state==='active')void run(()=>p.actions.refresh());
+      if(state==='background')void p.actions.flushDeviceTurns().catch(()=>{});
+    });
     const pop = () => {void run(()=>receiveLink(window.location.href));};
     if (Platform.OS === 'web') {window.addEventListener('popstate',pop);window.addEventListener('hashchange',pop);}
     return () => {subscription.remove(); resume.remove(); if (Platform.OS === 'web') {window.removeEventListener('popstate',pop);window.removeEventListener('hashchange',pop);}};
@@ -226,7 +229,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
         onGames={()=>navigate('games')} onMatches={()=>navigate('matches')} onAccount={()=>openHeaderDialog('account')} onNotifications={()=>openHeaderDialog('inbox')}/>;
   const extras=<>
     <AccountDeletionBanner/>
-    {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {copyText('pending saves')}. {p.pending ? copyText('Your progress is saved locally and will sync to the cloud when connected.') : copyText('Downloaded single-player games keep working offline; progress syncs when you reconnect.')}</Notice>}
+    {(!p.network || p.pending>0) && <Notice>{p.network ? t('ui.offline.online','Online') : t('ui.offline.offline','Offline')} · {p.pending} {copyText('pending saves')}. {p.localMatches.some(match=>match.saving_on_device)?copyText('Saving on this device…'):p.pending ? copyText('Your progress is saved locally and will sync to the cloud when connected.') : copyText('Downloaded single-player games keep working offline; progress syncs when you reconnect.')}</Notice>}
           {notificationBanner&&!inbox&&<View style={{gap:10}}><NotificationItem item={notificationBanner} onOpen={openNotification}/>{!gameVisible&&<Button compact secondary onPress={()=>setNotificationBanner(null)}>{copyText('Dismiss')}</Button>}</View>}
           {appSession&&<Card><Title small>{copyText("Continue to the BuildPlay app")}</Title><Copy muted>{copyText("Confirm the account you want to use in the app. Your password stays out of the browser callback link.")}</Copy><Button onPress={()=>run(async()=>{if(!p.account){setAccount(true);return;}const result=await p.actions.request('POST',`/auth/app-sessions/${encodeURIComponent(appSession)}/complete`);await Linking.openURL(result.callback_url);setAppSession('');})}>{p.account?copyText("Continue as {v0}",{v0:p.account.display_name}):copyText("Log in to continue")}</Button></Card>}
     <NotificationPrompt inline={boardVisible}/>

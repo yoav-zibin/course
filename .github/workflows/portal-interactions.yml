@@ -19,6 +19,11 @@ on:
         type: choice
         options: [board, landscape, startup, startup-video, startup-link, startup-profile, responses, responses-profile, responses-checkers, responses-checkers-profile, responses-checkers-stacks, responses-checkers-instruments, responses-rapid, startup-flows, startup-flows-profile]
         default: board
+      hold_account_ms:
+        description: Artificial competing account transaction for signed checker measurements (milliseconds)
+        type: choice
+        options: ['0', '1500']
+        default: '0'
       video_pairs:
         description: Paired trials for recorded launches
         type: choice
@@ -86,6 +91,7 @@ jobs:
           BUILD_RUN: ${{ inputs.build_run }}
           BASELINE_BUILD_RUN: ${{ inputs.baseline_build_run }}
           SCENARIO: ${{ inputs.scenario }}
+          HOLD_ACCOUNT_MS: ${{ inputs.hold_account_ms || '0' }}
           VIDEO_PAIRS: ${{ inputs.video_pairs || '5' }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -141,7 +147,7 @@ jobs:
           PYPROFILE
             fi
             if [[ "$signed_checkers" == 1 ]]; then
-              python3 scripts/native-interactions/prepare_checker_trace.py "$portal"
+              python3 scripts/native-interactions/prepare_checker_trace.py "$portal" --hold-account-ms "$HOLD_ACCOUNT_MS"
             fi
             (cd "$portal" && npm ci && CI=1 npx --no-install expo export --platform ios --output-dir "$base/js-$name")
             cp "$base/js-$name"/_expo/static/js/ios/*.hbc "$app/main.jsbundle"

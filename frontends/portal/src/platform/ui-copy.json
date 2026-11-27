@@ -3440,6 +3440,24 @@
     "hi": "खोज उपलब्ध नहीं है। फिर से कोशिश करें।",
     "ar": "البحث غير متاح. حاول مرة أخرى."
   },
+  "Saving on this device…": {
+    "es": "Guardando en este dispositivo…",
+    "fr": "Enregistrement sur cet appareil…",
+    "de": "Wird auf diesem Gerät gespeichert…",
+    "pt": "Salvando neste dispositivo…",
+    "zh": "正在保存到此设备…",
+    "hi": "इस डिवाइस पर सहेजा जा रहा है…",
+    "ar": "جارٍ الحفظ على هذا الجهاز…"
+  },
+  "Move is in memory. Device storage could not save it yet. Keep the app open while it retries.": {
+    "es": "La jugada sigue en memoria. Aún no se ha podido guardar en el dispositivo. Mantén la aplicación abierta mientras vuelve a intentarlo.",
+    "fr": "Le coup est en mémoire. Son enregistrement sur cet appareil a échoué. Gardez l’application ouverte pendant la nouvelle tentative.",
+    "de": "Der Zug ist im Arbeitsspeicher. Er konnte noch nicht auf dem Gerät gespeichert werden. Lass die App für den nächsten Versuch geöffnet.",
+    "pt": "A jogada está na memória. Ainda não foi possível salvá-la no dispositivo. Mantenha o app aberto enquanto ele tenta novamente.",
+    "zh": "这一步仍在内存中，暂时无法保存到设备。请保持应用打开，等待重试。",
+    "hi": "चाल अभी मेमोरी में है। इसे डिवाइस पर सहेजा नहीं जा सका। दोबारा कोशिश होने तक ऐप खुला रखें।",
+    "ar": "النقلة محفوظة في الذاكرة مؤقتًا. تعذّر حفظها على الجهاز حتى الآن. أبقِ التطبيق مفتوحًا أثناء إعادة المحاولة."
+  },
   "pending saves": {
     "es": "guardados pendientes",
     "fr": "sauvegardes en attente",

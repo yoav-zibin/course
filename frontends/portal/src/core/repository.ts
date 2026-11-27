@@ -1,5 +1,8 @@
 import {requestId} from './random-id';
+import {equal} from './account-data';
+import {recordDiagnosticEvent} from './diagnostics';
 import * as storage from '../platform/storage';
+import {DeviceTurns,type TurnStorage} from './device-turns';
 import type { AccountData, LocalMatch } from './types';
 import { redactedArchive } from './redaction';
 import {isQuotaError,utf8Size} from '../platform/recoverable-cache';
@@ -10,13 +13,9 @@ import {protectedResponsePaths,responseRetentionPriorities} from './cache-policy
 import {apiOrigin,DEFAULT_API_ORIGIN} from '../platform/credential-vault';
 import {hydrateSinglePlayer,needsCloudSave} from './single-player';
 export const LEGACY_ORIGIN_KEY='game-platform.portal.origin.v1';
-export interface StorageAdapter { supportsBrowserImports?: boolean; getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem?(key: string): Promise<void>; keys(): Promise<string[]>; exclusive<T>(name: string, run: () => Promise<T>): Promise<T> }
+export interface StorageAdapter { turnStorage?: TurnStorage; supportsBrowserImports?: boolean; getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void>; removeItem?(key: string): Promise<void>; keys(): Promise<string[]>; exclusive<T>(name: string, run: () => Promise<T>): Promise<T> }
 export const emptyAccountData = (): AccountData => ({ version: 1, responses: {}, queues: {}, conflicts: {}, local: {}, archives: [], archivedMatches: [], selectedId: null });
-export function equal(a: any, b: any): boolean {
-  if (a === b) return true;
-  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
-  const keys = Object.keys(a); return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) && equal(a[key], b[key]));
-}
+export {equal} from './account-data';
 export {requestId} from './random-id';
 const RECOVERABLE_BUDGET = 1_000_000, MATCH_BUDGET = 20_000_000, QUOTA_RETRIES = 8;
 const LOCAL_BUDGET = 2_000_000, ARCHIVE_BUDGET = 1_000_000, PRUNE_ON_LOAD_BYTES = 3_000_000;
@@ -64,15 +63,60 @@ export function migrateLegacy(raw: any): AccountData {
   }
   data.imported = true; return data;
 }
+// Several stores can share the native module in one process. They must also
+// share the writer for the same account and backend.
+const deviceJournals=new WeakMap<TurnStorage,Map<string,DeviceTurns>>();
 export class AccountRepository {
+  private checkpoints = new Map<string,Promise<void>>();
+  deviceTurns(id:string):DeviceTurns|undefined {
+    if(!this.adapter.turnStorage)return;
+    const backend=this.adapter.turnStorage,key=this.key(id);
+    let journals=deviceJournals.get(backend);
+    if(!journals){journals=new Map();deviceJournals.set(backend,journals);}
+    let journal=journals.get(key);
+    if(!journal){journal=new DeviceTurns(backend,'buildplay.turns.v1.'+key);journals.set(key,journal);}
+    return journal;
+  }
+  checkpointTurns(id:string):Promise<void>{
+    const journal=this.deviceTurns(id),key=this.key(id),running=this.checkpoints.get(key);
+    if(running)return running;
+    if(!journal?.hasSaved)return Promise.resolve();
+    // Give React a frame and combine rapid turns. The journal is already
+    // durable, including if iOS suspends the app before this timer fires.
+    const pending:Promise<void>=new Promise<void>(resolve=>setTimeout(resolve,250)).then(()=>{
+      const queued=performance.now();
+      return this.adapter.exclusive(key,async()=>{
+        const start=performance.now();
+        const count=await journal.checkpoint(()=>this.readAccount(id),data=>this.write(id,data));
+        if(count)recordDiagnosticEvent('local_move_checkpoint',{turns:count,wait_for_store_ms:Math.round(start-queued),duration_ms:Math.round(performance.now()-start)});
+      });
+    })
+      .finally(()=>{this.checkpoints.delete(key);})
+      .then(()=>{if(journal.hasSaved)return this.checkpointTurns(id);});
+    this.checkpoints.set(key,pending);return pending;
+  }
   private activeGames = new Map<string,{id: string; version?: number}>();
   private matchUsers = new Map<string,string>();
   constructor(public backend = '', public adapter: StorageAdapter = storage) {}
   protectGame(id: string, gameId: string | null, version?: number) { if (gameId) this.activeGames.set(id,{id:gameId,version}); else this.activeGames.delete(id); }
   prioritizeMatches(id: string, userId = id) { this.matchUsers.set(id,userId); }
   key(id: string) { const scope = !this.backend || this.backend === 'https://buildplay.fun' ? '' : `${encodeURIComponent(this.backend)}.`; return `buildplay.shared.v1.${scope}${id}`; }
-  lock<T>(id: string, run: () => Promise<T>): Promise<T> { return this.adapter.exclusive(this.key(id), run); }
-  async read(id: string): Promise<AccountData> {
+  lock<T>(id:string,run:()=>Promise<T>):Promise<T>{
+    const journal=this.deviceTurns(id);
+    return this.adapter.exclusive(this.key(id),async()=>{
+      if(journal?.hasPending)await journal.persist();
+      return run();
+    });
+  }
+  async read(id:string):Promise<AccountData> {
+    const journal=this.deviceTurns(id);if(!journal)return this.readAccount(id);
+    const cursor=journal.cursor;
+    const [data]=await Promise.all([this.readAccount(id),journal.load()]);
+    const restored=journal.restore(data,cursor);
+    if(journal.hasSaved)void this.checkpointTurns(id).catch(error=>reportCacheFailure('turn-checkpoint',error));
+    return restored;
+  }
+  private async readAccount(id: string): Promise<AccountData> {
     const text = await this.adapter.getItem(this.key(id));
     if (text) { const parsed = JSON.parse(text); if (parsed?.version !== 1 || !parsed.responses || !parsed.queues || !parsed.local) throw new Error('Saved portal data needs recovery; the original data was kept.'); if (text.length * 3 > PRUNE_ON_LOAD_BYTES && utf8Size(text) > PRUNE_ON_LOAD_BYTES) this.trim(parsed, id); return parsed; }
     if (this.adapter.supportsBrowserImports === false) return emptyAccountData();
@@ -202,6 +246,7 @@ export class AccountRepository {
   async preserveMergedAccounts(targetId: string, sourceIds: string[]): Promise<void> {
     const sources: { id: string; data: AccountData }[] = [];
     for (const id of [...new Set(sourceIds)].filter(id => id && id !== targetId)) {
+      await this.deviceTurns(id)?.persist();
       const data=await this.read(id);
       if(id==='visitor' && data.visitor_claimed_by && data.visitor_claimed_by!==targetId)continue;
       sources.push({id,data});

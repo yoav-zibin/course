@@ -1,10 +1,11 @@
 """Add simulator-only timing probes to an isolated historical or current JS checkout."""
 from pathlib import Path
-import shutil,sys
+import argparse
 
-def prepare(portal):
+def prepare(portal,hold_account_ms=0):
     scripts=Path(__file__).resolve().parent
-    shutil.copy2(scripts/'checker-trace.js',portal/'benchmark-checkers.js')
+    probe=(scripts/'checker-trace.js').read_text().replace('__BENCHMARK_ACCOUNT_HOLD_MS__',str(hold_account_ms))
+    (portal/'benchmark-checkers.js').write_text(probe)
     entry=portal/'index.ts'
     entry.write_text("import './benchmark-checkers';\n"+entry.read_text())
     diagnostics=portal/'src/core/diagnostics.ts'
@@ -27,4 +28,9 @@ export async function {name}(...args: Parameters<typeof {inner}>) {{
 }}
 """)
 
-if __name__=='__main__':prepare(Path(sys.argv[1]))
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('portal',type=Path)
+    parser.add_argument('--hold-account-ms',type=int,choices=[0,1500],default=0)
+    args=parser.parse_args()
+    prepare(args.portal,args.hold_account_ms)

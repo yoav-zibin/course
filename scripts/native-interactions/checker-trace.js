@@ -17,7 +17,7 @@ function append(row) {
 function begin(label) {const id=++sequence;append({label,id,phase:'begin'});return id;}
 function end(id) {append({id,phase:'end'});}
 function event(label,data={}) {
-  if(!['drag_performance','game_move','game_drop_board_updated','local_move_timing'].includes(label))return;
+  if(!['drag_performance','game_move','game_drop_board_updated','local_move_timing','local_move_journal_saved','local_move_checkpoint'].includes(label))return;
   const numbers=Object.fromEntries(Object.entries(data).filter(([,v])=>typeof v==='number'||typeof v==='boolean'));
   append({label,phase:'event',...numbers});
 }
@@ -38,7 +38,19 @@ repository.lock=function(owner,run){
 };
 const portal=PortalStore.prototype;
 traceAsync(portal,'callGame',args=>'Rules: '+args[1]);
-traceAsync(portal,'practiceMove','Apply and save local move');
+traceAsync(portal,'practiceMove','Apply local move');
+const holdAccountMs=__BENCHMARK_ACCOUNT_HOLD_MS__;
+if(holdAccountMs){
+  const apply=portal.practiceMove;
+  portal.practiceMove=function(...args){
+    // Simulate a slow background storage transaction without blocking the JS thread.
+    void this.repository.lock(this.identity(),async()=>{
+      const id=begin('Simulated competing account transaction');
+      try{await new Promise(resolve=>setTimeout(resolve,holdAccountMs));}finally{end(id);}
+    }).catch(()=>{});
+    return apply.apply(this,args);
+  };
+}
 traceAsync(portal,'sync','Cloud synchronization');
 const publish=portal.publishData;
 portal.publishData=function(...args){

@@ -1,4 +1,5 @@
 import {AccountScopeChangedError,visibleErrorMessage} from './account-scope';
+import {deviceTurn} from './device-turns';
 import {playerLink} from './links';
 import type {InviteShareChannel} from './invite-sharing';
 import {withoutPersonalReferral} from './account-data';
@@ -74,6 +75,8 @@ export class PortalStore {
   private syncCompatibilityRetryAfter = 0;
   private api = new PortalApi('', getLocale);
   private repository = new AccountRepository();
+  private turnCheckpoint?:Promise<void>;
+  private get turnSaveError(){return copyText('Move is in memory. Device storage could not save it yet. Keep the app open while it retries.');}
   private volatileResponses = new Map<string,Map<string,any>>();
   getSnapshot = () => this.state;
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
@@ -117,10 +120,11 @@ export class PortalStore {
   private decorate(match: Match | null): Match | null {
     if (!match) return null;
     const local = this.data.local[match.id];
-    return {...match, ...(local || {}), ...(local ? {match_kind: singlePlayerKind(local)!, cloud_pending: needsCloudSave(local), awaitingHandoff: this.awaitingLocalHandoff(local)} : {cloud_pending:!!this.data.creations?.[match.id]}),
+    return {...match, ...(local || {}), ...(local ? {match_kind: singlePlayerKind(local)!, cloud_pending: needsCloudSave(local), saving_on_device:this.repository.deviceTurns(this.identity())?.isSaving(local.id)??false, awaitingHandoff: this.awaitingLocalHandoff(local)} : {cloud_pending:!!this.data.creations?.[match.id]}),
       pending: this.data.queues[match.id]?.length || 0, conflict: this.data.conflicts[match.id] || null};
   }
   private publishData(data: AccountData) {
+    data=this.repository.deviceTurns(this.identity())?.display(data)??data;
     this.mergeVolatile(data);this.data = data; const selected = this.state.selectedMatch;
     const retired = selected && removedSavedMatch(data,selected.id), hidden = hiddenMatchIds(data);
     // Another tab can retire the selected device branch. Do not retain its
@@ -135,6 +139,7 @@ export class PortalStore {
       else if (path.startsWith('/users?ids=') && Array.isArray(value)) for (const profile of value) if (profile?.id) profiles[profile.id] = profile;
     }
     this.patch({matchGames:this.downloadedGameNames(),profiles:{...profiles,...this.state.profiles},
+      ...(this.state.storageError===this.turnSaveError&&!this.repository.deviceTurns(this.identity())?.hasPending?{storageError:null}:{}),
       ...(ownProfile && !this.state.profile && !this.state.deletionUpdating ? {profile: ownProfile, account: {...this.state.account!, canonical_user_id: ownProfile.id}} : {}), ...(retired ? {history:null,replayIndex:null} : {}), localMatches: Object.values(data.local).map(match => this.decorate(match) as LocalMatch), conflicts: data.conflicts, archived: [...data.archivedMatches, ...data.archives], pending: Object.values(data.queues).reduce((n, q) => n + q.length, 0) + Object.values(data.local).filter(needsCloudSave).length + Object.keys(data.creations || {}).length, selectedMatch: this.decorate(next), myMatches: this.state.myMatches.filter(match=>!hidden.has(match.id)).map(m => this.decorate(data.responses[`/matches/${m.id}`] || m)!) });
   }
   private mergeVolatile(data: AccountData) {
@@ -164,7 +169,7 @@ export class PortalStore {
       if(!durableBranch)value=preserve(this.data.responses[path],value);
       const persisted=saved.data.responses[path];this.mergeVolatile(saved.data);
       this.data.responses=saved.data.responses;this.data.responseRecency=saved.data.responseRecency;this.data.cacheClock=saved.data.cacheClock;
-      this.data.local=saved.data.local;
+      this.data.local=(this.repository.deviceTurns(id)?.display(saved.data)??saved.data).local;
       if (matchId && this.data.local[matchId]) this.patch({localMatches:Object.values(this.data.local).map(match => this.decorate(match) as LocalMatch)});
       this.rememberVolatile(path,value,persisted);
     } catch(error) {guard();value=preserve(this.data.responses[path],value);this.rememberVolatile(path,value,this.data.responses[path]);reportCacheFailure('download',error);}
@@ -411,6 +416,7 @@ export class PortalStore {
   }
   async refresh(capabilities?:Promise<void>, startup=false, freshlyOpenedId?:string): Promise<void> {
     if(!this.state.ready)return;
+    await this.flushDeviceTurns();
     if (this.refreshPromise) return this.refreshPromise;
     const guard = this.capture();
     const pending = (async () => {
@@ -520,6 +526,7 @@ export class PortalStore {
     if (!ids.length) return; const profiles = await this.read(`/users?ids=${encodeURIComponent(ids.join(','))}`); guard(); this.patch({ profiles: { ...this.state.profiles, ...Object.fromEntries(profiles.map((p: any) => [p.id, p])) } });
   }
   async refreshMatch() {
+    await this.flushDeviceTurns();
     const selected = this.state.selectedMatch; if (!selected) return;
     const guard = this.capture(); const token = this.selection;
     this.startOfflineDownloads();
@@ -964,44 +971,100 @@ export class PortalStore {
     if(match.move_count>0)await this.recoverPresentation(match);
     if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {}); return match;
   }
-  async practiceMove(move: any) {
-    if (!this.state.account && !this.localOnly) throw new Error(copyText('Log in to save your matches in the cloud.'));
-    const selected = this.state.selectedMatch as LocalMatch; if (!selected || !this.data.local[selected.id]) throw new Error('Choose a local match first');
-    if (this.state.replayIndex !== null || this.awaitingLocalHandoff(this.data.local[selected.id])) throw new Error('Return to the live board and confirm the next player is ready');
-    const guard = this.capture(); const owner = this.identity();
-    const started=performance.now();
-    await this.repository.lock(owner, async () => {
-      const acquired=performance.now();
-      const data = await this.repository.read(owner); const original = data.local[selected.id];
-      const read=performance.now();
-      if (!original || original.move_count !== selected.move_count || original.status !== 'ongoing' || this.awaitingLocalHandoff(original, data)) throw new Error('Local match changed. Refresh before moving.');
-      // The isolated rules return fresh state and practiceResult appends to a
-      // new moves array. Existing history can be shared for this transaction.
-      const next: LocalMatch = {...original}; const packagePath=`/games/${next.game_id}/versions/${next.game_version}`;
-      const game = data.responses[packagePath] || (next.game_id===bundled.id && next.game_version===bundled.version ? bundled : undefined); if (!game?.server_code) throw new Error('Download this game once before playing offline');
-      if(!data.responses[packagePath])data.responses[packagePath]=game;
-      const actor = next.localMode === 'pass' ? next.turn_of_player_indices?.find(i => next.players[i].kind === 'human') : localHumanSeat(next);
-      if (actor === undefined || !next.turn_of_player_indices?.includes(actor)) throw new Error('It is not your turn');
-      await this.practiceResult(game, next, await this.callGame(game, 'applyMove', [next.logicState, next.players[actor].id, move], next), true, actor);
-      const human=performance.now();
-      await this.practiceComputers(game, next); guard();
-      const computer=performance.now();
-      const humanMove = next.moves?.find(item => item.move_number === original.move_count + 1); if (humanMove) humanMove.move = move;
-      next.awaitingHandoff = game.all_state_public !== true && next.localMode === 'pass' && next.status === 'ongoing' && next.turn_of_player_indices?.[0] !== actor;
-      next.local_revision = localRevision(original) + 1; next.cloud_pending = true;
-      data.local[next.id] = next; await this.repository.write(owner, data); guard();
+  private async applyPracticeTurn(original:LocalMatch,game:Game,move:any) {
+    // The game runtime returns fresh state. Only new frames are appended so a
+    // turn can reuse the in-memory history without copying every previous board.
+    const next={...original};
+    const actor=next.localMode==='pass'?next.turn_of_player_indices?.find(i=>next.players[i].kind==='human'):localHumanSeat(next);
+    if(actor===undefined||!next.turn_of_player_indices?.includes(actor))throw new Error('It is not your turn');
+    await this.practiceResult(game,next,await this.callGame(game,'applyMove',[next.logicState,next.players[actor].id,move],next),true,actor);
+    next.moves[next.moves.length-1].move=move;
+    const human=performance.now();
+    await this.practiceComputers(game,next);
+    const computer=performance.now();
+    next.awaitingHandoff=game.all_state_public!==true&&next.localMode==='pass'&&next.status==='ongoing'&&next.turn_of_player_indices?.[0]!==actor;
+    next.local_revision=localRevision(original)+1;next.cloud_pending=true;
+    return {next,human,computer};
+  }
+  private observePracticeTurn(next:LocalMatch) {
+    if(next.localMode==='computer')this.observations.set(next.id,(next.moves||[]).slice(-(LOCAL_COMPUTER_MOVE_LIMIT+1)).map(move=>({
+      view:move.new_state,move_count:move.move_number,last_move_player_index:move.player_index,
+    })));
+  }
+  private async saveDeviceTurns(repository:AccountRepository,owner:string) {
+    const journal=repository.deviceTurns(owner)!;
+    const generation=this.generation;
+    const current=()=>this.generation===generation&&this.repository===repository&&this.identity()===owner;
+    const start=performance.now();
+    try {await journal.persist();}
+    catch(error){
+      if(current())this.patch({storageError:this.turnSaveError});
+      throw error;
+    }
+    if(current()){
+      recordDiagnosticEvent('local_move_journal_saved',{duration_ms:Math.round(performance.now()-start)});
+      this.publishData(this.data);
+      if(this.state.storageError===this.turnSaveError)this.patch({storageError:null});
+    }
+    const checkpoint=repository.checkpointTurns(owner);
+    if(this.turnCheckpoint!==checkpoint){
+      this.turnCheckpoint=checkpoint;
+      void checkpoint.catch(error=>reportCacheFailure('turn-checkpoint',error)).then(()=>{
+        if(current()&&!this.localOnly&&this.state.account&&isOnline())void this.sync().catch(()=>{});
+      });
+    }
+  }
+  private async flushDeviceTurns(){
+    const owner=this.identity();
+    if(this.repository.deviceTurns(owner)?.hasPending)await this.saveDeviceTurns(this.repository,owner);
+  }
+  async practiceMove(move:any,options:{waitForSave?:boolean}={}) {
+    if(!this.state.account&&!this.localOnly)throw new Error(copyText('Log in to save your matches in the cloud.'));
+    const selected=this.state.selectedMatch as LocalMatch;
+    if(!selected||!this.data.local[selected.id])throw new Error('Choose a local match first');
+    if(this.state.replayIndex!==null||this.awaitingLocalHandoff(this.data.local[selected.id]))throw new Error('Return to the live board and confirm the next player is ready');
+    const guard=this.capture(),owner=this.identity(),repository=this.repository;
+    const started=performance.now(),packagePath=`/games/${selected.game_id}/versions/${selected.game_version}`;
+    const apply=async(data:AccountData)=>{
+      const original=data.local[selected.id];
+      if(!original||original.move_count!==selected.move_count||original.status!=='ongoing'||this.awaitingLocalHandoff(original,data))throw new Error('Local match changed. Refresh before moving.');
+      const game:Game=data.responses[packagePath]||(original.game_id===bundled.id&&original.game_version===bundled.version?bundled:undefined);
+      if(!game?.server_code)throw new Error('Download this game once before playing offline');
+      const result=await this.applyPracticeTurn(original,game,move);guard();
+      return {...result,original,game};
+    };
+    const journal=repository.deviceTurns(owner);
+    if(journal){
+      const selection=this.selection;
+      const {next,original,human,computer}=await apply(journal.display(this.data));
+      const current=journal.display(this.data).local[next.id];
+      if(selection!==this.selection||this.state.replayIndex!==null||!current||current.status!=='ongoing'||this.awaitingLocalHandoff(current)||
+        current.move_count!==original.move_count||
+        localRevision(current)!==localRevision(original)||!equal(current.logicState,original.logicState))
+        throw new Error('Local match changed. Refresh before moving.');
+      journal.stage(deviceTurn(requestId(),original,next));
+      this.observePracticeTurn(next);
+      this.publishData(this.data);
+      recordDiagnosticEvent('local_move_timing',{in_memory:true,wait_for_store_ms:0,read_ms:0,
+        human_rules_and_view_ms:Math.round(human-started),computer_ms:Math.round(computer-human),
+        save_ms:0,publish_ms:Math.round(performance.now()-computer)});
+      const saved=this.saveDeviceTurns(repository,owner);
+      if(options.waitForSave===false)void saved.catch(()=>{});
+      else await saved;
+      return;
+    }
+    await repository.lock(owner,async()=>{
+      const acquired=performance.now(),data=await repository.read(owner),read=performance.now();
+      const {next,game,human,computer}=await apply(data);
+      data.responses[packagePath]??=game;
+      data.local[next.id]=next;await repository.write(owner,data);guard();
       const saved=performance.now();
-      // Publish the accepted views with the final board so the renderer can
-      // present computer actions that were committed in this single batch.
-      if (next.localMode === 'computer') this.observations.set(next.id, (next.moves || []).slice(-(LOCAL_COMPUTER_MOVE_LIMIT + 1)).map(move => ({
-        view: move.new_state, move_count: move.move_number, last_move_player_index: move.player_index,
-      })));
-      this.publishData(data);
-      recordDiagnosticEvent('local_move_timing',{wait_for_store_ms:Math.round(acquired-started),
-        read_ms:Math.round(read-acquired),human_rules_and_view_ms:Math.round(human-read),
-        computer_ms:Math.round(computer-human),save_ms:Math.round(saved-computer),publish_ms:Math.round(performance.now()-saved)});
+      this.observePracticeTurn(next);this.publishData(data);
+      recordDiagnosticEvent('local_move_timing',{wait_for_store_ms:Math.round(acquired-started),read_ms:Math.round(read-acquired),
+        human_rules_and_view_ms:Math.round(human-read),computer_ms:Math.round(computer-human),save_ms:Math.round(saved-computer),
+        publish_ms:Math.round(performance.now()-saved)});
     });
-    if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {});
+    if(!this.localOnly&&this.state.account&&isOnline())void this.sync().catch(()=>{});
   }
   async revealLocal() { const id = this.state.selectedMatch?.id; if (!id) return; await this.repository.mutate(this.identity(), data => { if (data.local[id]) {data.local[id].awaitingHandoff = false;data.local[id].local_revision = localRevision(data.local[id])+1;data.local[id].cloud_pending=true;} }); await this.reloadData(); if (!this.localOnly && this.state.account && isOnline()) void this.sync().catch(() => {}); }
   async removeSavedMatch(id: string, expected: Match) {
@@ -1112,6 +1175,7 @@ export class PortalStore {
     return { type: 'state_changed', state: view.state ?? null, view: view.state ?? null, players: match.players.map(p => ({ player_index: p.player_index, player_id: p.id, kind: p.kind, name: p.name || (p.user_id ? this.state.profiles[p.user_id]?.display_name || (p.user_id === this.state.account?.id ? this.state.account.display_name : `Player ${p.player_index + 1}`) : `Computer ${p.player_index + 1}`), picture_url: p.user_id ? this.state.profiles[p.user_id]?.picture_url || '' : '' })), turn_of_player_indices: view.turn_of_player_indices, turn_of_player_index: view.turn_of_player_indices?.[0] ?? null, my_player_index: seat, acting_for_player_index: allowed ? seat : null, status: view.status, end_reason: view.end_reason, move_count: view.move_count, last_move_player_index: replay === null ? match.last_move_player_index ?? null : replayActor, token_pot: view.token_pot || 0, replay: replay === null ? null : { index: replay, total: match.move_count }, presentation_history: this.presentationHistory().slice(-12), locale: getLocale(), direction: getDirection(), strings: texts?.strings || this.state.game?.declarative_ui?.strings || {} };
   }
   actions = {
+    flushDeviceTurns: () => this.flushDeviceTurns(),
     refreshNotifications: (more = false) => this.refreshNotifications(more), readNotification: (id: string) => this.perform(() => this.readNotification(id), false), claimNotificationPrompt: () => this.claimNotificationPrompt(), dismissNotificationPrompt: () => this.patch({notificationPrompt: false, notificationPromptReady: false}),
     bootstrap: (baseUrl?: string, localOnly = false,initialUrl?:string) => this.bootstrap(baseUrl, localOnly,initialUrl), refresh: () => this.refresh(), refreshMatch: () => this.refreshMatch(),
     rememberAttribution:(url:string)=>this.rememberAttribution(url),
@@ -1130,7 +1194,7 @@ export class PortalStore {
     createMatch: (options: any) => this.perform(() => this.createMatch(options)),
     matchAction: (action: 'join' | 'start' | 'leave' | 'rematch' | 'maybeLeave' | 'playerLeft', body?: any) => this.perform(() => this.matchAction(action, body)), removePlayer: (id: string) => this.perform(() => this.removePlayer(id)),
     leaveMatch: (id?: string) => this.perform(() => this.leaveMatch(id)), archiveMatch: (id: string) => this.perform(() => this.archiveMatch(id)), submitMove: (move: any) => this.perform(() => this.submitMove(move), false), resolveConflict: (id: string) => this.perform(() => this.resolveConflict(id)),
-    startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move: any) => this.perform(() => this.practiceMove(move), false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.deleteSinglePlayer(id)), removeSavedMatch: (id: string, expected: Match) => this.perform(() => this.removeSavedMatch(id,expected)),
+    startPractice: (id: string, options?: PracticeOptions) => this.perform(() => this.startPractice(id, options)), practiceMove: (move:any,options?:{waitForSave?:boolean}) => this.perform(() => this.practiceMove(move,options),false), revealLocal: () => this.perform(() => this.revealLocal()), deleteLocal: (id: string) => this.perform(() => this.deleteSinglePlayer(id)), removeSavedMatch: (id: string, expected: Match) => this.perform(() => this.removeSavedMatch(id,expected)),
     loadHistory: () => this.perform(() => this.loadHistory()), replay: (index: number | null) => this.perform(() => this.replay(index), false), presentationMessage: () => this.presentationMessage(), presentationHistory: () => this.presentationHistory(),
     saveGame: (id: string, saved: boolean) => this.perform(async () => { await this.request(saved ? 'PUT' : 'DELETE', `${this.paginated ? '/v2' : ''}/users/me/saved-games/${encodeURIComponent(id)}`); await this.list('savedGames'); }),
     openInvite: (token: string) => this.perform(() => this.openInvite(token)),

@@ -1094,3 +1094,92 @@ test('choosing pass and play while the details download creates one match from t
     assert.deepEqual(store.getSnapshot().localMatches.filter(saved=>saved.game_id===fixture.id).map(saved=>saved.id),[match.id]);
   } finally {release(fixture);restore();}
 });
+
+test('native checker input publishes consecutive turns while the journal and full-account transaction are blocked',async()=>{
+  const storage=browserStorage();
+  const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test',true);
+  await store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0});
+  const repo=(store as any).repository as AccountRepository,accountKey=repo.key('visitor');
+  const id=store.getSnapshot().selectedMatch!.id,accountText=storage[accountKey];
+  const old=repo.adapter,values=new Map<string,string>();let reads=0,writes=0;
+  let openJournal!:()=>void,openAccount!:()=>void;
+  const journalGate=new Promise<void>(done=>{openJournal=done;});
+  const accountGate=new Promise<void>(done=>{openAccount=done;});
+  const adapter={...old,getItem:async(key:string)=>{if(key===accountKey)reads++;return old.getItem(key);},
+    setItem:async(key:string,value:string)=>{if(key===accountKey)writes++;await old.setItem(key,value);},
+    exclusive:<T>(key:string,run:()=>Promise<T>)=>old.exclusive(key,async()=>{await accountGate;return run();}),
+    turnStorage:{getItem:async(key:string)=>values.get(key)??null,
+      setItem:async(key:string,value:string)=>{await journalGate;values.set(key,value);},
+      removeItem:async(key:string)=>{values.delete(key);}}};
+  repo.adapter=adapter;
+  const stale=await repo.read('visitor');reads=0;
+  const blocked=repo.lock('visitor',async()=>{});
+  const ui=async()=>{
+    await store.actions.practiceMove({cell:0},{waitForSave:false});
+    await store.actions.practiceMove({cell:1},{waitForSave:false});
+  };
+  try {
+    await Promise.race([ui(),new Promise((_,reject)=>setTimeout(()=>reject(new Error('Board waited for storage')),500))]);
+    assert.equal(store.getSnapshot().selectedMatch!.move_count,2);
+    assert.equal(store.getSnapshot().selectedMatch!.saving_on_device,true);
+    assert.deepEqual([reads,writes],[0,0]);assert.equal(storage[accountKey],accountText);
+    (store as any).publishData(stale);assert.equal(store.getSnapshot().selectedMatch!.move_count,2);
+    openJournal();await repo.deviceTurns('visitor')!.persist();
+    assert.equal(store.getSnapshot().selectedMatch!.saving_on_device,false);
+    // Restart from a copy of just the durable account and journal. The old
+    // process's whole-account write has still never entered its transaction.
+    const disk=new Map(values);
+    const restored=new AccountRepository('https://local.test',{...adapter,getItem:async()=>accountText,
+      setItem:async()=>{},turnStorage:{getItem:async k=>disk.get(k)??null,setItem:async(k,v)=>{disk.set(k,v);},removeItem:async k=>{disk.delete(k);}}});
+    const replay=(await restored.read('visitor')).local[id];
+    assert.deepEqual(replay.moves.map(frame=>frame.move),[{cell:0},{cell:1}]);assert.equal(replay.local_revision,3);
+    openAccount();await blocked;await Promise.all([repo.checkpointTurns('visitor'),restored.checkpointTurns('visitor')]);
+    assert.equal(JSON.parse(storage[accountKey]).local[id].move_count,2);assert.equal(values.size,0);
+    (store as any).publishData(stale);assert.equal(store.getSnapshot().selectedMatch!.move_count,2);
+  }finally{openJournal();openAccount();await blocked;}
+});
+
+test('native move journal failures keep the board in memory and retry on the next refresh',async()=>{
+  const disk=browserStorage();
+  const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test',true);
+  await store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0});
+  const repo=(store as any).repository as AccountRepository,accountKey=repo.key('visitor'),id=store.getSnapshot().selectedMatch!.id;
+  const values=new Map<string,string>();let fail=true;
+  repo.adapter={...repo.adapter,turnStorage:{getItem:async k=>values.get(k)??null,
+    setItem:async(k,v)=>{if(fail)throw Error('device full');values.set(k,v);},removeItem:async k=>{values.delete(k);}}};
+  await assert.rejects(store.actions.practiceMove({cell:0}),/device full/);
+  assert.equal(store.getSnapshot().selectedMatch!.move_count,1);assert.equal(store.getSnapshot().selectedMatch!.saving_on_device,true);
+  assert.match(store.getSnapshot().storageError!,/in memory/);
+  assert.equal((await repo.read('visitor')).local[id].move_count,0);assert.equal(JSON.parse(disk[accountKey]).local[id].move_count,0);
+  fail=false;await store.actions.refreshMatch();await repo.checkpointTurns('visitor');
+  assert.equal(store.getSnapshot().storageError,null);assert.equal(store.getSnapshot().selectedMatch!.saving_on_device,false);
+  assert.deepEqual(JSON.parse(disk[accountKey]).local[id].moves.map((m:any)=>m.move),[{cell:0}]);
+});
+
+test('signed-in sync waits for the move journal while the selected board accepts input',async()=>{
+  browserStorage(true);
+  const uploaded:number[]=[];
+  const restore=mockedFetch((url,init)=>{
+    if(url.pathname==='/matches/single-player-sync')uploaded.push(JSON.parse(String(init.body)).match.move_count);
+  });
+  let releaseJournal!:()=>void,startedWrite!:()=>void;
+  const gate=new Promise<void>(resolve=>{releaseJournal=resolve;});
+  const writing=new Promise<void>(resolve=>{startedWrite=resolve;});
+  try{
+    const store=new PortalStore(testRuntime());await store.bootstrap('https://local.test');
+    await store.actions.startPractice('bundled-tictactoe',{humans:2,computers:0});
+    await store.actions.refresh();assert.deepEqual(uploaded,[0]);
+    const repo=(store as any).repository as AccountRepository,records=new Map<string,string>();
+    repo.adapter={...repo.adapter,turnStorage:{getItem:async k=>records.get(k)??null,
+      setItem:async(k,v)=>{startedWrite();await gate;records.set(k,v);},removeItem:async k=>{records.delete(k);}}};
+    await store.actions.practiceMove({cell:0},{waitForSave:false});await writing;
+    await store.actions.practiceMove({cell:1},{waitForSave:false});
+    const sync=(store as any).sync() as Promise<void>;
+    await new Promise(resolve=>setTimeout(resolve,25));
+    assert.equal(store.getSnapshot().selectedMatch!.move_count,2);
+    assert.equal(store.getSnapshot().selectedMatch!.saving_on_device,true);assert.deepEqual(uploaded,[0]);
+    releaseJournal();await sync;await repo.checkpointTurns('visitor');await store.actions.refresh();
+    assert.deepEqual(uploaded,[0,2]);
+    assert.equal(store.getSnapshot().selectedMatch!.cloud_pending,false);
+  }finally{releaseJournal();restore();}
+});

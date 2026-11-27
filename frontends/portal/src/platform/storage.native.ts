@@ -9,6 +9,8 @@ export const getItem = persistent.getItem;
 export const setItem = persistent.setItem;
 export const removeItem = persistent.removeItem;
 export const keys = persistent.keys;
+// This separate key can be written without entering the account transaction.
+export const turnStorage = {getItem,setItem,removeItem};
 let serial: Promise<unknown> = Promise.resolve();
 export function exclusive<T>(_name: string, run: () => Promise<T>): Promise<T> {
   const result = serial.then(run, run); serial = result.catch(() => {}); return result;
