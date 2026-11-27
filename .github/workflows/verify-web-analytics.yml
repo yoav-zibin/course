@@ -12,9 +12,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontends/portal/package-lock.json
-      - working-directory: frontends/portal
-        run: npm ci && npx --no-install playwright install --with-deps chromium webkit
+          cache-dependency-path: package-lock.json
+      - run: npm ci && npx --no-install playwright install --with-deps chromium webkit
       - name: Download the currently published worker and real Google tag
         run: |
           assets="$RUNNER_TEMP/analytics-assets"
@@ -23,11 +22,9 @@ jobs:
             curl --fail --silent --show-error --retry 2 "https://buildplay.fun/$file" -o "$assets/$file"
             cmp "$file" "$assets/$file"
           done
-          for file in frontends/portal/node_modules/@qwik.dev/partytown/lib/*; do
-            if [ -f "$file" ]; then
-              resource="static/app/analytics-worker/$(basename "$file")"
-              curl --fail --silent --show-error --retry 2 "https://buildplay.fun/$resource" -o "$assets/$resource"
-            fi
+          for file in partytown.js partytown-sw.js partytown-sandbox-sw.html partytown-atomics.js partytown-media.js; do
+            resource="static/app/analytics-worker/$file"
+            curl --fail --silent --show-error --retry 2 "https://buildplay.fun/$resource" -o "$assets/$resource"
           done
           curl --fail --silent --show-error --retry 2 'https://www.googletagmanager.com/gtag/js?id=G-6CCXZQYVE7' -o "$assets/google-tag.js"
       - name: Exercise both browsers with only loopback networking available
