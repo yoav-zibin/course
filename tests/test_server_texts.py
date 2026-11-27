@@ -295,12 +295,11 @@ def test_a_rejected_move_of_tictactoe_is_answered_in_the_viewers_language() -> N
         "game_schemas": {key: body["unit_tests"][key + "_schema"] for key in ("state", "move", "view")},
     }, owner)
     match = api.ok("POST", "/matches", as_user=owner, json={"game_id": game["id"], "num_computer_opponents": 0})
-    api.ok("POST", f"/matches/{match['id']}/join", as_user=guest)
-    current = api.ok("POST", f"/matches/{match['id']}/start", as_user=owner, json={})
-    current = api.ok("POST", f"/matches/{match['id']}/moves", as_user=owner,
+    current = api.ok("POST", f"/matches/{match['id']}/join", as_user=guest)
+    current = api.ok("POST", f"/matches/{match['id']}/moves", as_user=guest,
                      json={"move": {"cell": 0}, "expected_move_count": current["move_count"]})
     def post_move(language=None):
-        headers = {"X-User-Id": guest, "X-User-Password": api.passwords_by_user_id[guest]}
+        headers = {"X-User-Id": owner, "X-User-Password": api.passwords_by_user_id[owner]}
         if language:
             headers["Accept-Language"] = language
         return api.client.post(f"/matches/{match['id']}/moves", headers=headers,

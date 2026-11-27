@@ -84,11 +84,11 @@ def test_same_game_can_offer_solo_and_multiplayer(api: Api):
     alice, bob = api.new_user('alice'), api.new_user('bob')
     game = api.new_game(owner=alice, allowed_player_counts=[1, 2])
     solo = save(api, alice, single_player(alice, game))
-    humans = api.new_match(owner=alice, game_id=game, joiners=[bob], start=True)
+    humans = api.new_match(owner=alice, game_id=game, joiners=[bob])
     snapshot = single_player(alice, game, computers=1, identity="local-computer-save")
     computer = save(api, alice, snapshot)
     assert api.summary(solo)['players'] == ['alice']
-    assert api.match_summary(humans)['players'] == ['alice', 'bob']
+    assert api.match_summary(humans)['players'] == ['bob', 'alice']
     assert api.ok('GET', f'/matches/{humans}')['match_kind'] == 'multiplayer'
     snapshot = advance(snapshot, score=1, turn=[1])
     computer = save(api, alice, snapshot, computer['cloud_revision'])

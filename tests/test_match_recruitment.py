@@ -20,8 +20,8 @@ def linked_api(request):
     return api
 
 
-def lobby(api, owner, *, players=2):
-    match = api.new_match(owner=owner, game_id=api.new_game(owner=owner, allowed_player_counts=[players]))
+def lobby(api, owner, *, counts=(2,)):
+    match = api.new_match(owner=owner, game_id=api.new_game(owner=owner, allowed_player_counts=counts))
     return match, api.ok("GET", f"/matches/{match}")["invite_code"]
 
 
@@ -55,9 +55,11 @@ def test_both_shared_links_recruit_new_or_unattributed_existing_accounts(linked_
 
 def test_full_spectator_links_still_recruit_without_acceptance(linked_api):
     api = linked_api
-    owner, player = api.new_user("Owner"), api.new_user("Player")
-    match, token = lobby(api, owner)
+    owner, player, reserved = [api.new_user(name) for name in ("Owner", "Player", "Reserved")]
+    match, token = lobby(api, owner, counts=(2, 3))
     api.ok("POST", f"/invites/{token}/accept", as_user=player)
+    store = api.platform._store
+    store.put_match(replace(store.get_match(match), reserved_for_user_ids=frozenset({reserved})))
     newcomer = signup(api, invite_token=token)
     api.ok("POST", f"/invites/{token}/accept", as_user=newcomer)
     assert api.platform._store.get_user(newcomer).invited_by_user_id == owner
@@ -103,7 +105,6 @@ def test_visitor_funnel_and_ancestry_survive_invite_match_and_user_deletion(link
     api.passwords_by_user_id[account["id"]] = account["password"]
     joined_headers = {**headers, "X-User-Id": account["id"], "X-User-Password": account["password"]}
     assert api.client.post(f"/invites/{token}/accept", headers=joined_headers).status_code == 200
-    api.ok("POST", f"/matches/{match}/start", as_user=owner)
     assert store.get_invite(token) is None
     retained = store.list_analytics("invite_history")
     assert len(retained) == 1 and retained[0]["views"] == 2
@@ -135,13 +136,14 @@ def test_recycled_code_does_not_mark_old_account_as_a_new_signup(linked_api):
     match, token = lobby(api, owner)
     user = signup(api, invite_token=token)
     api.ok("POST", f"/invites/{token}/accept", as_user=user)
-    api.ok("POST", f"/matches/{match}/start", as_user=owner)
     api.platform._new_invite_token = lambda: token
     next_match, next_token = lobby(api, owner)
     assert next_token == token
     api.ok("POST", f"/invites/{next_token}/accept", as_user=user)
-    assert api.platform._store.get_invite(token).acceptances[0].signed_up is False
-    assert len(api.platform._store.list_analytics("invite_history")) == 2
+    history = api.platform._store.list_analytics("invite_history")
+    assert len(history) == 2
+    allocation = next(row for row in history if row["match_id"] == next_match)
+    assert allocation["acceptances"][0]["signed_up"] is False
     assert next_match != match
 
 
@@ -176,9 +178,8 @@ def test_share_play_completion_and_revocation_are_permanent_observed_stages(link
     assert api.client.post(f"/matches/{match}/share", json={"channel": "share_link"}, headers=visitor).status_code == 204
     player = signup(api, invite_match_id=match)
     api.ok("POST", f"/invites/{token}/accept", as_user=player)
-    api.ok("POST", f"/matches/{match}/start", as_user=owner)
-    assert api.move(match, as_user=owner, next_turn=1).status_code == 201
-    assert api.move(match, as_user=player, next_turn=None).status_code == 201
+    assert api.move(match, as_user=player, next_turn=1).status_code == 201
+    assert api.move(match, as_user=owner, next_turn=None).status_code == 201
     counts = summary(api.platform._store, match_id=match)
     assert counts["events"]["invite_shared"] == 1
     assert counts["distinct_visitors"]["invite_shared"] == 1
@@ -209,14 +210,13 @@ def test_first_player_conversion_does_not_read_previous_move_pages():
     match, token = lobby(api, owner)
     player = signup(api, invite_token=token)
     api.ok('POST', f'/invites/{token}/accept', as_user=player)
-    api.ok('POST', f'/matches/{match}/start', as_user=owner)
-    assert api.move(match, as_user=owner, next_turn=1).status_code == 201
+    assert api.move(match, as_user=player, next_turn=1).status_code == 201
     cold = QueryStore(store.client, namespace=store.namespace)
     api.platform = ScalablePlatform(store=cold, clock=api.platform._clock, computer_move_delay_seconds=0)
     api.client.app.state.platform = api.platform
     with patch.object(cold, '_read_moves', side_effect=AssertionError('previous history was loaded')):
-        assert api.move(match, as_user=player, next_turn=0).status_code == 201
-        assert api.move(match, as_user=owner, next_turn=1).status_code == 201
+        assert api.move(match, as_user=owner, next_turn=0).status_code == 201
+        assert api.move(match, as_user=player, next_turn=1).status_code == 201
     assert summary(cold, match_id=match)['events']['player_played'] == 2
 
 

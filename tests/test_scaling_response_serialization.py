@@ -133,7 +133,7 @@ def test_match_pages_preserve_membership_and_player_state_views(paginated_api):
         "name": "Counter", "code": "<div></div>",
         "allowed_player_counts": [2], "server_code": COUNTER_GAME,
     }, owner)["id"]
-    match_id = api.new_match(owner=owner, game_id=game_id, joiners=[other], start=True)
+    match_id = api.new_match(owner=owner, game_id=game_id, joiners=[other])
 
     assert api.request("GET", "/v2/matches").status_code == 401
     for caller in (owner, other):

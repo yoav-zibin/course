@@ -28,7 +28,7 @@ def test_players_take_turns(api: Api) -> None:
 
 def test_any_player_in_the_turn_set_may_move(api: Api) -> None:
     alice, bob, carol = (api.new_user(name) for name in ["alice", "bob", "carol"])
-    game_id = api.new_game(owner=alice, allowed_player_counts=[3])
+    game_id = api.new_game(owner=alice, allowed_player_counts=[3, 4])
     match_id = api.new_match(
         owner=alice, game_id=game_id, joiners=[bob, carol], start=True
     )

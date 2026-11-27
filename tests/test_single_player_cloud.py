@@ -144,8 +144,7 @@ def test_game_supporting_solo_and_two_players_needs_two_accounts_for_multiplayer
     game = api.new_game(owner=owner, allowed_player_counts=(1, 2))
     identity = api.new_match(owner=owner, game_id=game)
     assert api.request("POST", f"/matches/{identity}/start", as_user=owner).status_code == 409
-    api.ok("POST", f"/matches/{identity}/join", as_user=other)
-    assert api.ok("POST", f"/matches/{identity}/start", as_user=owner)["status"] == "ongoing"
+    assert api.ok("POST", f"/matches/{identity}/join", as_user=other)["status"] == "ongoing"
 
 
 def test_legacy_computer_match_private_and_owner_gets_portable_state(api: Api):

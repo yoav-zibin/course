@@ -502,11 +502,15 @@ def test_standard_import_catalog_pinned_match_and_cheat_rejections(payload):
     assert any(item['id'] == game['id'] and item['name'].endswith(' (Declarative)') for item in api.ok('GET', '/games'))
     pinned = api.ok('GET', f"/games/{game['id']}/versions/{game['version']}")
     assert pinned['declarative_ui'] == payload['declarative_ui']
-    match_id = api.new_match(owner=alice, game_id=game['id'], joiners=[bob], start=True)
-    before = api.ok('GET', f'/matches/{match_id}', as_user=alice)
+    lobby = api.ok('POST', '/matches', as_user=alice, json={'game_id': game['id']})
+    match_id = lobby['id']
+    before = api.ok('POST', f"/invites/{lobby['invite_code']}/accept", as_user=bob)
     assert before['game_version'] == game['version']
-    current = [alice, bob][before['state']['cur']]
-    other = bob if current == alice else alice
+    assert before['status'] == 'ongoing'
+    players = [seat['user_id'] for seat in before['players']]
+    assert players == [bob, alice]
+    assert before['turn_of_player_indices'] == [0]
+    current, other = players
 
     def rejected(move, who=None):
         who = who or current
@@ -532,10 +536,10 @@ def test_standard_import_catalog_pinned_match_and_cheat_rejections(payload):
     for _ in range(10):
         if not rolled['state'].get('opening'):
             break
-        current = [alice, bob][rolled['state']['cur']]
+        current = players[rolled['state']['cur']]
         rolled = api.ok('POST', f'/matches/{match_id}/moves', as_user=current, json={'move': {'action': 'roll'}})
     assert not rolled['state'].get('opening')
-    current = [alice, bob][rolled['state']['cur']]
+    current = players[rolled['state']['cur']]
     # The last opening response belongs to the player who rolled, which may
     # be the lower seat. Obtain legal destinations as the actual starting seat.
     rolled = api.ok('GET', f'/matches/{match_id}', as_user=current)

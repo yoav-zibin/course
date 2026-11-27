@@ -8,7 +8,7 @@ def _invite(api: Api, match_id: str, *, as_user: str) -> str:
 def test_invite_views_joins_and_sign_ups_are_counted(api: Api) -> None:
     alice, bob = api.new_user("alice"), api.new_user("bob")
     match_id = api.new_match(
-        owner=alice, game_id=api.new_game(owner=alice, allowed_player_counts=[2, 3])
+        owner=alice, game_id=api.new_game(owner=alice, allowed_player_counts=[2, 3, 4])
     )
     token = _invite(api, match_id, as_user=alice)
     api.ok("GET", f"/invites/{token}")

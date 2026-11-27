@@ -33,7 +33,7 @@ def test_seeded_move_history_model(seed: int) -> None:
     store = InMemoryStore()
     api = Api(store=store)
     users = [api.new_user(f"fuzz-{n}") for n in range(3)]
-    game = api.new_game(owner=users[0], allowed_player_counts=[3])
+    game = api.new_game(owner=users[0], allowed_player_counts=[3, 4])
     match = api.new_match(owner=users[0], game_id=game, joiners=users[1:], start=True)
     # The game's newMatch decides the opening turn: seat 0.
     turn = {0}
