@@ -188,5 +188,9 @@ jobs:
           if [ -f deploy/install-invite-code-timer.sh ]; then
             bash deploy/install-invite-code-timer.sh
           fi
+          if [ -f tools/game_alternative_names.py ] && [ ! -f ../release-state/game-alternative-names-v1 ]; then
+            (cd .. && .venv/bin/python -m game_platform.tools.game_alternative_names --config config.json &&
+              touch release-state/game-alternative-names-v1)
+          fi
           rm -rf "$staging"
           REMOTE
