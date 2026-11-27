@@ -21,6 +21,7 @@ def test_create_and_get_a_game(api: Api) -> None:
         "id": game["id"],
         "version": 1,
         "name": "Poker",
+        "alternative_names": [],
         "description": "Texas hold'em",
         "allowed_player_counts": [2, 3, 6],
         "allows_leave_mid_match": True,

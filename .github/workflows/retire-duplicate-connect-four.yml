@@ -1,0 +1,31 @@
+name: Retire the duplicate Connect Four listing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retire:
+    if: github.ref == 'refs/heads/main' && github.repository == 'yoav-zibin/course'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retire the reviewed listing through the game API
+        env:
+          VM_HOST: ${{ secrets.GCP_VM_HOST }}
+          VM_USER: ${{ secrets.GCP_VM_USER }}
+          VM_SSH_KEY: ${{ secrets.GCP_VM_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          install -m 700 -d ~/.ssh
+          key="$RUNNER_TEMP/catalog-maintenance-key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$VM_SSH_KEY" > "$key"
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+          ssh -T -i "$key" "$VM_USER@$VM_HOST" \
+            'sudo /opt/game-platform/.venv/bin/python - --config /opt/game-platform/config.json --retire-duplicate-only' \
+            < tools/game_alternative_names.py
