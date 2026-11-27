@@ -97,7 +97,7 @@ jobs:
             adb shell svc wifi disable
             adb shell svc data disable
             python3 scripts/native-smoke.py fun.buildplay.debug "$GITHUB_WORKSPACE/android-test-results"
-            if [[ -n "${BUILDPLAY_GOOGLE_SERVICES_FILE:-}" ]]; then bash scripts/verify-native-analytics.sh android "$GITHUB_WORKSPACE/BuildPlay.apk" "${ANDROID_SERIAL:-emulator-5554}" "$GITHUB_WORKSPACE/android-test-results/analytics.json"; fi
+            if [ -n "${BUILDPLAY_GOOGLE_SERVICES_FILE:-}" ]; then bash scripts/verify-native-analytics.sh android "$GITHUB_WORKSPACE/BuildPlay.apk" "${ANDROID_SERIAL:-emulator-5554}" "$GITHUB_WORKSPACE/android-test-results/analytics.json"; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

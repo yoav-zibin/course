@@ -8,7 +8,12 @@ output=${4:?result JSON path}
 test "${GITHUB_ACTIONS:-}" = true
 scratch=$(mktemp -d "$RUNNER_TEMP/buildplay-analytics.XXXXXX")
 cp index.ts "$scratch/original-entry"
-trap 'cp "$scratch/original-entry" index.ts' EXIT
+log_pid=
+cleanup() {
+  if [[ -n "$log_pid" ]]; then kill "$log_pid" 2>/dev/null || true; fi
+  cp "$scratch/original-entry" index.ts
+}
+trap cleanup EXIT
 cp scripts/analytics-probe.js index.ts
 CI=1 npx --no-install expo export --platform "$platform" --output-dir "$scratch/export" --max-workers 2
 bundles=("$scratch/export/_expo/static/js/$platform/"*.hbc)
@@ -37,6 +42,11 @@ if [[ "$platform" == android ]]; then
   "$build_tools/apksigner" sign --ks android/app/debug.keystore --ks-pass pass:android --out "$scratch/signed.apk" "$scratch/aligned.apk"
   adb -s "$device" install -r "$scratch/signed.apk"
   adb -s "$device" shell am force-stop "$package"
+  adb -s "$device" shell setprop debug.firebase.analytics.app "$package"
+  adb -s "$device" shell setprop log.tag.FA VERBOSE
+  adb -s "$device" shell setprop log.tag.FA-SVC VERBOSE
+  adb -s "$device" logcat -T 1 -s FA:V FA-SVC:V > "$scratch/sdk.log" &
+  log_pid=$!
   activity=$(adb -s "$device" shell cmd package resolve-activity --brief "$package" | tr -d '\r' | tail -1)
   adb -s "$device" shell am start -n "$activity"
   result_path="/data/data/$package/files/BuildPlayShared/$file"
@@ -58,6 +68,9 @@ config = dict(BUNDLE_ID=sys.argv[2], PROJECT_ID="demo-buildplay-analytics", GCM_
 PY
   codesign --force --sign - --preserve-metadata=identifier,entitlements "$app"
   xcrun simctl install "$device" "$app"
+  xcrun simctl spawn "$device" log stream --level debug --style compact \
+    --predicate 'process == "BuildPlay" AND eventMessage CONTAINS "I-ACS"' > "$scratch/sdk.log" &
+  log_pid=$!
   xcrun simctl launch --terminate-running-process "$device" "$bundle" -FIRDebugEnabled
   container=$(xcrun simctl get_app_container "$device" "$bundle" data)
   read_result() { cat "$container/Library/Application Support/BuildPlayShared/$file" 2>/dev/null; }
@@ -77,4 +90,24 @@ rows = json.loads(envelope['value'])
 pathlib.Path(sys.argv[2]).write_text(json.dumps(rows, indent=2) + '\n')
 assert [r.get('status') for r in rows] == ['enabled', 'enabled', 'disabled'], rows
 print('Firebase SDK results', rows)
+PY
+# The logEvent API returns void even when measurement rejects a screen. Check
+# the SDK's own local diagnostics before counting the delivery path as verified.
+python3 - "$scratch/sdk.log" "$output" <<'PY'
+import json, pathlib, re, sys, time
+log, output = map(pathlib.Path, sys.argv[1:])
+deadline = time.monotonic() + 15
+while True:
+    messages = log.read_text(errors='replace')
+    received = [name for name in ('games', 'match') if re.search(r'\b' + name + r'\b', messages)]
+    rejected = re.findall(r'cannot log (?:a )?screen view[^\n]*', messages, re.I)
+    if len(received) == 2 or rejected or time.monotonic() >= deadline:
+        break
+    time.sleep(.5)
+# Only retain the two fixture labels and SDK error codes from the device log.
+summary = {'screens': received, 'rejected': bool(rejected),
+           'appleMessageCodes': sorted(set(re.findall(r'I-ACS\d+', messages))),
+           'logLines': len(messages.splitlines())}
+output.with_name('analytics-sdk.json').write_text(json.dumps(summary, indent=2) + '\n')
+assert received == ['games', 'match'] and not rejected, summary
 PY
