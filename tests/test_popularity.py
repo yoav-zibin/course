@@ -150,7 +150,8 @@ def test_popular_pages_include_featured_ranked_and_unplayed_games(query_backend)
         unplayed = api.new_game(owner=owner)
         template = store.get_game(unplayed)
         for game_id in (*FEATURED_GAME_IDS, "rank-a", "rank-b", "rank-c", "hidden", "zero"):
-            store.add_game_version(replace(template, id=game_id, published=game_id != "hidden"))
+            store.add_game_version(replace(template, id=game_id))
+        store.set_game_published("hidden", False)
         for game_id, score in [("rank-b", 3), ("rank-c", 3), ("rank-a", 6),
                                ("hidden", 8), (FEATURED_GAME_IDS[2], 2)]:
             store.record_game_match_start(game_id, score)
