@@ -6,12 +6,12 @@ before pushing. Use the existing CI and deployment workflow.
 
 # Tests before pushing
 
-Fetch and integrate current upstream before final checks. Choose local checks
-that are likely to catch problems in the changes; focused checks are sufficient
-when appropriate, and suites that would not exercise the changes may be skipped.
-Running every suite locally is not a pre-push requirement, including native iOS
-and Android suites. Use CI for broad validation and address failures when they
-appear. Preserve the direct-push workflow above.
+Fetch and integrate current upstream before pushing directly. Let CI run the
+routine test suites and native builds. On the shared production VM, use a local
+test only to reproduce a specific CI failure. Run it through
+`scripts/run-local-check.sh`, which serializes checks across checkouts, caps
+the whole process tree at half a CPU core, and requests idle disk I/O priority.
+For a Gradle failure, run one Gradle command with `--no-daemon --max-workers=1`.
 
 # Updating game content
 
