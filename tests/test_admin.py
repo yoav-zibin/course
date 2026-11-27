@@ -192,4 +192,4 @@ def test_weak_passwords_and_open_debug_tools_are_warned_about(caplog) -> None:
     warn_about_insecure_setup(Config(), platform)
 
     assert "own id as password" in caplog.text
-    assert "without Google sign-in or a private admin API credential" in caplog.text
+    assert "without Google sign-in or a master password" in caplog.text

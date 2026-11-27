@@ -193,22 +193,25 @@ def test_the_drill_really_triggers_a_surge_then_a_flood_and_cleans_up(
 ) -> None:
     caplog.set_level(logging.DEBUG)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(drill, "USERS_FILE", tmp_path / "users.jsonl")
+    users_file = tmp_path / "users.jsonl"
+    monkeypatch.setattr(drill, "USERS_FILE", users_file)
     monitor = Monitor(MonitoringConfig(signup_surge_per_minute=3, signup_flood_per_minute=8, alert_cooldown_seconds=0))
     platform = GamePlatform()
     app = create_app(platform, monitor=monitor, master_password="pw")
     with RunningServer(app) as server:
-        stages = "120x2,600x1"  # 4 sign-ups, then 10
+        stages = "120x2,600x1"
         args = type("Args", (), {"target": server.url, "stages": stages, "allow_remote": False, "password": "pw"})()
         drill.ramp(args)
         found = alerts(caplog)
         assert ("signup_surge", "minor") in found and ("signup_flood", "major") in found
         assert found.index(("signup_surge", "minor")) < found.index(("signup_flood", "major"))
-        assert len(platform.all_data().users) >= 12
+        assert {json.loads(line)["id"] for line in users_file.read_text().splitlines()} == {
+            user.id for user in platform.all_data().users
+        }
 
         drill.cleanup(args)
         assert platform.all_data().users == []
-        assert not (tmp_path / "users.jsonl").exists()
+        assert not users_file.exists()
 
 
 def test_the_drill_can_send_a_test_alert(caplog: pytest.LogCaptureFixture) -> None:
