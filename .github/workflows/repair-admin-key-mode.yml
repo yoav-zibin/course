@@ -20,9 +20,10 @@ jobs:
           ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_deploy "$VM_USER@$VM_HOST" '
             set -eu
-            key=/opt/game-platform/admin-api-key
-            test "$(sudo stat -c "%F:%u" -- "$key")" = "regular file:0"
-            sudo chmod 0600 -- "$key"
+            for file in /opt/game-platform/admin-api-key /opt/game-platform/config.json; do
+              test "$(sudo stat -c "%F:%u" -- "$file")" = "regular file:0"
+              sudo chmod 0600 -- "$file"
+            done
             sudo systemctl reset-failed game-platform.service
             sudo systemctl start game-platform.service
           '
