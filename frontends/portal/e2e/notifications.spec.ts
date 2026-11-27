@@ -113,7 +113,14 @@ test('a rematch request lets the reserved opponent join a rematch from the inbox
   for(const [index,cell]of [0,3,1,4,2].entries()){
     const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(index%2?bob:alice),data:{move:{cell},expected_move_count:index}});expect(moved.ok(),await moved.text()).toBeTruthy();
   }
-  const rematch=await request.post(`/matches/${match.id}/rematch`,{headers:headers(alice)});expect(rematch.ok()).toBeTruthy();const next=await rematch.json();
+  const requester=await page.context().newPage();
+  await loginAs(requester,alice);await requester.goto(`/portal#match=${match.id}`);
+  const created=requester.waitForResponse(response=>response.request().method()==='POST'&&
+    new URL(response.url()).pathname===`/matches/${match.id}/rematch`);
+  await requester.getByTestId('finished-match-actions').getByRole('button',{name:'Play again',exact:true}).click();
+  const rematch=await created;expect(rematch.ok()).toBeTruthy();const next=await rematch.json();
+  await expect(requester).toHaveURL(new RegExp(`#match=${next.id}$`));
+  await requester.close();
   const entry=(await inbox(request,bob)).items.find((item:any)=>item.event==='rematch_request');expect(entry).toBeTruthy();
   await loginAs(page,bob);await page.goto('/portal');await page.getByRole('button',{name:'Notifications',exact:true}).click();
   await page.getByTestId(`notification-${entry.id}`).click();

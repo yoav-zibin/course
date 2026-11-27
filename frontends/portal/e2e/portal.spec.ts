@@ -10,6 +10,31 @@ async function account(request:APIRequestContext,name:string){const response=awa
 async function restore(page:Page,user:any){await page.addInitScript(user=>{localStorage.setItem('game-platform.accounts.v1',JSON.stringify([user]));localStorage.setItem('game-platform.current-account.v1',user.id);},user);}
 async function game(request:APIRequestContext,name:string){const id=await createGame(request,name);const response=await request.get(`/games/${id}`);expect(response.ok(),await response.text()).toBeTruthy();return response.json();}
 
+test('Chess uses the landscape board area without a duplicate title and remains playable',async({page,request})=>{
+  const id='5ceeb4a4-da2f-4218-884e-d485968d9c78';
+  const chess=JSON.parse(readFileSync(path.resolve(__dirname,'../../../games/declarative/chess.json'),'utf8'));
+  const game={...chess,id,version:1,renderer_type:'declarative',
+    game_schemas:Object.fromEntries(['state','move','view'].map(key=>[key,chess.unit_tests[key+'_schema']]))};
+  await loginAs(page,await createUser(request,uniqueName('Chess player')));
+  await page.route(url=>url.pathname===`/games/${id}`||url.pathname===`/games/${id}/versions/1`,
+    route=>route.fulfill({json:game}));
+  await page.goto(`/portal#game=${id}`);
+  await page.getByTestId('play-pass').getByRole('button',{name:'Pass and play',exact:true}).click();
+  const stage=page.getByTestId('game-stage'),canvas=stage.locator('svg').first();
+  await expect(canvas).toBeVisible();
+  await expect(stage.getByText('Chess (Declarative)',{exact:true})).toHaveCount(0);
+  await page.setViewportSize({width:750,height:336});
+  await expect(canvas).toHaveAttribute('preserveAspectRatio','none');
+  await expect(canvas).toHaveAttribute('viewBox','20 96 560 560');
+  expect((await canvas.boundingBox())!.width).toBe(750);
+  expect((await canvas.boundingBox())!.height).toBeGreaterThan(260);
+  await stage.getByRole('button',{name:'Select piece at row 7, column 5',exact:true}).click();
+  await stage.getByRole('button',{name:'Move to row 5, column 5',exact:true}).click();
+  await expect(stage.getByRole('button',{name:'Select piece at row 2, column 5',exact:true})).toBeVisible();
+  await page.setViewportSize({width:390,height:750});
+  await expect(canvas).not.toHaveAttribute('preserveAspectRatio','none');
+});
+
 test('host controls and the offline starter game retain all eight languages without changing saves',async({page,request})=>{
   test.setTimeout(120000);
   const copy=(source:string,locale:string)=>locale==='en'?source:(sharedCopy as Record<string,Record<string,string>>)[source][locale];

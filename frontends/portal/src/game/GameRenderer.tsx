@@ -33,7 +33,7 @@ export type GameRendererProps = {
   showDestinationsAfterSelection?: boolean;
   omitPieceId?: string;
   boardPresentation?: {
-    visibleBoard: (board: Board) => boolean;
+    visibleBoard?: (board: Board) => boolean;
     presentScene: (scene: Scene, message: StateMessage) => Scene;
     showActionBadges?: (piece: Piece) => boolean;
     motion?: Partial<Motion>;
@@ -109,7 +109,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
   const [motionBusy,setMotionBusy]=useState(false), motionTimer=useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvas = useRef<React.ComponentRef<typeof View>>(null), surface=useRef<React.ComponentRef<typeof View>>(null), origin = useRef({x:0,y:0});
   const fittedGeometry=useRef('');
-  const visibleBoards = useMemo(()=>boardPresentation ? spec.boards.filter(boardPresentation.visibleBoard) : undefined,[spec,boardPresentation]);
+  const visibleBoards = useMemo(()=>boardPresentation?.visibleBoard ? spec.boards.filter(boardPresentation.visibleBoard) : undefined,[spec,boardPresentation]);
   const bounds = useMemo(()=>contentBounds(spec,display.scene,visibleBoards),[spec,display.scene,visibleBoards]);
   const widthFittedHeight=width*bounds.height/bounds.width;
   // A measured frame fits the board below its controls in the actual safe-area

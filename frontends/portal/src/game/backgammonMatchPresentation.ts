@@ -3,7 +3,6 @@ import type {Scene, StateMessage} from './types';
 import {pieceActions} from './validation';
 
 export const BACKGAMMON_GAME_ID='5f5293c3-2a3a-4eec-b631-9debf59be0ca';
-export const fillsBackgammonLandscape=(width:number,height:number)=>width>height&&height<600;
 
 const hiddenLabels = new Set([
   'title', 'bar_label', 'off_label', 'white_label', 'black_label', 'moves_remaining', 'hint_move',

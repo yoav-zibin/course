@@ -17,7 +17,8 @@ import {NativeGestureRoot} from './ui/NativeGestureRoot';
 import {MATCH_HISTORY_HEIGHT} from './ui/bugPosition';
 import {diagnosticPath,recordDiagnosticPage,recordDiagnosticEvent,rememberDiagnosticSecrets} from './core/diagnostics';
 import {installWebApp} from './ui/webApp';
-import {BACKGAMMON_GAME_ID,fillsBackgammonLandscape} from './game/backgammonMatchPresentation';
+import {BACKGAMMON_GAME_ID} from './game/backgammonMatchPresentation';
+import {fillsMatchLandscape} from './game/matchBoardLayout';
 import {getDirection} from './platform/i18n';
 import {configureReporter,createReporter,reportClientIssue} from './core/reporting';
 import {ErrorBoundary} from './ui/ErrorBoundary';
@@ -34,7 +35,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
   const {width,height} = useWindowDimensions();
   const fittedBoard=boardVisible&&!p.selectedMatch?.awaitingHandoff;
   const backgammonStage=fittedBoard&&p.selectedMatch?.game_id===BACKGAMMON_GAME_ID;
-  const fillBoard=backgammonStage&&fillsBackgammonLandscape(width,height);
+  const fillBoard=fittedBoard&&fillsMatchLandscape(p.selectedMatch?.game_id,width,height);
   const [localOnly]=useState(readLocalUiTest);
   const [screen, setScreen] = useState<Screen>('games');
   const [account, setAccount] = useState<boolean|null>(null);
@@ -250,7 +251,7 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
       <StatusBar style="light" />
       {showDetails&&header}
       <View style={{flex:1,flexDirection:'row',minHeight:0}}>
-        {backgammonStage?<View style={[s.boardFrame,!fillBoard&&s.historyClearance]}>{contentBody}</View>:
+        {backgammonStage||fillBoard?<View style={[s.boardFrame,!fillBoard&&s.historyClearance]}>{contentBody}</View>:
         <ScrollView ref={content} key={contentKey} style={{flex:1,minWidth:0}} scrollEnabled={!fittedBoard} contentContainerStyle={[s.content,gameVisible&&{maxWidth:1500},fittedBoard?s.fittedBoard:{padding:gameVisible?0:width<600?14:28}]} keyboardShouldPersistTaps="handled">
           {contentBody}
         </ScrollView>}

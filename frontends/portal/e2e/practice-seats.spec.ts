@@ -152,6 +152,13 @@ test('pass-and-play replay keeps each private hand attributed to its frame viewe
   await page.getByRole('button',{name:'Go to end',exact:true}).click();
   await expect(page.getByText('Your seat 1',{exact:true})).toBeVisible();await ensureMatchMenuOpen(page);await expect(page.getByTestId('match-outcome')).toHaveText('Player 4 won');
   await page.screenshot({path:info.outputPath('pass-replay-private-view.png'),fullPage:true});
+  await ensureMatchMenuClosed(page);
+  await page.getByTestId('finished-match-actions').getByRole('button',{name:'Play again',exact:true}).click();
+  await expect(page).not.toHaveURL(new RegExp(`#match=${id}$`));
+  await expect(page.getByRole('button',{name:'Advance',exact:true})).toBeVisible();
+  const nextId=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!;
+  expect(await savedMatch(page,nextId)).toMatchObject({match_kind:'pass_and_play',move_count:0});
+  expect((await savedMatch(page,nextId)).players).toHaveLength(4);
 });
 
 for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer practice retains randomly chosen seat ${humanSeat+1} of ${count} through replay and chooses again for a rematch`,async({page},info)=>{
@@ -180,8 +187,7 @@ for(const count of [2,4])for(const humanSeat of [0,count-1])test(`computer pract
   await page.getByRole('button',{name:'Go to end',exact:true}).click();
   const rematchSeat=humanSeat===0?count-1:0;
   await page.evaluate(value=>{Math.random=()=>value;},rematchSeat===0?0:0.999999);
-  await ensureMatchMenuOpen(page);
-  await page.getByRole('button',{name:'Play again',exact:true}).click();
+  await page.getByTestId('finished-match-actions').getByRole('button',{name:'Play again',exact:true}).click();
   await expect(page).not.toHaveURL(new RegExp(`#match=${id}$`));await expect(page.getByRole('button',{name:'Advance',exact:true})).toBeVisible();
   const nextId=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('match')!,next=await savedMatch(page,nextId);
   expect(next.players).toHaveLength(count);expect(next.players.filter((player:any)=>player.kind==='human')).toHaveLength(1);
