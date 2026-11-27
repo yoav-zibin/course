@@ -139,3 +139,6 @@ def test_random_fleet_remains_available_as_a_server_generated_option():
     ships = placed["state"]["boards"][0]["ships"]
     assert len(ships) == 5
     assert sum(len(ship["cells"]) for ship in ships) == 17
+    next_player = rules.call("applyMove", placed["state"], "p1", {"type": "auto_place"}, ctx=ctx, seed=73)
+    assert next_player["state"]["boards"][1]["ships"] != ships
+    assert rules.call("viewFor", next_player["state"], "p0", ctx=ctx, seed=74)["boards"][1]["ships"] == []
