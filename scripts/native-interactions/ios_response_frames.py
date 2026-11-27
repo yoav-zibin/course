@@ -5,6 +5,7 @@ from pathlib import Path
 import av
 import numpy as np
 from response_frames import destination,response,spent_die_feedback
+from response_profiles import ios_stacks
 
 def frames(movie,width,height):
     with av.open(movie) as source:
@@ -99,6 +100,20 @@ def measure(directory):
             if row['action'] in ('open-menu','close-menu','open-report','dismiss-report'):
                 row['dialog_landmark_ms']=destination(times,pictures,start)
         except ValueError as e:row['error']=str(e)
+    stacks_file=directory/'stacks.jsonl'
+    if stacks_file.is_file():
+        stacks=[json.loads(line) for line in stacks_file.read_text().splitlines() if line]
+        for case,scenario in result.items():
+            if not scenario['proof'].get('verified'):continue
+            for row in scenario['actions']:
+                duration=row.get('release_to_spent_die_ms')
+                if duration is None:continue
+                down=next(s for s in touches if s['wall']==row['input_wall_ms'])
+                counts=ios_stacks(stacks,down['t']+row['hold_ms'],duration)
+                if counts:
+                    name=f"{case}-{row['action']}.release.folded"
+                    (directory/name).write_text(''.join(f'{path} {weight}\n' for path,weight in counts.items()))
+                    row.update(release_profile=name,release_profile_units='observed thread microseconds, including waits')
     (directory/'clock-alignment.json').write_text(json.dumps({'clockAnchors':len(anchors),'medianOffsetMs':global_offset,
         'p95ResidualMs':float(np.percentile(abs(offsets-global_offset),95))},indent=2))
     (directory/'responses.json').write_text(json.dumps(result,indent=2))

@@ -17,7 +17,7 @@ on:
       scenario:
         description: Interactions to measure
         type: choice
-        options: [board, landscape, startup, startup-video, startup-link, startup-profile, responses, responses-profile, responses-checkers, responses-checkers-profile, responses-checkers-instruments, responses-rapid, startup-flows, startup-flows-profile]
+        options: [board, landscape, startup, startup-video, startup-link, startup-profile, responses, responses-profile, responses-checkers, responses-checkers-profile, responses-checkers-stacks, responses-checkers-instruments, responses-rapid, startup-flows, startup-flows-profile]
         default: board
       video_pairs:
         description: Paired trials for recorded launches
@@ -92,10 +92,12 @@ jobs:
           set -euo pipefail
           base="$RUNNER_TEMP/interaction"
           benchmark=scripts/native-interactions/ios.sh
+          signed_checkers=0
+          if [[ "$SCENARIO" == responses-checkers-instruments || "$SCENARIO" == responses-checkers-stacks ]]; then signed_checkers=1; fi
           if [[ "$SCENARIO" == responses-checkers-instruments ]]; then
             sudo -n /usr/sbin/DevToolsSecurity -enable
           fi
-          if [[ "$SCENARIO" == startup* || "$SCENARIO" == responses-checkers-instruments ]]; then
+          if [[ "$SCENARIO" == startup* || "$signed_checkers" == 1 ]]; then
             export EXPO_PUBLIC_API_URL=http://localhost:18764
             benchmark=scripts/native-interactions/ios-startup.sh
             python3 - "$base" <<'PY'
@@ -114,7 +116,7 @@ jobs:
             [[ "$BASELINE" =~ ^[0-9a-f]{40}$ ]]
             revisions=(baseline current)
           fi
-          instruments_failed=0
+          checker_replay_failed=0
           for name in "${revisions[@]}"; do
             revision=$GITHUB_SHA
             app="$base/release/BuildPlay.app"
@@ -138,7 +140,7 @@ jobs:
           p.write_text("import './benchmark-profile';\n"+p.read_text()+"\n;(globalThis as any).__finishBenchmarkEntry();\n")
           PYPROFILE
             fi
-            if [[ "$SCENARIO" == responses-checkers-instruments ]]; then
+            if [[ "$signed_checkers" == 1 ]]; then
               python3 scripts/native-interactions/prepare_checker_trace.py "$portal"
             fi
             (cd "$portal" && npm ci && CI=1 npx --no-install expo export --platform ios --output-dir "$base/js-$name")
@@ -155,10 +157,14 @@ jobs:
               if [[ "$SCENARIO" == responses-checkers* ]]; then measure+=(--checker-pair); fi
               if [[ "$SCENARIO" == responses-rapid ]]; then measure+=(--rapid); fi
               if [[ "$SCENARIO" == responses-checkers-instruments ]]; then measure+=(--instruments "$base/fixture"); fi
+              if [[ "$SCENARIO" == responses-checkers-stacks ]]; then measure+=(--signed-checkers "$base/fixture"); fi
               if [[ "$SCENARIO" == startup-flows* ]]; then measure+=(--fresh "$base/fixture"); fi
               if ! "${measure[@]}"; then
-                if [[ "$SCENARIO" != responses-checkers-instruments ]]; then exit 1; fi
-                instruments_failed=1
+                if [[ "$signed_checkers" != 1 ]]; then exit 1; fi
+                checker_replay_failed=1
+              fi
+              if [[ "$signed_checkers" == 1 && -f "$base/results/$name/verified.json" ]]; then
+                python3 scripts/native-interactions/ios_response_frames.py "$base/results/$name" || checker_replay_failed=1
               fi
               continue
             fi
@@ -167,7 +173,7 @@ jobs:
               echo "::warning::Baseline verification failed. Continuing with the independent candidate."
             fi
           done
-          if [[ "$instruments_failed" == 1 ]]; then exit 1; fi
+          if [[ "$checker_replay_failed" == 1 ]]; then exit 1; fi
           if [[ "$SCENARIO" == startup-video || "$SCENARIO" == startup-link || "$SCENARIO" == startup-profile ]]; then
             flags=(--pairs "$VIDEO_PAIRS")
             if [[ "$SCENARIO" == startup-link || "$SCENARIO" == startup-profile ]]; then flags+=(--sender); fi
@@ -183,7 +189,7 @@ jobs:
             ${{ runner.temp }}/interaction/results/*/*.json
             ${{ runner.temp }}/interaction/results/*/*.jsonl
             ${{ runner.temp }}/interaction/results/*/*.sample.txt
-            ${{ runner.temp }}/interaction/results/*/*.sample.folded
+            ${{ runner.temp }}/interaction/results/*/*.folded
             ${{ runner.temp }}/interaction/results/*/*.trace.zip
             ${{ runner.temp }}/interaction/results/*/*.xml
             ${{ runner.temp }}/interaction/results/*/*.log

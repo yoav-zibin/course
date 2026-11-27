@@ -5,7 +5,7 @@ final class ResponseTests: XCTestCase {
     private struct Bounds: Decodable { let x, y, width, height: CGFloat }
     private struct Action: Decodable { let id: String; let label, until, absent: String?; let at, to, spentDie: Point?; let lift: CGFloat? }
     private struct Scenario: Decodable { let id, match: String; let bounds: Bounds; let actions: [Action] }
-    private struct Cases: Decodable { let library: String; let profile: Bool; let rapid, instruments: Bool?; let scenarios: [Scenario] }
+    private struct Cases: Decodable { let library: String; let profile: Bool; let rapid, signedCheckers, hostProfiler: Bool?; let scenarios: [Scenario] }
     private let app = XCUIApplication(bundleIdentifier: "edu.columbia.gameportal.starter")
 
     private func element(_ name: String) -> XCUIElement {
@@ -18,15 +18,15 @@ final class ResponseTests: XCTestCase {
         let resource = try XCTUnwrap(Bundle(for: Self.self).url(forResource:"response-cases",withExtension:"json"))
         let data = try JSONDecoder().decode(Cases.self,from:Data(contentsOf:resource))
         let scenario = try XCTUnwrap(data.scenarios.first { $0.id == name })
-        if data.instruments==true {app.launchEnvironment["BUILDPLAY_CHECKER_SIGNPOSTS"]="1"}
+        if data.signedCheckers==true {app.launchEnvironment["BUILDPLAY_CHECKER_SIGNPOSTS"]="1"}
         else {app.launchEnvironment["BUILDPLAY_LOCAL_UI_TEST"] = "1"}
         app.launchEnvironment["DYLD_INSERT_LIBRARIES"] = data.library
-        if data.profile || data.instruments==true {app.launchEnvironment["BUILDPLAY_RESPONSE_STACKS"]="1"}
+        if data.profile || data.signedCheckers==true {app.launchEnvironment["BUILDPLAY_RESPONSE_STACKS"]="1"}
         app.launch()
         let canvas = element("Game board. Use pieces and highlighted destinations.")
         // The restored game installs its URL listener as part of startup.
         // Wait for the warm board before asking UIKit to open the test match.
-        if data.instruments==true {
+        if data.signedCheckers==true {
             let login=app.buttons["Log in / continue as guest"]
             if login.waitForExistence(timeout:10) {
                 for _ in 0..<7 {if login.isHittable {break};app.swipeUp()}
@@ -48,12 +48,12 @@ final class ResponseTests: XCTestCase {
             let x=f.midX+(point.x-b.x-b.width/2)*s, y=f.midY+(point.y-b.y-b.height/2)*s
             return app.coordinate(withNormalizedOffset:.zero).withOffset(CGVector(dx:x-app.frame.minX,dy:y-app.frame.minY+(lift>0 ? min(54,lift*s*0.6+22,f.height/3):0)))
         }
-        if data.rapid==true || data.instruments==true {
+        if data.rapid==true || data.signedCheckers==true {
             let paths=try scenario.actions.map { action in
                 (action.id,coordinate(try XCTUnwrap(action.at)).screenPoint,coordinate(try XCTUnwrap(action.to),lift:action.lift ?? 0).screenPoint)
             }
             XCTAssertEqual(paths.count,2)
-            if data.instruments==true {
+            if data.signedCheckers==true {
                 // Resolve the accessibility tree before profiling. Public drag
                 // calls can request a new snapshot while the board is updating.
                 for action in scenario.actions {
@@ -62,13 +62,15 @@ final class ResponseTests: XCTestCase {
                         print("RESPONSE_DIE \(name) \(action.id) \(p.x) \(p.y)")
                     }
                 }
-                var request=URLRequest(url:try XCTUnwrap(URL(string:"http://127.0.0.1:18766/ready")))
-                request.httpMethod="POST";request.timeoutInterval=140
-                let ready=expectation(description:"Profiler ready for checker input")
-                URLSession.shared.dataTask(with:request){_,response,error in
-                    XCTAssertNil(error);XCTAssertEqual((response as? HTTPURLResponse)?.statusCode,200);ready.fulfill()
-                }.resume()
-                wait(for:[ready],timeout:145)
+                if data.hostProfiler==true {
+                    var request=URLRequest(url:try XCTUnwrap(URL(string:"http://127.0.0.1:18766/ready")))
+                    request.httpMethod="POST";request.timeoutInterval=140
+                    let ready=expectation(description:"Profiler ready for checker input")
+                    URLSession.shared.dataTask(with:request){_,response,error in
+                        XCTAssertNil(error);XCTAssertEqual((response as? HTTPURLResponse)?.statusCode,200);ready.fulfill()
+                    }.resume()
+                    wait(for:[ready],timeout:145)
+                }
                 for (id,from,to) in paths {
                     let mark="RESPONSE_ACTION \(name) \(id)"
                     let done=expectation(description:"UIKit delivered "+id)
