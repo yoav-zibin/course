@@ -17,7 +17,7 @@ on:
       scenario:
         description: Interactions to measure
         type: choice
-        options: [board, landscape, startup, startup-video, startup-link, startup-profile, responses, responses-profile, responses-checkers, responses-checkers-profile, responses-checkers-stacks, responses-checkers-instruments, responses-rapid, startup-flows, startup-flows-profile]
+        options: [board, landscape, startup, startup-video, startup-link, startup-profile, responses, responses-profile, responses-checkers, responses-checkers-profile, responses-checkers-stacks, responses-checkers-instruments, responses-rapid, startup-flows, startup-flows-profile, analytics]
         default: board
       hold_account_ms:
         description: Artificial competing account transaction for signed checker measurements (milliseconds)
@@ -137,6 +137,11 @@ jobs:
             git diff --exit-code "$source_sha" "$revision" -- frontends/portal/{package-lock.json,app.config.ts,plugins,modules,ios}
             git worktree add --detach "$base/$name" "$revision"
             portal="$base/$name/frontends/portal"
+            if [[ "$SCENARIO" == analytics ]]; then
+              (cd "$portal" && npm ci && bash "$GITHUB_WORKSPACE/scripts/native-interactions/ios-analytics.sh" \
+                "$app" "$SIMULATOR_ID" "$base/results/$name")
+              continue
+            fi
             if [[ "$SCENARIO" == startup-profile ]]; then
               cp scripts/native-interactions/profile-launch.js "$portal/benchmark-profile.js"
               python3 - "$portal/index.ts" <<'PYPROFILE'
