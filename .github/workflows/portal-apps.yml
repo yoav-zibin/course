@@ -70,6 +70,10 @@ jobs:
             -Pandroid.enableMinifyInReleaseBuilds=false :app:assembleRelease \
             2>&1 | tee "$GITHUB_WORKSPACE/buildplay-build.log"
           cp android/app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/BuildPlay.apk"
+      - name: Verify Firebase configuration in the packaged APK
+        run: |
+          set -o pipefail
+          apkanalyzer manifest print "$GITHUB_WORKSPACE/BuildPlay.apk" | python3 scripts/check-android-analytics.py
       - name: Check Android release size
         env:
           BUILDPLAY_PERF_PLATFORM: android

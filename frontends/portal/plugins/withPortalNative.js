@@ -53,6 +53,23 @@ module.exports = function withPortalNative(config) {
   config = withAndroidManifest(config, config => {
     const application = config.modResults.manifest.application?.[0];
     if (application) {
+      AndroidConfig.Manifest.ensureToolsAvailable(config.modResults);
+      for (const flag of ['firebase_analytics_collection_enabled', 'google_analytics_automatic_screen_reporting_enabled',
+        'google_analytics_adid_collection_enabled', 'google_analytics_default_allow_ad_personalization_signals']) {
+        AndroidConfig.Manifest.addMetaDataItemToMainApplication(application, flag, 'false');
+      }
+      // Messaging initializes Firebase at launch. Only the signed-in Worklet
+      // starts the measurement SDK, so omit its eager discovery registration.
+      const discoveryName = 'com.google.firebase.components.ComponentDiscoveryService';
+      const registrar = 'com.google.firebase.components:com.google.firebase.analytics.connector.internal.AnalyticsConnectorRegistrar';
+      const services = application.service ??= [];
+      let discovery = services.find(service => service.$['android:name'] === discoveryName);
+      if (!discovery) {
+        discovery = {$: {'android:name': discoveryName}};
+        services.push(discovery);
+      }
+      discovery['meta-data'] = [...(discovery['meta-data'] || []).filter(item => item.$['android:name'] !== registrar),
+        {$: {'android:name': registrar, 'tools:node': 'remove'}}];
       application.$['android:allowBackup'] = 'false';
       application.$['android:fullBackupContent'] = '@xml/portal_backup_rules';
       application.$['android:dataExtractionRules'] = '@xml/portal_data_extraction_rules';
