@@ -111,13 +111,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
-    parser.add_argument("--retire-duplicate-only", action="store_true")
     args = parser.parse_args()
     secret = json.loads(args.config.read_text()).get("master_password")
     if not isinstance(secret, str) or not secret:
         parser.error("the private config must contain a master password")
-    action = retire_duplicate_connect_four if args.retire_duplicate_only else publish
-    action(args.base_url.rstrip("/"), secret)
+    publish(args.base_url.rstrip("/"), secret)
 
 
 if __name__ == "__main__":
