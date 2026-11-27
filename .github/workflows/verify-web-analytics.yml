@@ -1,0 +1,39 @@
+name: Verify published web analytics
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  browsers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontends/portal/package-lock.json
+      - working-directory: frontends/portal
+        run: npm ci && npx --no-install playwright install --with-deps chromium webkit
+      - name: Download the currently published worker and real Google tag
+        run: |
+          assets="$RUNNER_TEMP/analytics-assets"
+          mkdir -p "$assets/static/shared" "$assets/static/app/analytics-worker"
+          for file in static/analytics.js static/shared/analytics-worker.js; do
+            curl --fail --silent --show-error --retry 2 "https://buildplay.fun/$file" -o "$assets/$file"
+            cmp "$file" "$assets/$file"
+          done
+          for file in frontends/portal/node_modules/@qwik.dev/partytown/lib/*; do
+            if [ -f "$file" ]; then
+              resource="static/app/analytics-worker/$(basename "$file")"
+              curl --fail --silent --show-error --retry 2 "https://buildplay.fun/$resource" -o "$assets/$resource"
+            fi
+          done
+          curl --fail --silent --show-error --retry 2 'https://www.googletagmanager.com/gtag/js?id=G-6CCXZQYVE7' -o "$assets/google-tag.js"
+      - name: Exercise both browsers with only loopback networking available
+        run: |
+          sudo unshare --net bash -c '
+            set -eu
+            ip link set lo up
+            exec sudo -H -u "$1" "$2" "$3" "$4"
+          ' -- "$(id -un)" "$(command -v node)" "$GITHUB_WORKSPACE/scripts/verify-web-analytics.cjs" "$RUNNER_TEMP/analytics-assets"
