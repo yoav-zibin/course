@@ -4,4 +4,5 @@ NS_ASSUME_NONNULL_BEGIN
 typedef NSString *_Nullable (^BPStorageAccess)(NSString *operation, NSString *key, NSString *value,
                                               NSError *_Nullable *_Nonnull error);
 FOUNDATION_EXPORT void BPInstallStorageWorklet(void *runtime, BPStorageAccess access);
+FOUNDATION_EXPORT void BPInstallAnalyticsWorklet(void *runtime, BPStorageAccess access);
 NS_ASSUME_NONNULL_END

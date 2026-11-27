@@ -12,6 +12,18 @@ public final class LegacyPortalModule: Module {
       ProcessInfo.processInfo.environment["BUILDPLAY_LOCAL_UI_TEST"] == "1"
     }
 
+    Function("installAnalyticsWorklet") {
+      guard let appContext = self.appContext else { throw Exceptions.RuntimeLost() }
+      let runtime = try appContext.runtime
+      let analytics = PortalAnalytics()
+      runtime.withUnsafePointee { pointer in
+        BPInstallAnalyticsWorklet(pointer) { _, id, screen, _ in
+          analytics.view(id: id, name: screen)
+          return nil
+        }
+      }
+    }
+
     Function("installStorageWorklet") {
       guard let appContext = self.appContext else { throw Exceptions.RuntimeLost() }
       let runtime = try appContext.runtime

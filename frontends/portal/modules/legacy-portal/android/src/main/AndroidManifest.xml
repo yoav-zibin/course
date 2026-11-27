@@ -1,1 +1,14 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <application>
+    <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
+    <meta-data android:name="google_analytics_automatic_screen_reporting_enabled" android:value="false" />
+    <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
+    <meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false" />
+    <!-- Messaging starts Firebase at launch. The Analytics Worklet explicitly
+         starts measurement after sign-in, so discovery must skip its eager registrar. -->
+    <service android:name="com.google.firebase.components.ComponentDiscoveryService">
+      <meta-data android:name="com.google.firebase.components:com.google.firebase.analytics.connector.internal.AnalyticsConnectorRegistrar"
+          tools:node="remove" />
+    </service>
+  </application>
+</manifest>

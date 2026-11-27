@@ -16,7 +16,7 @@ import {BugButton} from './ui/BugButton';
 import {NativeGestureRoot} from './ui/NativeGestureRoot';
 import {MATCH_HISTORY_HEIGHT} from './ui/bugPosition';
 import {diagnosticPath,recordDiagnosticPage,recordDiagnosticEvent,rememberDiagnosticSecrets} from './core/diagnostics';
-import {installWebApp} from './ui/webApp';
+import {installWebApp,updatePortalAnalytics} from './ui/webApp';
 import {BACKGAMMON_GAME_ID} from './game/backgammonMatchPresentation';
 import {fillsMatchLandscape} from './game/matchBoardLayout';
 import {getDirection} from './platform/i18n';
@@ -43,6 +43,13 @@ function PortalApp({p,boardVisible,matchMenuOpen,onCloseMatchMenu,history}: {p:R
   const content = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const [notice, setNotice] = useState('');
   const [inbox,setInbox] = useState<boolean|null>(null), [notificationBanner,setNotificationBanner] = useState<InAppNotification|null>(null);
+  const analyticsId = p.ready && !localOnly && p.baseUrl === 'https://buildplay.fun'
+    ? p.account?.canonical_user_id || p.account?.id || null : null;
+  const analyticsScreen = account ? 'account' : inbox ? 'inbox' : boardVisible ? 'match'
+    : screen === 'games' && p.selectedGameId ? 'game' : screen;
+  useEffect(() => {
+    updatePortalAnalytics(analyticsId, analyticsScreen);
+  }, [analyticsId, analyticsScreen]);
   const observedNotifications = useRef<{scope:string; ids:Set<string>; initialized:boolean}>({scope:'',ids:new Set(),initialized:false});
   const [appSession,setAppSession] = useState('');
   const [pendingInvite,setPendingInvite]=useState(''),[invitePreview,setInvitePreview]=useState<any>(null);

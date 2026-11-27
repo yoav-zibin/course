@@ -192,6 +192,8 @@ jobs:
           app="$GITHUB_WORKSPACE/ios-portal-build/Build/Products/Release-iphonesimulator/BuildPlay.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Info.plist")" = BuildPlay
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = edu.columbia.gameportal.starter
+          test "$(/usr/libexec/PlistBuddy -c 'Print :FIREBASE_ANALYTICS_COLLECTION_ENABLED' "$app/Info.plist")" = false
+          grep -aFq 'FIRAnalytics' "$app/BuildPlay"
           test -f "$app/main.jsbundle"
           python3 scripts/sign-ios-simulator.py "$app"
           ditto -c -k --sequesterRsrc --keepParent "$app" "$GITHUB_WORKSPACE/BuildPlay-simulator.zip"
@@ -301,6 +303,10 @@ jobs:
         run: |
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
+      - name: Configure the production Firebase iOS client
+        env:
+          BUILDPLAY_IOS_GOOGLE_SERVICES_PLIST: ${{ secrets.IOS_GOOGLE_SERVICES_PLIST }}
+        run: python3 scripts/configure-ios-analytics.py
       - run: npm ci
       - run: npx expo prebuild --platform ios --no-install --no-clean
       - working-directory: frontends/portal/ios
@@ -323,6 +329,9 @@ jobs:
             CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$APPLE_TEAM_ID" archive
           archive_app="$GITHUB_WORKSPACE/BuildPlay.xcarchive/Products/Applications/BuildPlay.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$archive_app/Info.plist")" = "$IOS_PORTAL_BUNDLE_ID"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :BUNDLE_ID' "$archive_app/BuildPlayFirebase.plist")" = "$IOS_PORTAL_BUNDLE_ID"
+          test ! -e "$archive_app/GoogleService-Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :FIREBASE_ANALYTICS_COLLECTION_ENABLED' "$archive_app/Info.plist")" = false
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$archive_app/Info.plist")" = "${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
           python3 "$GITHUB_WORKSPACE/scripts/verify-ios-distribution-sdk.py" "$archive_app"
       - name: Export IPA with existing cloud signing access

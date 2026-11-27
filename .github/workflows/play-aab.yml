@@ -85,8 +85,9 @@ jobs:
               output.write(f'code={code}\n')
           print(f'Play versionCode: {code}')
           PY
-      - name: Prepare optional Android push configuration
+      - name: Configure the production Firebase Android client
         env:
+          BUILDPLAY_REQUIRE_FIREBASE_CONFIG: '1'
           BUILDPLAY_ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
         run: node scripts/configure-notification-build.mjs
       - name: Write upload keystore

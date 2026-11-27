@@ -34,7 +34,7 @@
     },
     {
       "kind": "bullet",
-      "text": "Usage analytics. We use Google Analytics to understand how signed-in users, including guests, use the site (pages visited, approximate location, device type). We send your internal BuildPlay account ID so Google Analytics can recognize the same account across sessions or devices. Google Analytics collects this data under Google's own privacy policy; you can opt out with the {link0}.",
+      "text": "Usage analytics. We use Google Analytics on the website and in the iOS and Android apps for signed-in users, including guests. It records pages and screens viewed, approximate location, and device type. We send your internal BuildPlay account ID so Google Analytics can recognize the same account across sessions or devices. Google collects this data under its privacy policy. Signing out stops collection. On the website you can also use the {link0}.",
       "links": [
         {
           "placeholder": "link0",

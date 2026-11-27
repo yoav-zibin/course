@@ -15,14 +15,14 @@
       lib: '/static/app/analytics-worker/',
       fallbackTimeout: 0,
       forward: ['buildPlaySyncAnalyticsIdentity'],
-      mainWindowAccessors: ['__buildPlayAnalyticsUser', disableKey],
+      mainWindowAccessors: ['__buildPlayAnalyticsUser', '__buildPlayAnalyticsScreen', disableKey],
     };
     // A denied worker registration must skip analytics. Partytown recognizes
     // this attribute on scripts that may execute only inside its worker.
     const setup = document.createElement('script');
     setup.type = 'text/partytown';
     setup.setAttribute('data-ptworkeronly', '');
-    setup.src = '/static/shared/analytics-worker.js?v=1';
+    setup.src = '/static/shared/analytics-worker.js?v=2';
     document.head.appendChild(setup);
     const loader = document.createElement('script');
     loader.async = true;
@@ -41,9 +41,9 @@
   }
 
   let scheduled = false;
-  function setUser(userId) {
+  function setUser(userId, screenChanged = false) {
     const id = typeof userId === 'string' && userId ? userId : null;
-    if (window.__buildPlayAnalyticsUser === id) return;
+    if (window.__buildPlayAnalyticsUser === id && !screenChanged) return;
     window.__buildPlayAnalyticsUser = id;
     if (!id && window[disableKey] !== true) {
       window[disableKey] = true;
@@ -71,7 +71,12 @@
     window.setTimeout(clearUser, session.expires_in_seconds * 1000);
   }
 
-  window.BuildPlayAnalytics = {setUser, trackSession, clearUser};
+  function setPortalView(userId, screen) {
+    const changed = window.__buildPlayAnalyticsScreen !== screen;
+    window.__buildPlayAnalyticsScreen = screen;
+    setUser(userId, changed);
+  }
+  window.BuildPlayAnalytics = {setUser, setPortalView, trackSession, clearUser};
   if (document.currentScript?.hasAttribute('data-admin-session')) {
     afterLoadWhenIdle(() => {
       if (sessionClosed) return;

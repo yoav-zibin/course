@@ -1,45 +1,39 @@
-import {portal} from '../core';
+import {deferredAnalytics, type AnalyticsScreen} from '../platform/analytics-session';
 
-type AnalyticsWindow = Window & {BuildPlayAnalytics?: {setUser(id: string | null): void}};
+type AnalyticsWindow = Window & {BuildPlayAnalytics?: {setPortalView(id: string | null, screen: AnalyticsScreen): void}};
 
 let installed = false;
 let prompt:any=null;
 
-function observeAnalyticsUser() {
-  const browser = window as AnalyticsWindow;
-  let requested = false;
-  let current: string | null = null;
-  function requestController() {
-    if (!current) { requested = false; return; }
+let requested = false;
+let current: string | null = null;
+let visible: AnalyticsScreen = 'games';
+export const updatePortalAnalytics = deferredAnalytics(
+  task => { if (window.requestIdleCallback) window.requestIdleCallback(task); else window.setTimeout(task, 0); },
+  (id, screen) => {
+    if (location.hostname !== 'buildplay.fun' || document.querySelector('meta[name="local-preview"]')) return;
+    const browser = window as AnalyticsWindow;
+    current = id;
+    visible = screen;
+    if (browser.BuildPlayAnalytics) {
+      browser.BuildPlayAnalytics.setPortalView(current, visible);
+      return;
+    }
+    if (requested || !id) return;
+    requested = true;
     const script = document.createElement('script');
     script.async = true;
     script.fetchPriority = 'low';
-    script.src = '/static/analytics.js?v=3';
-    script.onload = () => browser.BuildPlayAnalytics?.setUser(current);
+    script.src = '/static/analytics.js?v=4';
+    script.onload = () => browser.BuildPlayAnalytics?.setPortalView(current, visible);
     script.onerror = () => { requested = false; };
     document.head.appendChild(script);
-  }
-  function sync() {
-    const {account} = portal.getSnapshot();
-    const id = account?.canonical_user_id || account?.id || null;
-    if (id === current) return;
-    current = id;
-    if (browser.BuildPlayAnalytics) {
-      browser.BuildPlayAnalytics.setUser(current);
-    } else if (id && !requested) {
-      requested = true;
-      if (window.requestIdleCallback) window.requestIdleCallback(requestController);
-      else window.setTimeout(requestController, 0);
-    }
-  }
-  portal.subscribe(sync);
-  sync();
-}
+  },
+);
 
 export function installWebApp() {
   if (installed || document.querySelector('meta[name="local-preview"]')) return;
   installed = true;
-  if (location.hostname === 'buildplay.fun') observeAnalyticsUser();
   window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();prompt=event;});
   if('serviceWorker' in navigator) void navigator.serviceWorker.register('/portal-worker.js',{scope:'/',updateViaCache:'none'}).catch(()=>{});
 }

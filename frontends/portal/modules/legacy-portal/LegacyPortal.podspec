@@ -12,6 +12,8 @@ Pod::Spec.new do |s|
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
   s.dependency 'React-jsi'
+  s.dependency 'FirebaseAnalytics/Core', '12.19.0'
+  s.dependency 'FirebaseCore', '12.19.0'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20' }
   s.source_files = 'ios/*.{h,mm,swift}', 'cpp/*.h'
   s.public_header_files = 'ios/BPStorageWorklet.h'

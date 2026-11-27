@@ -1,15 +1,44 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { AndroidConfig, withAndroidManifest, withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
+const { AndroidConfig, IOSConfig, withAndroidManifest, withAppBuildGradle, withDangerousMod, withPodfile, withXcodeProject } = require('expo/config-plugins');
 
 /** Preserve the former app's no-backup policy and permit an existing debug key. */
 module.exports = function withPortalNative(config) {
+  // Firebase can discover the default plist before configure() runs. Only the
+  // signed-in Analytics Worklet opens this named production client resource.
+  const iosClient = process.env.BUILDPLAY_IOS_GOOGLE_SERVICES_FILE;
+  if (iosClient) config = withXcodeProject(config, config => {
+    const root = config.modRequest.projectRoot;
+    const group = IOSConfig.XcodeUtils.getProjectName(root);
+    const filename = 'BuildPlayFirebase.plist';
+    fs.copyFileSync(iosClient, path.join(IOSConfig.Paths.getSourceRoot(root), filename));
+    const filepath = group + '/' + filename;
+    if (!config.modResults.hasFile(filepath)) {
+      config.modResults = IOSConfig.XcodeUtils.addResourceFileToGroup({
+        filepath, groupName: group, project: config.modResults, isBuildFile: true,
+      });
+    }
+    return config;
+  });
+  // FirebaseCoreInternal imports this Objective-C module from Swift when Expo
+  // links pods statically. Keep other pods on the Expo template's defaults.
+  config = withPodfile(config, config => {
+    const pod = "pod 'GoogleUtilities', :modular_headers => true";
+    if (!config.modResults.contents.includes(pod)) {
+      config.modResults.contents = config.modResults.contents.replace(/^(\s*)use_expo_modules!/m, (_, indent) =>
+        indent + pod + '\n' + indent + 'use_expo_modules!');
+    }
+    return config;
+  });
   // Saves live in the app sandbox; the portal does not need shared storage or
   // permission to draw over other applications from the development template.
   config = AndroidConfig.Permissions.withBlockedPermissions(config, [
     'android.permission.READ_EXTERNAL_STORAGE',
     'android.permission.WRITE_EXTERNAL_STORAGE',
     'android.permission.SYSTEM_ALERT_WINDOW',
+    'com.google.android.gms.permission.AD_ID',
+    'android.permission.ACCESS_ADSERVICES_AD_ID',
+    'android.permission.ACCESS_ADSERVICES_ATTRIBUTION',
   ]);
   config = withAndroidManifest(config, config => {
     const application = config.modResults.manifest.application?.[0];
