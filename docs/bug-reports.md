@@ -385,7 +385,7 @@ Use this benefit scale:
 
 | Score | Meaning |
 | --- | --- |
-| 0 | Nothing needs fixing, or the proposed change would worsen other users' experience. |
+| 0 | Nothing needs fixing, a verified published fix fully covers a duplicate, or the proposed change would worsen other users' experience. |
 | 1 | A completely trivial adjustment, such as minor wording, a color or a CSS property. |
 | 2–10 | Increasing improvements to the website, with higher scores for more substantial real bugs and user-experience improvements. |
 
@@ -398,7 +398,10 @@ authorization, escalation, verification and publication requirements still apply
 After making and verifying changes, save a separate few-sentence
 `changes_summary` describing what actually changed in code or game logic. Do not
 put the proposed plan in this field. For a verified already-fixed report, explain
-that no additional changes were needed and identify the published fix. The CLI
+that no additional changes were needed and identify the published fix. For a
+duplicate, give score 0 once the published fix is verified to cover the report
+in full, cite the original report or published fix in the score rationale, and
+follow the usual authorization and verified-publication rules. The CLI
 requires a saved assessment and this summary when marking a report handled;
 resolution notes still record root cause, checks and publication evidence.
 Failed or unfinished repairs remain pending. The hourly review automatically
