@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler,HTTPServer
 from pathlib import Path
 import json,os,signal,subprocess,threading,time
 import xml.etree.ElementTree as ET
+from response_profiles import apple_sample_stacks
 
 def capture(output,device,inputs):
     logs=(output/'instruments.log').open('w',buffering=1)
@@ -72,7 +73,13 @@ def capture(output,device,inputs):
             if trace:
                 try:trace.wait(120)
                 except subprocess.TimeoutExpired:trace.terminate();trace.wait(15)
-            for child,_ in samples:child.wait(timeout=30)
+            for child,meta in samples:
+                child.wait(timeout=30)
+                report=output/meta['file']
+                if report.is_file():
+                    stacks=apple_sample_stacks(report.read_text(errors='replace'))
+                    if stacks:
+                        report.with_suffix('.folded').write_text(''.join(f'{path} {n}\n' for path,n in stacks.items()))
             (output/'instruments-session.json').write_text(json.dumps({'recordings':started,'host_samples':[m for _,m in samples]},indent=2))
             for meta in started:
                 path=output/meta['path']

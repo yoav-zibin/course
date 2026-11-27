@@ -1,11 +1,45 @@
-"""Collapse measured input intervals into FlameGraph stacks. All weights are in microseconds."""
+"""Collapse input profiles into FlameGraph stacks. Host sample reports use observation counts."""
 import json
+import re
 from collections import Counter
 from pathlib import Path
 
 
 def label(value):
     return str(value).replace(';',',').replace('\n',' ').strip()
+
+
+def apple_sample_stacks(report):
+    """Collapse Apple's inclusive per-thread sample tree to exclusive stack counts."""
+    _, _, tree = report.partition('Call graph:')
+    stacks = Counter()
+    branch = []
+    def close_frame():
+        _, name, count, children = branch.pop()
+        if count > children:
+            path = [parent[1] for parent in branch] + [name]
+            stacks[';'.join(path)] += count - children
+        if branch:
+            branch[-1][3] += count
+
+    for line in tree.splitlines():
+        if line.startswith(('Total number in stack', 'Sort by top of stack', 'Binary Images:')):
+            break
+        row = re.match(r'^([\s+!:|]*)([\d,]+) (.+)$', line)
+        if not row:
+            continue
+        depth = len(row[1])
+        while branch and branch[-1][0] >= depth:
+            close_frame()
+        # The first row of each tree gives the sampled thread. ASLR addresses
+        # are unnecessary after symbolication and vary between app launches.
+        name = label(re.sub(r'\s+\[0x[0-9a-fA-F]+\].*$', '', row[3]))
+        if not branch and not name.startswith('Thread_'):
+            continue
+        branch.append([depth, name, int(row[2].replace(',', '')), 0])
+    while branch:
+        close_frame()
+    return stacks
 
 
 def web_stacks(path,row,duration):

@@ -183,6 +183,7 @@ jobs:
             ${{ runner.temp }}/interaction/results/*/*.json
             ${{ runner.temp }}/interaction/results/*/*.jsonl
             ${{ runner.temp }}/interaction/results/*/*.sample.txt
+            ${{ runner.temp }}/interaction/results/*/*.sample.folded
             ${{ runner.temp }}/interaction/results/*/*.trace.zip
             ${{ runner.temp }}/interaction/results/*/*.xml
             ${{ runner.temp }}/interaction/results/*/*.log
