@@ -1,7 +1,7 @@
 """Collapse input profiles into FlameGraph stacks. Host sample reports use observation counts."""
 import json
 import re
-from collections import Counter
+from collections import Counter,defaultdict
 from pathlib import Path
 
 
@@ -82,14 +82,19 @@ def android_stacks(filename,window=None):
 
 def ios_stacks(rows,down,duration):
     result=Counter();selected=[r for r in rows if down<=r['t']<=down+duration]
-    stamps=sorted({r['t'] for r in selected})
+    lanes=defaultdict(set)
+    for row in selected:
+        lanes[row.get('thread_id',row['thread'])].add(row['t'])
     # The sampler aims for 10 ms. A busy simulator can leave much longer
     # gaps. A stack snapshot cannot identify what ran during those gaps.
-    lengths={t:round(1000*(min(down+duration,t+10,stamps[i+1] if i+1<len(stamps) else t+10)-t))
-             for i,t in enumerate(stamps)}
+    lengths={}
+    for lane,times in lanes.items():
+        stamps=sorted(times)
+        for t,next_t in zip(stamps,stamps[1:]+[down+duration]):
+            lengths[lane,t]=round(1000*(min(down+duration,t+10,next_t)-t))
     for r in selected:
         # Render one lane per sampled thread. Waiting threads account for time
         # on their own lane. Simultaneously running threads add independent time.
         thread=label(r['thread'])+(' · running' if r['running'] else ' · waiting')
-        result[thread+';'+';'.join(label(f) for f in reversed(r['stack']))]+=max(1,lengths[r['t']])
+        result[thread+';'+';'.join(label(f) for f in reversed(r['stack']))]+=max(1,lengths[r.get('thread_id',r['thread']),r['t']])
     return result

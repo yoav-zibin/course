@@ -25,9 +25,8 @@ static id checkerPath(Class pathClass, CGPoint from, CGPoint to, NSTimeInterval 
   return path;
 }
 
-void BPPerformCheckerDrags(CGPoint firstStart, CGPoint firstEnd, CGPoint secondStart, CGPoint secondEnd,
-                           NSTimeInterval gap,
-                           void (^completion)(BOOL, NSError *)) {
+static void performDrags(CGPoint firstStart, CGPoint firstEnd, BOOL pair, CGPoint secondStart, CGPoint secondEnd,
+                         void (^completion)(BOOL, NSError *)) {
   Class pathClass=NSClassFromString(@"XCPointerEventPath"),recordClass=NSClassFromString(@"XCSynthesizedEventRecord");
   XCUIDevice *device=XCUIDevice.sharedDevice;
   id synth=[device respondsToSelector:@selector(eventSynthesizer)]?[device eventSynthesizer]:nil;
@@ -41,8 +40,16 @@ void BPPerformCheckerDrags(CGPoint firstStart, CGPoint firstEnd, CGPoint secondS
       userInfo:@{NSLocalizedDescriptionKey:@"This XCTest runtime cannot schedule both timed checker drags."}]);
     return;
   }
-  id record=[[recordClass alloc] initWithName:@"Two checker moves" interfaceOrientation:UIInterfaceOrientationPortrait];
+  id record=[[recordClass alloc] initWithName:@"Checker drag" interfaceOrientation:UIInterfaceOrientationPortrait];
   [record addPointerEventPath:checkerPath(pathClass,firstStart,firstEnd,0)];
-  [record addPointerEventPath:checkerPath(pathClass,secondStart,secondEnd,.53+gap)];
+  if(pair)[record addPointerEventPath:checkerPath(pathClass,secondStart,secondEnd,.59)];
   [synth synthesizeEvent:record completion:completion];
+}
+
+void BPPerformCheckerDrags(CGPoint from, CGPoint to, CGPoint nextFrom, CGPoint nextTo, void (^completion)(BOOL, NSError *)) {
+  performDrags(from,to,YES,nextFrom,nextTo,completion);
+}
+
+void BPPerformCheckerDrag(CGPoint from, CGPoint to, void (^completion)(BOOL, NSError *)) {
+  performDrags(from,to,NO,CGPointZero,CGPointZero,completion);
 }

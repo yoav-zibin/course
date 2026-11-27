@@ -21,7 +21,7 @@ final class ResponseTests: XCTestCase {
         if data.instruments==true {app.launchEnvironment["BUILDPLAY_CHECKER_SIGNPOSTS"]="1"}
         else {app.launchEnvironment["BUILDPLAY_LOCAL_UI_TEST"] = "1"}
         app.launchEnvironment["DYLD_INSERT_LIBRARIES"] = data.library
-        if data.profile {app.launchEnvironment["BUILDPLAY_RESPONSE_STACKS"]="1"}
+        if data.profile || data.instruments==true {app.launchEnvironment["BUILDPLAY_RESPONSE_STACKS"]="1"}
         app.launch()
         let canvas = element("Game board. Use pieces and highlighted destinations.")
         // The restored game installs its URL listener as part of startup.
@@ -69,11 +69,24 @@ final class ResponseTests: XCTestCase {
                     XCTAssertNil(error);XCTAssertEqual((response as? HTTPURLResponse)?.statusCode,200);ready.fulfill()
                 }.resume()
                 wait(for:[ready],timeout:145)
+                for (id,from,to) in paths {
+                    let mark="RESPONSE_ACTION \(name) \(id)"
+                    let done=expectation(description:"UIKit delivered "+id)
+                    print("\(mark) begin \(Date().timeIntervalSince1970*1000)")
+                    BPPerformCheckerDrag(from,to) { ok,error in
+                        XCTAssertTrue(ok,error?.localizedDescription ?? "XCTest could not inject the checker drag")
+                        done.fulfill()
+                    }
+                    wait(for:[done],timeout:30)
+                    Thread.sleep(forTimeInterval:2.5)
+                    print("\(mark) end \(Date().timeIntervalSince1970*1000)")
+                }
+                return
             }
             let end=expectation(description:"UIKit delivered both drags")
             let pair="RESPONSE_PAIR \(name) \(paths[0].0) \(paths[1].0)"
             print("\(pair) begin \(Date().timeIntervalSince1970*1000)")
-            BPPerformCheckerDrags(paths[0].1,paths[0].2,paths[1].1,paths[1].2,data.rapid==true ? 0.06 : 2.5) { ok,error in
+            BPPerformCheckerDrags(paths[0].1,paths[0].2,paths[1].1,paths[1].2) { ok,error in
                 XCTAssertTrue(ok,error?.localizedDescription ?? "XCTest could not inject the two drags")
                 end.fulfill()
             }

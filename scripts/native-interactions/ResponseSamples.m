@@ -16,7 +16,7 @@ static thread_t mainThread;
 static _Atomic thread_t symbolThread;
 static _Atomic uint64_t deadlineUS;
 static uint64_t usec(void) {return (uint64_t)(CACurrentMediaTime()*1e6);}
-static unsigned int stack(thread_t thread, uintptr_t *pcs, unsigned int limit) {
+static unsigned int stack(thread_t thread, uintptr_t top, uintptr_t *pcs, unsigned int limit) {
   uintptr_t fp=0,pc=0;
   if(thread_suspend(thread)!=KERN_SUCCESS)return 0;
 #if defined(__arm64__)
@@ -31,18 +31,24 @@ static unsigned int stack(thread_t thread, uintptr_t *pcs, unsigned int limit) {
   }
 #endif
   unsigned int n=0;if(pc)pcs[n++]=pc;
-  while(fp && n<limit){
-    uintptr_t frame[2];vm_size_t size=0;
-    if(vm_read_overwrite(mach_task_self(),(vm_address_t)fp,sizeof(frame),(vm_address_t)frame,&size)!=KERN_SUCCESS||size!=sizeof(frame))break;
+  // Copy frame pointers in one Mach call and resume the app immediately.
+  // A separate kernel round trip per frame makes short UI stalls hard to sample.
+  uintptr_t words[8192];const uintptr_t base=fp;
+  vm_size_t length=fp && top>fp ? MIN(sizeof(words),top-fp) : 0, copied=0;
+  if(length && vm_read_overwrite(mach_task_self(),fp,length,(vm_address_t)words,&copied)!=KERN_SUCCESS)copied=0;
+  thread_resume(thread);
+  while(n<limit && copied>=2*sizeof(uintptr_t) && fp>=base && fp-base<=copied-2*sizeof(uintptr_t) && (fp-base)%sizeof(uintptr_t)==0){
+    const uintptr_t *frame=words+(fp-base)/sizeof(uintptr_t);
     if(!frame[1])break;
     pcs[n++]=frame[1]-1;
-    if(frame[0]<=fp || frame[0]-fp>1048576 || frame[0]%sizeof(uintptr_t))break;
+    if(frame[0]<=fp)break;
     fp=frame[0];
   }
-  thread_resume(thread);return n;
+  return n;
 }
 typedef struct {
   double time;
+  uint64_t threadID;
   BOOL running;
   char name[128];
   unsigned int count;
@@ -53,16 +59,17 @@ static void collect(NSMutableData *samples){
   thread_act_array_t threads;mach_msg_type_number_t count;
   if(task_threads(mach_task_self(),&threads,&count)!=KERN_SUCCESS)return;
   const thread_t self=pthread_mach_thread_np(pthread_self());
-  const double t=CACurrentMediaTime()*1000;
   for(unsigned int i=0;i<count;i++){
     thread_t th=threads[i];thread_basic_info_data_t info;mach_msg_type_number_t size=THREAD_BASIC_INFO_COUNT;
     if(th!=self && th!=atomic_load(&symbolThread) && thread_info(th,THREAD_BASIC_INFO,(thread_info_t)&info,&size)==KERN_SUCCESS){
-      ResponseSample sample={.time=t,.running=info.run_state==TH_STATE_RUNNING};
+      ResponseSample sample={.running=info.run_state==TH_STATE_RUNNING};
       pthread_t p=pthread_from_mach_thread_np(th);
       if(p)pthread_getname_np(p,sample.name,sizeof(sample.name));
       if(th==mainThread)strlcpy(sample.name,"main",sizeof(sample.name));
       if(th==mainThread || sample.running || strstr(sample.name,"JavaScript") || strstr(sample.name,"worklet")){
-        sample.count=stack(th,sample.pcs,sizeof(sample.pcs)/sizeof(sample.pcs[0]));
+        if(!p || pthread_threadid_np(p,&sample.threadID)!=0)sample.threadID=th;
+        sample.time=CACurrentMediaTime()*1000;
+        sample.count=stack(th,p?(uintptr_t)pthread_get_stackaddr_np(p):0,sample.pcs,sizeof(sample.pcs)/sizeof(sample.pcs[0]));
         if(sample.count)[samples appendBytes:&sample length:sizeof(sample)];
       }
     }
@@ -89,7 +96,7 @@ static void writeSamples(NSData *data,FILE *out,NSMutableDictionary<NSNumber*,NS
         }
         [names addObject:symbol?:@"unknown"];
       }
-      NSDictionary *row=@{@"t":@(sample->time),@"thread":sample->name[0]?[NSString stringWithUTF8String:sample->name]:@"worker",
+      NSDictionary *row=@{@"t":@(sample->time),@"thread_id":@(sample->threadID),@"thread":sample->name[0]?[NSString stringWithUTF8String:sample->name]:@"worker",
                           @"running":@(sample->running),@"stack":names};
       NSData *bytes=[NSJSONSerialization dataWithJSONObject:row options:0 error:nil];
       fwrite(bytes.bytes,1,bytes.length,out);fputc('\n',out);
@@ -103,7 +110,7 @@ void recordResponseStacks(void){
   if(!wake){
     mainThread=pthread_mach_thread_np(pthread_self());
     wake=dispatch_semaphore_create(0);
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
       NSString *path=[NSSearchPathForDirectoriesInDomains(NSCachesDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"response-stacks.jsonl"];
       FILE *out=fopen(path.fileSystemRepresentation,"a");if(!out)return;
       NSMutableDictionary *symbols=[NSMutableDictionary dictionary];
