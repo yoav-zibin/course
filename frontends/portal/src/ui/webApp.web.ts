@@ -24,7 +24,7 @@ export const updatePortalAnalytics = deferredAnalytics(
     const script = document.createElement('script');
     script.async = true;
     script.fetchPriority = 'low';
-    script.src = '/static/analytics.js?v=4';
+    script.src = '/static/analytics.js?v=5';
     script.onload = () => browser.BuildPlayAnalytics?.setPortalView(current, visible);
     script.onerror = () => { requested = false; };
     document.head.appendChild(script);

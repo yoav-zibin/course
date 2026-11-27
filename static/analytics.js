@@ -22,7 +22,7 @@
     const setup = document.createElement('script');
     setup.type = 'text/partytown';
     setup.setAttribute('data-ptworkeronly', '');
-    setup.src = '/static/shared/analytics-worker.js?v=2';
+    setup.src = '/static/shared/analytics-worker.js?v=3';
     document.head.appendChild(setup);
     const loader = document.createElement('script');
     loader.async = true;

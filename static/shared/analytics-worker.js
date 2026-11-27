@@ -13,6 +13,7 @@
   window.buildPlaySyncAnalyticsIdentity = () => {
     const id = window.__buildPlayAnalyticsUser || null;
     const screen = window.__buildPlayAnalyticsScreen || null;
+    const locationForReport = screen ? location.origin + '/portal/' + screen : location.origin + location.pathname;
     const changedUser = previous !== id;
     if (!changedUser && previousScreen === screen) return;
     previous = id;
@@ -21,17 +22,20 @@
       if (!id || window[disableKey]) return;
       initialized = true;
       window.gtag('js', new Date());
-      window.gtag('config', measurementId, {user_id: id, page_location: location.origin + location.pathname,
-        ...(screen ? {send_page_view:false} : {})});
+      window.gtag('config', measurementId, {user_id: id, page_location: locationForReport,
+        ...(screen ? {page_title:screen} : {})});
       const tag = document.createElement('script');
       tag.setAttribute('data-ptworkeronly', '');
       tag.src = 'https://www.googletagmanager.com/gtag/js?id=' + measurementId;
       document.head.appendChild(tag);
-    } else if (changedUser) {
-      window.gtag('config', measurementId, {user_id: id, update: true});
+    } else if (changedUser || (id && screen)) {
+      window.gtag('config', measurementId, {user_id: id, update: true,
+        ...(id && screen ? {page_title:screen,page_location:locationForReport} : {})});
     }
     if (id && screen && !window[disableKey]) {
-      window.gtag('event','page_view',{page_title:screen,page_location:location.origin+'/portal/'+screen});
+      // The live GA4 web stream counts browser history pageviews automatically.
+      // This event also covers screens such as Account that keep the same URL.
+      window.gtag('event','portal_screen',{screen_name:screen,page_title:screen,page_location:locationForReport});
     }
   };
   window.buildPlaySyncAnalyticsIdentity();

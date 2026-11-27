@@ -6,12 +6,12 @@ import path from 'node:path';
 const controller = readFileSync(path.join(__dirname, '../../../static/analytics.js'), 'utf8')
   .replace("location.hostname !== 'buildplay.fun'", 'false');
 const tag = 'https://www.googletagmanager.com/gtag/js?id=G-6CCXZQYVE7';
-const fixture = '<button onclick="this.textContent=\'Moved\'">Move</button><script src="/static/analytics.js?v=4"></script>';
+const fixture = '<button onclick="this.textContent=\'Moved\'">Move</button><script src="/static/analytics.js?v=5"></script>';
 
 test.beforeEach(async ({page, baseURL}) => {
   if (!baseURL || !['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname)) throw new Error('Requires a loopback origin');
   await page.route('**/analytics-fixture', route => route.fulfill({contentType:'text/html', body:fixture}));
-  await page.route('**/static/analytics.js?v=4', route => route.fulfill({contentType:'text/javascript', body:controller}));
+  await page.route('**/static/analytics.js?v=5', route => route.fulfill({contentType:'text/javascript', body:controller}));
 });
 
 test('input works while the Google tag is loading and while it occupies its worker', async ({page, context, baseURL}) => {
@@ -55,8 +55,8 @@ test('input works while the Google tag is loading and while it occupies its work
   expect(await page.evaluate(() => (window as any)['ga-disable-G-6CCXZQYVE7'])).toBe(true);
 });
 
-test('portal navigation sends one virtual page per signed-in screen without match URLs', async ({page, context, baseURL}) => {
-  const events: Array<[string,string]> = [];
+test('portal navigation reports signed-in screens without duplicating GA4 history pageviews', async ({page, context, baseURL}) => {
+  const events: Array<[string,string,string]> = [];
   await context.route('**/page-probe', async route => {
     events.push(JSON.parse(route.request().postData()!));
     await route.fulfill({body:'ok'});
@@ -64,9 +64,9 @@ test('portal navigation sends one virtual page per signed-in screen without matc
   await context.route(tag, route => route.fulfill({
     contentType:'text/javascript',headers:{'Access-Control-Allow-Origin':'*'},body:`
       function record(command) {
-        if (command[0] === 'event' && command[1] === 'page_view') {
+        if (command[0] === 'event') {
           const event = command[2];
-          fetch(${JSON.stringify(baseURL + '/page-probe')}, {method:'POST',body:JSON.stringify([event.page_title,event.page_location])});
+          fetch(${JSON.stringify(baseURL + '/page-probe')}, {method:'POST',body:JSON.stringify([command[1],event.page_title,event.page_location])});
         }
       }
       window.dataLayer.forEach(record);
@@ -79,10 +79,10 @@ test('portal navigation sends one virtual page per signed-in screen without matc
     (window as any).BuildPlayAnalytics.setPortalView(user,name);
   }, [id,screen]);
   await view('fixture-account','games');
-  await expect.poll(() => events).toEqual([['games',baseURL+'/portal/games']]);
+  await expect.poll(() => events).toEqual([['portal_screen','games',baseURL+'/portal/games']]);
   await view('fixture-account','games');
   await view('fixture-account','match');
-  await expect.poll(() => events).toEqual([['games',baseURL+'/portal/games'],['match',baseURL+'/portal/match']]);
+  await expect.poll(() => events).toEqual([['portal_screen','games',baseURL+'/portal/games'],['portal_screen','match',baseURL+'/portal/match']]);
   await view(null,'account');
   expect(await page.evaluate(() => (window as any)['ga-disable-G-6CCXZQYVE7'])).toBe(true);
 });
