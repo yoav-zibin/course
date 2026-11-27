@@ -1,5 +1,6 @@
 package com.buildplay.legacyportal
 
+import android.app.Activity
 import android.content.Context
 import android.os.Bundle
 import androidx.annotation.Keep
@@ -8,7 +9,7 @@ import com.google.firebase.analytics.FirebaseAnalytics
 
 /** Called serially on the Analytics Worklet. The SDK handles its own uploads. */
 @Keep
-internal class AnalyticsWorklet(private val context: Context) {
+internal class AnalyticsWorklet(private val context: Context, private val currentActivity: () -> Activity?) {
   external fun install(runtime: Long)
   private var sdk: FirebaseAnalytics? = null
   private var user: String? = null
@@ -28,7 +29,10 @@ internal class AnalyticsWorklet(private val context: Context) {
     // Development builds can omit the Firebase client configuration.
     val analytics = sdk ?: run {
       if (FirebaseApp.getApps(context).none { it.name == FirebaseApp.DEFAULT_APP_NAME }) return null
-      FirebaseAnalytics.getInstance(context).also { sdk = it }
+      val application = context.applicationContext as? PortalApplication ?: return null
+      application.initializeWithCurrentActivity(currentActivity) {
+        FirebaseAnalytics.getInstance(context)
+      }.also { sdk = it }
     }
     if (user != id) {
       analytics.setAnalyticsCollectionEnabled(true)

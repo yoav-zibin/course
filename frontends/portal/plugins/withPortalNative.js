@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { AndroidConfig, IOSConfig, withAndroidManifest, withAppBuildGradle, withDangerousMod, withPodfile, withXcodeProject } = require('expo/config-plugins');
+const { AndroidConfig, IOSConfig, withAndroidManifest, withAppBuildGradle, withDangerousMod, withMainApplication, withPodfile, withXcodeProject } = require('expo/config-plugins');
 
 /** Preserve the former app's no-backup policy and permit an existing debug key. */
 module.exports = function withPortalNative(config) {
@@ -40,6 +40,16 @@ module.exports = function withPortalNative(config) {
     'android.permission.ACCESS_ADSERVICES_AD_ID',
     'android.permission.ACCESS_ADSERVICES_ATTRIBUTION',
   ]);
+  config = withMainApplication(config, config => {
+    const base = 'com.buildplay.legacyportal.PortalApplication()';
+    let source = config.modResults.contents;
+    if (!source.includes(base)) {
+      source = source.replace(/(class MainApplication\s*:\s*)(?:android\.app\.)?Application\(\)/, '$1' + base);
+      if (!source.includes(base)) throw new Error('Cannot install the Portal activity lifecycle in MainApplication.');
+      config.modResults.contents = source;
+    }
+    return config;
+  });
   config = withAndroidManifest(config, config => {
     const application = config.modResults.manifest.application?.[0];
     if (application) {

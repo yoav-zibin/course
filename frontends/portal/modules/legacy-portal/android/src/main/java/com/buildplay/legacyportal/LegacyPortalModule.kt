@@ -33,7 +33,7 @@ class LegacyPortalModule : Module() {
       val context = appContext.reactContext as? ReactApplicationContext ?: error("No React context")
       val pointer = context.javaScriptContextHolder?.get() ?: 0L
       check(pointer != 0L) { "The JavaScript runtime is unavailable" }
-      AnalyticsWorklet(context.applicationContext).install(pointer)
+      AnalyticsWorklet(context.applicationContext) { appContext.currentActivity }.install(pointer)
     }
 
     AsyncFunction("protectBugControlGesture") { viewTag: Int ->

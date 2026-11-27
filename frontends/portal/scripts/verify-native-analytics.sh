@@ -106,6 +106,7 @@ while True:
     time.sleep(.5)
 # Only retain the two fixture labels and SDK error codes from the device log.
 summary = {'screens': received, 'rejected': bool(rejected),
+           'rejectedInBackground': any('background' in m.lower() or 'not active' in m.lower() for m in rejected),
            'appleMessageCodes': sorted(set(re.findall(r'I-ACS\d+', messages))),
            'logLines': len(messages.splitlines())}
 output.with_name('analytics-sdk.json').write_text(json.dumps(summary, indent=2) + '\n')
