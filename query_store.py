@@ -500,7 +500,8 @@ class QueryStore:
                     row = json.loads(data["json"])
                     if row["status"] == "ongoing" or (
                         row["status"] == "over" and (
-                            data.get("move_count", 0) or row.get("initial_turn_player_indices") is not None
+                            data.get("move_count", 0) or row.get("initial_state") is not None
+                            or row.get("initial_turn_player_indices") is not None
                             or row.get("end_reason") == "finished"
                         )
                     ):

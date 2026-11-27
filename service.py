@@ -4800,7 +4800,8 @@ class GamePlatform:
             for match in store.list_matches_involving(user_id):
                 if match.status == "ongoing" or (
                     match.status == "over" and (
-                        match.moves or match.initial_turn_player_indices is not None
+                        match.moves or match.initial_state is not None
+                        or match.initial_turn_player_indices is not None
                         or match.end_reason == "finished"
                     )
                 ):

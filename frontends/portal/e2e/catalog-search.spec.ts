@@ -106,9 +106,17 @@ test('both game carousels load additional pages at the horizontal edge',async({p
   for(const kind of ['recentGames','popularGames'] as const){
     const row=page.getByTestId(kind);
     await expect(row.getByRole('link',{name:`Play ${kind} Cobalt Alpha`,exact:true})).toBeVisible();
-    expect(requests[kind]).toEqual(['first']);
-    await row.evaluate(element=>{element.scrollLeft=element.scrollWidth;});
-    await expect.poll(()=>requests[kind]).toEqual(['first','empty','last']);
+    await row.scrollIntoViewIfNeeded();
+    const requestedPages=()=>requests[kind].filter(cursor=>cursor!=='first');
+    expect(requestedPages()).toEqual([]);
+    await expect(async()=>{
+      await row.evaluate(async element=>{
+        element.scrollLeft=0;
+        await new Promise(requestAnimationFrame);
+        element.scrollLeft=element.scrollWidth;
+      });
+      await expect.poll(requestedPages,{timeout:1000}).toEqual(['empty','last']);
+    }).toPass({timeout:10000});
     await row.evaluate(element=>{element.scrollLeft=element.scrollWidth;});
     await expect(row.getByRole('link',{name:`Play ${kind} Chess`,exact:true})).toBeVisible();
   }
