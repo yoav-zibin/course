@@ -32,6 +32,7 @@ function renderAdminIdentity() {
       try {
         const response = await fetch("/auth/admin-session", {method: "DELETE", credentials: "same-origin", cache: "no-store"});
         if (!response.ok) throw new Error("admin_signout_failed");
+        window.BuildPlayAnalytics?.clearUser();
         window.google?.accounts?.id?.disableAutoSelect();
         location.replace(signInUrl());
       } catch {
@@ -54,6 +55,7 @@ async function loadAdminIdentity() {
     const session = await response.json();
     if (!session.signed_in) {location.replace(signInUrl()); return;}
     administrator = session.user;
+    window.BuildPlayAnalytics?.trackSession(session);
   } catch {sessionError = "load";}
   finally {sessionLoading = false; renderAdminIdentity();}
 }
