@@ -28,14 +28,17 @@ export function createPersistentStorage(fallback: StorageFallback, native: Persi
     if (typeof value !== 'string') throw new Error('Saved native data has an invalid format');
     return value;
   });
-  // Only cache the small installation metadata needed by every request.
-  // Successful reads include missing values. Failed reads are retried.
+  // Sync and a foreground move can request the same account snapshot together.
+  // Share that in-flight read. After it settles, only installation metadata
+  // stays cached, so a later account read sees changes from other writers.
   const getItem = (key: string): Promise<string|null> => {
-    if(!cachedKeys.has(key))return read(key);
     const existing=cached.get(key);
     if(existing)return existing;
     const clear=()=>{if(cached.get(key)===result)cached.delete(key);};
-    const result=read(key).catch(error=>{clear();throw error;});
+    const result=read(key).then(value=>{
+      if(!cachedKeys.has(key))clear();
+      return value;
+    },error=>{clear();throw error;});
     cached.set(key,result);
     return result;
   };

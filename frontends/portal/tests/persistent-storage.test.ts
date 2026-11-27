@@ -69,3 +69,15 @@ test('a write queued behind an active native read owns the final value',async()=
   assert.equal(await read,'first');await write;
   assert.equal(f.values.get('current'),'latest');
 });
+test('concurrent account reads share a snapshot until a write or read completion',async()=>{
+  const f=fixture(),key='account';f.values.set(key,'first');
+  let calls=0;
+  f.native.getPersistentItem=async item=>{calls++;return f.values.get(item)??null;};
+  const first=f.adapter.getItem(key),same=f.adapter.getItem(key);
+  const write=f.adapter.setItem(key,'second'),after=f.adapter.getItem(key);
+  assert.deepEqual(await Promise.all([first,same,write,after]),['first','first',undefined,'second']);
+  assert.equal(calls,2);
+  f.values.set(key,'external update');
+  assert.equal(await f.adapter.getItem(key),'external update');
+  assert.equal(calls,3);
+});

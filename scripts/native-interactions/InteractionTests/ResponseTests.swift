@@ -43,29 +43,37 @@ final class ResponseTests: XCTestCase {
         let board = canvas.waitForExistence(timeout:10) ? canvas : element("game-stage")
         XCTAssertTrue(board.waitForExistence(timeout:25),app.debugDescription)
         Thread.sleep(forTimeInterval:1.4)
-        if data.instruments==true {
-            var request=URLRequest(url:try XCTUnwrap(URL(string:"http://127.0.0.1:18766/ready")))
-            request.httpMethod="POST";request.timeoutInterval=120
-            let ready=expectation(description:"Profiler attached to the warm app")
-            URLSession.shared.dataTask(with:request){_,response,error in
-                XCTAssertNil(error);XCTAssertEqual((response as? HTTPURLResponse)?.statusCode,200);ready.fulfill()
-            }.resume()
-            wait(for:[ready],timeout:125)
-        }
         func coordinate(_ point:Point, lift:CGFloat = 0) -> XCUICoordinate {
             let f=board.frame, b=scenario.bounds, s=min(f.width/b.width,f.height/b.height)
             let x=f.midX+(point.x-b.x-b.width/2)*s, y=f.midY+(point.y-b.y-b.height/2)*s
             return app.coordinate(withNormalizedOffset:.zero).withOffset(CGVector(dx:x-app.frame.minX,dy:y-app.frame.minY+(lift>0 ? min(54,lift*s*0.6+22,f.height/3):0)))
         }
-        if data.rapid==true {
+        if data.rapid==true || data.instruments==true {
             let paths=try scenario.actions.map { action in
                 (action.id,coordinate(try XCTUnwrap(action.at)).screenPoint,coordinate(try XCTUnwrap(action.to),lift:action.lift ?? 0).screenPoint)
             }
             XCTAssertEqual(paths.count,2)
+            if data.instruments==true {
+                // Resolve the accessibility tree before profiling. Public drag
+                // calls can request a new snapshot while the board is updating.
+                for action in scenario.actions {
+                    if let die=action.spentDie {
+                        let p=coordinate(die).screenPoint
+                        print("RESPONSE_DIE \(name) \(action.id) \(p.x) \(p.y)")
+                    }
+                }
+                var request=URLRequest(url:try XCTUnwrap(URL(string:"http://127.0.0.1:18766/ready")))
+                request.httpMethod="POST";request.timeoutInterval=140
+                let ready=expectation(description:"Profiler ready for checker input")
+                URLSession.shared.dataTask(with:request){_,response,error in
+                    XCTAssertNil(error);XCTAssertEqual((response as? HTTPURLResponse)?.statusCode,200);ready.fulfill()
+                }.resume()
+                wait(for:[ready],timeout:145)
+            }
             let end=expectation(description:"UIKit delivered both drags")
             let pair="RESPONSE_PAIR \(name) \(paths[0].0) \(paths[1].0)"
             print("\(pair) begin \(Date().timeIntervalSince1970*1000)")
-            BPPerformCheckerDrags(paths[0].1,paths[0].2,paths[1].1,paths[1].2) { ok,error in
+            BPPerformCheckerDrags(paths[0].1,paths[0].2,paths[1].1,paths[1].2,data.rapid==true ? 0.06 : 2.5) { ok,error in
                 XCTAssertTrue(ok,error?.localizedDescription ?? "XCTest could not inject the two drags")
                 end.fulfill()
             }

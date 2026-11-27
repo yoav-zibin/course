@@ -92,6 +92,9 @@ jobs:
           set -euo pipefail
           base="$RUNNER_TEMP/interaction"
           benchmark=scripts/native-interactions/ios.sh
+          if [[ "$SCENARIO" == responses-checkers-instruments ]]; then
+            sudo -n /usr/sbin/DevToolsSecurity -enable
+          fi
           if [[ "$SCENARIO" == startup* || "$SCENARIO" == responses-checkers-instruments ]]; then
             export EXPO_PUBLIC_API_URL=http://localhost:18764
             benchmark=scripts/native-interactions/ios-startup.sh

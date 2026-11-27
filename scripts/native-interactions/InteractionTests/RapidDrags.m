@@ -26,6 +26,7 @@ static id checkerPath(Class pathClass, CGPoint from, CGPoint to, NSTimeInterval 
 }
 
 void BPPerformCheckerDrags(CGPoint firstStart, CGPoint firstEnd, CGPoint secondStart, CGPoint secondEnd,
+                           NSTimeInterval gap,
                            void (^completion)(BOOL, NSError *)) {
   Class pathClass=NSClassFromString(@"XCPointerEventPath"),recordClass=NSClassFromString(@"XCSynthesizedEventRecord");
   XCUIDevice *device=XCUIDevice.sharedDevice;
@@ -42,6 +43,6 @@ void BPPerformCheckerDrags(CGPoint firstStart, CGPoint firstEnd, CGPoint secondS
   }
   id record=[[recordClass alloc] initWithName:@"Two checker moves" interfaceOrientation:UIInterfaceOrientationPortrait];
   [record addPointerEventPath:checkerPath(pathClass,firstStart,firstEnd,0)];
-  [record addPointerEventPath:checkerPath(pathClass,secondStart,secondEnd,.59)];
+  [record addPointerEventPath:checkerPath(pathClass,secondStart,secondEnd,.53+gap)];
   [synth synthesizeEvent:record completion:completion];
 }
