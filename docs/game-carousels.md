@@ -24,8 +24,10 @@ Keep Chess, Backgammon, and Connect Four in the first three Board & Strategy
 Games positions. When several games serve a recognizable audience and would
 be hard to discover in the existing rows, consider adding a category before
 Miscellaneous. Compare the full published catalog with the manifest before
-pushing an update. The weekly Catalog carousel review action writes the current
-review prompt and uncategorized titles to a single GitHub issue.
+pushing an update. The BuildPlay VM runs the weekly review every Monday at
+09:00 UTC. It compares the live catalog with the manifest on `main` and writes
+the review prompt and uncategorized titles to a single GitHub issue. The
+scheduled command is `python3 catalog-carousel-review.py --publish`.
 
 The Portal loads each public category from `/v2/games/carousels/{category}`. Its
 VM keeps playable game summaries and ordered carousel IDs in memory. Writes
