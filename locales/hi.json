@@ -22,6 +22,7 @@
   "error.wrong_code": "गलत कोड",
   "error.published_game_unavailable": "प्रकाशित गेम अब उपलब्ध नहीं है",
   "error.game_not_found": "गेम नहीं मिला",
+  "error.game_category_not_found": "खेल की श्रेणी नहीं मिली",
   "error.game_id_not_found": "id {game_id} वाला कोई गेम नहीं है",
   "error.game_version_not_found": "गेम का संस्करण नहीं मिला",
   "error.game_deleted": "गेम हटा दिया गया है",

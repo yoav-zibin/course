@@ -22,6 +22,7 @@
   "error.wrong_code": "código incorrecto",
   "error.published_game_unavailable": "el juego publicado ya no está disponible",
   "error.game_not_found": "juego no encontrado",
+  "error.game_category_not_found": "categoría de juegos no encontrada",
   "error.game_id_not_found": "no hay ningún juego con el id {game_id}",
   "error.game_version_not_found": "versión del juego no encontrada",
   "error.game_deleted": "el juego ha sido eliminado",

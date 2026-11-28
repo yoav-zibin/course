@@ -12,7 +12,7 @@ Prefer comparable plays, active players, or tournaments on the same platform
 and in the same time window. For titles with limited data, use public releases
 of the same game or gaming family and documented reach as rough signals. Keep
 close calls stable. The initial ordering used online reach and editorial
-estimates for smaller titles, using sources such as these:
+estimates for smaller titles. The sources below informed the initial order.
 
 - [Chess.com 2025 year in review](https://www.chess.com/article/view/year-in-review-2025)
 - [Board Game Arena 2025 plays and tournaments](https://en.boardgamearena.com/news?id=1025)

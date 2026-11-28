@@ -22,6 +22,7 @@
   "error.wrong_code": "验证码错误",
   "error.published_game_unavailable": "已发布的游戏已不可用",
   "error.game_not_found": "找不到该游戏",
+  "error.game_category_not_found": "找不到该游戏分类",
   "error.game_id_not_found": "没有 id 为 {game_id} 的游戏",
   "error.game_version_not_found": "找不到该游戏版本",
   "error.game_deleted": "该游戏已被删除",

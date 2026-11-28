@@ -22,6 +22,7 @@
   "error.wrong_code": "falscher Code",
   "error.published_game_unavailable": "das veröffentlichte Spiel ist nicht mehr verfügbar",
   "error.game_not_found": "Spiel nicht gefunden",
+  "error.game_category_not_found": "Spielkategorie nicht gefunden",
   "error.game_id_not_found": "kein Spiel mit der ID {game_id}",
   "error.game_version_not_found": "Spielversion nicht gefunden",
   "error.game_deleted": "das Spiel wurde gelöscht",
