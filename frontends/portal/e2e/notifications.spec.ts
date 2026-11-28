@@ -182,14 +182,21 @@ test('first confirmed turn handoff asks once and profile controls register and d
   const alice=await createUser(request,uniqueName('Notification player')),bob=await createUser(request,uniqueName('Other player'));
   const match=await createMatch(request,bob,await createGame(request,uniqueName('Consent game')));await acceptInvite(request,bob,alice,match.id);
   await fakeWebPush(page);await loginAs(page,alice);await page.goto(`/portal#match=${match.id}`);
-  await page.getByRole('button',{name:'Cell 1',exact:true}).click();
+  const playCell=async(name:string)=>{
+    const [response]=await Promise.all([
+      page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/matches/${match.id}/moves`),
+      page.getByRole('button',{name,exact:true}).click(),
+    ]);
+    expect(response.ok(),await response.text()).toBeTruthy();
+  };
+  await playCell('Cell 1');
   await ensureMatchMenuOpen(page);
   await expect(page.getByRole('heading',{name:'Know when it’s your turn',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>(window as any).__notificationPrompts)).toBe(0);
   await page.getByRole('button',{name:'Not now',exact:true}).click();
   await ensureMatchMenuClosed(page);
   const moved=await request.post(`/matches/${match.id}/moves`,{headers:headers(bob),data:{move:{cell:3},expected_move_count:1}});expect(moved.ok()).toBeTruthy();
-  await page.getByRole('button',{name:'Cell 2',exact:true}).click();
+  await playCell('Cell 2');
   await expect(page.getByRole('heading',{name:'Know when it’s your turn',exact:true})).toHaveCount(0);
   await ensureMatchMenuOpen(page);
   await page.getByRole('button',{name:'Account menu',exact:true}).click();

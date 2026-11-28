@@ -293,10 +293,14 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       while(alive.current&&motionUntil.current>Date.now())
         await new Promise(resolve=>setTimeout(resolve,Math.min(motionUntil.current-Date.now(),10000)));
     };
-    // History can arrive after the current authoritative board is playable.
-    // Refresh its presentation without briefly disabling controls or cancelling
-    // a held piece. A rejected submission must still use the normal re-arm path.
-    const authorityJSON=(value:StateMessage)=>JSON.stringify({...value,presentation_history:undefined});
+    // History and player profiles can arrive after the board is playable.
+    // Refresh their presentation without cancelling input on the current turn.
+    // A rejected submission must still use the normal re-arm path.
+    const authorityJSON=(value:StateMessage)=>JSON.stringify({
+      ...value,
+      presentation_history:undefined,
+      players:Array.isArray(value.players)?value.players.map(player=>({...player,name:undefined,picture_url:undefined})):value.players,
+    });
     if(!sent.current&&latest.current&&authorityJSON(incoming)===authorityJSON(latest.current)){
       const atRevision=revision.current;
       queue.current=queue.current.catch(()=>{}).then(async()=>{

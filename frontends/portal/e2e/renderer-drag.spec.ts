@@ -74,13 +74,15 @@ test('a genuine authoritative change cancels a held touch without submitting a s
   expect(await page.evaluate(()=>(window as any).__moves)).toEqual([]);
 });
 
-test('late history enrichment keeps current controls enabled and preserves a held drag',async({page,request,isMobile})=>{
+test('late history and player profiles keep controls enabled and preserve a held drag',async({page,request,isMobile})=>{
   const pkg=spec(`const gameUI={reduce(m){const s=m.type==='ui_event'?m.state_changed:m;return {scene:{
     pieces:[{id:'token',type:'token',board:'board',position:{cell:'0'},actions:['move'],move_targets:['destination'],aria_label:'Source token'}],
     targets:[{id:'destination',board:'board',position:{cell:'12'},label:'Bottom destination'}],
-    labels:[{id:'history',x:220,y:20,text:'History entries '+(s.presentation_history||[]).length}]},
+    labels:[{id:'history',x:220,y:20,text:'History entries '+(s.presentation_history||[]).length},
+      {id:'player',x:220,y:40,text:s.players[0].name}]},
     ...(m.type==='ui_event'?{make_move:m.event}:{})}}};`);
-  await mount(page,request,pkg);
+  const player={player_index:0,player_id:'p0',kind:'human',name:'Player 1',picture_url:''};
+  await mount(page,request,pkg,state({players:[player]}));
   const source=page.getByRole('button',{name:'Source token: Move',exact:true});await expect(source).toBeEnabled();
   await page.evaluate(()=>{
     (window as any).__historyDisabled=false;
@@ -90,7 +92,7 @@ test('late history enrichment keeps current controls enabled and preserves a hel
     }).observe(document.body,{subtree:true,attributes:true,attributeFilter:['aria-disabled']});
   });
   const history=[{move_count:0,view:{},last_move_player_index:null}];
-  await page.evaluate(message=>window.postMessage(message,'*'),state({presentation_history:history}));
+  await page.evaluate(message=>window.postMessage(message,'*'),state({presentation_history:history,players:[player]}));
   await expect(page.getByText('History entries 1',{exact:true})).toBeVisible();
   expect(await page.evaluate(()=>(window as any).__historyDisabled)).toBe(false);
   const box=(await source.locator('ellipse').first().boundingBox())!;
@@ -104,8 +106,10 @@ test('late history enrichment keeps current controls enabled and preserves a hel
     await page.mouse.move(start.x+30,start.y+30,{steps:3});
   }
   const held=page.getByTestId('dragged-piece');await expect(held).toHaveCount(1);
-  await page.evaluate(message=>window.postMessage(message,'*'),state({presentation_history:[...history,{move_count:0,view:{accepted:true},last_move_player_index:null}]}));
-  await expect(page.getByText('History entries 2',{exact:true})).toBeVisible();
+  await page.evaluate(message=>window.postMessage(message,'*'),state({
+    presentation_history:history,players:[{...player,name:'Alice',picture_url:'/alice.png'}],
+  }));
+  await expect(page.getByText('Alice',{exact:true})).toBeVisible();
   await expect(held).toHaveCount(1);
   const destination=(await page.getByRole('button',{name:'Bottom destination',exact:true}).locator('rect').boundingBox())!;
   if(cdp){
