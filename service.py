@@ -5071,33 +5071,36 @@ class GamePlatform:
             ) for item in user.notifications
         )
 
-    def list_notifications(self, *, caller_id: str, limit: int = 20,
+    def list_notifications(self, *, caller: User, limit: int = 20,
                            cursor: str | None = None) -> dict[str, Any]:
-        """Unread updates, newest per match, independent of push permission."""
-        with self._lock:
-            user = self._require_user(caller_id)
-            entries = self._notification_entries(user, include_read=False)
-            start = 0
-            if cursor is not None:
-                index = next((i for i, item in enumerate(entries) if item.id == cursor), None)
-                if index is None:
-                    raise InvalidRequestError("invalid notification cursor")
-                start = index + 1
-            seen: set[str] = set()
-            unread = []
-            for index, item in enumerate(entries):
-                group = item.match_id or item.id
-                if item.read_at is not None or group in seen:
-                    continue
-                seen.add(group)
-                unread.append((index, item))
-            available = [item for index, item in unread if index >= start]
-            page = available[:limit]
-            return {
-                "items": page,
-                "next_cursor": page[-1].id if page and len(available) > len(page) else None,
-                "unread_count": len(unread),
-            }
+        """Unread updates, newest per match, from the fresh authenticated account."""
+        entries = caller.notifications
+        if any(item.match_id is None and item.read_at is None for item in entries):
+            # Resolve historical links and read their inbox in the same transaction.
+            with self._lock:
+                user = self._require_user(caller.id)
+                entries = self._notification_entries(user, include_read=False)
+        start = 0
+        if cursor is not None:
+            index = next((i for i, item in enumerate(entries) if item.id == cursor), None)
+            if index is None:
+                raise InvalidRequestError("invalid notification cursor")
+            start = index + 1
+        seen: set[str] = set()
+        unread = []
+        for index, item in enumerate(entries):
+            group = item.match_id or item.id
+            if item.read_at is not None or group in seen:
+                continue
+            seen.add(group)
+            unread.append((index, item))
+        available = [item for index, item in unread if index >= start]
+        page = available[:limit]
+        return {
+            "items": page,
+            "next_cursor": page[-1].id if page and len(available) > len(page) else None,
+            "unread_count": len(unread),
+        }
 
     def read_notification(self, *, caller_id: str, notification_id: str) -> tuple[UserNotification, tuple[str, ...]]:
         with self._lock:

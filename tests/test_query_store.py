@@ -72,10 +72,17 @@ def test_notification_inbox_rolls_back_and_reloads_without_collection_queries(st
     with store.atomic():
         platform._notify_match_event("notify.turn", match=match,
                                      recipient_ids=[bob], tag_suffix="turn")
-    cold.clear_cache()
+    assert cold.get_user(bob).notifications == ()
     api.client.app.state.platform = ScalablePlatform(store=cold)
     with patch.object(cold, "_query", side_effect=AssertionError("inbox queried a collection")):
-        page = api.ok("GET", "/users/me/notifications", as_user=bob)
+        rpc = cold.client._firestore_api
+        with (
+            patch.object(rpc, "batch_get_documents", wraps=rpc.batch_get_documents) as read_docs,
+            patch.object(rpc, "begin_transaction", wraps=rpc.begin_transaction) as begin,
+        ):
+            page = api.ok("GET", "/users/me/notifications", as_user=bob)
+            read_docs.assert_called_once()
+            begin.assert_called_once()
         assert page["unread_count"] == 1
         entry, = page["items"]
         assert entry["event"] == "turn"
@@ -103,6 +110,9 @@ def test_notification_opt_out_history_and_directed_invites_survive_query_merge(s
     assert cold.get_user(alice).notifications[0].event == "invite_request"
     assert cold.get_user(bob).notifications == ()
     assert cold.get_invite(invite.token).recipient_user_id == alice
+    page = api.ok("GET", "/users/me/notifications", as_user=bob)
+    assert page["items"][0]["match_id"] == match
+    assert page == api.ok("GET", "/users/me/notifications", as_user=alice)
 
 
 def test_native_delivery_receipt_survives_restart_and_removes_invalid_token(store, monkeypatch):

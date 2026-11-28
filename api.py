@@ -32,7 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from game_platform.invariants import InvariantRequest, InvariantReport, check_invariants
 from game_platform import i18n, observability
 from game_platform.game_input_metrics import game_input_metrics
-from game_platform.models import Match, MatchStatus
+from game_platform.models import Match, MatchStatus, User
 from game_platform.schemas import (
     BatchSubRequest,
     BatchSubResponse,
@@ -128,12 +128,20 @@ def _get_platform(request: Request) -> GamePlatform:
 Platform = Annotated[GamePlatform, Depends(_get_platform)]
 
 
+def _get_authenticated_user(
+    platform: Platform,
+    x_user_id: Annotated[str | None, Header()] = None,
+    x_user_password: Annotated[str | None, Header()] = None,
+) -> User:
+    return platform.authenticate(user_id=x_user_id, password=x_user_password)
+
+
 def _get_caller_id(
     platform: Platform,
     x_user_id: Annotated[str | None, Header()] = None,
     x_user_password: Annotated[str | None, Header()] = None,
 ) -> str:
-    return platform.authenticate(user_id=x_user_id, password=x_user_password).id
+    return _get_authenticated_user(platform, x_user_id, x_user_password).id
 
 
 CallerId = Annotated[str, Depends(_get_caller_id)]
@@ -536,11 +544,11 @@ def cancel_account_deletion(platform: Platform, caller_id: CallerId) -> UserOut:
 
 @router.get("/users/me/notifications")
 def list_notifications(
-    platform: Platform, caller_id: CallerId,
+    platform: Platform, caller: Annotated[User, Depends(_get_authenticated_user)],
     limit: Annotated[int, Field(ge=1, le=100)] = 20,
     cursor: Annotated[str | None, Field(max_length=200)] = None,
 ) -> NotificationsOut:
-    page = platform.list_notifications(caller_id=caller_id, limit=limit, cursor=cursor)
+    page = platform.list_notifications(caller=caller, limit=limit, cursor=cursor)
     return NotificationsOut(
         items=[UserNotificationOut.of(item) for item in page["items"]],
         next_cursor=page["next_cursor"], unread_count=page["unread_count"],
