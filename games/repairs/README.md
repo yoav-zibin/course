@@ -9,6 +9,7 @@ changed source for games whose full packages are maintained in the catalog.
 | Sittuyin | 4 | `05029c9d-c266-426e-b96c-b6dac311d90c` |
 | Uno | 5 | `b167b753-0bde-4ce8-960b-063b658bcce4` |
 | Checkers | 3 | `04aad4ba-8cf6-4dd5-8d65-9dead4dab5ee` |
+| Checkers fade | 4 | `04aad4ba-8cf6-4dd5-8d65-9dead4dab5ee` |
 | Tic-Tac-Toe | 4 | `3a3c1981-77a3-4fc4-83c5-a37ff604c240` |
 
 To reproduce a repair, export the base package and write

@@ -8,7 +8,7 @@ import {performInviteShare,type InviteShareChannel} from '../core/invite-sharing
 import {GameRenderer} from '../game/GameRenderer';
 import {preparePresentationRuntime} from '../game/preparePresentationResponse';
 import {BACKGAMMON_GAME_ID,backgammonMatchPresentation} from '../game/backgammonMatchPresentation';
-import {CHECKERS_GAME_ID,CHESS_GAME_ID,checkersMatchPresentation,chessMatchPresentation,fillsMatchLandscape} from '../game/matchBoardLayout';
+import {CHECKERS_GAME_ID,CHESS_GAME_ID,CONNECT_FOUR_GAME_ID,checkersMatchPresentation,chessMatchPresentation,connectFourMatchPresentation,fillsMatchLandscape} from '../game/matchBoardLayout';
 import {Button,Card,Copy,Dialog,Empty,Notice,Row,Title,colors} from './components';
 import {text,useApp} from './context';
 import {reportClientIssue} from '../core/reporting';
@@ -47,7 +47,8 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
   const checkersDrag=checkers&&game?.declarative_ui?.ui_code?.includes("checkers-drop-");
   const chessDrag=match.game_id===CHESS_GAME_ID&&game?.declarative_ui?.ui_code?.includes("chess-drop-");
   const boardPresentation=backgammon?backgammonMatchPresentation:
-    match.game_id===CHESS_GAME_ID?chessMatchPresentation(fillBoard):checkers?checkersMatchPresentation:undefined;
+    match.game_id===CHESS_GAME_ID?chessMatchPresentation(fillBoard):checkers?checkersMatchPresentation:
+    match.game_id===CONNECT_FOUR_GAME_ID?connectFourMatchPresentation:undefined;
   const hasInstructions=Boolean(game&&(game.tutorial_text||game.game_logic_rules||game.game_ui_rules));
   const sharingScope=JSON.stringify([p.baseUrl,p.account?.id,match.id]),currentSharingScope=useRef(sharingScope);currentSharingScope.current=sharingScope;
   const [confirm,setConfirm]=useState(''),[rendererError,setRendererError]=useState('');

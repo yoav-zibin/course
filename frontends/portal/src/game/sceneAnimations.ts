@@ -6,9 +6,9 @@ export type SceneTrack = {from:Transform;to:Transform;duration:number;delay:numb
 
 // Explicit animations also cover accepted own moves, while reloads and jumps
 // settle immediately. Local UI interactions are checked by the host separately.
-export function animateSceneUpdate(previous:StateMessage|null,next:StateMessage):boolean {
+export function animateSceneUpdate(previous:StateMessage|null,next:StateMessage,publicView=false):boolean {
   return !!previous && Number.isSafeInteger(previous.move_count) && next.move_count===previous.move_count!+1
-    && (previous.my_player_index??null)===(next.my_player_index??null)
+    && (publicView||(previous.my_player_index??null)===(next.my_player_index??null))
     && !!previous.replay===!!next.replay;
 }
 

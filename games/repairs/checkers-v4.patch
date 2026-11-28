@@ -1,0 +1,18 @@
+--- a/ui.js
++++ b/ui.js
+@@ -325,0 +326,15 @@
++    const last = (state.view || state.state)?.lastMove;
++    if (!event && last?.from && last?.to && state.move_count > 0) {
++      const piece = frame.scene.pieces.find(item => item.position.cell === cell(last.to));
++      if (piece) {
++        const sourceId = 'piece_' + last.from.r + '_' + last.from.c;
++        frame.timeline = {
++          key:'checkers-move-' + state.move_count,
++          steps:[
++            [{piece_id:sourceId,exit:true,duration_ms:300},
++             {piece_id:piece.id,from:{opacity:0},to:{opacity:0},duration_ms:300}],
++            [{piece_id:piece.id,from:{opacity:0},duration_ms:300}],
++          ],
++        };
++      }
++    }

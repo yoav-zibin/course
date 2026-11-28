@@ -46,6 +46,7 @@ test('suppressed initial/reduced-motion keys are consumed and duplicates do not 
 test('explicit accepted transitions allow own actors but skip remounts, jumps, reversals and viewer changes',()=>{
   assert.equal(animateSceneUpdate(message(1),message(2)),true);
   assert.equal(animateSceneUpdate(message(1),message(2,{last_move_player_index:1})),true);
+  assert.equal(animateSceneUpdate(message(1),message(2,{my_player_index:1}),true),true);
   for(const previous of [null,message(0),message(2),message(3),message(1,{my_player_index:1}),message(1,{replay:{index:1}})])
     assert.equal(animateSceneUpdate(previous,message(2)),false);
 });

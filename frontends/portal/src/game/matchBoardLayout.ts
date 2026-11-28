@@ -1,6 +1,7 @@
 import type {GameRendererProps} from './GameRenderer';
 import {BACKGAMMON_GAME_ID} from './backgammonMatchPresentation';
 
+export const CONNECT_FOUR_GAME_ID='e299b14e-480d-44f3-8132-74282a46cebc';
 export const CHECKERS_GAME_ID='04aad4ba-8cf6-4dd5-8d65-9dead4dab5ee';
 export const CHESS_GAME_ID='5ceeb4a4-da2f-4218-884e-d485968d9c78';
 
@@ -15,7 +16,7 @@ const chessPresentation:NonNullable<GameRendererProps['boardPresentation']>={
       controls:scene.controls?.filter(control=>control.label!==(strings?.text_20||'Resign'))};
   },
   showSelectionFooter:false,
-  motion:{animate_own:true},
+  animateOwnPaths:true,
 };
 const chessLandscapePresentation={...chessPresentation,visibleBoard:()=>true};
 export const chessMatchPresentation=(landscape:boolean)=>landscape?chessLandscapePresentation:chessPresentation;
@@ -23,4 +24,9 @@ export const chessMatchPresentation=(landscape:boolean)=>landscape?chessLandscap
 export const checkersMatchPresentation:NonNullable<GameRendererProps['boardPresentation']>={
   presentScene:scene=>({...scene,labels:[]}),
   showSelectionFooter:false,
+};
+
+export const connectFourMatchPresentation:NonNullable<GameRendererProps['boardPresentation']>={
+  presentScene:scene=>scene,
+  animateOwnPaths:true,
 };

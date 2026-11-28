@@ -37,6 +37,7 @@ export type GameRendererProps = {
     visibleBoard?: (board: Board) => boolean;
     presentScene: (scene: Scene, message: StateMessage) => Scene;
     showSelectionFooter?: boolean;
+    animateOwnPaths?: boolean;
     motion?: Partial<Motion>;
   };
   frameHeight?: number;
@@ -219,15 +220,15 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     let timelineGhosts:Piece[]=[];
     let timelineDuration:number|undefined;
     let animate = explicit
-      ? !!tracks?.size && (stateChange?animateSceneUpdate(lastPaint.current,message):!!lastPaint.current&&canMove(message,sent.current))
-      : stateChange && (animations===null?animateUpdate(lastPaint.current,message):animateLastMove(lastPaint.current,message,spec.motion?.animate_own,publicView));
+      ? !!tracks?.size && (stateChange?animateSceneUpdate(lastPaint.current,message,publicView):!!lastPaint.current&&canMove(message,sent.current))
+      : stateChange && (animations===null?animateUpdate(lastPaint.current,message):animateLastMove(lastPaint.current,message,boardPresentation?.animateOwnPaths,publicView));
     if (timeline) {
       const plan=compileTimeline(spec,reverse?raw:previous?.scene??{},reverse?previous!.scene:raw,timeline,reverse);
       const fresh=authored.timeline ? lastTimelineKey.current!==authored.timeline.key :
         authored.animations ? !!tracks?.size : true;
       const eligible=authored.last_move_animations && !authored.timeline && !authored.animations
-        ? animateLastMove(lastPaint.current,message,spec.motion?.animate_own,publicView)
-        : stateChange ? animateSceneUpdate(lastPaint.current,message) : !!lastPaint.current && canMove(message,sent.current);
+        ? animateLastMove(lastPaint.current,message,boardPresentation?.animateOwnPaths,publicView)
+        : stateChange ? animateSceneUpdate(lastPaint.current,message,publicView) : !!lastPaint.current && canMove(message,sent.current);
       animate=!!plan.tracks.size && (historyStep || (fresh && eligible));
       tracks=plan.tracks;
       explicit=true;
