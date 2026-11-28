@@ -6,6 +6,7 @@ from fastapi import HTTPException, Query, Response
 from game_platform.schemas import (
     CursorPageOut, GameSummaryOut, MatchOut, UserOut, UserWithPasswordOut, MoveOut,
 )
+from game_platform.game_catalog import game_categories
 from game_platform.move_history import history_prefix
 
 
@@ -38,6 +39,7 @@ def install(app, *, debug_tools):
         return {
             "pagination": enabled,
             "game_carousels": True,
+            "catalog_carousels": True,
             "page_size": 50,
             "max_page_size": 100,
             "search": "word-prefix" if enabled else "substring",
@@ -53,9 +55,23 @@ def install(app, *, debug_tools):
         return {"items": [GameSummaryOut.of(game) for game in result.items],
                 "next_cursor": result.next_cursor}
 
+    @app.get("/v2/games/carousels")
+    def catalog_carousels():
+        return [{"id": row.id, "title": row.title} for row in game_categories()]
+
+    @app.get("/v2/games/carousels/{category}", response_model=CursorPageOut[GameSummaryOut])
+    def category_games(platform: Platform, category: str,
+                       limit: int = Query(20, ge=1, le=100), cursor: str | None = None):
+        try:
+            result = platform.page_game_category(category, limit=limit, cursor=cursor)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"items": [GameSummaryOut.of(game, include_schemas=False) for game in result.items],
+                "next_cursor": result.next_cursor}
+
     @app.get("/v2/users/me/recent-games", response_model=CursorPageOut[GameSummaryOut])
     def recent_games(platform: Platform, caller_id: CallerId,
-                     limit: int = Query(8, ge=1, le=100), cursor: str | None = None):
+                     limit: int = Query(20, ge=1, le=100), cursor: str | None = None):
         try:
             result = platform.page_recent_games(caller_id=caller_id, limit=limit, cursor=cursor)
         except ValueError as exc:

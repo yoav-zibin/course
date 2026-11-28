@@ -233,6 +233,10 @@ class QueryStore:
         self._game_metadata_cache = ReadCache(
             max_bytes=256 * 1024 * 1024, refresh_seconds=float('inf'),
             copy_value=_copy_game_metadata)
+        self._game_catalog_cache = ReadCache(
+            max_bytes=128 * 1024 * 1024, refresh_seconds=60, copy_value=lambda value: value
+        )
+        self._game_catalog_lock = threading.Lock()
         self.translation_memory = TranslationMemory(_BundleBackend(self))
         marker = self.collection("meta").document("schema").get()
         if not marker.exists or marker.to_dict().get("version") != SCHEMA:
@@ -359,10 +363,17 @@ class QueryStore:
         end-to-end (the live demo's epoch invalidation)."""
         self._cache.clear()
         self._game_metadata_cache.clear()
+        self._invalidate_game_catalog()
+
+    def _invalidate_game_catalog(self):
+        with self._game_catalog_lock:
+            self._game_catalog_cache.clear()
 
     def _cache_committed(self, path, data):
         self._cache.put(("doc", path), data)
         kind = self._kind_for_path(path)
+        if kind == "games":
+            self._invalidate_game_catalog()
         if kind is None:
             self._cache.drop_where(lambda k: k[0] == "query")
         else:
@@ -378,6 +389,7 @@ class QueryStore:
     def close(self):
         self._cache.close()
         self._game_metadata_cache.close()
+        self._game_catalog_cache.close()
 
     def get_analytics(self, kind, identity):
         analytics_query(kind)
@@ -830,7 +842,7 @@ class QueryStore:
             )
         return rows
 
-    def _list_all(self, kind, filters=(), *, detail=True):
+    def _list_all(self, kind, filters=(), *, detail=True, fresh=False):
         """Every matching record, read in bounded pages: each Firestore query
         fetches at most LEGACY_LIMIT documents, so the store never streams a
         whole collection in one read. The decoded result is the caller's own
@@ -839,7 +851,12 @@ class QueryStore:
         seen: set[str] = set()
         after = None
         while True:
-            docs = self._query(kind, filters, limit=LEGACY_LIMIT, after=after)
+            if fresh:
+                docs = self._run_query(
+                    kind, filters, limit=LEGACY_LIMIT, after=after, transaction=None
+                )
+            else:
+                docs = self._query(kind, filters, limit=LEGACY_LIMIT, after=after)
             records.extend(
                 self._collect(kind, filters, docs, detail=detail, seen=seen)
             )
@@ -1475,6 +1492,17 @@ class QueryStore:
         if not include_unpublished:
             filters.append(("published", "==", True))
         return self._list_all("games", filters, detail=False)
+
+    def game_catalog(self):
+        from game_platform.game_catalog import GameCatalog
+
+        def build():
+            filters = [("deleted", "==", False), ("published", "==", True)]
+            return GameCatalog.build(self._list_all("games", filters, detail=False, fresh=True))
+
+        # Coalesce simultaneous first-page requests on a cold process.
+        with self._game_catalog_lock:
+            return self._game_catalog_cache.get_or_fetch("catalog", build)
 
     def list_all_game_versions(self):
         return self._list("game_versions")

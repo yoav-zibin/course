@@ -5,6 +5,7 @@ import logging
 import json
 import os
 import stat
+import threading
 from pathlib import Path
 
 import uvicorn
@@ -241,6 +242,14 @@ def main() -> None:
             )
             reporter.start()
         monitor.start()
+        if config.firestore.enabled:
+            def warm_game_catalog():
+                try:
+                    platform.game_catalog()
+                except Exception:
+                    logger.exception("Could not prewarm the game catalog")
+
+            threading.Thread(target=warm_game_catalog, name="game-catalog", daemon=True).start()
         observability.log_event(
             "server_started",
             f"serving on {config.server.host}:{config.server.port}",

@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from pydantic import JsonValue
 
+from game_platform.game_catalog import GameCatalog
 from game_platform.paging import Page, decode_cursor, encode_cursor, page_size
 
 import logging
@@ -2422,6 +2423,29 @@ class GamePlatform:
                     word in ' '.join((game.name, game.description, *game.alternative_names)).casefold()
                     for word in words)]
 
+    def game_catalog(self) -> GameCatalog:
+        cached = getattr(self._store, "game_catalog", None)
+        if cached is not None:
+            return cached()
+        read = getattr(self._store, "list_games_without_code", self._store.list_games)
+        return GameCatalog.build(self._plain_read(read))
+
+    def page_game_category(self, category: str, *, limit: int, cursor: str | None) -> Page[Game]:
+        page_size(limit)
+        scope = ["game-category", category]
+        start = int(decode_cursor(scope, cursor) or 0)
+        if start < 0:
+            raise ValueError("invalid game category cursor")
+        catalog = self.game_catalog()
+        if category not in catalog.rows:
+            raise NotFoundError("game category not found")
+        ids = catalog.rows[category]
+        end = start + limit
+        return Page(
+            [catalog.games[game_id] for game_id in ids[start:end]],
+            encode_cursor(scope, str(end)) if end < len(ids) else None,
+        )
+
     def list_popular_games(self, *, limit: int = 8) -> list[Game]:
         """Returns three featured catalog titles, followed by the persistent ranking."""
         if type(limit) is not int or not 1 <= limit <= 20:
@@ -4779,12 +4803,17 @@ class GamePlatform:
         if not user.recent_games_backfilled:
             user = self._backfill_recent_games(caller_id)
         ids = user.recent_game_ids
-        get_game = getattr(self._store, "get_game_without_code", self._store.get_game)
-        end = min(start + limit, len(ids))
-        games = self._plain_read(lambda: [
-            game for game_id in ids[start:end] if self._is_carousel_game(game := get_game(game_id))
-        ])
-        return Page(games, encode_cursor(scope, str(end)) if end < len(ids) else None)
+        if start >= len(ids):
+            return Page([])
+        catalog = self.game_catalog()
+        games = []
+        for index in range(start, len(ids)):
+            if (game := catalog.games.get(ids[index])) is None:
+                continue
+            if len(games) == limit:
+                return Page(games, encode_cursor(scope, str(index)))
+            games.append(game)
+        return Page(games)
 
     def _backfill_recent_games(self, caller_id: str) -> User:
         store = self._store

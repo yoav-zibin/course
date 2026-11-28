@@ -2,7 +2,9 @@ import {visibleErrorMessage} from '../core/account-scope';
 import {copyText,playerText} from '../platform/i18n';
 import React, {useEffect, useRef, useState} from 'react';
 import {FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, View} from 'react-native';
+import type {ViewToken} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import {categoryKey, CAROUSEL_PAGE_SIZE} from '../core';
 import type {Game, GameCarousel, Match} from '../core/types';
 import {Button, Card, Choices, Copy, Dialog, Empty, Field, Notice, Row, Title, colors} from './components';
 import {text, useApp} from './context';
@@ -24,21 +26,35 @@ function GameCard({game}: {game: Game}) {
   </Pressable><Row><Button compact onPress={()=>run(()=>openGame(game.id))}>{copyText("Play")}</Button></Row></Card>;
 }
 
+const GAME_CARD_WIDTH = 265;
+const GAME_CARD_GAP = 14;
+const gameCardLayout = (_: ArrayLike<Game> | null | undefined, index: number) =>
+  ({length: GAME_CARD_WIDTH, offset: index * (GAME_CARD_WIDTH + GAME_CARD_GAP), index});
+
 function GameCarouselRow({kind, title}: {kind: GameCarousel; title: string}) {
   const {p}=useApp();
-  if (!p[kind].length) return null;
+  const games = kind === 'recentGames' || kind === 'popularGames' ? p[kind] : p.categoryGames[kind] ?? [];
+  const loadMore = () => {void p.actions.loadMoreGames(kind).catch(()=>{});};
+  const prefetch = useRef({loadMore, index: 0});
+  prefetch.current = {loadMore, index: games.length >= CAROUSEL_PAGE_SIZE ? games.length - CAROUSEL_PAGE_SIZE / 2 - 1 : Infinity};
+  const onViewableItemsChanged = useRef(({viewableItems}: {viewableItems: ViewToken[]}) => {
+    const {index, loadMore} = prefetch.current;
+    if (viewableItems.some(item => item.index !== null && item.index >= index)) loadMore();
+  }).current;
+  const viewabilityConfig = useRef({itemVisiblePercentThreshold: 50}).current;
+  if (!games.length) return null;
   return <>
     <Title small>{title}</Title>
     <FlatList testID={kind} horizontal keyboardShouldPersistTaps="handled"
-      data={p[kind]} keyExtractor={game=>game.id}
+      data={games} keyExtractor={game=>game.id}
       renderItem={({item})=><GameCard game={item}/>}
-      ItemSeparatorComponent={GameCardSeparator}
-      onEndReachedThreshold={0.35}
-      onEndReached={()=>{void p.actions.loadMoreGames(kind).catch(()=>{});}}/>
+      ItemSeparatorComponent={GameCardSeparator} getItemLayout={gameCardLayout}
+      viewabilityConfig={viewabilityConfig} onViewableItemsChanged={onViewableItemsChanged}
+      onEndReachedThreshold={0.35} onEndReached={loadMore}/>
   </>;
 }
 
-function GameCardSeparator() {return <View style={{width:14}}/>;}
+function GameCardSeparator() {return <View style={{width:GAME_CARD_GAP}}/>;}
 
 export function Catalog() {
   const {p,run,openAccount} = useApp(), t=useText();
@@ -49,7 +65,9 @@ export function Catalog() {
     {!p.account && <Card><Title small>{t('ui.auth.welcome','Make yourself at home')}</Title><Copy muted>{t('ui.portal.login_note','Log in or continue as a guest to create and join matches.')}</Copy><Row><Button onPress={openAccount}>{t('ui.auth.log_in','Log in / continue as guest')}</Button><Copy small muted>{copyText('Your account keeps every match saved in the cloud.')}</Copy></Row></Card>}
     <GameSearch/>
     <GameCarouselRow kind="recentGames" title={t('ui.games.recent','Recently played')}/>
-    <GameCarouselRow kind="popularGames" title={t('ui.games.popular','Popular games')}/>
+    {p.gameCategories.length ? p.gameCategories.map(row =>
+      <GameCarouselRow key={row.id} kind={categoryKey(row.id)} title={t(`ui.games.category.${row.id}`,row.title)}/>)
+      : <GameCarouselRow kind="popularGames" title={t('ui.games.popular','Popular games')}/>}
     <Card><Title small>{t('ui.proposal.title','Missing a game? Propose it')}</Title><Copy muted>{t('ui.proposal.explainer','Tell us which game you would like to play here. Our AI agents will review your proposal and create the game within 24 hours.')}</Copy><Row><Button secondary onPress={()=>setProposal(true)}>{t('ui.proposal.submit','Propose a game')}</Button></Row></Card>
     <Dialog visible={proposal} title={t('ui.proposal.title','Propose a game')} onClose={()=>setProposal(false)}>
       <Field label={t('ui.proposal.name_label','Game name')} value={name} onChangeText={setName} maxLength={120}/><Field label={t('ui.proposal.description_label','Why this game?')} multiline value={description} onChangeText={setDescription} maxLength={2000}/><Field label={t('ui.proposal.rules_label','Link to the rules (optional)')} value={rules} onChangeText={setRules} autoCapitalize="none" keyboardType="url"/>
@@ -62,7 +80,7 @@ export function GameDetail() {
   const {p,run,openAccount,showSelectedMatch} = useApp(),t=useText();
   // Catalog cards already include the available player counts. A player can
   // choose a mode while the same full, version-checked package is downloading.
-  const summary=!p.selectedGame && [p.games,p.popularGames,p.savedGames,p.recentGames]
+  const summary=!p.selectedGame && [p.games,p.popularGames,p.savedGames,p.recentGames,...Object.values(p.categoryGames)]
     .map(games=>games.find(item=>item.id===p.selectedGameId)).find(item=>item?.renderer_type==='declarative'&&item.allowed_player_counts?.length);
   const game=p.selectedGame||summary||null;
   const creating=useRef(false);
@@ -185,4 +203,4 @@ export function LocalMatches() {
   </>;
 }
 
-const s=StyleSheet.create({eyebrow:{fontSize:12,letterSpacing:2,fontWeight:'700',color:colors.accent},grid:{flexDirection:'row',flexWrap:'wrap',gap:16},gameCard:{width:265,flexGrow:1,maxWidth:380,padding:18},cover:{width:'100%',height:132,borderRadius:8,backgroundColor:'#222a3d'},columns:{flexDirection:'row',flexWrap:'wrap',gap:18},column:{flex:1,minWidth:260}});
+const s=StyleSheet.create({eyebrow:{fontSize:12,letterSpacing:2,fontWeight:'700',color:colors.accent},grid:{flexDirection:'row',flexWrap:'wrap',gap:16},gameCard:{width:GAME_CARD_WIDTH,flexGrow:1,maxWidth:380,padding:18},cover:{width:'100%',height:132,borderRadius:8,backgroundColor:'#222a3d'},columns:{flexDirection:'row',flexWrap:'wrap',gap:18},column:{flex:1,minWidth:260}});

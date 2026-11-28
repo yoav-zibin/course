@@ -110,7 +110,7 @@ def test_recent_game_pages_recover_match_history_and_keep_new_plays_past_the_leg
             store.add_game_version(replace(template, id=game_id))
         store.put_user(replace(store.get_user(owner), recent_game_ids=head))
         path = '/v2/users/me/recent-games'
-        first = api.ok('GET', path, as_user=owner)
+        first = api.ok('GET', path, as_user=owner, params={'limit': 8})
         assert [game['id'] for game in first['items']] == list(head)
         assert api.request('GET', path, as_user=opponent, params={'cursor': first['next_cursor']}).status_code == 400
         tail = api.ok('GET', path, as_user=owner, params={'cursor': first['next_cursor']})
@@ -239,3 +239,60 @@ def test_translation_bundle_reuses_cached_tables_with_game_scoped_translations()
     # require neither another source read nor lookup of globally shared texts.
     prefetch.assert_not_called()
     platform._translate_for_bundle.assert_called_once_with([], "es")
+
+
+def test_carousel_pages_share_catalog_reads_and_invalidate_on_visibility_change():
+    from game_platform.game_catalog import game_categories
+
+    store = query_store()
+    api = Api(store=store)
+    try:
+        owner = api.new_user('carousel owner')
+        template = store.get_game(api.new_game(owner=owner))
+        categories = game_categories()
+        featured = categories[0].game_ids[:3]
+        # The fixture has more than one page of playable titles, with an HTML
+        # game and a retired game between them in storage order.
+        extra = tuple(f'carousel-{i:02}' for i in range(22))
+        for game_id in (*featured, *extra, 'retired'):
+            store.add_game_version(replace(template, id=game_id, name=game_id))
+        store.add_game_version(replace(template, id='html', name='HTML', import_package=None))
+        store.set_game_published('retired', False)
+        account = store.get_user(owner)
+        store.put_user(replace(
+            account, recent_games_backfilled=True,
+            recent_game_ids=('retired', *extra[:10], 'html', *extra[10:]),
+        ))
+        store.clear_cache()
+        root = '/v2/games/carousels'
+        sections = api.ok('GET', root)
+        assert sections[0]['id'] == categories[0].id
+        assert sections[-1]['title'] == 'Miscellaneous'
+        with patch.object(store, '_run_query', wraps=store._run_query) as query:
+            board = api.ok('GET', f"{root}/{categories[0].id}")
+            assert [game['id'] for game in board['items']] == list(featured)
+            first = api.ok('GET', f'{root}/miscellaneous')
+            assert len(first['items']) == 20 and first['next_cursor']
+            tail = api.ok('GET', f'{root}/miscellaneous', params={'cursor': first['next_cursor']})
+            assert len(tail['items']) == 3 and tail['next_cursor'] is None
+            listed = {g['id'] for g in first['items'] + tail['items']}
+            assert set(extra) <= listed and listed.isdisjoint({'retired', 'html', *featured})
+            assert api.request('GET', f"{root}/{categories[0].id}",
+                               params={'cursor': first['next_cursor']}).status_code == 400
+            assert api.request('GET', f'{root}/unknown').status_code == 404
+
+            recent = '/v2/users/me/recent-games'
+            first = api.ok('GET', recent, as_user=owner)
+            assert [game['id'] for game in first['items']] == list(extra[:20])
+            tail = api.ok('GET', recent, as_user=owner, params={'cursor': first['next_cursor']})
+            assert [game['id'] for game in tail['items']] == list(extra[20:])
+            assert tail['next_cursor'] is None
+            assert sum(call.args[0] == 'games' for call in query.call_args_list) == 1
+
+            store.set_game_published(featured[0], False)
+            board = api.ok('GET', f"{root}/{categories[0].id}")
+            assert [game['id'] for game in board['items']] == list(featured[1:])
+            assert sum(call.args[0] == 'games' for call in query.call_args_list) == 2
+    finally:
+        api.client.close()
+        store.close()

@@ -24,19 +24,37 @@ import { configureI18n, setLocale, getLocale, getDirection, gameTexts, localizeG
 import bundled from './bundled-tictactoe.json';
 import { browserLogin } from '../platform/browser-login';
 import { rememberUrlAttribution, newAccountAttribution, forgetMatchAttribution, purgePersonalAttribution,type MatchAttribution } from './attribution';
-import type { Account, AccountData, Game, GameCarousel, Match, LocalMatch, ListKind, PortalState, PracticeOptions, InAppNotification } from './types';
+import type { Account, AccountData, CategoryCarousel, Game, GameCarousel, GameCategory, Match, LocalMatch, ListKind, PortalState, PracticeOptions, InAppNotification } from './types';
 export * from './types';
 export { t } from '../platform/i18n';
 
-const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, accounts: [], profile: null, deletionUpdating: false, profiles: {}, authConfig: {}, games: [], popularGames: [], recentGames: [], myMatches: [], matchGames: {}, savedGames: [], notifications: [], notificationCursor: null, unreadNotifications: 0, notificationPrompt: false, notificationPromptReady: false, localMatches: [], selectedMatch: null, selected: null, selectedGame: null, game: null, selectedGameId: null, history: null, replayIndex: null, pending: 0, conflicts: {}, archived: [], network: isOnline(), loading: false, error: null, storageError: null, locale: 'en', query: '', cursors: {} });
+const initial = (): PortalState => ({ ready: false, baseUrl: '', account: null, accounts: [], profile: null, deletionUpdating: false, profiles: {}, authConfig: {}, games: [], popularGames: [], recentGames: [], gameCategories: [], categoryGames: {}, myMatches: [], matchGames: {}, savedGames: [], notifications: [], notificationCursor: null, unreadNotifications: 0, notificationPrompt: false, notificationPromptReady: false, localMatches: [], selectedMatch: null, selected: null, selectedGame: null, game: null, selectedGameId: null, history: null, replayIndex: null, pending: 0, conflicts: {}, archived: [], network: isOnline(), loading: false, error: null, storageError: null, locale: 'en', query: '', cursors: {} });
 const listPaths: Record<ListKind, string> = { games: '/games', myMatches: '/matches', savedGames: '/users/me/saved-games' };
-const carouselPaths: Record<GameCarousel, string> = {
+const legacyCarouselPaths = {
   popularGames: '/games/popular',
   recentGames: '/users/me/recent-games',
 };
-const CAROUSEL_PAGE_SIZE = 8;
+const categoryManifestPath = '/v2/games/carousels';
+export const CAROUSEL_PAGE_SIZE = 20;
+export const categoryKey = (id: string): CategoryCarousel => `category-${id}`;
+const isCategory = (kind: GameCarousel): kind is CategoryCarousel => kind.startsWith('category-');
+const carouselPath = (kind: GameCarousel) => isCategory(kind)
+  ? `/games/carousels/${encodeURIComponent(kind.slice('category-'.length))}`
+  : legacyCarouselPaths[kind];
 const unique = <T extends { id?: string; token?: string }>(values: T[]): T[] => [...new Map(values.map(v => [v.id || v.token, v])).values()];
 const savedList = <T>(value: unknown): T[] => Array.isArray(value) ? value : [];
+function cachedCarousels(responses: AccountData['responses'], signedIn: boolean) {
+  const gameCategories = savedList<GameCategory>(responses[categoryManifestPath]);
+  return {
+    gameCategories,
+    categoryGames: Object.fromEntries(gameCategories.map(row => {
+      const key = categoryKey(row.id);
+      return [key, savedList<Game>(responses[carouselPath(key)]).map(localizeGame)];
+    })),
+    popularGames: savedList<Game>(responses[carouselPath('popularGames')]).map(localizeGame),
+    recentGames: signedIn ? savedList<Game>(responses[carouselPath('recentGames')]).map(localizeGame) : [],
+  };
+}
 const localHumanSeat = (match: Match) => match.players.find(player => player.kind === 'human' && player.active !== false)?.player_index ?? 0;
 const LOCAL_COMPUTER_MOVE_LIMIT = 200;
 class RemovedSavedMatchError extends Error {
@@ -56,6 +74,7 @@ export class PortalStore {
   private accountSelectionWrites: Promise<void> = Promise.resolve();
   private paginated = false;
   private paginatedCarousels = false;
+  private categoryCarousels = false;
   private carouselRequests = new Map<string, Promise<void>>();
   private expandedCarouselGeneration: Partial<Record<GameCarousel, number>> = {};
   private refreshPromise: Promise<void> | null = null;
@@ -89,7 +108,8 @@ export class PortalStore {
   getSnapshot = () => this.state;
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
   private patch(update: Partial<PortalState>) { if (Object.hasOwn(update, 'selectedMatch')) update.selected = update.selectedMatch; if (Object.hasOwn(update, 'game')) update.selectedGame = update.game; this.state = { ...this.state, ...update }; setDiagnosticScope(JSON.stringify([this.state.baseUrl, this.identity()])); this.listeners.forEach(fn => fn()); }
-  private localize() { this.patch({ locale: getLocale(), matchGames:this.downloadedGameNames(), games: this.state.games.map(localizeGame), savedGames: this.state.savedGames.map(localizeGame), popularGames: this.state.popularGames.map(localizeGame), recentGames: this.state.recentGames.map(localizeGame), game: this.state.game ? localizeGame(this.state.game) : null }); }
+  private localize() { this.patch({ locale: getLocale(), matchGames:this.downloadedGameNames(),
+    categoryGames: Object.fromEntries(Object.entries(this.state.categoryGames).map(([key, games]) => [key, games.map(localizeGame)])), games: this.state.games.map(localizeGame), savedGames: this.state.savedGames.map(localizeGame), popularGames: this.state.popularGames.map(localizeGame), recentGames: this.state.recentGames.map(localizeGame), game: this.state.game ? localizeGame(this.state.game) : null }); }
   private identity() { return this.state.account?.id || 'visitor'; }
   private turnIdentity() { return this.state.profile?.id || this.state.account?.canonical_user_id || this.identity(); }
   private downloadedGameNames(): Record<string, Game> {
@@ -196,10 +216,10 @@ export class PortalStore {
     const fields = {deletion_requested_at: own.deletion_requested_at ?? null, deletion_scheduled_at: own.deletion_scheduled_at ?? null, deletion_started_at: own.deletion_started_at ?? null};
     return Array.isArray(value) ? value.map(item => ids.has(item?.id) ? {...item,...fields} : item) : ids.has(value?.id) ? {...value,...fields} : value;
   }
-  private async read(path: string, allowCached = true,linkOpen?:boolean): Promise<any> {
+  private async read(path: string, allowCached = true,linkOpen?:boolean, save = true): Promise<any> {
     const guard = this.capture(), ownProfile = !!this.state.account && path === `/users/${encodeURIComponent(this.state.account.id)}`, revision = this.profileRevision;
     if (this.localOnly) { if (allowCached && Object.hasOwn(this.data.responses, path)) return this.cached(path); throw new TypeError('This device launch is offline.'); }
-    try { if (!isOnline() || Date.now() < this.retryAfter) throw new TypeError('Offline'); const result = await this.api.request('GET', path, undefined, this.state.account,undefined,linkOpen); guard(); if (ownProfile && revision !== this.profileRevision && this.state.profile) return this.state.profile; this.retryAfter = 0; this.patch({ network: isOnline() }); const matchId = /^\/matches\/([^/]+)$/.exec(path)?.[1]; if (matchId && this.data.conflicts[matchId]?.message.startsWith('The outcome of this unsaved action')) delete this.data.conflicts[matchId]; let saved = await this.cache(path, this.preserveOwnDeletion(path,result,revision)); guard(); const latest=this.preserveOwnDeletion(path,saved,revision); if(!equal(saved,latest)){saved=await this.cache(path,latest);guard();} return ownProfile && revision !== this.profileRevision && this.state.profile ? this.state.profile : saved; }
+    try { if (!isOnline() || Date.now() < this.retryAfter) throw new TypeError('Offline'); const result = await this.api.request('GET', path, undefined, this.state.account,undefined,linkOpen); guard(); if (ownProfile && revision !== this.profileRevision && this.state.profile) return this.state.profile; this.retryAfter = 0; this.patch({ network: isOnline() }); if (!save) return result; const matchId = /^\/matches\/([^/]+)$/.exec(path)?.[1]; if (matchId && this.data.conflicts[matchId]?.message.startsWith('The outcome of this unsaved action')) delete this.data.conflicts[matchId]; let saved = await this.cache(path, this.preserveOwnDeletion(path,result,revision)); guard(); const latest=this.preserveOwnDeletion(path,saved,revision); if(!equal(saved,latest)){saved=await this.cache(path,latest);guard();} return ownProfile && revision !== this.profileRevision && this.state.profile ? this.state.profile : saved; }
     catch (error) { guard(); if (error instanceof ApiError && error.status < 500) throw error; if (Date.now() >= this.retryAfter) this.retryAfter = Date.now() + 10000; this.patch({ network: false }); if (allowCached && Object.hasOwn(this.data.responses, path)) return this.cached(path); throw error; }
   }
   private async list(kind: ListKind, more = false): Promise<void> {
@@ -222,6 +242,17 @@ export class PortalStore {
     // Stable aliases restore useful lists when the next launch is offline.
     await this.cache(listPaths[kind], kind === 'myMatches' ? this.matchSummaries(items) : items);
   }
+  private async loadCatalogCarousels(): Promise<void> {
+    if (!this.categoryCarousels) return this.loadCarousel('popularGames');
+    const rows: GameCategory[] = await this.read(categoryManifestPath);
+    if (!Array.isArray(rows)) throw new Error('Invalid game category response');
+    const activeRows = new Set(rows.map(row => categoryKey(row.id)));
+    const categoryGames = Object.fromEntries(Object.entries(this.state.categoryGames)
+      .filter(([key]) => activeRows.has(key as CategoryCarousel)));
+    this.patch({gameCategories: rows, categoryGames});
+    await Promise.all(rows.map(row => this.loadCarousel(categoryKey(row.id))));
+  }
+
   private loadCarousel(kind: GameCarousel, more = false): Promise<void> {
     if (more && (!this.state.cursors[kind] || !this.state.network)) return Promise.resolve();
     const key = `${this.generation}:${kind}`;
@@ -234,11 +265,13 @@ export class PortalStore {
 
   private async readCarousel(kind: GameCarousel, more: boolean): Promise<void> {
     const guard = this.capture();
-    const path = carouselPaths[kind];
-    const previous = this.state[kind];
+    const category = isCategory(kind) ? kind : null;
+    const paged = category !== null || this.paginatedCarousels;
+    const path = carouselPath(kind);
+    const previous = isCategory(kind) ? this.state.categoryGames[kind] ?? [] : this.state[kind];
     let cursor = more ? this.state.cursors[kind] : null;
     let items: Game[];
-    if (!this.paginatedCarousels) {
+    if (!paged) {
       items = await this.read(path);
     } else {
       const visited = new Set<string | null | undefined>();
@@ -249,7 +282,7 @@ export class PortalStore {
         visited.add(cursor);
         const params = new URLSearchParams({limit: String(CAROUSEL_PAGE_SIZE)});
         if (cursor) params.set('cursor', cursor);
-        const response = await this.read(`/v2${path}?${params}`);
+        const response = await this.read(`/v2${path}?${params}`, false, undefined, false);
         guard();
         items = response.items;
         cursor = visited.has(response.next_cursor) ? null : response.next_cursor;
@@ -257,19 +290,20 @@ export class PortalStore {
     }
     guard();
     if (!Array.isArray(items)) throw new Error('Invalid game carousel response');
-    const keepTail = !more && this.paginatedCarousels && this.expandedCarouselGeneration[kind] === this.generation;
+    const keepTail = !more && paged && this.expandedCarouselGeneration[kind] === this.generation;
     const refreshedIds = new Set(items.map(game => game.id));
     const games = (more ? unique([...previous, ...items]) :
       keepTail ? [...items, ...previous.filter(game => !refreshedIds.has(game.id))] : items).map(localizeGame);
     if (more) this.expandedCarouselGeneration[kind] = this.generation;
-    this.patch({[kind]: games, cursors: {...this.state.cursors,
+    const gameLists = category ? {categoryGames: {...this.state.categoryGames, [category]: games}} : {[kind]: games};
+    this.patch({...gameLists, cursors: {...this.state.cursors,
       [kind]: keepTail ? this.state.cursors[kind] : cursor ?? null}});
-    if (this.paginatedCarousels) await this.cache(path, games);
+    if (paged) await this.cache(path, games);
   }
 
   private async suggestGames(query: string): Promise<Game[]> {
     const guard=this.capture(),prefix=gameSearchPrefix(query);
-    const games=[...this.state.recentGames,...this.state.popularGames,...this.state.games,...this.state.savedGames];
+    const games=[...this.state.recentGames,...this.state.popularGames,...Object.values(this.state.categoryGames).flat(),...this.state.games,...this.state.savedGames];
     if(!prefix||this.localOnly)return gameSuggestions(games,query);
     try{
       if(!this.paginated){
@@ -425,9 +459,9 @@ export class PortalStore {
       const initialMatchId=target?.kind==='match'?target.id:undefined;
       await Promise.all([this.reloadData(),incoming?this.rememberAttribution(incoming):purgePersonalAttribution()]);
       const snapshot = this.data, hidden = hiddenMatchIds(snapshot);
-      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']), authConfig:snapshot.responses['/auth/config']||{},
-        popularGames: savedList<Game>(snapshot.responses[carouselPaths.popularGames]).map(localizeGame),
-        recentGames: account ? savedList<Game>(snapshot.responses[carouselPaths.recentGames]).map(localizeGame) : [] });
+      const carousels = cachedCarousels(snapshot.responses, !!account);
+      this.categoryCarousels = carousels.gameCategories.length > 0;
+      this.patch({ games: savedList(snapshot.responses['/games']), myMatches: savedList<Match>(snapshot.responses['/matches']).filter(match=>!hidden.has(match.id)), savedGames: savedList(snapshot.responses['/users/me/saved-games']), authConfig:snapshot.responses['/auth/config']||{}, ...carousels });
       if (!initialMatchId && snapshot.selectedId && !removedSavedMatch(snapshot,snapshot.selectedId)) {
         const match = snapshot.local[snapshot.selectedId] || snapshot.responses[`/matches/${snapshot.selectedId}`];
         if (match) {
@@ -451,6 +485,8 @@ export class PortalStore {
       const capabilities = localOnly ? Promise.resolve() : this.api.request('GET','/storage/capabilities').then(result=>{
         this.paginated=result.pagination===true;
         this.paginatedCarousels=result.game_carousels===true;
+        this.categoryCarousels=result.catalog_carousels===true;
+        if (!this.categoryCarousels) this.patch({gameCategories: [], categoryGames: {}});
       }).catch(()=>{});
       let showLocalData!:()=>void;
       const localReady=new Promise<void>(resolve=>{showLocalData=resolve;});
@@ -484,7 +520,7 @@ export class PortalStore {
       guard();
       const updateAuth=()=>this.read('/auth/config').then(authConfig=>{guard();this.patch({authConfig});});
       if (this.state.selectedMatch) { this.startOfflineDownloads();await Promise.all([this.state.selectedMatch.id===freshlyOpenedId?undefined:this.refreshMatch(),startup?updateAuth().catch(()=>{}):undefined]); return; }
-      const jobs: Promise<any>[] = [this.list('games'), updateAuth(), this.loadCarousel('popularGames')];
+      const jobs: Promise<any>[] = [this.list('games'), updateAuth(), this.loadCatalogCarousels()];
       if (this.state.account) jobs.push(this.refreshNotifications(), this.list('myMatches'), this.list('savedGames'), this.loadCarousel('recentGames'), this.refreshProfile());
       const results = await Promise.allSettled(jobs); guard();
       await this.claimDailyLogin().catch(() => {}); guard();
@@ -800,7 +836,7 @@ export class PortalStore {
     const target=loginAttribution??await newAccountAttribution(this.state.accounts);current();
     const { ready, baseUrl, accounts, authConfig, locale, storageError } = this.state;
     this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts, authConfig, account, locale, storageError, network: !this.localOnly && isOnline() }); const guard = this.capture(); await this.reloadData(); guard();
-    this.patch({ games: savedList(this.data.responses['/games']), myMatches: savedList(this.data.responses['/matches']) }); await this.refresh(); guard();
+    this.patch({ games: savedList(this.data.responses['/games']), myMatches: savedList(this.data.responses['/matches']), ...cachedCarousels(this.data.responses, true) }); await this.refresh(); guard();
     await this.completeLinkLogin(target);guard();
     const latest=await newAccountAttribution(this.state.accounts);guard();
     if(equal(latest,target))await forgetMatchAttribution();
@@ -837,7 +873,7 @@ export class PortalStore {
     await saveAccounts(accounts,this.state.baseUrl).catch(warning);guard();
     // Follow any older selection write; it must not resurrect another login.
     await this.writeSelection('visitor',guard).catch(warning);guard();const { ready, baseUrl, authConfig, locale,storageError } = this.state;
-    this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts,authConfig, locale,storageError, network: !this.localOnly && isOnline() }); await this.reloadData();guard();await this.refresh();guard();
+    this.data = emptyAccountData(); this.patch({ ...initial(), ready, baseUrl, accounts,authConfig, locale,storageError, network: !this.localOnly && isOnline() }); await this.reloadData();guard();this.patch(cachedCarousels(this.data.responses, false));await this.refresh();guard();
   }
   private async attribution(): Promise<any> {if(this.bootstrapPromise&&!this.state.ready)await this.bootstrapPromise;return newAccountAttribution(this.state.accounts);}
   async guest(name: string,intentGuard?:()=>void) { const guard = this.capture();intentGuard?.(); const attribution = await this.attribution(); guard();intentGuard?.(); const result = await this.api.request('POST', '/users', { display_name: name.trim() || 'Player', locale: getLocale(), ...attribution }); guard();intentGuard?.(); await this.saveLogin(result,[],intentGuard); }

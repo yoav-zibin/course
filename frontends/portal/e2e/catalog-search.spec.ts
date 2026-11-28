@@ -121,3 +121,55 @@ test('both game carousels load additional pages at the horizontal edge',async({p
     await expect(row.getByRole('link',{name:`Play ${kind} Chess`,exact:true})).toBeVisible();
   }
 });
+
+test('category and recent rows prefetch their next 20 cards at the middle of each page',async({page,request})=>{
+  await page.setViewportSize({width:390,height:844});
+  const user=await createUser(request,uniqueName('Category player'));await loginAs(page,user);
+  await catalog(page);
+  await page.route('**/storage/capabilities',route=>route.fulfill({json:{pagination:true,game_carousels:true,catalog_carousels:true}}));
+  await page.route('**/v2/games/carousels',route=>route.fulfill({json:[
+    {id:'board',title:'Board & Strategy Games'},{id:'miscellaneous',title:'Miscellaneous'},
+  ]}));
+  await page.route('**/v2/games/carousels/miscellaneous?*',route=>route.fulfill({json:{items:[games[0]],next_cursor:null}}));
+  const paths=[['category-board','/v2/games/carousels/board'],['recentGames','/v2/users/me/recent-games']] as const;
+  const cards=Array.from({length:45},(_,index)=>({...games[0],id:'prefetch-'+index,name:'Card '+(index+1)}));
+  const requests=new Map<string,number[]>();
+  for(const [kind,pathname] of paths){
+    const starts:number[]=[];
+    requests.set(kind,starts);
+    await page.route(url=>url.pathname===pathname,route=>{
+      const params=new URL(route.request().url()).searchParams;
+      expect(params.get('limit')).toBe('20');
+      const start=Number(params.get('cursor')||'0'),end=Math.min(start+20,cards.length);
+      starts.push(start);
+      return route.fulfill({json:{items:cards.slice(start,end),next_cursor:end<cards.length?String(end):null}});
+    });
+  }
+  await page.goto('/portal#games');
+  await expect(page.getByRole('heading',{name:'Miscellaneous',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:/popular games/i})).toHaveCount(0);
+  for(const [kind] of paths){
+    const row=page.getByTestId(kind);
+    await expect(row.getByRole('link',{name:'Play Card 1',exact:true})).toBeVisible();
+    await row.scrollIntoViewIfNeeded();
+    const step=await row.evaluate(element=>{
+      const [first,second]=element.querySelectorAll('[role="link"]');
+      return second.getBoundingClientRect().left-first.getBoundingClientRect().left;
+    });
+    const scroll=async(index:number)=>row.evaluate((element,left)=>{element.scrollLeft=left;},index*step);
+    await scroll(7);
+    await expect(row.getByRole('link',{name:'Play Card 8',exact:true})).toBeInViewport();
+    expect(requests.get(kind)).toEqual([0]);
+    await scroll(9);
+    await expect.poll(()=>requests.get(kind)).toEqual([0,20]);
+    await scroll(28);
+    await expect(row.getByRole('link',{name:'Play Card 29',exact:true})).toBeInViewport();
+    expect(requests.get(kind)).toEqual([0,20]);
+    await scroll(29);
+    await expect.poll(()=>requests.get(kind)).toEqual([0,20,40]);
+    await expect(async()=>{
+      await scroll(44);
+      await expect(row.getByRole('link',{name:'Play Card 45',exact:true})).toBeInViewport({timeout:1000});
+    }).toPass({timeout:10000});
+  }
+});

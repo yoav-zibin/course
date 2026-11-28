@@ -13,7 +13,7 @@ export function GameSearch(){
   const root=useRef<React.ComponentRef<typeof View>>(null),pressing=useRef(false),blurTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const listId=`game-suggestions-${useId()}`,scope=JSON.stringify([p.baseUrl,p.account?.id,p.locale]);
   const current=response.query===query&&response.scope===scope;
-  const suggestions=gameSuggestionMatches([...p.recentGames,...p.popularGames,...p.games,...p.savedGames,...(current?response.games:[])],query);
+  const suggestions=gameSuggestionMatches([...p.recentGames,...p.popularGames,...Object.values(p.categoryGames).flat(),...p.games,...p.savedGames,...(current?response.games:[])],query);
   const visible=expanded&&gameSearchWords(query).length>0;
   useEffect(()=>{
     let alive=true;
