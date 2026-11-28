@@ -59,7 +59,7 @@ def row_and_current(public=True):
 
 def test_manifest_covers_the_reviewed_catalog_and_both_visibility_classes():
     rows = publisher.reviewed_games(publisher.MANIFEST)
-    assert len(rows) == 149
+    assert len(rows) == 229
     assert {row["all_state_public"] for row in rows} == {False, True}
     by_name = {row["name"]: row for row in rows}
     for name in ("Backgammon", "Chess (Declarative)", "Yacht", "Yut Nori"):

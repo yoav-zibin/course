@@ -64,16 +64,16 @@
       "name": "Ayoayo",
       "all_state_public": true,
       "reason": "All pits, captured seeds and current player are public.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "ff02637535a16b697018a6f59ad49e1cc0f09ec16528ca9d973eb5441e119f66"
     },
     {
       "id": "5f5293c3-2a3a-4eec-b631-9debf59be0ca",
       "name": "Backgammon",
       "all_state_public": true,
-      "reason": "All checkers, bar/off counts, rolled dice, legal moves and accepted roll metadata are public.",
-      "version": 5,
-      "server_code_sha256": "6e798d6da75524ed6829e5c3e057401af72542a185e3f3b7a0cb822a3b13c0f4"
+      "reason": "Checkers, dice, cube, score and accepted animation positions are public.",
+      "version": 12,
+      "server_code_sha256": "f7044be96b2a162fe084edc82fedc7d0451d8856121be19bf31cfa69aa12e4e8"
     },
     {
       "id": "42bd63dd-baad-43b8-a354-c6d9b5d2e0be",
@@ -96,16 +96,16 @@
       "name": "Bao",
       "all_state_public": true,
       "reason": "All board pieces, positions and gameplay counters are public.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "5091546c933d3faa8cff88a3ae77db3cda84fa2f736c19afb5875b6029867d67"
     },
     {
       "id": "c0db7c63-6643-4643-91c6-c22f4f0a0ced",
       "name": "Battleship (Declarative)",
       "all_state_public": false,
-      "reason": "Ship placements are visible only to their owner until sunk or game over.",
-      "version": 1,
-      "server_code_sha256": "eec7979cea3525748432462dc1f8424834e9cc471bf24a185609d716e31809a0"
+      "reason": "Unhit ships and unsubmitted fleets remain hidden from opponents.",
+      "version": 3,
+      "server_code_sha256": "63f42b5365e4db5b566f0648aebd08511dff89174ea127ba76f3ba74a03737b2"
     },
     {
       "id": "b78abbca-59bd-444e-8d5c-034b4432d402",
@@ -160,23 +160,23 @@
       "name": "Bunco",
       "all_state_public": true,
       "reason": "Dice and round scores are public; future rolls are generated on demand.",
-      "version": 3,
+      "version": 7,
       "server_code_sha256": "4349b8a35f810c7590fde173db1e8755b01d41772a4391adafc830b3c1ca1776"
     },
     {
       "id": "9bfbf1d3-1138-44e6-a937-7bf7dc281bbf",
       "name": "Call Bridge",
       "all_state_public": false,
-      "reason": "viewFor removes all hands and kitty, then adds back only the current viewer's hand.",
-      "version": 2,
-      "server_code_sha256": "58a4d841d40057d042b540a27aaf0f3b3602c4a768c75e3ad726dbed4e1df948"
+      "reason": "The view exposes only the viewer’s hand and keeps the kitty and other hands private.",
+      "version": 5,
+      "server_code_sha256": "2ca7b0b517b7f165db54a3c43c0eb7ccc214f92fee2bfd29e80559b5864fed8c"
     },
     {
       "id": "429b0515-1cbe-4cd0-9519-e6a0242bec43",
       "name": "Can't Stop",
       "all_state_public": true,
       "reason": "All progress, temporary markers and dice are public; future rolls are generated on demand.",
-      "version": 3,
+      "version": 7,
       "server_code_sha256": "d0c9dbe7bc61432c896b702709ddccbf0fc7d536b271f8f4737ca7faf780ad44"
     },
     {
@@ -224,7 +224,7 @@
       "name": "Chaturanga",
       "all_state_public": true,
       "reason": "All board pieces, positions and gameplay counters are public.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "5813b0dc8b0996e6d8db166b04ee35faf923b148311fcd72730d6e1aa96b5c26"
     },
     {
@@ -232,7 +232,7 @@
       "name": "Chaupar",
       "all_state_public": true,
       "reason": "All pieces and current rolls are public; future rolls are generated on demand.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "fbd42639c09c81cd46a851cba2ac110793ed52a6076eaa07907044718bc3666d"
     },
     {
@@ -288,23 +288,23 @@
       "name": "Congkak",
       "all_state_public": true,
       "reason": "Every house, store and current turn is public on the shared board.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "3dedc83fdcb563f1a209ea6986120df80fe26c26011ca97228c421d189a258a5"
     },
     {
       "id": "e299b14e-480d-44f3-8132-74282a46cebc",
       "name": "Connect Four",
       "all_state_public": true,
-      "reason": "All board pieces, positions and gameplay counters are public.",
-      "version": 3,
-      "server_code_sha256": "e4fce270f9481cb7eb22d34c98c12441b7e4db8f859f4ec43019311f41135ae3"
+      "reason": "The rack, disc identities, placement and fall-animation metadata are public.",
+      "version": 7,
+      "server_code_sha256": "8d476c284f41532d323022842a24d50380303be1b1b07028d27a013aef167bfd"
     },
     {
       "id": "cb76dfc6-a1a9-4a2a-9d0c-b978d9bad2d8",
       "name": "Craps",
       "all_state_public": true,
       "reason": "All bets, chips and current dice are public; future rolls are generated on demand.",
-      "version": 2,
+      "version": 5,
       "server_code_sha256": "508bfe53a9a360797cbd604ee9a810d3124e7066cebdc9e0a833fc71c6439d3b"
     },
     {
@@ -367,9 +367,9 @@
       "id": "66859bb0-89fa-408f-aed3-3aab01eacb6a",
       "name": "Dominion: Prosperity",
       "all_state_public": false,
-      "reason": "Private card hands and concealed player decks.",
-      "version": 2,
-      "server_code_sha256": "74d4265fbb2b87985302ec6c91fb4ce34d0e175593efde0c3fa0548efb5d8593"
+      "reason": "Hands, deck order and unrevealed draws remain private to the relevant player.",
+      "version": 6,
+      "server_code_sha256": "1b216da58f3e8dc6f6ffeb172ac0887a92c2e8e02d5f5b710539b1e138720b65"
     },
     {
       "id": "9dc613de-a407-4699-9500-6bc1c1c88554",
@@ -431,9 +431,9 @@
       "id": "76a773b9-b39c-4bfc-b9f5-63bdfe49465a",
       "name": "Gin Rummy",
       "all_state_public": false,
-      "reason": "Private card hands and concealed stock.",
-      "version": 2,
-      "server_code_sha256": "eafd52c03745b31ac0e9cae537305a698ed58593d9c90904018c52a31eb457bf"
+      "reason": "Opponents see counts and the top discard. Hands and stock remain hidden.",
+      "version": 6,
+      "server_code_sha256": "4e6de83dc01a032ce0fddbc92937bffe24925261b0fd86932d9a10b4d57ee5e9"
     },
     {
       "id": "6d9d0269-1e83-4d38-9529-6735e6eb1919",
@@ -520,7 +520,7 @@
       "name": "Jungle",
       "all_state_public": true,
       "reason": "All board pieces, positions and gameplay counters are public.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "85812ba9e56c0a4c7229439924f0b17bc4daee7bc6e07280ad8b9f1389eb8e1f"
     },
     {
@@ -584,7 +584,7 @@
       "name": "Machi Koro",
       "all_state_public": true,
       "reason": "Coins, establishments, landmarks, market supply and rolled dice are public; later rolls use fresh RNG.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "b47b209a404ddfb4492eacb91001fe0635cc4a68b0aec865c63dd683d88e01ad"
     },
     {
@@ -592,7 +592,7 @@
       "name": "Makruk",
       "all_state_public": true,
       "reason": "All board pieces, positions and gameplay counters are public.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "c2390328bbcc8ba9d013e6dd3048462e1bc2241617c27c2f15cfaf1c5446d84e"
     },
     {
@@ -608,7 +608,7 @@
       "name": "Mangala",
       "all_state_public": true,
       "reason": "All board pieces, positions and gameplay counters are public.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "a7e8271d3a6c4987362e02d2e84d9d6513b5adf026da688b6537dd92e3a50a8f"
     },
     {
@@ -632,7 +632,7 @@
       "name": "Mehen",
       "all_state_public": true,
       "reason": "All board pieces, positions and gameplay counters are public.",
-      "version": 2,
+      "version": 6,
       "server_code_sha256": "a5c3fff19e5c94314d0132738ce44773dc268c7c8395442a784b1a373f3089eb"
     },
     {
@@ -671,9 +671,9 @@
       "id": "1a94829a-e417-4c3f-b344-c6581412dcb7",
       "name": "Monopoly City",
       "all_state_public": false,
-      "reason": "The shuffled chance deck order is concealed.",
-      "version": 1,
-      "server_code_sha256": "764a996ec99c039e37f624f512f2f83e1802c0d2ce33f3cd4fafc6541cb8a79c"
+      "reason": "The current board is shared, but the order of unseen Chance cards remains hidden.",
+      "version": 4,
+      "server_code_sha256": "3d2a44197c7c7b2baec466d181b299bac484aec3cb11d5d5bd8d171d32f15b0d"
     },
     {
       "id": "9161d33c-4617-4930-a5dd-f1f370b63b6a",
@@ -871,9 +871,9 @@
       "id": "5292ce7b-b39c-4a1c-a652-473a1e5a5881",
       "name": "Senet",
       "all_state_public": true,
-      "reason": "All pieces and current rolls are public; future rolls are generated on demand.",
-      "version": 2,
-      "server_code_sha256": "be0e1fe8c1c6f76938be5754cb3a5c5ce82d53248cc77a0a9e2d785f6381578c"
+      "reason": "Pawn positions and rolls are shared. Legal pawn choices are scoped to the current viewer’s turn.",
+      "version": 5,
+      "server_code_sha256": "4969112e5a1fb1b5aaa00a5626bf68e80f02be015f61990fe076f05fa59067e3"
     },
     {
       "id": "a80478f8-b0be-4a4a-96aa-fbb5a3427c4c",
@@ -1194,6 +1194,646 @@
       "reason": "Dice colors and outcomes are public; cup draws and rolls are generated on demand.",
       "version": 3,
       "server_code_sha256": "40bc70cd7af59d2816e9d5c58b93da378f5b168660f1ebd845e713a50f491cac"
+    },
+    {
+      "id": "0bd0b8dc-9aeb-4081-9e3c-5da7ae9554e4",
+      "name": "Ataxx (Declarative)",
+      "version": 5,
+      "server_code_sha256": "105a1fcba95b825de81f3c36e9be1dc76df9e5eb0c4e882da87d5c30c9fc10bb",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "881012c7-c713-4dba-a617-0f7d9b82a48f",
+      "name": "Azul",
+      "version": 1,
+      "server_code_sha256": "96fd790376768f841ee48046750fbbdc8b926f7685745d16f19f22b490a77969",
+      "all_state_public": false,
+      "reason": "The unseen order of the tile bag and lid is hidden behind counts."
+    },
+    {
+      "id": "096152e8-296d-49cc-b662-23a006f7c2ce",
+      "name": "Beat the Landlord",
+      "version": 4,
+      "server_code_sha256": "4bd7c8fb53c4291aeabc12d5ad1034ec1d922fd1a45e46df4aab2553789809aa",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "85b02c4a-0bfa-4190-92c2-4a93865d43b7",
+      "name": "Big Two",
+      "version": 4,
+      "server_code_sha256": "0e52623c04cae21e2ea3b6c6da8262821db1b548e4fe9f78d5dfde4534822310",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "a51c6c5b-30f4-46b4-b061-0621ff598588",
+      "name": "Blackjack",
+      "version": 3,
+      "server_code_sha256": "ed52f787b8bb316e729e6f4d247c6299c2ed329feeb83479527a08a612d317e1",
+      "all_state_public": false,
+      "reason": "The dealer’s hole card and unseen deck order remain hidden during play."
+    },
+    {
+      "id": "17611851-ae1f-4420-b479-fda58a057b08",
+      "name": "Bo Bing",
+      "version": 3,
+      "server_code_sha256": "341c964a79569a018e6f26e10be897a9a725b68c322a2207f24d9d30491ee7c0",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "75e2c2ff-7fcc-4c35-af8c-1ec92ba6c8a1",
+      "name": "Cartographers (Declarative)",
+      "version": 4,
+      "server_code_sha256": "a43c4a67160941f99bbd3d330a5f4b402405aef2cf5f66a89774289f5ccfcbc6",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "31cf7a90-88fd-4ace-94f5-099337eea572",
+      "name": "Casino War",
+      "version": 2,
+      "server_code_sha256": "88d922e8421741a067cb7a6e1d8d26856eeb1c3e494083504870d00813f81470",
+      "all_state_public": false,
+      "reason": "The dealer’s face-down card remains hidden until the round is resolved."
+    },
+    {
+      "id": "eef4cdd2-ab5a-4e00-a3c9-9e801e7239c9",
+      "name": "Catan (Declarative)",
+      "version": 5,
+      "server_code_sha256": "da8bbf75fce450e0cb5a30a21cffd3a294597adcfae99e76da4b3fcd361c9094",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "4c198ba6-8c6e-4950-b670-59fe235e33b9",
+      "name": "Catch the Ten",
+      "version": 4,
+      "server_code_sha256": "7522c239216dc0ec6ae1220a6141928f1934829a86e01ed0aaaf528e546d2bd2",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "bcac053c-a452-49e7-8736-899302470e31",
+      "name": "Chase the Ace",
+      "version": 2,
+      "server_code_sha256": "ad9628372abe614118382f2d2a4248e7be3850915aed518e6a330d77bf5be065",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "88301920-51b3-4588-aa64-f8f6e3150a59",
+      "name": "Chutes & Ladders (Declarative)",
+      "version": 6,
+      "server_code_sha256": "405174346c643e35dcf993bfee7b64a522fcf2d2453d29d48e78a90b7e19cb4e",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "43c459a8-10f6-42ff-a147-32a16eb1d916",
+      "name": "Codenames (Declarative)",
+      "version": 3,
+      "server_code_sha256": "4b4f74967961d7bf89427a1273a4dbf74d6810ab87d4f16f4f48596e95b668fe",
+      "all_state_public": false,
+      "reason": "Spymasters and guessers receive different views of unrevealed team colors."
+    },
+    {
+      "id": "ab31bf7f-484a-43bc-826d-386b496e921f",
+      "name": "Connect6 (Declarative)",
+      "version": 5,
+      "server_code_sha256": "e2eeb74981d039b223fc0e4d3264770dd2f0169d531f4824ed0e6a0c3cde318d",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "830f4b4e-7a8e-4600-ad9e-06866c125f9b",
+      "name": "Conquian",
+      "version": 5,
+      "server_code_sha256": "73cf329ce5da6d1c06a0560a17748042a6e23ec45491cb6f56d431d6a17e140f",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "2fe3cc92-540f-4096-92c4-ced7877f4d35",
+      "name": "Court Piece",
+      "version": 4,
+      "server_code_sha256": "647ebcb6c0a30bc754fe6924a571a990fb955e0b2f771882f3f246e4d64c2eef",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "3aa17272-bb44-48a2-8396-f59b3fe66304",
+      "name": "Crownfields",
+      "version": 3,
+      "server_code_sha256": "6c8cff5c526d5b944c39bf70f3ecad2d9f2e04598bd2a2f3b7a917226e0db546",
+      "all_state_public": false,
+      "reason": "The face-down pile is replaced by its count in the view."
+    },
+    {
+      "id": "3670eda6-7157-4ec1-bd37-d3eb6df9d660",
+      "name": "Dead Man's Dice",
+      "version": 3,
+      "server_code_sha256": "5557b9e8b145ec849ff0600db4016c89b21e4e9021b1b5eb36c674fb98610ac5",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "1273748c-c263-4080-bd5b-8a26c5390494",
+      "name": "Dos (Declarative)",
+      "version": 7,
+      "server_code_sha256": "a87355577d56d3b003ed8dfe185eba96c7740dda0d4632d715cc6e5e586b9161",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "4c6d6b00-89c2-4407-909c-4855d907c093",
+      "name": "Dots and Boxes",
+      "version": 3,
+      "server_code_sha256": "4ec18910785936753e8ae1292da676b3dd7a27414b99901bb9154a0ce1d3dd29",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "ee37f000-e93c-4454-ae5b-32bc0d215ab0",
+      "name": "Dots and Boxes",
+      "version": 5,
+      "server_code_sha256": "102e5b4264786639ab43e376c775793e96688b8094999dff83a5611bb2539419",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "07d31102-4474-4ddd-88a7-fe787e7db4b3",
+      "name": "Escape Circuit",
+      "version": 1,
+      "server_code_sha256": "100136a8fe1cb02a4392375873189b85b9e0620d0217ce2de38bf6f29709064f",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "cf005d08-46d0-4cca-86c1-99f3e529d8d2",
+      "name": "Flipside Lords",
+      "version": 2,
+      "server_code_sha256": "d4289fc945198b0613e18cc5d5728fada97492afae949dc1c04ba74d5edd7693",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "9449f538-4042-4a0a-a961-c1acb29f4ab5",
+      "name": "Go Fish",
+      "version": 5,
+      "server_code_sha256": "ffcfee9a83299e71c7f22fcf36a987cd0c1d9f2af7141bbeca1bfe9bd5b85ee2",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "6d9124c9-dd2e-40a0-be98-2e6b9dccdae5",
+      "name": "Gobblet (Declarative)",
+      "version": 5,
+      "server_code_sha256": "6fda4024c1255c20f0ed84cbfa6a3f41e6368f037af6bd798ed9ee60359cb525",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "da303ede-4a34-4176-a2a6-6bd4ba444a96",
+      "name": "Gomoku",
+      "version": 6,
+      "server_code_sha256": "16b8b9ae29ce585e410386ef8e7e1c69752509fdf6a7d453b032e6ba5b174267",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "666416d0-a5e9-4eea-8bd7-7ed3fe0a58ed",
+      "name": "Greed",
+      "version": 3,
+      "server_code_sha256": "00755cdf72316851c40c5f7214b65a58e7510e519a7835a0fc13626a750af007",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "50ebb440-5eda-4cd8-85f2-c171e28f8e88",
+      "name": "Guandan",
+      "version": 3,
+      "server_code_sha256": "d6bb288910471d82d821fa445162616fe7cfd73b1692783325c803f0e9a6e2ed",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "3edeeff4-d411-4ed6-b6f3-4f38ae235492",
+      "name": "Guess Who",
+      "version": 11,
+      "server_code_sha256": "a20554e665694afb547e7ed9494c47efaf89a351d6321519d71dc21d9525421b",
+      "all_state_public": false,
+      "reason": "Each player sees their own mystery character, with the opposing character hidden."
+    },
+    {
+      "id": "dfe9ea4a-c283-43b8-8ae7-22dbcd74d091",
+      "name": "Hackenbush (Declarative)",
+      "version": 4,
+      "server_code_sha256": "71d3b173a696a24af27b887029c73c515e93193463b636d2d1eeb6171ee75598",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "e7d619e6-42fa-4822-b237-fb379a74301e",
+      "name": "Hanamikoji",
+      "version": 2,
+      "server_code_sha256": "6e05ce88f4d7a91e95bebdfcaa87731b6bc7e8af777b6a914397d964040f0bd5",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "cfe8dfd4-bf49-4317-9a91-9b95d0435d6b",
+      "name": "Hive",
+      "version": 2,
+      "server_code_sha256": "00ed6c40c433f6903a9f87e18012958f5bc3fd0322bd21f95e388061e7511990",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "71a55e91-f9cf-48bd-a53a-ba6a64d6c759",
+      "name": "Jaipur",
+      "version": 1,
+      "server_code_sha256": "d90a5a2f703c76a191e4f4dd110bac4f1d46a9a7a814b9fcc162a904c2b174a6",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "a51d0d5d-d5c9-4f26-8401-a4699dd9b7ca",
+      "name": "Kayles",
+      "version": 4,
+      "server_code_sha256": "bc97097757851f4506225bd72e092b1485dfca376e6e0a020e22c1b7ab289574",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "41e87142-1640-4de7-9bc2-2b8ca33d038c",
+      "name": "Kingdomino",
+      "version": 1,
+      "server_code_sha256": "6bc35194f89399307c6aef9687b4c05553e8a0ac762d3bbbece29906e54e0666",
+      "all_state_public": false,
+      "reason": "The future domino deck is hidden while the available drafting line is visible."
+    },
+    {
+      "id": "dc5b8251-0b49-466f-b503-babaea9cfa78",
+      "name": "Kings in the Corner",
+      "version": 2,
+      "server_code_sha256": "4f2401adebb5177c7b27353b554802c45b34774a9a341b8b537e0199f2691836",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "d6d9c54e-1953-411c-a05b-e06f00716e19",
+      "name": "Kisolo (Declarative)",
+      "version": 6,
+      "server_code_sha256": "cccc0e22f6cf73d7f7c3a9f94cc6a7d0c6bda9cdf885c126a64cededdb216629",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "eb74d08e-b6a0-4986-8301-5dbad509378d",
+      "name": "Lantern Trails",
+      "version": 2,
+      "server_code_sha256": "9f99ac7742283417ddf3cae73e4115573969bbdacb54562cb7472f0cea7cdf94",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "ba21b9ca-1a64-4805-978c-4c39aa9467a5",
+      "name": "Love Letter (Declarative)",
+      "version": 3,
+      "server_code_sha256": "217be7b036cbda5e751b09a4b64cf1d09785900f7f4d9c1cf497b84a2ab1a7de",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "96189029-0cf8-401e-8320-50e08458cfe9",
+      "name": "Mancala (Kalah)",
+      "version": 6,
+      "server_code_sha256": "957bff284f0aea751ad125bb6b8a39bde8cd1e2329f6f7e1e6c391914538e51d",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "71f8e799-e946-4c85-9c0f-ab113778da95",
+      "name": "Mastermind (Declarative)",
+      "version": 3,
+      "server_code_sha256": "1d3610393066c91c1418c9b5d6fd811db43226c3193ce31a9988dd0435ac4f59",
+      "all_state_public": false,
+      "reason": "Only the codemaker can see the unrevealed code before the game ends."
+    },
+    {
+      "id": "ed3e6317-cb5a-420d-9294-e47426ab0975",
+      "name": "Mau-Mau (Declarative)",
+      "version": 6,
+      "server_code_sha256": "06a67f166605d8808b4aa3bee40bea07a0b2cd9f4cf7bb4e182ae648c8784e64",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "670808aa-199f-4c78-9790-61ca5d33a02f",
+      "name": "Michigan",
+      "version": 3,
+      "server_code_sha256": "8dbe1624836ff5301c584a52b18dee5a85a73553bf93f10b15f448c7465aeb53",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "c229e9ce-e6f1-4f55-9b8a-9cd0ecabe910",
+      "name": "Mille Bornes",
+      "version": 4,
+      "server_code_sha256": "158e43f2a8aedf0fa7cf5ce24a7cc06c9c4a8ad219bc0f204abeb3173d35bd90",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "56bc0171-f7f5-4a54-bf43-97b798a32d8f",
+      "name": "Nim",
+      "version": 7,
+      "server_code_sha256": "17aa8294f23a2434dd26ea4eb8d9e24c5e976e70eef8ed50f6fdaa4ddfc703d8",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "981859e6-a0e8-48e2-9814-bcbe0ca3806f",
+      "name": "Nine Men's Morris",
+      "version": 3,
+      "server_code_sha256": "625ea45ecfbffec258ea799836df2ea349034104f25026c0f131eda35da88eb7",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "ec8c2782-50aa-4f5d-a345-784ae7b3ce70",
+      "name": "Nine Stars",
+      "version": 2,
+      "server_code_sha256": "1f4803ed1f628fc6d995ffdab1508a17f81ccc2714ed4ca7ed43677cbdfc1dae",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "22c1e198-40dc-414f-b51c-054809ccad52",
+      "name": "Old Maid",
+      "version": 3,
+      "server_code_sha256": "bb2b1fed77e85a5c862e030f93cafd78965dd35ea2447bbd58adcf55beb3b1cd",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "d7967539-2c46-45fe-a12a-0687bc055681",
+      "name": "Onitama (Declarative)",
+      "version": 3,
+      "server_code_sha256": "f99f39202299b6fff5d1060675db064a23711dbadf046885eb78d3386e16b93d",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "b48c72c8-b499-4526-b0e7-d326d76e13f2",
+      "name": "Oware (Declarative)",
+      "version": 3,
+      "server_code_sha256": "daa3121f0def111aa15def60116accd3aeb2baa25c3bc6a2c64bec1cbd57e185",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "27fa7868-caea-492e-a387-006d70d02eb9",
+      "name": "Paper Soccer (Declarative)",
+      "version": 5,
+      "server_code_sha256": "ac816f614fcb087a9400d946846d42878b1b8ecc594b92432608ef6d3ecb5637",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "fb678d3f-1d01-4af5-851f-9f3a40fb9446",
+      "name": "Patchwork",
+      "version": 2,
+      "server_code_sha256": "8b9798f1de6dc33b9982ce5a030f8224aa7d19e6735dc4b11a8128dfc401f9b4",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "8cb79485-9d6e-4dcd-8ca9-4a89499b1149",
+      "name": "Pedro",
+      "version": 4,
+      "server_code_sha256": "42ea522ca9d4214b08db25e49b2e49413f65e3f4d905c85f2d63e29b3b09953e",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "0689bc72-ffd9-4be7-a15e-5455bb8ed728",
+      "name": "Pentago (Declarative)",
+      "version": 2,
+      "server_code_sha256": "432a6d135783bdff3ef02b6df38d2fb0a1e32ad0e84ca42401df6e98380ca6e3",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "7bdaddac-cea2-4b94-8d11-232a7c1ac998",
+      "name": "Pente",
+      "version": 3,
+      "server_code_sha256": "724331453b51986cc9a6e93e00cbe469d8493075b55783e64c86c39168cbcd05",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "4cf1f12c-70ff-4a41-9df0-d4758a59b84b",
+      "name": "Pig",
+      "version": 3,
+      "server_code_sha256": "4b96d91b0c5a4e09f995955815b35104a061c86ba7fa6aea4a447c5896a7e720",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "28d4c330-0bea-4144-9bd0-1d6c30e519b9",
+      "name": "Quarto (Declarative)",
+      "version": 2,
+      "server_code_sha256": "ca1554f400a262c2ca1f8279749cda575bf6d220580764e20a6697fdcaf578a6",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "9edbc3e1-03d3-4a05-9861-ad64372bd133",
+      "name": "Quoridor (Declarative)",
+      "version": 2,
+      "server_code_sha256": "dc0080c6fdb7d5a89cf55b90f2111b591347f1cec4adde8beab468a00634f5cf",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "d8f87443-1508-4696-9aef-3d2ff285bbe9",
+      "name": "Reversi",
+      "version": 5,
+      "server_code_sha256": "3bd194b71b82bd3975746c70f42f0e6f0ddc670c4973807b2cc2d31387c86474",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "cf74f047-f5e8-43ab-9cf8-308b373bf4b7",
+      "name": "Santorini",
+      "version": 2,
+      "server_code_sha256": "9167e4e172efd63047b9ed3cc3423ee7d504dc4f4e47f13b8e7e0281c194535b",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "ce92cc27-6aa1-4ea3-8432-ce3d9cc89ff9",
+      "name": "Scattergories (Declarative)",
+      "version": 2,
+      "server_code_sha256": "23298d9c3a84f0a6d9a35021883fa627666559f18009cd0d0dc3fb689ee9eb99",
+      "all_state_public": false,
+      "reason": "Current round answers are visible only to the player who entered them."
+    },
+    {
+      "id": "48e5246c-863a-4022-af32-118b45546aa6",
+      "name": "Scopa (Declarative)",
+      "version": 4,
+      "server_code_sha256": "508a3bd855f24bd6a5b7593551a985c4e2ca6e7b60a770f3704751bc36d01f09",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "1659e2f4-64da-4001-b57d-83f38ae1f909",
+      "name": "Sergeant Major",
+      "version": 5,
+      "server_code_sha256": "6e8c24d35caf4a1487539b61bd054d14d82862a13f60f27bedc3a844525da3ee",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "079a76b2-2a42-44b5-9de6-0ccf5fc54328",
+      "name": "Sim (Declarative)",
+      "version": 5,
+      "server_code_sha256": "fbb4556151c818829922735d72621a823ec40411fa192ddd75183ddd576369e6",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "98ce6990-74bf-49c9-a830-c11c0a4af1ee",
+      "name": "Six Men's Morris (Declarative)",
+      "version": 7,
+      "server_code_sha256": "e387a6e0fd921846d4fff9cc9040a46f2318bb4566b5edf8dbb80c33de370dfe",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "916e927b-0e8a-4831-b248-6a2a91208370",
+      "name": "Six-Card Golf",
+      "version": 4,
+      "server_code_sha256": "78c0baa2d3c3c234aea825af48192161a7c5b416cb98b2998d23aaec280a6bce",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "1eff5a3c-7679-4167-839c-282cfb695e4d",
+      "name": "Slapjack",
+      "version": 4,
+      "server_code_sha256": "cb1f3f6b4991b3f1e0a233156071540c52f4d3bda4e931af0504f1764d7b7072",
+      "all_state_public": false,
+      "reason": "The view shows face-up flips and hand counts without revealing upcoming cards."
+    },
+    {
+      "id": "d01a55a5-c2d9-4f97-b727-efebdbe518f9",
+      "name": "Snakes and Ladders",
+      "version": 5,
+      "server_code_sha256": "c17b0a1f5794056f5d781f2aa17a3425f77f6b77ac93da0f74d08106c43eea18",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "47543e17-2019-4558-a134-54749bce817d",
+      "name": "Snap",
+      "version": 4,
+      "server_code_sha256": "b84294adb17543e01376880de8bfefc6797462c1fd0e8e91d75f29ad300a6a20",
+      "all_state_public": false,
+      "reason": "The view shows face-up flips and hand counts without revealing upcoming cards."
+    },
+    {
+      "id": "fe2ca717-19c3-4ab0-be80-4c11d869f1ff",
+      "name": "SOS",
+      "version": 3,
+      "server_code_sha256": "cef2283a3fbbc38a4d9b3563372edd3b73ade748bfcacf77064f8896c68ea5df",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "56db43a3-4ec6-4707-aa76-cdc53c46cf5f",
+      "name": "Splendor",
+      "version": 2,
+      "server_code_sha256": "5df30d50177efb448aac15d1338b2218f5f8043c9d048ecdbc90e255ff55b857",
+      "all_state_public": false,
+      "reason": "The view hides unseen deck order and other players’ face-down reserved cards."
+    },
+    {
+      "id": "3e15d841-9f30-4d40-ae8d-e632681c3d69",
+      "name": "Spoons",
+      "version": 6,
+      "server_code_sha256": "fca14b73cf4ef47a772f586a5e7086c6ca0dacfc332ecafdd1e34fba69b257c2",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "df50c40b-1267-4e2b-9ca8-a12638a9a364",
+      "name": "Stitch & Time",
+      "version": 2,
+      "server_code_sha256": "de8dcba2680e769039756d5525163f5459e2e4bc30eb3555858728799e7ffaaf",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "0b35477f-4419-409d-b20e-328ecd839b02",
+      "name": "Thirty-one (Declarative)",
+      "version": 6,
+      "server_code_sha256": "c44be66e77d99af2d5903089ac060fd8a318a3a817b5cd757f42a5150baebb0f",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
+    },
+    {
+      "id": "da95efbd-59ef-4cbc-a311-7fafa8fa7b3b",
+      "name": "Three-card Monte",
+      "version": 2,
+      "server_code_sha256": "455fa82e0bd1e11df03c71f9fd2738b0b53e54d42a49063c99613659890473bb",
+      "all_state_public": false,
+      "reason": "The dealer can see the hidden queen position during the guess."
+    },
+    {
+      "id": "3a3c1981-77a3-4fc4-83c5-a37ff604c240",
+      "name": "Tic-Tac-Toe",
+      "version": 5,
+      "all_state_public": true,
+      "reason": "Every mark, the current turn and the result are visible to every player.",
+      "server_code_sha256": "3e782a46bfb8ad9a55ac0fe30c344f1c0caf32b069da949cf98c794a649ea98c"
+    },
+    {
+      "id": "ae0fe2d3-95c1-4a52-be83-5b6100cb091f",
+      "name": "Trivial Pursuit (Declarative)",
+      "version": 2,
+      "server_code_sha256": "285f8b7ad157c9f4ec2c84ad79ecf6cbea1406ad4aea9d105d088b0621c144fc",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "4f881744-1ec8-44e1-8ef4-14fad0fe2917",
+      "name": "Twist Five",
+      "version": 2,
+      "server_code_sha256": "e34942eac9e0b6079f8da9ab140f502a7eef1c9a683d8ca5b2adb62e21d6cacd",
+      "all_state_public": true,
+      "reason": "Reviewed the rules and view function. The gameplay position is shared by all viewers, with only move affordances or the viewer index varying."
+    },
+    {
+      "id": "12f59de6-21d0-4d89-a6ab-3c50345d5b68",
+      "name": "War",
+      "version": 3,
+      "server_code_sha256": "cf41d70b23da7f345074dd7b9fb2e06610c7d8aaa752150bddb17e32024afdeb",
+      "all_state_public": false,
+      "reason": "Face-up cards and deck sizes are visible. Face-down card identities remain hidden."
+    },
+    {
+      "id": "495cfc33-148a-4ffd-98e7-14b0a494bc52",
+      "name": "Whist (Declarative)",
+      "version": 5,
+      "server_code_sha256": "711b6aa75a8c8d36b39d7a7f17406655da99d80dc8e2e4566404ed1119be9fe3",
+      "all_state_public": false,
+      "reason": "The player view keeps unseen cards or other players’ hands private."
     }
   ]
 }
