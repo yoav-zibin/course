@@ -1,7 +1,7 @@
 import {visibleErrorMessage} from '../core/account-scope';
 import {copyText,playerText} from '../platform/i18n';
 import React, {useEffect, useRef, useState} from 'react';
-import {FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, View} from 'react-native';
+import {FlatList, Platform, Pressable, ScrollView, StyleSheet, View} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {categoryKey, CAROUSEL_PAGE_SIZE} from '../core';
 import type {Game, GameCarousel, Match} from '../core/types';
@@ -11,6 +11,7 @@ import {MatchOutcome} from './MatchOutcome';
 import {GameInstructions} from './GameInstructions';
 import {matchGameName} from './match-game';
 import {GameSearch} from './GameSearch';
+import {GameCover} from './GameCover';
 import {isSinglePlayerMatch, matchKind, singlePlayerMatches} from './match-kind';
 import {readLocalUiTest} from '../platform/legacy';
 import {RemoveSavedMatch} from './RemoveSavedMatch';
@@ -19,7 +20,7 @@ function useText() {const {p} = useApp(); return (key: string, fallback: string)
 function GameCard({game}: {game: Game}) {
   const {p,openGame,run} = useApp();
   return <Card style={s.gameCard}><Pressable android_ripple={{color:'#465572'}} accessibilityRole="link" accessibilityLabel={copyText("Play {v0}",{v0:game.name})} onPress={()=>run(()=>openGame(game.id))} style={({pressed})=>({gap:12,opacity:pressed?.75:1})}>
-    {game.cover_url ? <Image source={{uri:new URL(game.cover_url,p.baseUrl).href}} style={s.cover} resizeMode="contain" accessibilityLabel={playerText(game.name)}/> : <View style={[s.cover,{alignItems:'center',justifyContent:'center'}]}><Copy style={{fontSize:44,color:colors.blue}}>◇</Copy></View>}
+    <GameCover uri={game.cover_url?new URL(game.cover_url,p.baseUrl).href:undefined} label={playerText(game.name)}/>
     <Title small>{game.name}</Title><Copy small muted numberOfLines={3}>{game.description}</Copy>
     <Copy small style={{color:colors.blue}}>{game.allowed_player_counts?.join(', ')} {copyText("players")}</Copy>
   </Pressable><Row><Button compact onPress={()=>run(()=>openGame(game.id))}>{copyText("Play")}</Button></Row></Card>;
@@ -202,4 +203,4 @@ export function LocalMatches() {
   </>;
 }
 
-const s=StyleSheet.create({eyebrow:{fontSize:12,letterSpacing:2,fontWeight:'700',color:colors.accent},grid:{flexDirection:'row',flexWrap:'wrap',gap:16},gameCard:{width:GAME_CARD_WIDTH,flexGrow:1,maxWidth:380,padding:18},cover:{width:'100%',height:132,borderRadius:8,backgroundColor:'#222a3d'},columns:{flexDirection:'row',flexWrap:'wrap',gap:18},column:{flex:1,minWidth:260}});
+const s=StyleSheet.create({eyebrow:{fontSize:12,letterSpacing:2,fontWeight:'700',color:colors.accent},grid:{flexDirection:'row',flexWrap:'wrap',gap:16},gameCard:{width:GAME_CARD_WIDTH,flexGrow:1,maxWidth:380,padding:18},columns:{flexDirection:'row',flexWrap:'wrap',gap:18},column:{flex:1,minWidth:260}});
