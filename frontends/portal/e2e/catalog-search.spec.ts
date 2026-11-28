@@ -157,16 +157,19 @@ test('category and recent rows prefetch their next 20 cards at the middle of eac
       return second.getBoundingClientRect().left-first.getBoundingClientRect().left;
     });
     const scroll=async(index:number)=>row.evaluate((element,left)=>{element.scrollLeft=left;},index*step);
+    // An independent account refresh may reread the first page.
+    const nextPages=()=>requests.get(kind)?.filter(start=>start!==0);
     await scroll(7);
     await expect(row.getByRole('link',{name:'Play Card 8',exact:true})).toBeInViewport();
-    expect(requests.get(kind)).toEqual([0]);
+    expect(nextPages()).toEqual([]);
     await scroll(9);
-    await expect.poll(()=>requests.get(kind)).toEqual([0,20]);
-    await scroll(28);
-    await expect(row.getByRole('link',{name:'Play Card 29',exact:true})).toBeInViewport();
-    expect(requests.get(kind)).toEqual([0,20]);
+    await expect.poll(nextPages).toEqual([20]);
+    await expect.poll(()=>row.evaluate(element=>element.scrollWidth)).toBeGreaterThan(step*39);
+    await scroll(27);
+    await expect(row.getByRole('link',{name:'Play Card 28',exact:true})).toBeInViewport();
+    expect(nextPages()).toEqual([20]);
     await scroll(29);
-    await expect.poll(()=>requests.get(kind)).toEqual([0,20,40]);
+    await expect.poll(nextPages).toEqual([20,40]);
     await expect(async()=>{
       await scroll(44);
       await expect(row.getByRole('link',{name:'Play Card 45',exact:true})).toBeInViewport({timeout:1000});

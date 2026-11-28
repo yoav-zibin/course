@@ -234,7 +234,7 @@ class QueryStore:
             max_bytes=256 * 1024 * 1024, refresh_seconds=float('inf'),
             copy_value=_copy_game_metadata)
         self._game_catalog_cache = ReadCache(
-            max_bytes=128 * 1024 * 1024, refresh_seconds=60, copy_value=lambda value: value
+            max_bytes=128 * 1024 * 1024, refresh_seconds=15 * 60, copy_value=lambda value: value
         )
         self._game_catalog_lock = threading.Lock()
         self.translation_memory = TranslationMemory(_BundleBackend(self))

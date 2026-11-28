@@ -32,6 +32,6 @@ scheduled command is `python3 catalog-carousel-review.py --publish`.
 The Portal loads each public category from `/v2/games/carousels/{category}`. Its
 VM keeps playable game summaries and ordered carousel IDs in memory. Writes
 that change live game records invalidate the local snapshot. The VM warms the
-catalog at startup and refreshes it in the background after 60 seconds on the
+catalog at startup and refreshes it in the background after 15 minutes on the
 next request. Recently played uses the same summaries and pages the signed-in
 player's own game IDs.

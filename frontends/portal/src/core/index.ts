@@ -75,7 +75,8 @@ export class PortalStore {
   private paginated = false;
   private paginatedCarousels = false;
   private categoryCarousels = false;
-  private carouselRequests = new Map<string, Promise<void>>();
+  private categoryRefresh: {generation: number; after: number} | undefined;
+  private carouselRequests = new Map<string, {more: boolean; load: Promise<void>}>();
   private expandedCarouselGeneration: Partial<Record<GameCarousel, number>> = {};
   private refreshPromise: Promise<void> | null = null;
   private pendingPackages = new Map<string,Promise<Game>>();
@@ -244,6 +245,9 @@ export class PortalStore {
   }
   private async loadCatalogCarousels(): Promise<void> {
     if (!this.categoryCarousels) return this.loadCarousel('popularGames');
+    const generation = this.generation;
+    if (this.categoryRefresh?.generation === generation && this.categoryRefresh.after > Date.now()) return;
+    const guard = this.capture();
     const rows: GameCategory[] = await this.read(categoryManifestPath);
     if (!Array.isArray(rows)) throw new Error('Invalid game category response');
     const activeRows = new Set(rows.map(row => categoryKey(row.id)));
@@ -251,15 +255,21 @@ export class PortalStore {
       .filter(([key]) => activeRows.has(key as CategoryCarousel)));
     this.patch({gameCategories: rows, categoryGames});
     await Promise.all(rows.map(row => this.loadCarousel(categoryKey(row.id))));
+    guard();
+    this.categoryRefresh = {generation, after: Date.now() + 60_000};
   }
 
   private loadCarousel(kind: GameCarousel, more = false): Promise<void> {
     if (more && (!this.state.cursors[kind] || !this.state.network)) return Promise.resolve();
     const key = `${this.generation}:${kind}`;
     const pending = this.carouselRequests.get(key);
-    if (pending) return pending;
+    if (pending) {
+      if (!more || pending.more) return pending.load;
+      const guard = this.capture();
+      return pending.load.then(() => {guard(); return this.loadCarousel(kind, true);});
+    }
     const load = this.readCarousel(kind, more).finally(() => this.carouselRequests.delete(key));
-    this.carouselRequests.set(key, load);
+    this.carouselRequests.set(key, {more, load});
     return load;
   }
 
