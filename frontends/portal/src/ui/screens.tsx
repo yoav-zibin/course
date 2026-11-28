@@ -2,7 +2,6 @@ import {visibleErrorMessage} from '../core/account-scope';
 import {copyText,playerText} from '../platform/i18n';
 import React, {useEffect, useRef, useState} from 'react';
 import {FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, View} from 'react-native';
-import type {ViewToken} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {categoryKey, CAROUSEL_PAGE_SIZE} from '../core';
 import type {Game, GameCarousel, Match} from '../core/types';
@@ -37,9 +36,9 @@ function GameCarouselRow({kind, title}: {kind: GameCarousel; title: string}) {
   const loadMore = () => {void p.actions.loadMoreGames(kind).catch(()=>{});};
   const prefetch = useRef({loadMore, index: 0});
   prefetch.current = {loadMore, index: games.length >= CAROUSEL_PAGE_SIZE ? games.length - CAROUSEL_PAGE_SIZE / 2 - 1 : Infinity};
-  const onViewableItemsChanged = useRef(({viewableItems}: {viewableItems: ViewToken[]}) => {
+  const onViewableItemsChanged = useRef(({viewableItems}: {viewableItems: {index?: number | null}[]}) => {
     const {index, loadMore} = prefetch.current;
-    if (viewableItems.some(item => item.index !== null && item.index >= index)) loadMore();
+    if (viewableItems.some(item => typeof item.index === 'number' && item.index >= index)) loadMore();
   }).current;
   const viewabilityConfig = useRef({itemVisiblePercentThreshold: 50}).current;
   if (!games.length) return null;
