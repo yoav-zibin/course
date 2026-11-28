@@ -1,0 +1,5 @@
+--- a/ui.js
++++ b/ui.js
+@@ -354 +354 @@
+-        makeMove = { setup: [sel, dest] }; sel = null; dest = null;
++        makeMove = { setup: [Math.min(sel, dest), Math.max(sel, dest)] }; sel = null; dest = null;

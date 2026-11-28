@@ -1,0 +1,5 @@
+--- a/ui.js
++++ b/ui.js
+@@ -287 +287 @@
+-    if (v.drawCount > 0) {
++    if (v.drawCount > 0 || (myTurn && canDraw)) {

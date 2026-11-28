@@ -1,0 +1,512 @@
+--- a/ui.js
++++ b/ui.js
+@@ -153,20 +153 @@
+-// Legality (ported from the server's resolveDest/legalMoves): houses
+-// 28/29 bear off only on exact 3/2; house 30 on exact 1, or any throw
+-// once houses 1..10 are all empty; bearing off past 30 needs the exact
+-// throw and a prior landing on house 26; a pawn below 26 may not jump
+-// over 26 before landing on it; a run of 3+ enemy pawns cannot be
+-// jumped; landing on your own pawn or a defended enemy pawn turns the
+-// mover back to the first empty house below; an undefended enemy pawn
+-// is beaten back. House 27 (Water) sends the pawn back to house 15.
+-// VISITED: whether a pawn has landed on house 26 lives in the server
+-// state (visited) and is NOT in the view. It affects legality only
+-// for throws that would carry a pawn past house 26. The reducer
+-// tracks it exactly in local_state by observing every move from the
+-// start of the match (the Sniff transition-tracking pattern): the
+-// tracked map updates on each move_count step — a pawn landing on 26
+-// becomes visited, a pawn sent back by Water or beaten below 26
+-// becomes unvisited, a beaten pawn placed on 26+ becomes visited.
+-// A viewer who joins mid-match starts from all-unvisited, so a pawn
+-// that secretly visited 26 and fell back is offered conservatively
+-// (never an illegal move; at most a legal move is not offered until
+-// the pawn lands on 26 again under observation).
++// The active player's choices and their final houses come from the server.
+@@ -183,91 +163,0 @@
+-function seOccS(P, h) {
+-  let out = null;
+-  P.forEach(function (arr, seat) {
+-    arr.forEach(function (x, i) { if (x === h) out = { seat: seat, idx: i }; });
+-  });
+-  return out;
+-}
+-function seFirstEmptyBelowS(P, h) {
+-  for (let x = h; x >= 1; x--) if (!seOccS(P, x)) return x;
+-  return 0;
+-}
+-function seBounceDestS(P, seat, i, dest) {
+-  const h = P[seat][i];
+-  for (let x = dest - 1; x >= 1; x--) {
+-    if (x === h) return h;
+-    if (!seOccS(P, x)) return x;
+-  }
+-  return h;
+-}
+-function seDefendedS(P, seat, h) {
+-  for (let s = 0; s < P.length; s++) {
+-    if (s === seat) continue;
+-    return P[s].indexOf(h - 1) >= 0 || P[s].indexOf(h + 1) >= 0;
+-  }
+-  return false;
+-}
+-function seBlockedRunS(P, seat, fromH, toH) {
+-  const set = {};
+-  for (let s = 0; s < P.length; s++) {
+-    if (s === seat) continue;
+-    P[s].forEach(function (x) { if (x >= 1) set[x] = true; });
+-  }
+-  let run = 0;
+-  for (let h = 1; h <= 30; h++) {
+-    run = set[h] ? run + 1 : 0;
+-    if (run >= 3 && h > fromH && h - 2 < toH) return true;
+-  }
+-  return false;
+-}
+-// S = {P: pieces by seat, V: visited by seat, roll}
+-function seResolveDestS(S, seat, i) {
+-  const P = S.P, h = P[seat][i], R = S.roll;
+-  if (h === 0) return null;
+-  if (h === 28) return R === 3 ? { to: 0 } : null;
+-  if (h === 29) return R === 2 ? { to: 0 } : null;
+-  if (h === 30) {
+-    if (R === 1) return { to: 0 };
+-    let lowEmpty = true;
+-    for (let x = 1; x <= 10; x++) if (seOccS(P, x)) lowEmpty = false;
+-    return lowEmpty ? { to: 0 } : null;
+-  }
+-  const dest = h + R;
+-  if (dest > 31) return null;
+-  if (dest === 31) return S.V[seat][i] ? { to: 0 } : null;
+-  if (h < 26 && dest > 26 && !S.V[seat][i]) return null;
+-  if (seBlockedRunS(P, seat, h, dest)) return null;
+-  const o = seOccS(P, dest);
+-  if (o && o.seat === seat) return { to: seBounceDestS(P, seat, i, dest) };
+-  if (o && o.seat !== seat && seDefendedS(P, seat, dest)) return { to: seBounceDestS(P, seat, i, dest) };
+-  return { to: dest };
+-}
+-function seLegalMovesS(S, seat) {
+-  const P = S.P, moves = [];
+-  if (S.roll === null || S.roll === undefined) return moves;
+-  P[seat].forEach(function (h, i) {
+-    if (h === 0) return;
+-    const r = seResolveDestS(S, seat, i);
+-    if (r && r.to !== h) moves.push({ piece: i, back: false });
+-  });
+-  if (moves.length) return moves;
+-  P[seat].forEach(function (h, i) {
+-    if (h === 0) return;
+-    const dest = h - S.roll;
+-    if (dest >= 1 && !seOccS(P, dest)) moves.push({ piece: i, back: true });
+-  });
+-  return moves;
+-}
+-// Final resting house of a forward move (capture + Water resolved).
+-function seFinalHouseS(S, seat, i) {
+-  const P = S.P.map(function (a) { return a.slice(); });
+-  const r = seResolveDestS(S, seat, i);
+-  if (!r) return P[seat][i];
+-  const dest = r.to;
+-  if (dest === 0) return 0;
+-  const o = seOccS(S.P, dest);
+-  const victim = o && o.seat !== seat && !seDefendedS(S.P, seat, dest) ? o : null;
+-  P[seat][i] = dest;
+-  if (victim) P[victim.seat][victim.idx] = seFirstEmptyBelowS(P, dest - 1);
+-  if (dest === 27) return seOccS(P, 15) ? seFirstEmptyBelowS(P, 14) : 15;
+-  return dest;
+-}
+@@ -282,29 +171,0 @@
+-// Advance the tracked visited map across exactly one observed move.
+-// prev = {vis, pp, pc, pr} snapshot of the previous state; P = pieces
+-// by seat now; returns the updated visited map (by seat).
+-function seTrackAdvance(prev, P, n) {
+-  const vis = prev.vis.map(function (a) { return a.slice(); });
+-  const mover = prev.pc;
+-  if (mover === null || mover === undefined || !prev.pp) return vis;
+-  const S = { P: prev.pp, V: prev.vis, roll: prev.pr };
+-  const fwd = seLegalMovesS(S, mover).filter(function (m) { return !m.back; });
+-  // mover pawn: the one whose house changed
+-  let mi = -1;
+-  (prev.pp[mover] || []).forEach(function (h, i) { if (P[mover] && P[mover][i] !== h) mi = i; });
+-  if (mi >= 0 && fwd.length) {
+-    const r = seResolveDestS(S, mover, mi);
+-    if (r) {
+-      if (r.to === 26) vis[mover][mi] = true;
+-      else if (r.to === 27) vis[mover][mi] = false;
+-    }
+-  }
+-  // beaten pawns: any other seat's pawn whose house changed
+-  for (let s = 0; s < n; s++) {
+-    if (s === mover) continue;
+-    (prev.pp[s] || []).forEach(function (h, i) {
+-      if (P[s] && P[s][i] !== h) vis[s][i] = P[s][i] >= 26;
+-    });
+-  }
+-  return vis;
+-}
+-
+@@ -325,15 +186 @@
+-    // ---- visited tracking (see the section header) -------------------------
+-    const stored = localState && typeof localState === "object" ? localState : null;
+-    let vis;
+-    if (stored && Array.isArray(stored.vis) && Array.isArray(stored.pp)
+-        && typeof stored.mc === "number") {
+-      if (s.move_count === stored.mc + 1) vis = seTrackAdvance(stored, P, nPlayers);
+-      else if (s.move_count === 0) vis = P.map(function (a) { return a.map(function () { return false; }); });
+-      else vis = stored.vis.map(function (a) { return a.slice(); });
+-    } else {
+-      vis = P.map(function (a) { return a.map(function () { return false; }); });
+-    }
+-    const snap = { vis: vis, pp: P, pc: currentSeat, pr: v.roll, mc: s.move_count };
+-
+-    const S = { P: P, V: vis, roll: v.roll };
+-    const legal = myTurn ? seLegalMovesS(S, me) : [];
++    const legal = myTurn ? v.choices : [];
+@@ -436,2 +283,2 @@
+-      if (backMode) hint = T("hint_selected_back", { piece: sel + 1, dest: seLabelFor(T, P[me][sel] - v.roll) });
+-      else hint = T("hint_selected", { piece: sel + 1, dest: seLabelFor(T, seFinalHouseS(S, me, sel)) });
++      if (backMode) hint = T("hint_selected_back", { piece: sel + 1, dest: seLabelFor(T, legal.find(function (move) { return move.piece === sel; }).house) });
++      else hint = T("hint_selected", { piece: sel + 1, dest: seLabelFor(T, legal.find(function (move) { return move.piece === sel; }).house) });
+@@ -467,2 +314 @@
+-    out.local_state = makeMove ? Object.assign({ sel: null }, snap)
+-      : Object.assign({ sel: sel }, snap);
++    out.local_state = { sel: makeMove ? null : sel, mc: s.move_count };
+--- a/server.js
++++ b/server.js
+@@ -175,0 +176,32 @@
++function playPawn(st, ctx, playerId, move){
++  var playedRoll = st.roll, h = st.pieces[playerId][move.piece];
++  if(move.back){
++    st.pieces[playerId][move.piece] = h - playedRoll;
++  } else {
++    var r = resolveDest(st, ctx, playerId, move.piece);
++    var dest = r.to;
++    if(dest === 0){
++      st.pieces[playerId][move.piece] = 0;
++    } else {
++      var o = occ(st, ctx, dest);
++      var victim = (o && o.pid !== playerId && !defended(st, ctx, playerId, dest)) ? o : null;
++      st.pieces[playerId][move.piece] = dest;
++      if(victim){
++        // Capture: the beaten pawn goes to the first empty house
++        // below the house where it was hit.
++        var vp = firstEmptyBelow(st, ctx, dest - 1);
++        st.pieces[victim.pid][victim.idx] = vp;
++        st.visited[victim.pid][victim.idx] = vp >= 26;
++      }
++      if(dest === 27){
++        // The House of Water sends the pawn back to house 15, or the
++        // first empty house below it.
++        var back = occ(st, ctx, 15) ? firstEmptyBelow(st, ctx, 14) : 15;
++        st.pieces[playerId][move.piece] = back;
++        st.visited[playerId][move.piece] = false;
++      } else if(dest === 26){
++        st.visited[playerId][move.piece] = true;
++      }
++    }
++  }
++}
+@@ -195,30 +227,2 @@
+-    var st = clone(state), playedRoll = st.roll, h = st.pieces[playerId][move.piece];
+-    if(move.back){
+-      st.pieces[playerId][move.piece] = h - playedRoll;
+-    } else {
+-      var r = resolveDest(st, ctx, playerId, move.piece);
+-      var dest = r.to;
+-      if(dest === 0){
+-        st.pieces[playerId][move.piece] = 0;
+-      } else {
+-        var o = occ(st, ctx, dest);
+-        var victim = (o && o.pid !== playerId && !defended(st, ctx, playerId, dest)) ? o : null;
+-        st.pieces[playerId][move.piece] = dest;
+-        if(victim){
+-          // Capture: the beaten pawn goes to the first empty house
+-          // below the house where it was hit.
+-          var vp = firstEmptyBelow(st, ctx, dest - 1);
+-          st.pieces[victim.pid][victim.idx] = vp;
+-          st.visited[victim.pid][victim.idx] = vp >= 26;
+-        }
+-        if(dest === 27){
+-          // The House of Water sends the pawn back to house 15, or the
+-          // first empty house below it.
+-          var back = occ(st, ctx, 15) ? firstEmptyBelow(st, ctx, 14) : 15;
+-          st.pieces[playerId][move.piece] = back;
+-          st.visited[playerId][move.piece] = false;
+-        } else if(dest === 26){
+-          st.visited[playerId][move.piece] = true;
+-        }
+-      }
+-    }
++    var st = clone(state), playedRoll = st.roll;
++    playPawn(st, ctx, playerId, move);
+@@ -255 +259,7 @@
+-    return { pieces: clone(state.pieces), current: state.current, roll: state.roll, pending: [], winner: state.winner };
++    legalMoves.ctx = ctx;
++    var choices = legalMoves(state, playerId).map(function(move){
++      var projected = clone(state);
++      playPawn(projected, ctx, playerId, move);
++      return { piece: move.piece, back: move.back === true, house: projected.pieces[playerId][move.piece] };
++    });
++    return { pieces: clone(state.pieces), current: state.current, roll: state.roll, pending: [], winner: state.winner, choices: choices };
+--- a/unit_tests.json
++++ b/unit_tests.json
+@@ -75 +75,2 @@
+-      "winner"
++      "winner",
++      "choices"
+@@ -112,0 +114,28 @@
++      },
++      "choices": {
++        "type": "array",
++        "maxItems": 5,
++        "items": {
++          "type": "object",
++          "required": [
++            "piece",
++            "back",
++            "house"
++          ],
++          "additionalProperties": false,
++          "properties": {
++            "piece": {
++              "type": "integer",
++              "minimum": 0,
++              "maximum": 4
++            },
++            "back": {
++              "type": "boolean"
++            },
++            "house": {
++              "type": "integer",
++              "minimum": 0,
++              "maximum": 30
++            }
++          }
++        }
+@@ -226 +255,28 @@
+-        "winner": null
++        "winner": null,
++        "choices": [
++          {
++            "piece": 0,
++            "back": false,
++            "house": 6
++          },
++          {
++            "piece": 1,
++            "back": false,
++            "house": 8
++          },
++          {
++            "piece": 2,
++            "back": false,
++            "house": 10
++          },
++          {
++            "piece": 3,
++            "back": false,
++            "house": 12
++          },
++          {
++            "piece": 4,
++            "back": false,
++            "house": 14
++          }
++        ]
+@@ -248 +304,2 @@
+-        "winner": null
++        "winner": null,
++        "choices": []
+@@ -317 +374,18 @@
+-        "winner": null
++        "winner": null,
++        "choices": [
++          {
++            "piece": 2,
++            "back": false,
++            "house": 15
++          },
++          {
++            "piece": 3,
++            "back": false,
++            "house": 12
++          },
++          {
++            "piece": 4,
++            "back": false,
++            "house": 14
++          }
++        ]
+@@ -339 +413,2 @@
+-        "winner": null
++        "winner": null,
++        "choices": []
+@@ -445 +520,18 @@
+-        "winner": null
++        "winner": null,
++        "choices": [
++          {
++            "piece": 0,
++            "back": false,
++            "house": 11
++          },
++          {
++            "piece": 1,
++            "back": false,
++            "house": 5
++          },
++          {
++            "piece": 2,
++            "back": false,
++            "house": 7
++          }
++        ]
+@@ -467 +559,2 @@
+-        "winner": null
++        "winner": null,
++        "choices": []
+@@ -536 +629,28 @@
+-        "winner": null
++        "winner": null,
++        "choices": [
++          {
++            "piece": 0,
++            "back": false,
++            "house": 14
++          },
++          {
++            "piece": 1,
++            "back": false,
++            "house": 5
++          },
++          {
++            "piece": 2,
++            "back": false,
++            "house": 11
++          },
++          {
++            "piece": 3,
++            "back": false,
++            "house": 12
++          },
++          {
++            "piece": 4,
++            "back": false,
++            "house": 13
++          }
++        ]
+@@ -558 +678,2 @@
+-        "winner": null
++        "winner": null,
++        "choices": []
+@@ -664 +785,18 @@
+-        "winner": null
++        "winner": null,
++        "choices": [
++          {
++            "piece": 0,
++            "back": false,
++            "house": 11
++          },
++          {
++            "piece": 1,
++            "back": false,
++            "house": 5
++          },
++          {
++            "piece": 2,
++            "back": false,
++            "house": 7
++          }
++        ]
+@@ -686 +824,2 @@
+-        "winner": null
++        "winner": null,
++        "choices": []
+@@ -759 +898,18 @@
+-        "winner": null
++        "winner": null,
++        "choices": [
++          {
++            "piece": 0,
++            "back": false,
++            "house": 11
++          },
++          {
++            "piece": 1,
++            "back": false,
++            "house": 5
++          },
++          {
++            "piece": 2,
++            "back": false,
++            "house": 7
++          }
++        ]
+@@ -781 +937,2 @@
+-        "winner": null
++        "winner": null,
++        "choices": []
+@@ -887 +1044,8 @@
+-        "winner": null
++        "winner": null,
++        "choices": [
++          {
++            "piece": 4,
++            "back": false,
++            "house": 0
++          }
++        ]
+@@ -909 +1073,2 @@
+-        "winner": null
++        "winner": null,
++        "choices": []
+@@ -978 +1143,2 @@
+-        "winner": "u1"
++        "winner": "u1",
++        "choices": []
+@@ -1000 +1166,2 @@
+-        "winner": "u1"
++        "winner": "u1",
++        "choices": []
+@@ -1109 +1276,28 @@
+-        "winner": null
++        "winner": null,
++        "choices": [
++          {
++            "piece": 0,
++            "back": false,
++            "house": 11
++          },
++          {
++            "piece": 1,
++            "back": false,
++            "house": 13
++          },
++          {
++            "piece": 2,
++            "back": false,
++            "house": 15
++          },
++          {
++            "piece": 3,
++            "back": false,
++            "house": 17
++          },
++          {
++            "piece": 4,
++            "back": false,
++            "house": 20
++          }
++        ]
+@@ -1131 +1325,2 @@
+-        "winner": null
++        "winner": null,
++        "choices": []
+@@ -1200 +1395,2 @@
+-        "winner": "u2"
++        "winner": "u2",
++        "choices": []
+@@ -1222 +1418,2 @@
+-        "winner": "u2"
++        "winner": "u2",
++        "choices": []
