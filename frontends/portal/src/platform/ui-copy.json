@@ -1322,6 +1322,60 @@
     "hi": "आप बिना खाते के भी इस डिवाइस पर खेल सकते हैं।",
     "ar": "يمكنك أيضًا اللعب محليًا دون حساب."
   },
+  "Board & Strategy Games": {
+    "es": "Juegos de mesa y estrategia",
+    "fr": "Jeux de plateau et de stratégie",
+    "de": "Brett- und Strategiespiele",
+    "pt": "Jogos de tabuleiro e estratégia",
+    "zh": "棋盘与策略游戏",
+    "hi": "बोर्ड और रणनीति के खेल",
+    "ar": "ألعاب اللوح والاستراتيجية"
+  },
+  "Card Games": {
+    "es": "Juegos de cartas",
+    "fr": "Jeux de cartes",
+    "de": "Kartenspiele",
+    "pt": "Jogos de cartas",
+    "zh": "纸牌游戏",
+    "hi": "ताश के खेल",
+    "ar": "ألعاب الورق"
+  },
+  "Dice Games": {
+    "es": "Juegos de dados",
+    "fr": "Jeux de dés",
+    "de": "Würfelspiele",
+    "pt": "Jogos de dados",
+    "zh": "骰子游戏",
+    "hi": "पासे के खेल",
+    "ar": "ألعاب النرد"
+  },
+  "Domino Games": {
+    "es": "Juegos de dominó",
+    "fr": "Jeux de dominos",
+    "de": "Dominospiele",
+    "pt": "Jogos de dominó",
+    "zh": "多米诺游戏",
+    "hi": "डोमिनो के खेल",
+    "ar": "ألعاب الدومينو"
+  },
+  "Word & Party Games": {
+    "es": "Juegos de palabras y de fiesta",
+    "fr": "Jeux de mots et d’ambiance",
+    "de": "Wort- und Partyspiele",
+    "pt": "Jogos de palavras e de festa",
+    "zh": "文字与聚会游戏",
+    "hi": "शब्द और पार्टी के खेल",
+    "ar": "ألعاب الكلمات والحفلات"
+  },
+  "Miscellaneous": {
+    "es": "Otros juegos",
+    "fr": "Autres jeux",
+    "de": "Weitere Spiele",
+    "pt": "Outros jogos",
+    "zh": "其他游戏",
+    "hi": "अन्य खेल",
+    "ar": "ألعاب متنوعة"
+  },
   "Search games": {
     "es": "Buscar juegos",
     "fr": "Rechercher des jeux",
