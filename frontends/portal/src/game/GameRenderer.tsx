@@ -31,11 +31,11 @@ export type GameRendererProps = {
   onScene?: (scene:Scene,message:StateMessage)=>void;
   showToolbar?: boolean;
   showDestinationsAfterSelection?: boolean;
+  publicView?: boolean;
   omitPieceId?: string;
   boardPresentation?: {
     visibleBoard?: (board: Board) => boolean;
     presentScene: (scene: Scene, message: StateMessage) => Scene;
-    showActionBadges?: (piece: Piece) => boolean;
     showSelectionFooter?: boolean;
     motion?: Partial<Motion>;
   };
@@ -45,7 +45,6 @@ export type GameRendererProps = {
 
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const signs: Record<string, string> = {tap: '↖', move: '↔', rotate: '↻', flip: '⇋', scale: '↗'};
 const labels: Record<string, string> = {tap: 'Select', move: 'Move', rotate: 'Rotate', flip: 'Flip', scale: 'Resize'};
 
 function errorOf(value: unknown) { return value instanceof Error ? value : new Error(String(value)); }
@@ -61,7 +60,7 @@ export function GameRenderer(props: GameRendererProps) {
     catch (error) { return {error: errorOf(error)}; }
   }, [serialized, motion]);
   useEffect(()=>{if(checked.error)recordDiagnosticLog('error','visible_game_error',checked.error);},[checked.error]);
-  const viewer=props.message.my_player_index??'spectator';
+  const viewer=props.publicView?'public':props.message.my_player_index??'spectator';
   const rendererKey=useMemo(()=>`${props.contextKey||''}:${serialized}:viewer:${viewer}`,[props.contextKey,serialized,viewer]);
   if (!checked.spec) return <Text accessibilityRole="alert" style={styles.error}>{playerText(checked.error?.message || copyText("Invalid game package"))}</Text>;
   return <Renderer {...props} key={rendererKey} spec={checked.spec} />;
@@ -75,7 +74,7 @@ type Gesture = {
 };
 type Display = {scene: Scene; previous: Scene; animate: boolean; serial: number; replay:boolean;ghosts:Piece[];inferGroups?:boolean;moves?:Map<string,MoveTrack>;tracks?:Map<string,SceneTrack>;started?:number};
 
-function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,showDestinationsAfterSelection=false,omitPieceId,boardPresentation,frameHeight,fillFrame=false}: GameRendererProps & {spec: GameSpec}) {
+function Renderer({spec, message, presentationHistory, onMove, onError, deliveryKey,onAnimationStateChange,onScene,showToolbar=true,showDestinationsAfterSelection=false,publicView=false,omitPieceId,boardPresentation,frameHeight,fillFrame=false}: GameRendererProps & {spec: GameSpec}) {
   const [display, setDisplay] = useState<Display>({scene: {}, previous: {}, animate: false, serial: 0,replay:false,ghosts:[]});
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
@@ -155,6 +154,27 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     callbacks.current.onAnimationStateChange?.(false);
   },[reducedMotion]);
 
+  const replaying=Boolean(message.replay);
+  useEffect(()=>{
+    if(!display.animate||!replaying)return;
+    let frame=0,previous:number|undefined,frames=0,slowFrames=0,maxGap=0;
+    const measure=(time:number)=>{
+      if(previous!==undefined){
+        const gap=time-previous;
+        frames++;
+        if(gap>32)slowFrames++;
+        maxGap=Math.max(maxGap,gap);
+      }
+      previous=time;
+      frame=requestAnimationFrame(measure);
+    };
+    frame=requestAnimationFrame(measure);
+    return ()=>{
+      cancelAnimationFrame(frame);
+      if(frames)recordDiagnosticEvent('history_animation_frames',{frames,slow_frames:slowFrames,max_gap_ms:Math.round(maxGap)});
+    };
+  },[display.animate,display.serial,replaying]);
+
   useEffect(()=>{
     if(Platform.OS!=='web')return;
     // Piece controls and account dialogs live outside the SVG canvas. Escape
@@ -200,13 +220,13 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
     let timelineDuration:number|undefined;
     let animate = explicit
       ? !!tracks?.size && (stateChange?animateSceneUpdate(lastPaint.current,message):!!lastPaint.current&&canMove(message,sent.current))
-      : stateChange && (animations===null?animateUpdate(lastPaint.current,message):animateLastMove(lastPaint.current,message));
+      : stateChange && (animations===null?animateUpdate(lastPaint.current,message):animateLastMove(lastPaint.current,message,spec.motion?.animate_own,publicView));
     if (timeline) {
       const plan=compileTimeline(spec,reverse?raw:previous?.scene??{},reverse?previous!.scene:raw,timeline,reverse);
       const fresh=authored.timeline ? lastTimelineKey.current!==authored.timeline.key :
         authored.animations ? !!tracks?.size : true;
       const eligible=authored.last_move_animations && !authored.timeline && !authored.animations
-        ? animateLastMove(lastPaint.current,message)
+        ? animateLastMove(lastPaint.current,message,spec.motion?.animate_own,publicView)
         : stateChange ? animateSceneUpdate(lastPaint.current,message) : !!lastPaint.current && canMove(message,sent.current);
       animate=!!plan.tracks.size && (historyStep || (fresh && eligible));
       tracks=plan.tracks;
@@ -256,7 +276,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       }
       catch (reason) { if(atRevision===revision.current){sent.current=false;setBusy(false);} report(reason); }
     }
-  },[spec,report,omitPieceId,boardPresentation]);
+  },[spec,report,omitPieceId,boardPresentation,publicView]);
 
   const messageJSON = useMemo(()=>JSON.stringify(message),[message]);
   const historyJSON = useMemo(()=>JSON.stringify(presentationHistory??null),[presentationHistory]);
@@ -634,7 +654,7 @@ function Renderer({spec, message, presentationHistory, onMove, onError, delivery
       const graphic=<PieceGraphic key={`${item.ghost?'ghost':'piece'}:${item.piece.id}`} piece={item.piece} previous={item.previous}
         spec={spec} {...item.options} serial={display.serial} enabled={active&&!item.ghost} selected={item.piece.selected||rootId===selected}
         started={display.started} concealed={rootId===draggedId} onPress={pressPiece}
-        artworkRef={templates.ids.get(item.piece)} showActionBadges={boardPresentation?.showActionBadges?.(item.piece)}/>;
+        artworkRef={templates.ids.get(item.piece)}/>;
       (item.z<=STATIC_PIECE_Z_MAX?lower:upper).push(!item.ghost&&pieceActions(item.piece).length&&boardInput.wrapPiece?
         boardInput.wrapPiece(graphic,rootId):graphic);
     }
@@ -776,7 +796,7 @@ const BoardGraphic=memo(function BoardGraphic({board,spec}:{board:Board;spec:Gam
   </G>;
 });
 
-const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false,concealed=false,dragged=false,artworkRef,showActionBadges=true}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:(piece:Piece)=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean;concealed?:boolean;dragged?:boolean;artworkRef?:string;showActionBadges?:boolean}) {
+const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,serial,enabled,selected,onPress,effect,inferMovement=true,moveTrack,sceneTrack,started,pulseEnabled=false,concealed=false,dragged=false,artworkRef}:{piece:Piece;previous?:Piece;spec:GameSpec;animate:boolean;serial:number;enabled:boolean;selected?:boolean;onPress?:(piece:Piece)=>void;effect?:'enter'|'change'|'exit';inferMovement?:boolean;moveTrack?:MoveTrack;sceneTrack?:SceneTrack;started?:number;pulseEnabled?:boolean;concealed?:boolean;dragged?:boolean;artworkRef?:string}) {
   const [frameState,setFrameState]=useState({serial:-1,phase:1});
   const {newEffect,next,before,popAnimation,needsAnimation,duration,delay}=pieceAnimation(spec,piece,previous,
     {animate,effect,inferMovement,moveTrack,sceneTrack,pulseEnabled});
@@ -815,7 +835,6 @@ const PieceGraphic=memo(function PieceGraphic({piece,previous,spec,animate,seria
     {!shared && (artworkRef?<Use href={`#${artworkRef}`}/>:<Asset spec={spec} id={piece.asset??type.asset} x={-size.width/2} y={-size.height/2} width={size.width} height={size.height}/>)}
     {!shared&&piece.text!==undefined&&<SvgText textAnchor="middle" alignmentBaseline="central" fill={type.text_color||(type.shape==='text'?'#ecf4fa':'#122735')} fontSize={type.font_size??Math.min(size.width*.5,size.height*.6,40)} fontWeight="700">{playerText(piece.text||'')}</SvgText>}
     {type.action_outline!=='none'&&(type.action_outline==='ellipse'?<Ellipse rx={size.width/2+4} ry={size.height/2+4} fill="none" stroke={outline} strokeWidth={selected?4:2}/>:<Rect x={-size.width/2-4} y={-size.height/2-4} width={size.width+8} height={size.height+8} rx={8} fill="none" stroke={outline} strokeWidth={selected?4:2}/>)}
-    {showActionBadges&&enabled&&actions.length>0&&<G transform={`translate(${-size.width/2} ${-size.height/2-13})`} pointerEvents="none">{actions.map((action,index)=><G key={action} transform={`translate(${index*22} 0)`}><Rect x={0} y={-9} width={20} height={18} rx={5} fill="#122b3a" stroke="#75ceee"/><SvgText x={10} y={0} textAnchor="middle" alignmentBaseline="central" fill="#ffffff" fontSize={14}>{signs[action]}</SvgText></G>)}</G>}
   </G>;
 });
 

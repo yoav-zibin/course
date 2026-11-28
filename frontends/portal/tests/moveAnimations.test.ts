@@ -41,6 +41,10 @@ test('fall paths never drift horizontally and zero-duration steps settle',()=>{
 test('game paths animate known opponent actors only on consecutive forward snapshots',()=>{
   assert.equal(animateLastMove(message(1),message(2)),true);
   assert.equal(animateLastMove(message(1),message(2,{last_move_player_index:0})),false);
+  assert.equal(animateLastMove(message(1),message(2,{last_move_player_index:0}),true),true);
+  const nextSeat=message(2,{my_player_index:1,last_move_player_index:0});
+  assert.equal(animateLastMove(message(1),nextSeat,true),false);
+  assert.equal(animateLastMove(message(1),nextSeat,true,true),true);
   for(const previous of [null,message(0),message(2),message(3),message(1,{replay:{index:1}}),message(1,{my_player_index:1})])
     assert.equal(animateLastMove(previous,message(2)),false);
   for(const actor of [null,undefined])assert.equal(animateLastMove(message(1),message(2,{last_move_player_index:actor})),false);

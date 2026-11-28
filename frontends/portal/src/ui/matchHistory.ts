@@ -84,7 +84,8 @@ export function createMatchHistoryController(options:HistoryOptions){
           await wait(40);
         }
         if(!active())return;
-        await wait(180);if(!active())return;
+        // Leave the settled board visible before starting the next move.
+        await wait(420);if(!active())return;
         if(index>=end||index>=options.snapshot().total){await show(null,expectedScope,token);return;}
         const next=await show(index+1,expectedScope,token);if(!next)return;
         if(next.index===null||next.index<=index)return;

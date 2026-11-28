@@ -1,0 +1,29 @@
+--- a/ui.js
++++ b/ui.js
+@@ -0,0 +1 @@
++const specBoardOffset = {"x": 28, "y": 116};
+@@ -85,0 +87,7 @@
++ const bx=specBoardOffset.x, by=specBoardOffset.y;
++ s.paths=[];
++ for(const n of [1,2]){
++   const x=bx+292+n*120, y=by+67+n*112;
++   s.paths.push({id:'grid-v-'+n,points:[{x,y:by+67},{x,y:by+403}],color:PALETTE.pale,width:5});
++   s.paths.push({id:'grid-h-'+n,points:[{x:bx+292,y},{x:bx+652,y}],color:PALETTE.pale,width:5});
++ }
+--- a/piece_types.json
++++ b/piece_types.json
+@@ -241,2 +241,2 @@
+-    "color": "#33534b",
+-    "height": 48,
++    "color": "#00000000",
++    "height": 64,
+@@ -245 +245,3 @@
+-    "width": 55
++    "width": 68,
++    "border_color": "#00000000",
++    "action_outline": "none"
+--- a/metadata.json
++++ b/metadata.json
+@@ -2 +2 @@
+-  "all_state_public": false
++  "all_state_public": true

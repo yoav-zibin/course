@@ -3,13 +3,13 @@ import { position } from './validation';
 
 export type MoveTrack = { segments: { from: Point; to: Point; start: number; end: number; z?:number }[]; duration: number };
 
-// Only a consecutive accepted opponent update can play the path stored in its
+// Only a consecutive accepted update can play the path stored in its
 // view. A reconnect/jump has no complete preceding position to animate from.
-export function animateLastMove(previous: StateMessage | null, next: StateMessage): boolean {
+export function animateLastMove(previous: StateMessage | null, next: StateMessage, animateOwn=false, publicView=false): boolean {
   return !!previous && Number.isSafeInteger(previous.move_count) && next.move_count === previous.move_count! + 1
-    && (previous.my_player_index ?? null) === (next.my_player_index ?? null)
+    && (publicView || (previous.my_player_index ?? null) === (next.my_player_index ?? null))
     && !!previous.replay === !!next.replay && Number.isInteger(next.last_move_player_index)
-    && next.last_move_player_index !== next.my_player_index;
+    && (animateOwn || next.last_move_player_index !== next.my_player_index);
 }
 
 export function moveTracks(spec: GameSpec, animations: MoveAnimation[]): Map<string, MoveTrack> {

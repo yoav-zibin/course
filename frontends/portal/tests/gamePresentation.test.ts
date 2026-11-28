@@ -42,8 +42,6 @@ test('Backgammon keeps checker, die, and cube actions without redundant badges o
     labels:[{id:'hint_move',text:'Try a move',x:30,y:30}]},{view:{}} as StateMessage);
   assert.deepEqual(scene.pieces,[checker,die,cube,{...tools[0],position:{x:30,y:-18}}]);
   assert.deepEqual(scene.labels,[]);
-  for(const piece of [checker,die,cube])assert.equal(presentation.showActionBadges?.(piece),false);
-  assert.equal(presentation.showActionBadges?.(tools[0]),true);
   assert.equal(presentation.showSelectionFooter,false);
 });
 

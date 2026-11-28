@@ -8,7 +8,7 @@ import {performInviteShare,type InviteShareChannel} from '../core/invite-sharing
 import {GameRenderer} from '../game/GameRenderer';
 import {preparePresentationRuntime} from '../game/preparePresentationResponse';
 import {BACKGAMMON_GAME_ID,backgammonMatchPresentation} from '../game/backgammonMatchPresentation';
-import {CHESS_GAME_ID,chessMatchPresentation,fillsMatchLandscape} from '../game/matchBoardLayout';
+import {CHECKERS_GAME_ID,CHESS_GAME_ID,checkersMatchPresentation,chessMatchPresentation,fillsMatchLandscape} from '../game/matchBoardLayout';
 import {Button,Card,Copy,Dialog,Empty,Notice,Row,Title,colors} from './components';
 import {text,useApp} from './context';
 import {reportClientIssue} from '../core/reporting';
@@ -43,9 +43,11 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
   const backgammon=game?.id===BACKGAMMON_GAME_ID;
   const {width,height}=useWindowDimensions();
   const fillBoard=fillsMatchLandscape(match.game_id,width,height);
+  const checkers=match.game_id===CHECKERS_GAME_ID;
+  const checkersDrag=checkers&&game?.declarative_ui?.ui_code?.includes("checkers-drop-");
   const chessDrag=match.game_id===CHESS_GAME_ID&&game?.declarative_ui?.ui_code?.includes("chess-drop-");
   const boardPresentation=backgammon?backgammonMatchPresentation:
-    match.game_id===CHESS_GAME_ID?chessMatchPresentation(fillBoard):undefined;
+    match.game_id===CHESS_GAME_ID?chessMatchPresentation(fillBoard):checkers?checkersMatchPresentation:undefined;
   const hasInstructions=Boolean(game&&(game.tutorial_text||game.game_logic_rules||game.game_ui_rules));
   const sharingScope=JSON.stringify([p.baseUrl,p.account?.id,match.id]),currentSharingScope=useRef(sharingScope);currentSharingScope.current=sharingScope;
   const [confirm,setConfirm]=useState(''),[rendererError,setRendererError]=useState('');
@@ -116,7 +118,7 @@ export function MatchStage({menuOpen=false,onCloseMenu,menuHeader,menuExtras,his
     {singlePlayer&&waiting?<Card><Copy muted>{copyText('Private to your account')}</Copy>{owner&&<Button disabled={p.loading||Boolean(match.cloud_pending)||!p.network||!game?.allowed_player_counts.includes(activePlayers)} onPress={()=>run(()=>p.actions.matchAction('start'))}>{t('ui.match.start_match','Start match')}</Button>}</Card>
       :!singlePlayer&&waiting?<Card><Title small>{owner?copyText("Your lobby is ready"):copyText("Waiting for the host")}</Title><Copy muted>{owner?copyText("Share the match with a friend. Start when the required number of players has joined."):copyText("Join an open seat, then the host can start the game.")}</Copy>{owner&&!game?.allowed_player_counts.includes(match.players.length)&&<Copy small muted>{copyText("This game needs")} {game?.allowed_player_counts.join(', ')} {copyText("players.")}</Copy>}</Card>
       :match.awaitingHandoff?<Card style={{alignItems:'center',padding:40}}><Title small>{copyText("Pass the device")}</Title><Copy muted>{copyText("The next player’s board stays hidden until they are ready.")}</Copy><Button onPress={()=>run(()=>p.actions.revealLocal())}>{copyText("I’m ready")}</Button></Card>
-      :game?.declarative_ui&&message?<View testID="game-stage" style={[{backgroundColor:colors.surface,width:'100%',minWidth:0},fittedBoard&&{flex:1,minHeight:0}]} onLayout={event=>{if(fittedBoard)setFrameHeight(event.nativeEvent.layout.height);}}><GameRenderer spec={game.declarative_ui} message={message} showToolbar={false} showDestinationsAfterSelection={backgammon||chessDrag} omitPieceId={backgammon&&hasInstructions?'help':undefined} boardPresentation={boardPresentation} frameHeight={fittedBoard?frameHeight:undefined} fillFrame={fillBoard&&backgammon} presentationHistory={p.actions.presentationHistory()} contextKey={`${p.account?.id||'visitor'}:${match.id}:${game.version}`} onMove={submit} onAnimationStateChange={history.onAnimationStateChange} onScene={history.onScene} onError={error=>{history.stopPlayback();setRendererError(error.message);reportClientIssue('game_error',error);}}/></View>
+      :game?.declarative_ui&&message?<View testID="game-stage" style={[{backgroundColor:colors.surface,width:'100%',minWidth:0},fittedBoard&&{flex:1,minHeight:0}]} onLayout={event=>{if(fittedBoard)setFrameHeight(event.nativeEvent.layout.height);}}><GameRenderer spec={game.declarative_ui} message={message} showToolbar={false} showDestinationsAfterSelection={backgammon||chessDrag||checkersDrag} publicView={game.all_state_public===true} omitPieceId={backgammon&&hasInstructions?'help':undefined} boardPresentation={boardPresentation} frameHeight={fittedBoard?frameHeight:undefined} fillFrame={fillBoard&&backgammon} presentationHistory={p.actions.presentationHistory()} contextKey={`${p.account?.id||'visitor'}:${match.id}:${game.version}`} onMove={submit} onAnimationStateChange={history.onAnimationStateChange} onScene={history.onScene} onError={error=>{history.stopPlayback();setRendererError(error.message);reportClientIssue('game_error',error);}}/></View>
       :<Empty>{copyText("Loading the match’s saved game version…")}</Empty>}
     {rendererError&&<Notice error>{rendererError}</Notice>}
     {history.error&&history.error!==p.error&&<Notice error>{history.error}</Notice>}
